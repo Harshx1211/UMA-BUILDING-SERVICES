@@ -1,0 +1,2 @@
+﻿app/(app)/jobs/[id]/index.tsx(259,38): error TS2339: Property 'backArrow' does not exist on type '{ screen: { flex: number; backgroundColor: string; }; centered: { flex: number; alignItems: "center"; justifyContent: "center"; gap: number; }; headerMapWrap: { height: number; backgroundColor: string; position: "relative"; }; ... 70 more ...; backBtnTxt: { ...; }; }'.
+app/(app)/jobs/[id]/inspect.tsx(226,46): error TS2304: Cannot find name 'Linking'.
