@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { openDatabase } from '@/lib/database';
 import { JobStatus } from '@/constants/Enums';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { Job } from '@/types';
 
 interface DashboardStats {
@@ -19,14 +20,19 @@ interface WeekStats {
 interface DashboardState {
   todayJobs: Job[];
   todayStats: DashboardStats;
+  allStats: DashboardStats;
   weekStats: WeekStats;
-  openDefects: number;
+  openDefectsCount: number;
   isLoading: boolean;
   error: string | null;
+  /** Internal — ref to the current sync listener so we can cleanly unsubscribe */
+  _syncListenerRef: (() => void) | null;
 }
 
 interface DashboardActions {
   loadDashboard: (userId: string) => void;
+  subscribeToSync: (userId: string) => void;
+  unsubscribeFromSync: () => void;
   clearError: () => void;
 }
 
@@ -48,13 +54,15 @@ const weekRange = () => {
   return { start: fmt(monday), end: fmt(sunday) };
 };
 
-export const useDashboardStore = create<DashboardState & DashboardActions>((set) => ({
+export const useDashboardStore = create<DashboardState & DashboardActions>((set, get) => ({
   todayJobs: [],
   todayStats: { total: 0, completed: 0, inProgress: 0, pending: 0 },
+  allStats:   { total: 0, completed: 0, inProgress: 0, pending: 0 },
   weekStats: { total: 0, completed: 0 },
-  openDefects: 0,
+  openDefectsCount: 0,
   isLoading: false,
   error: null,
+  _syncListenerRef: null,
 
   loadDashboard: (userId: string) => {
     set({ isLoading: true, error: null });
@@ -93,20 +101,35 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set)
       const weekTotal = weekRows.length;
       const weekCompleted = weekRows.filter((r) => r.status === JobStatus.Completed).length;
 
-      // ── Open defects ─────────────────────────────────────────
+      // ── Open defects — real count from SQLite ─────────────────
       const defectRow = db.getFirstSync<{ count: number }>(
         `SELECT COUNT(*) as count FROM defects
-         WHERE job_id IN (
-           SELECT id FROM jobs WHERE assigned_to = ?
-         ) AND status = 'open'`,
+         WHERE status = 'open'
+           AND job_id IN (
+             SELECT id FROM jobs WHERE assigned_to = ?
+           )`,
         [userId]
       );
+      const openDefectsCount = defectRow?.count ?? 0;
+
+      // ── All-time stats (all jobs assigned, any date) ───────────────
+      const allJobRows = db.getAllSync<{ status: string }>(
+        `SELECT status FROM jobs
+         WHERE assigned_to = ?
+           AND status != ?`,
+        [userId, JobStatus.Cancelled]
+      );
+      const allTotal      = allJobRows.length;
+      const allCompleted  = allJobRows.filter((j) => j.status === JobStatus.Completed).length;
+      const allInProgress = allJobRows.filter((j) => j.status === JobStatus.InProgress).length;
+      const allPending    = allJobRows.filter((j) => j.status === JobStatus.Scheduled).length;
 
       set({
         todayJobs: todayJobRows,
         todayStats: { total, completed, inProgress, pending },
+        allStats: { total: allTotal, completed: allCompleted, inProgress: allInProgress, pending: allPending },
         weekStats: { total: weekTotal, completed: weekCompleted },
-        openDefects: defectRow?.count ?? 0,
+        openDefectsCount,
         isLoading: false,
         error: null,
       });
@@ -120,4 +143,25 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set)
   },
 
   clearError: () => set({ error: null }),
+
+  subscribeToSync: (userId: string) => {
+    // Clean up any previously registered listener before subscribing again
+    const prev = get()._syncListenerRef;
+    if (prev) offSyncComplete(prev);
+
+    const listener = () => {
+      if (__DEV__) console.log('[DashboardStore] sync complete — reloading dashboard');
+      useDashboardStore.getState().loadDashboard(userId);
+    };
+    onSyncComplete(listener);
+    set({ _syncListenerRef: listener });
+  },
+
+  unsubscribeFromSync: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) {
+      offSyncComplete(listener);
+      set({ _syncListenerRef: null });
+    }
+  },
 }));

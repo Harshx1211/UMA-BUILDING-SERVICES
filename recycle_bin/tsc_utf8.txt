@@ -1,0 +1,7 @@
+﻿lib/pdfGenerator.ts(131,122): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | number | true' is not assignable to parameter of type 'string | number | Date'.
+      Type 'boolean' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | number | true' is not assignable to parameter of type 'string | number'.
+      Type 'boolean' is not assignable to type 'string | number'.

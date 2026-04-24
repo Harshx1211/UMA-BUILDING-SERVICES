@@ -1,47 +1,50 @@
-// Login screen — navy curved hero section + floating white form card
-import { useState, useEffect } from 'react';
+// Login screen — professional hero with branding + premium floating form
+import { useState, useEffect, useRef } from 'react';
 import {
-
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
-  TextInput as RNTextInput,
-  TextInputProps,
+  Keyboard,
 } from 'react-native';
 import { Checkbox, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import Colors from '@/constants/Colors';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { Button } from '@/components/ui/Button';
+import { Card, Input } from '@/components/ui';
+import { useColors } from '@/hooks/useColors';
 
 const REMEMBER_ME_KEY = '@sitetrack/remember_me';
 
 export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
+  const C = useColors();
+  const scrollRef = useRef<ScrollView>(null);
 
-  // Form state
-  const [email, setEmail]             = useState('');
-  const [password, setPassword]       = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe]   = useState(false);
-  const [emailError, setEmailError]   = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  // Focus state
-  const [emailFocused, setEmailFocused] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
-
-  // Biometric state
+  const [email, setEmail]                   = useState('');
+  const [password, setPassword]             = useState('');
+  const [showPassword, setShowPassword]     = useState(false);
+  const [rememberMe, setRememberMe]         = useState(false);
+  const [emailError, setEmailError]         = useState('');
+  const [passwordError, setPasswordError]   = useState('');
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
-  const [biometricType, setBiometricType] = useState<'fingerprint' | 'face' | null>(null);
+  const [biometricType, setBiometricType]   = useState<'fingerprint' | 'face' | null>(null);
 
-  // ── Check biometric availability ─────────────
+  // Scroll down to form when keyboard opens so inputs are always visible
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => show.remove();
+  }, []);
+
   useEffect(() => {
     const checkBiometrics = async () => {
       try {
@@ -53,51 +56,37 @@ export default function LoginScreen() {
         if (compatible && enrolled && remembered === 'true') {
           setBiometricsAvailable(true);
           const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-          if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-            setBiometricType('face');
-          } else {
-            setBiometricType('fingerprint');
-          }
+          setBiometricType(
+            types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+              ? 'face' : 'fingerprint'
+          );
         }
-      } catch {
-        // Biometrics not critical — silently skip
-      }
+      } catch { /* silently skip */ }
     };
     checkBiometrics();
   }, []);
 
-  // ── Validation ────────────────────────────────
   const validate = (): boolean => {
     let valid = true;
     setEmailError('');
     setPasswordError('');
-
-    if (!email.trim()) {
-      setEmailError('Email is required.');
-      valid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError('Enter a valid email address.');
-      valid = false;
-    }
-
-    if (!password) {
-      setPasswordError('Password is required.');
-      valid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters.');
-      valid = false;
-    }
+    if (!email.trim()) { setEmailError('Email is required.'); valid = false; }
+    else if (!/\S+@\S+\.\S+/.test(email)) { setEmailError('Enter a valid email address.'); valid = false; }
+    if (!password) { setPasswordError('Password is required.'); valid = false; }
+    else if (password.length < 6) { setPasswordError('Password must be at least 6 characters.'); valid = false; }
     return valid;
   };
 
-  // ── Sign in ───────────────────────────────────
   const handleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     clearError();
-    if (!validate()) return;
+    if (!validate()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
     await signIn(email, password, rememberMe);
   };
 
-  // ── Biometric auth ────────────────────────────
   const handleBiometric = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
@@ -105,350 +94,316 @@ export default function LoginScreen() {
         cancelLabel: 'Use Password',
         disableDeviceFallback: false,
       });
-      if (result.success) {
-        router.replace('/(app)/');
-      }
-    } catch (err) {
-      console.warn('[Login] Biometric error:', err);
-    }
+      if (result.success) router.replace('/(app)/');
+    } catch (err) { console.warn('[Login] Biometric error:', err); }
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: C.primary }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        {/* ── Navy Hero Header ──────────────── */}
-        <View style={styles.heroSection}>
-          {/* Double-circle logo */}
-          <View style={styles.logoOuter}>
-            <View style={styles.logoInner}>
-              <Text style={styles.logoLetters}>ST</Text>
+        {/* ── Hero with Branding ────── */}
+        <View style={[styles.heroSection, { backgroundColor: C.primary }]}>
+
+          {/* Background decorative circles for depth */}
+          <View style={[styles.decorCircle1, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
+          <View style={[styles.decorCircle2, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+          <View style={[styles.decorCircle3, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+
+          {/* App Logo */}
+          <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
+            <View style={[styles.logoRing, { borderColor: 'rgba(255,255,255,0.3)' }]}>
+              <View style={[styles.logoInner, { backgroundColor: C.accent }]}>
+                <MaterialCommunityIcons name="tools" size={32} color="#FFFFFF" />
+              </View>
             </View>
-          </View>
-          <Text style={styles.welcomeText}>Welcome back</Text>
-          <Text style={styles.welcomeSub}>Sign in to continue</Text>
+          </Animated.View>
+
+          {/* Brand name + tagline */}
+          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.brandBlock}>
+            <Text style={styles.brandName}>SiteTrack</Text>
+            <Text style={styles.brandTagline}>Field Service Management</Text>
+          </Animated.View>
+
+          {/* Feature pills */}
+          <Animated.View entering={FadeInDown.delay(320).duration(500)} style={styles.featureStrip}>
+            {['📋 Jobs', '✅ Inspections', '📄 Reports'].map((f) => (
+              <View
+                key={f}
+                style={[styles.featurePill, {
+                  backgroundColor: 'rgba(255,255,255,0.15)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.1)',
+                }]}
+              >
+                <Text style={styles.featurePillTxt}>{f}</Text>
+              </View>
+            ))}
+          </Animated.View>
         </View>
 
-        {/* ── Floating Form Card ────────────── */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.formCard}>
+        {/* ── Premium Form Card ─────────────── */}
+        {/* NOTE: Plain View here — Animated.View with entering= blocks TextInput touches on Android new arch */}
+        <View style={styles.cardWrapper}>
+          <Card style={styles.formCard}>
 
-          {/* Error banner */}
-          {error ? (
-            <View style={styles.errorBanner}>
-              <MaterialCommunityIcons name="alert" size={16} color="#EF4444" />
-              <Text style={styles.errorBannerText}>{error}</Text>
-            </View>
-          ) : null}
+            <Text style={[styles.formTitle, { color: C.text }]}>Welcome back 👋</Text>
+            <Text style={[styles.formSub, { color: C.textSecondary }]}>Sign in to your account to continue</Text>
 
-          {/* Email */}
-          <View style={styles.emailFieldWrap}>
-            <Text style={styles.fieldLabel}>Email</Text>
-            <View style={[
-              styles.inputWrap, 
-              emailFocused && styles.inputFocus,
-              emailError ? styles.inputError : null
-            ]}>
-              <MaterialCommunityIcons name="email-outline" size={18} color="#94A3B8" />
-              <CustomTextInput
-                value={email}
-                onChangeText={(t) => { setEmail(t); setEmailError(''); }}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={() => setEmailFocused(false)}
-                placeholder="you@company.com.au"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-              />
-            </View>
-            {emailError ? <Text style={styles.fieldErrorText}>{emailError}</Text> : null}
-          </View>
+            {/* Error banner */}
+            {error && (
+              <View style={[styles.errorBanner, { backgroundColor: C.errorLight, borderColor: C.error + '40', borderWidth: 1 }]}>
+                <MaterialCommunityIcons name="alert-circle" size={18} color={C.error} />
+                <Text style={[styles.errorBannerText, { color: C.error }]}>{error}</Text>
+              </View>
+            )}
 
-          {/* Password */}
-          <View style={styles.passwordFieldWrap}>
-            <Text style={styles.fieldLabel}>Password</Text>
-            <View style={[
-              styles.inputWrap, 
-              passwordFocused && styles.inputFocus,
-              passwordError ? styles.inputError : null
-            ]}>
-              <MaterialCommunityIcons name="lock-outline" size={18} color="#94A3B8" />
-              <CustomTextInput
-                value={password}
-                onChangeText={(t) => { setPassword(t); setPasswordError(''); }}
-                onFocus={() => setPasswordFocused(true)}
-                onBlur={() => setPasswordFocused(false)}
-                placeholder="••••••••"
-                secureTextEntry={!showPassword}
-                autoComplete="password"
-              />
-              <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <MaterialCommunityIcons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
-                  color="#94A3B8"
+            {/* Email */}
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={(t) => { setEmail(t); setEmailError(''); }}
+              placeholder="you@company.com.au"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={emailError}
+              leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textTertiary} />}
+              style={{ marginBottom: 16 }}
+            />
+
+            {/* Password */}
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={(t) => { setPassword(t); setPasswordError(''); }}
+              placeholder="Enter your password"
+              secureTextEntry={!showPassword}
+              error={passwordError}
+              leftIcon={<MaterialCommunityIcons name="lock-outline" size={18} color={C.textTertiary} />}
+              rightIcon={
+                <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8}>
+                  <MaterialCommunityIcons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color={C.textTertiary}
+                  />
+                </TouchableOpacity>
+              }
+              style={{ marginBottom: 12 }}
+            />
+
+            {/* Remember me + Forgot */}
+            <View style={styles.rememberRow}>
+              <TouchableOpacity
+                style={styles.rememberLeft}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRememberMe(v => !v); }}
+                activeOpacity={0.7}
+              >
+                <Checkbox
+                  status={rememberMe ? 'checked' : 'unchecked'}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRememberMe(v => !v); }}
+                  color={C.accent}
                 />
+                <Text style={[styles.rememberLabel, { color: C.text }]}>Remember me</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
+                <Text style={[styles.forgotLink, { color: C.accent }]}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
-            {passwordError ? <Text style={styles.fieldErrorText}>{passwordError}</Text> : null}
-          </View>
 
-          {/* Remember me + Forgot */}
-          <View style={styles.rememberRow}>
-            <TouchableOpacity
-              style={styles.rememberLeft}
-              onPress={() => setRememberMe(v => !v)}
-              activeOpacity={0.7}
-            >
-              <Checkbox
-                status={rememberMe ? 'checked' : 'unchecked'}
-                onPress={() => setRememberMe(v => !v)}
-                color={Colors.light.accent}
+            {/* Sign In */}
+            <Button
+              title="Sign In"
+              onPress={handleSignIn}
+              isLoading={isLoading}
+              style={{ height: 52, borderRadius: 26 }}
+            />
+
+            {/* Divider */}
+            {biometricsAvailable && (
+              <View style={styles.dividerRow}>
+                <View style={[styles.divider, { backgroundColor: C.border }]} />
+                <Text style={[styles.dividerTxt, { color: C.textTertiary }]}>or continue with</Text>
+                <View style={[styles.divider, { backgroundColor: C.border }]} />
+              </View>
+            )}
+
+            {/* Biometric */}
+            {biometricsAvailable && (
+              <Button
+                title={biometricType === 'face' ? 'Face ID' : 'Fingerprint'}
+                variant="outline"
+                onPress={handleBiometric}
+                icon={
+                  <MaterialCommunityIcons
+                    name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
+                    size={20}
+                    color={C.primary}
+                  />
+                }
               />
-              <Text style={styles.rememberLabel}>Remember me</Text>
-            </TouchableOpacity>
+            )}
+          </Card>
+        </View>
 
-            <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-              <Text style={styles.forgotLink}>Forgot Password?</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Sign In button */}
-          <TouchableOpacity
-            style={[styles.signInBtn, isLoading && styles.signInBtnLoading]}
-            onPress={handleSignIn}
-            disabled={isLoading}
-            activeOpacity={0.85}
-          >
-            {isLoading
-              ? <MaterialCommunityIcons name="loading" size={20} color="#FFFFFF" />
-              : null}
-            <Text style={styles.signInBtnText}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Biometric button - Ghost Style */}
-          {biometricsAvailable && (
-            <TouchableOpacity
-              style={styles.biometricBtn}
-              onPress={handleBiometric}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons
-                name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
-                size={20}
-                color={Colors.light.primary}
-              />
-              <Text style={styles.biometricLabel}>
-                {biometricType === 'face' ? 'Use Face ID' : 'Use Fingerprint'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </Animated.View>
-
-        <View style={{ height: 40 }} />
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerTxt}>© 2025 SiteTrack · Built for Australian trade professionals</Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-// ── Inline custom text input (avoids react-native-paper outline style) ──
-function CustomTextInput(props: TextInputProps) {
-  return (
-    <RNTextInput
-      style={styles.textInput}
-      placeholderTextColor={"#94A3B8"}
-      {...props}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.primary,
-  },
-  scroll: {
-    flexGrow: 1,
-  },
+  container: { flex: 1 },
+  scroll: { flexGrow: 1 },
 
-  // ── Hero section ──────────
+  // ── Hero ──────────────────────────
   heroSection: {
-    backgroundColor: Colors.light.primary,
     alignItems: 'center',
-    paddingTop: 64,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    gap: 0,
+    paddingTop: 72,
+    paddingBottom: 60,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  logoOuter: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(249,115,22,0.15)',
+  // Decorative depth circles
+  decorCircle1: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    top: -100,
+    right: -100,
+  },
+  decorCircle2: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    bottom: -50,
+    left: -70,
+  },
+  decorCircle3: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    top: 30,
+    left: 30,
+  },
+  // Logo
+  logoContainer: { marginBottom: 20 },
+  logoRing: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoInner: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Colors.light.accent,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoLetters: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 1.2,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginTop: 12,
-  },
-  welcomeSub: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginTop: 4,
-  },
-
-  // ── Floating form card ────
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    marginHorizontal: 20,
-    marginTop: -24,
-    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  // Branding
+  brandBlock: { alignItems: 'center', marginBottom: 24 },
+  brandName: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  brandTagline: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 4,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+  },
+  // Feature pills
+  featureStrip: { flexDirection: 'row', gap: 8 },
+  featurePill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  featurePillTxt: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+
+  // ── Form Card ─────────────────────
+  cardWrapper: {
+    marginHorizontal: 16,
+    marginTop: -32,
+  },
+  formCard: {
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#0F1E3C',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
     elevation: 8,
     gap: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
+  formTitle: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
+  formSub: { fontSize: 14, marginBottom: 24, lineHeight: 20 },
 
-  // Error banner
+  // Error
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
-  errorBannerText: {
-    fontSize: 13,
-    color: '#EF4444',
-    fontWeight: '500',
-    flex: 1,
-  },
-
-  // Field Wraps
-  emailFieldWrap: {
-    marginBottom: 16,
-  },
-  passwordFieldWrap: {
-    marginBottom: 12,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    marginBottom: 6,
-  },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    height: 52,
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
-    gap: 10,
-  },
-  inputFocus: {
-    borderColor: Colors.light.primary,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.light.text,
-    paddingVertical: 0,
-  },
-  fieldErrorText: {
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-  },
+  errorBannerText: { fontSize: 13, fontWeight: '500', flex: 1 },
 
   // Remember row
   rememberRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  rememberLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: -8, // compensate for Checkbox default padding
-  },
-  rememberLabel: {
-    fontSize: 13,
-    color: '#0F172A',
-  },
-  forgotLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.light.accent,
-  },
+  rememberLeft: { flexDirection: 'row', alignItems: 'center', marginLeft: -8 },
+  rememberLabel: { fontSize: 13 },
+  forgotLink: { fontSize: 13, fontWeight: '600' },
 
-  // Sign In button
-  signInBtn: {
-    backgroundColor: Colors.light.accent,
-    borderRadius: 12,
-    height: 52,
+  // Divider
+  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    gap: 10,
+    marginVertical: 16,
   },
-  signInBtnLoading: { opacity: 0.75 },
-  signInBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  divider: { flex: 1, height: 1 },
+  dividerTxt: { fontSize: 11, fontWeight: '500' },
 
-  // Biometric Ghost Btn
-  biometricBtn: {
-    flexDirection: 'row',
+  // Footer
+  footer: {
+    paddingVertical: 28,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 48,
-    marginTop: 12,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 32,
   },
-  biometricLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.light.primary,
+  footerTxt: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    textAlign: 'center',
+    lineHeight: 17,
   },
 });

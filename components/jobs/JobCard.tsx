@@ -1,26 +1,29 @@
-// JobCard — redesigned: 4px left priority strip + content area with badges
-import React from 'react';
-import { StyleSheet, TouchableOpacity, View, Linking } from 'react-native';
+/**
+ * JobCard — premium card with priority strip, compliance badge, and swipe actions.
+ * Swipe left → Cancel (red)   Swipe right → Start (green)
+ * Compliance dot shows property standing at a glance.
+ */
+import React, { useRef } from 'react';
+import { StyleSheet, TouchableOpacity, View, Linking, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { JobTypeBadge } from './JobTypeBadge';
 import { StatusBadge } from './StatusBadge';
-import { JobStatus, JobType, Priority } from '@/constants/Enums';
-import Colors from '@/constants/Colors';
+import { JobStatus, JobType, Priority, ComplianceStatus } from '@/constants/Enums';
+import { useColors } from '@/hooks/useColors';
 import type { JobWithProperty } from '@/store/jobsStore';
 
 interface Props {
   job: JobWithProperty;
   onPress: () => void;
   showNavigate?: boolean;
+  /** When true, swipe-to-Start and swipe-to-Cancel are rendered (Jobs list only) */
+  swipeable?: boolean;
+  onStart?: () => void;
+  onCancel?: () => void;
 }
-
-const PRIORITY_STRIP: Record<Priority, string> = {
-  [Priority.Urgent]: '#EF4444',
-  [Priority.High]:   '#EAB308',
-  [Priority.Normal]: '#3B82F6',
-  [Priority.Low]:    '#9CA3AF',
-};
 
 function parseTime(hhmm: string): string {
   try {
@@ -29,36 +32,123 @@ function parseTime(hhmm: string): string {
   } catch { return hhmm; }
 }
 
-export function JobCard({ job, onPress, showNavigate = false }: Props) {
-  const stripColor  = PRIORITY_STRIP[job.priority as Priority] ?? Colors.light.info;
+// ─── Swipe action panels ─────────────────────
+function StartAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
+  return (
+    <TouchableOpacity style={[sw.startAction, { backgroundColor: C.success }]} onPress={onPress} activeOpacity={0.85}>
+      <MaterialCommunityIcons name="play-circle-outline" size={22} color="#FFFFFF" />
+      <Text style={sw.actionLabel}>Start</Text>
+    </TouchableOpacity>
+  );
+}
+StartAction.displayName = 'StartAction';
+
+function CancelAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
+  return (
+    <TouchableOpacity style={[sw.cancelAction, { backgroundColor: C.error }]} onPress={onPress} activeOpacity={0.85}>
+      <MaterialCommunityIcons name="close-circle-outline" size={22} color="#FFFFFF" />
+      <Text style={sw.actionLabel}>Cancel</Text>
+    </TouchableOpacity>
+  );
+}
+CancelAction.displayName = 'CancelAction';
+
+const sw = StyleSheet.create({
+  startAction:  { justifyContent: 'center', alignItems: 'center', width: 80, borderRadius: 18, marginLeft: 6, gap: 4 },
+  cancelAction: { justifyContent: 'center', alignItems: 'center', width: 80, borderRadius: 18, marginRight: 6, gap: 4 },
+  actionLabel:  { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+});
+
+// ─── Main card ───────────────────────────────
+export const JobCard = React.memo(function JobCard({
+  job, onPress, showNavigate = false, swipeable = false, onStart, onCancel,
+}: Props) {
+  const C = useColors();
+  const swipeRef = useRef<Swipeable>(null);
+
+  const getPriorityColor = (p: Priority): string => {
+    switch(p) {
+      case Priority.Urgent: return C.error;
+      case Priority.High: return C.warning;
+      case Priority.Normal: return C.primary;
+      case Priority.Low: return C.textTertiary;
+      default: return C.info;
+    }
+  };
+
+  const getComplianceCfg = (status: string) => {
+    switch(status) {
+      case ComplianceStatus.Compliant: return { dot: C.success, label: 'Compliant' };
+      case ComplianceStatus.NonCompliant: return { dot: C.error, label: 'Non-Compliant' };
+      case ComplianceStatus.Overdue: return { dot: C.warning, label: 'Overdue' };
+      case ComplianceStatus.Pending: return { dot: C.textTertiary, label: 'Pending' };
+      default: return null;
+    }
+  };
+
+  const stripColor  = getPriorityColor(job.priority as Priority);
+  const complianceCfg = getComplianceCfg(job.property_compliance_status ?? '');
+
   const suburb      = [job.property_suburb, job.property_state].filter(Boolean).join(', ');
   const timeLabel   = job.scheduled_time ? parseTime(job.scheduled_time) : null;
 
   const handleNavigate = (e: { stopPropagation: () => void }) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     e.stopPropagation();
-    const addr = [job.property_address, job.property_suburb, job.property_state]
-      .filter(Boolean).join(', ');
+    const addr = [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ');
     Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(addr)}`);
   };
 
-  return (
-    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.75}>
-      {/* Priority strip — left edge */}
+  const handleStart = () => {
+    swipeRef.current?.close();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onStart?.();
+  };
+
+  const handleCancel = () => {
+    swipeRef.current?.close();
+    Alert.alert(
+      'Cancel Job?',
+      'Are you sure you want to cancel this job? This action will be synced to the cloud.',
+      [
+        { text: 'Keep Job', style: 'cancel' },
+        {
+          text: 'Cancel Job',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            onCancel?.();
+          },
+        },
+      ]
+    );
+  };
+
+  const cardContent = (
+    <TouchableOpacity
+      style={[s.card, {
+        backgroundColor: C.surface,
+        borderColor: C.cardBorder,
+      }]}
+      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
+      activeOpacity={0.78}
+    >
+      {/* Priority strip */}
       <View style={[s.strip, { backgroundColor: stripColor }]} />
 
       {/* Content */}
       <View style={s.content}>
         {/* Row 1: Property name + Status badge */}
         <View style={s.row1}>
-          <Text style={s.propertyName} numberOfLines={1}>{job.property_name ?? 'Unknown Property'}</Text>
+          <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>{job.property_name ?? 'Unknown Property'}</Text>
           <StatusBadge status={job.status as JobStatus} small />
         </View>
 
         {/* Row 2: Address */}
         {suburb ? (
           <View style={s.row2}>
-            <MaterialCommunityIcons name="map-marker-outline" size={12} color={Colors.light.textSecondary} />
-            <Text style={s.address} numberOfLines={1}>
+            <MaterialCommunityIcons name="map-marker-outline" size={12} color={C.textTertiary} />
+            <Text style={[s.address, { color: C.textSecondary }]} numberOfLines={1}>
               {[job.property_address, suburb].filter(Boolean).join(', ')}
             </Text>
           </View>
@@ -68,115 +158,85 @@ export function JobCard({ job, onPress, showNavigate = false }: Props) {
         <View style={s.row3}>
           <JobTypeBadge jobType={job.job_type as JobType} />
           {timeLabel ? (
-            <View style={s.timeChip}>
-              <MaterialCommunityIcons name="clock-outline" size={11} color={Colors.light.textSecondary} />
-              <Text style={s.timeText}>{timeLabel}</Text>
+            <View style={[s.timeChip, { backgroundColor: C.backgroundTertiary }]}>
+              <MaterialCommunityIcons name="clock-outline" size={11} color={C.textSecondary} />
+              <Text style={[s.timeText, { color: C.textSecondary }]}>{timeLabel}</Text>
             </View>
           ) : null}
           <View style={{ flex: 1 }} />
           {showNavigate && (
-            <TouchableOpacity style={s.navBtn} onPress={handleNavigate as never} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <MaterialCommunityIcons name="navigation-variant-outline" size={12} color={Colors.light.primary} />
-              <Text style={s.navText}>Map</Text>
+            <TouchableOpacity
+              style={[s.navBtn, { backgroundColor: C.primary + '12', borderColor: C.primary + '20', borderWidth: 1 }]}
+              onPress={handleNavigate as never}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <MaterialCommunityIcons name="navigation-variant-outline" size={12} color={C.primary} />
+              <Text style={[s.navText, { color: C.primary }]}>Map</Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Row 4: Compliance dot — only when data present */}
+        {complianceCfg ? (
+          <View style={s.complianceRow}>
+            <View style={[s.complianceDot, { backgroundColor: complianceCfg.dot }]} />
+            <Text style={[s.complianceLabel, { color: C.textTertiary }]}>{complianceCfg.label}</Text>
+          </View>
+        ) : null}
       </View>
 
-      <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.light.border} style={s.chevron} />
+      <MaterialCommunityIcons name="chevron-right" size={16} color={C.borderStrong} style={s.chevron} />
     </TouchableOpacity>
   );
-}
+
+  if (!swipeable) return cardContent;
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderLeftActions={() => <StartAction onPress={handleStart} C={C} />}
+      renderRightActions={() => <CancelAction onPress={handleCancel} C={C} />}
+      leftThreshold={60}
+      rightThreshold={60}
+      overshootLeft={false}
+      overshootRight={false}
+    >
+      {cardContent}
+    </Swipeable>
+  );
+});
 
 const s = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'stretch',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1,
+    shadowColor: '#0F1E3C',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 3,
   },
+  strip:   { width: 5 },
+  content: { flex: 1, padding: 15, gap: 6 },
 
-  // Left priority strip
-  strip: {
-    width: 4,
-    borderRadius: 0,
-  },
+  row1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  propertyName: { fontSize: 15, fontWeight: '700', flex: 1, letterSpacing: -0.1 },
 
-  // Content area
-  content: {
-    flex: 1,
-    padding: 14,
-    gap: 6,
-  },
+  row2: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  address: { fontSize: 12, flex: 1 },
 
-  // Row 1
-  row1: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  propertyName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.light.text,
-    flex: 1,
-  },
+  row3: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 },
+  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  timeText:  { fontSize: 11, fontWeight: '500' },
+  navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
+  navText:   { fontSize: 10, fontWeight: '700' },
 
-  // Row 2
-  row2: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  address: {
-    fontSize: 12,
-    color: Colors.light.textSecondary,
-    flex: 1,
-  },
+  complianceRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  complianceDot:  { width: 6, height: 6, borderRadius: 3 },
+  complianceLabel:{ fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
 
-  // Row 3
-  row3: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginTop: 2,
-  },
-  timeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: Colors.light.background,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  timeText: {
-    fontSize: 11,
-    color: Colors.light.textSecondary,
-    fontWeight: '500',
-  },
-  navBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#EEF2F8',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  navText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.light.primary,
-  },
-
-  chevron: { marginRight: 10, alignSelf: 'center' },
+  chevron: { marginRight: 12, alignSelf: 'center' },
 });

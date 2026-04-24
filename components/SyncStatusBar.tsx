@@ -52,8 +52,17 @@ export function SyncStatusBar({ light = false }: Props) {
   } else if (!isOnline) {
     label = 'Offline';
   } else if (status?.lastSynced) {
-    const mins = Math.floor((Date.now() - new Date(status.lastSynced).getTime()) / 60_000);
-    label = mins < 1 ? 'Just synced' : mins === 1 ? '1 min ago' : `${mins} min ago`;
+    const syncDate = new Date(status.lastSynced);
+    // Guard against epoch (bad stored value — must be after year 2020)
+    if (syncDate.getFullYear() >= 2020) {
+      const diffMs = Date.now() - syncDate.getTime();
+      const mins  = Math.floor(diffMs / 60_000);
+      const hours = Math.floor(diffMs / 3_600_000);
+      if (mins < 2)         label = 'Just now';
+      else if (mins < 60)   label = `${mins} min ago`;
+      else if (hours < 24)  label = `${hours} hr ago`;
+      else                  label = syncDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    }
     if ((status.pendingCount ?? 0) > 0) label += ` · ${status.pendingCount} pending`;
   }
 

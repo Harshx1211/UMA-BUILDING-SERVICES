@@ -1,6 +1,9 @@
 // useNetworkStatus — wraps NetInfo to provide reactive online/offline state
-import { useEffect, useState } from 'react';
+// Phase 12: Tracks false→true transition to auto-trigger sync and show toast
+import { useEffect, useRef, useState } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import Toast from 'react-native-toast-message';
+import { runSync } from '@/lib/sync';
 
 interface NetworkStatus {
   isOnline: boolean;
@@ -15,11 +18,16 @@ export function useNetworkStatus(): NetworkStatus {
     isInternetReachable: null,
   });
 
+  // Track previous online state to detect false → true transition
+  const prevOnlineRef = useRef<boolean | null>(null);
+
   useEffect(() => {
-    // Get initial state
+    // Get initial state (don't show toast on first mount)
     NetInfo.fetch().then((state: NetInfoState) => {
+      const online = state.isConnected === true;
+      prevOnlineRef.current = online;
       setStatus({
-        isOnline: state.isConnected === true,
+        isOnline: online,
         connectionType: state.type,
         isInternetReachable: state.isInternetReachable,
       });
@@ -27,11 +35,28 @@ export function useNetworkStatus(): NetworkStatus {
 
     // Subscribe to changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
+      const online = state.isConnected === true;
+      const wasOffline = prevOnlineRef.current === false;
+
       setStatus({
-        isOnline: state.isConnected === true,
+        isOnline: online,
         connectionType: state.type,
         isInternetReachable: state.isInternetReachable,
       });
+
+      // Reconnection detected → trigger sync + show toast
+      if (wasOffline && online) {
+        Toast.show({
+          type: 'info',
+          text1: '🌐 Back online',
+          text2: 'Syncing your offline changes...',
+          visibilityTime: 3000,
+        });
+        // Fire-and-forget background sync
+        runSync().catch((err) => console.warn('[useNetworkStatus] sync on reconnect failed:', err));
+      }
+
+      prevOnlineRef.current = online;
     });
 
     return () => unsubscribe();

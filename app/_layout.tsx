@@ -2,14 +2,16 @@
 import 'react-native-url-polyfill/auto';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
-import { Slot } from 'expo-router';
+import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
+import { Slot, ErrorBoundaryProps } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Provider as PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/store/authStore';
-import { initializeSchema } from '@/lib/database';
+import { initializeSchema, cleanOldSyncQueueItems, clearFailedSyncItems } from '@/lib/database';
+import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
 import Colors from '@/constants/Colors';
 
 const paperLightTheme = {
@@ -46,14 +48,28 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { isLoading, restoreSession } = useAuthStore();
 
-  // 1. Initialise local SQLite on first launch
+  // 1. Initialise local SQLite then restore session — MUST be sequential.
+  //    On a fresh install, restoreSession() can trigger loadJobs() → SQLite queries
+  //    before the schema tables exist if both effects run in parallel (CRIT-3 race condition).
   useEffect(() => {
-    try { initializeSchema(); } catch (e) { console.error('[DB]', e); }
+    (async () => {
+      try {
+        initializeSchema();
+        cleanOldSyncQueueItems();
+        clearFailedSyncItems('job_assets');
+      } catch (e) {
+        console.error('[DB] Schema init error:', e);
+      }
+      // Session restore MUST come after schema is ready
+      await restoreSession();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2. Restore Supabase session (with 5-second timeout inside the store)
+  // 3. Configure notification handler + request permission
   useEffect(() => {
-    restoreSession();
+    configureNotificationHandler();
+    requestNotificationPermission();
   }, []);
 
   const theme = colorScheme === 'dark' ? paperDarkTheme : paperLightTheme;
@@ -65,8 +81,8 @@ export default function RootLayout() {
     return (
       <GestureHandlerRootView style={styles.container}>
         <PaperProvider theme={theme}>
-          <View style={[styles.container, { backgroundColor: Colors.light.primary }]}>
-            <ActivityIndicator color={Colors.light.accent} size="large" />
+          <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
+            <ActivityIndicator color={theme.colors.secondary} size="large" />
           </View>
           <StatusBar style="light" />
         </PaperProvider>
@@ -82,6 +98,22 @@ export default function RootLayout() {
         <Toast />
       </PaperProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 24 }}>
+      <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: '#0E2141', marginTop: 16, textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ fontSize: 14, color: '#4B5A6E', marginTop: 8, textAlign: 'center', marginBottom: 24 }}>An unexpected error occurred while loading this module.</Text>
+      <TouchableOpacity 
+        onPress={retry}
+        style={{ backgroundColor: '#0E2141', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+      >
+        <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Try Again</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 

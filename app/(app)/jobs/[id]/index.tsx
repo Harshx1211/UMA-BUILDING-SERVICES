@@ -1,30 +1,33 @@
-// Job Detail — Deep integration w/ Native Map & Signature Canvas — visual overhaul only
+// app/(app)/jobs/[id]/index.tsx
+// Clean dashboard layout — no tabs, action card grid, inline notes, no overflow
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Linking, ScrollView, StyleSheet,
-  TextInput, TouchableOpacity, View,
+  Linking, Modal, Platform, ScrollView, StyleSheet,
+  View, TouchableOpacity, TextInput,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Location from 'expo-location';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import Toast from 'react-native-toast-message';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import {
-  JobStatus, JobType, Priority, InspectionResult, DefectSeverity, SyncOperation,
+  JobStatus, JobType, Priority, InspectionResult, SyncOperation,
 } from '@/constants/Enums';
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
   getTimeLogsForJob, getSignatureForJob, insertRecord, updateRecord, addToSyncQueue,
 } from '@/lib/database';
-import { SignatureModal } from '@/components/jobs/SignatureModal';
-import Colors from '@/constants/Colors';
+import { generateUUID } from '@/utils/uuid';
+import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
+import { useColors } from '@/hooks/useColors';
+import { ScreenHeader, Button } from '@/components/ui';
 import type { Asset, Defect, InspectionPhoto, TimeLog } from '@/types';
 
-// ─── Types ────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
   result: InspectionResult | null;
   inspection_notes: string | null;
@@ -40,18 +43,14 @@ type JobDetail = {
   site_contact_name: string | null; site_contact_phone: string | null;
   access_notes: string | null; hazard_notes: string | null;
 };
-type TabKey = 'assets' | 'defects' | 'photos' | 'notes';
 
-// ─── Helpers ──────────────────────────────────
-function uuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso: string) {
-  try { return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }); }
-  catch { return iso; }
+  try {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
+      weekday: 'short', day: 'numeric', month: 'short',
+    });
+  } catch { return iso; }
 }
 function fmtTime(hhmm: string) {
   try {
@@ -68,12 +67,6 @@ const PRIORITY_LABEL: Record<Priority, string> = {
   [Priority.Urgent]: 'Urgent', [Priority.High]: 'High',
   [Priority.Normal]: 'Normal', [Priority.Low]: 'Low',
 };
-const PRIORITY_COLOR: Record<Priority, string> = {
-  [Priority.Urgent]: Colors.light.error,
-  [Priority.High]:   Colors.light.warning,
-  [Priority.Normal]: Colors.light.primary,
-  [Priority.Low]:    '#94A3B8',
-};
 const JOB_TYPE_LABEL: Record<JobType, string> = {
   [JobType.RoutineService]: 'Routine Service',
   [JobType.DefectRepair]:   'Defect Repair',
@@ -81,53 +74,81 @@ const JOB_TYPE_LABEL: Record<JobType, string> = {
   [JobType.Emergency]:      'Emergency',
   [JobType.Quote]:          'Quote',
 };
-const RESULT_CFG = {
-  [InspectionResult.Pass]:      { icon: 'check-circle' as const,        color: Colors.light.success },
-  [InspectionResult.Fail]:      { icon: 'close-circle' as const,        color: Colors.light.error },
-  [InspectionResult.NotTested]: { icon: 'minus-circle-outline' as const, color: '#94A3B8' },
-};
-const SEVERITY_CFG: Record<DefectSeverity, { color: string; label: string }> = {
-  [DefectSeverity.Critical]: { color: Colors.light.error,   label: 'Critical' },
-  [DefectSeverity.Major]:    { color: Colors.light.warning, label: 'Major' },
-  [DefectSeverity.Minor]:    { color: Colors.light.info,    label: 'Minor' },
-};
 
-// ─── Info Chip ────────────────────────────────
-function InfoChip({ icon, label, color }: { icon: string; label: string; color?: string }) {
+// ─── ActionCard mini-component ────────────────────────────────────────────────
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+function ActionCard({
+  icon, title, subtitle, badge, badgeColor, onPress, C,
+}: {
+  icon: MCIconName; title: string; subtitle?: string;
+  badge?: number; badgeColor?: string; onPress: () => void; C: any;
+}) {
   return (
-    <View style={chip.wrap}>
-      <Text style={chip.icon}>{icon}</Text>
-      <Text style={[chip.label, color ? { color } : null]}>{label}</Text>
-    </View>
+    <TouchableOpacity
+      style={[ac.card, { backgroundColor: C.surface, borderColor: C.border }]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <MaterialCommunityIcons name={icon} size={22} color={C.primary} />
+      <Text style={[ac.title, { color: C.text }]} numberOfLines={1}>{title}</Text>
+      {subtitle ? (
+        <Text style={[ac.sub, { color: C.textSecondary }]} numberOfLines={1}>{subtitle}</Text>
+      ) : null}
+      {(badge !== undefined && badge > 0) ? (
+        <View style={[ac.badge, { backgroundColor: badgeColor ?? C.accent }]}>
+          <Text style={ac.badgeTxt}>{badge}</Text>
+        </View>
+      ) : null}
+    </TouchableOpacity>
   );
 }
-const chip = StyleSheet.create({
-  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
-  icon:  { fontSize: 13 },
-  label: { fontSize: 13, color: Colors.light.text, fontWeight: '500' },
+const ac = StyleSheet.create({
+  card:     { flex: 1, borderRadius: 16, padding: 14, gap: 5, borderWidth: 1, minHeight: 90, position: 'relative' },
+  title:    { fontSize: 13, fontWeight: '700' },
+  sub:      { fontSize: 11 },
+  badge:    { position: 'absolute', top: 10, right: 10, minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  badgeTxt: { fontSize: 10, fontWeight: '800', color: '#FFF' },
 });
 
-// ─── Main ─────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function JobDetailScreen() {
-  const { id }   = useLocalSearchParams<{ id: string }>();
+  const C = useColors();
+  const navigation = useNavigation();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { updateJobStatus } = useJobsStore();
 
+  // Hide bottom tab bar on this detail screen
+  useFocusEffect(useCallback(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]));
+
+  const PRIORITY_COLOR: Record<Priority, string> = {
+    [Priority.Urgent]: C.error,
+    [Priority.High]:   C.warning,
+    [Priority.Normal]: C.primary,
+    [Priority.Low]:    C.textTertiary,
+  };
+
+  // ── State ──────────────────────────────────────────────────────────────────
   const [job,     setJob]     = useState<JobDetail | null>(null);
   const [assets,  setAssets]  = useState<AssetWithResult[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
   const [photos,  setPhotos]  = useState<InspectionPhoto[]>([]);
   const [notes,   setNotes]   = useState('');
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('assets');
-  const [isClocking,   setIsClocking]   = useState(false);
-  const [isLoading,    setIsLoading]    = useState(true);
-  const [showSigModal, setShowSigModal] = useState(false);
-  const [hasSig,       setHasSig]       = useState(false);
-  const [elapsed,      setElapsed]      = useState(0);
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isEditingNotes,   setIsEditingNotes]   = useState(false);
+  const [isClocking,       setIsClocking]       = useState(false);
+  const [isLoading,        setIsLoading]        = useState(true);
+  const [hasSig,           setHasSig]           = useState(false);
+  const [showBottomSheet,  setShowBottomSheet]  = useState(false);
+  const [elapsed,          setElapsed]          = useState(0);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionCountdown, setCompletionCountdown] = useState(5);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Timer for on-site elapsed time ─────────────────────────────────────────
   useEffect(() => {
     if (job?.status === JobStatus.InProgress) {
       timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
@@ -135,6 +156,11 @@ export default function JobDetailScreen() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [job?.status]);
 
+  useEffect(() => {
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, []);
+
+  // ── Data loading ───────────────────────────────────────────────────────────
   const loadJob = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
@@ -147,23 +173,18 @@ export default function JobDetailScreen() {
       setDefects(getDefectsForJob<Defect>(id));
       setPhotos(getPhotosForJob<InspectionPhoto>(id));
       setHasSig(!!getSignatureForJob(id));
-      setIsLoading(false);
-      const addr = [j.property_address, j.property_suburb, j.property_state].filter(Boolean).join(', ');
-      if (addr) {
-        try {
-          const res = await Location.geocodeAsync(addr);
-          if (res.length > 0) setCoords({ latitude: res[0].latitude, longitude: res[0].longitude });
-        } catch { /* ignore */ }
-      }
     } catch (err) {
       console.error('[JobDetail] load error:', err);
+    } finally {
       setIsLoading(false);
     }
   }, [id]);
 
   useEffect(() => { loadJob(); }, [loadJob]);
+  // Refresh data whenever we navigate back to this screen
+  useFocusEffect(useCallback(() => { loadJob(); }, [id]));
 
-  // ── Actions ─────────────────────────────────
+  // ── Job actions ────────────────────────────────────────────────────────────
   const handleStartJob = async () => {
     if (!job || !user) return;
     setIsClocking(true);
@@ -174,13 +195,13 @@ export default function JobDetailScreen() {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         lat = loc.coords.latitude; lng = loc.coords.longitude;
       }
-      const now = new Date().toISOString(), logId = uuid();
+      const now = new Date().toISOString(), logId = generateUUID();
       insertRecord('time_logs', { id: logId, job_id: job.id, user_id: user.id, clock_in: now, gps_lat: lat, gps_lng: lng });
       addToSyncQueue('time_logs', logId, SyncOperation.Insert, { id: logId, job_id: job.id, user_id: user.id, clock_in: now, gps_lat: lat, gps_lng: lng });
       updateJobStatus(job.id, JobStatus.InProgress);
       setJob(p => p ? { ...p, status: JobStatus.InProgress } : p);
       setElapsed(0);
-      Toast.show({ type: 'success', text1: 'Clocked in ✓', text2: lat ? 'GPS location recorded' : 'No GPS — location not recorded' });
+      Toast.show({ type: 'success', text1: 'Clocked In ✓', text2: lat ? 'GPS location recorded' : 'No GPS available' });
     } catch {
       Toast.show({ type: 'error', text1: 'Failed to clock in' });
     } finally { setIsClocking(false); }
@@ -198,37 +219,42 @@ export default function JobDetailScreen() {
         addToSyncQueue('time_logs', open.id, SyncOperation.Update, { clock_out: now });
       }
       if (timerRef.current) clearInterval(timerRef.current);
-      Toast.show({ type: 'info', text1: 'Paused', text2: `Time logged — ${fmtElapsed(elapsed)}` });
-    } catch { } finally { setIsClocking(false); }
+      Toast.show({ type: 'info', text1: 'Timer Paused', text2: `Time logged — ${fmtElapsed(elapsed)}` });
+    } catch { /* ignore */ } finally { setIsClocking(false); }
   };
 
-  const handleCompleteRequest = () => {
-    if (assets.some(a => !a.result || a.result === InspectionResult.NotTested)) {
-      Alert.alert('Incomplete Assets', 'Proceed without inspecting all assets?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Proceed', style: 'destructive', onPress: () => setShowSigModal(true) },
-      ]);
-      return;
-    }
-    if (!hasSig) { setShowSigModal(true); } else { finalizeCompletion(); }
-  };
+  const handleCompleteRequest = () => setShowBottomSheet(true);
+  const handleFinalizeConfirm = () => { setShowBottomSheet(false); finalizeCompletion(); };
 
-  const handleSignatureSaved = async (sigBase64: string) => {
-    if (!job) return;
-    const now = new Date().toISOString(), sigId = uuid();
-    const payload = { id: sigId, job_id: job.id, signature_url: sigBase64, signed_by_name: job.site_contact_name ?? 'Client', signed_at: now };
-    insertRecord('signatures', payload);
-    addToSyncQueue('signatures', sigId, SyncOperation.Insert, payload);
-    setHasSig(true);
-    finalizeCompletion();
-  };
 
   const finalizeCompletion = () => {
     if (!job) return;
+    try {
+      const now = new Date().toISOString();
+      const logs = getTimeLogsForJob<TimeLog>(job.id);
+      const open = logs.find(l => !l.clock_out);
+      if (open) {
+        updateRecord('time_logs', open.id, { clock_out: now });
+        addToSyncQueue('time_logs', open.id, SyncOperation.Update, { clock_out: now });
+      }
+    } catch (err) { console.warn('[JobDetail] finalizeCompletion:', err); }
     updateJobStatus(job.id, JobStatus.Completed);
     setJob(p => p ? { ...p, status: JobStatus.Completed } : p);
     if (timerRef.current) clearInterval(timerRef.current);
-    Toast.show({ type: 'success', text1: '✓ Job completed!', text2: 'Signature verified and job closed.' });
+    setShowCompletionModal(true);
+    setCompletionCountdown(5);
+    const jobId = job.id;
+    countdownRef.current = setInterval(() => {
+      setCompletionCountdown(prev => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          setShowCompletionModal(false);
+          router.replace(`/jobs/${jobId}/report` as never);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   const handleSaveNotes = () => {
@@ -246,541 +272,643 @@ export default function JobDetailScreen() {
     Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(addr)}`);
   };
 
-  // ── Derived ──────────────────────────────────
-  const inspected   = assets.filter(a => a.result && a.result !== InspectionResult.NotTested).length;
+  // ── Derived counts ─────────────────────────────────────────────────────────
+  // FLOW-8 FIX: NotTested is a deliberate result choice — count it as inspected.
+  // Previously this excluded NotTested, showing lower progress than the inspection form.
+  const inspected   = assets.filter(a => a.result !== null).length;
   const totalAssets = assets.length;
   const progressPct = totalAssets > 0 ? Math.round((inspected / totalAssets) * 100) : 0;
-  const fullAddress = [job?.property_address, job?.property_suburb, job?.property_state, job?.property_postcode].filter(Boolean).join(', ');
 
-  const TAB_LABELS: Record<TabKey, string> = {
-    assets:  `Assets${totalAssets > 0 ? ` (${totalAssets})` : ''}`,
-    defects: `Defects${defects.length > 0 ? ` (${defects.length})` : ''}`,
-    photos:  `Photos${photos.length > 0 ? ` (${photos.length})` : ''}`,
-    notes:   'Notes',
-  };
+  // ── Loading / error states ─────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
+        <ActivityIndicator color={C.primary} size="large" />
+      </View>
+    );
+  }
+  if (!job) {
+    return (
+      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
+        <Text style={{ fontSize: 40 }}>🔍</Text>
+        <Text style={[s.notFound, { color: C.textSecondary }]}>Job not found</Text>
+        <View style={{ marginTop: 16 }}>
+          <Button title="Go Back" onPress={() => router.back()} />
+        </View>
+      </View>
+    );
+  }
 
-  if (isLoading) return (
-    <View style={[s.screen, s.centered]}>
-      <ActivityIndicator color={Colors.light.primary} size="large" />
-    </View>
-  );
-
-  if (!job) return (
-    <View style={[s.screen, s.centered]}>
-      <Text style={{ fontSize: 40 }}>🔍</Text>
-      <Text style={s.notFound}>Job not found</Text>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
-        <Text style={s.backBtnTxt}>← Go Back</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const isScheduled  = job.status === JobStatus.Scheduled;
   const isInProgress = job.status === JobStatus.InProgress;
   const isCompleted  = job.status === JobStatus.Completed;
   const isCancelled  = job.status === JobStatus.Cancelled;
+  const isScheduled  = job.status === JobStatus.Scheduled; // FLOW-10
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <View style={s.screen}>
+    <View style={[s.screen, { backgroundColor: C.background }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
 
-      {/* ── MAP HEADER ─────────────────────── */}
-      <View style={s.mapWrap}>
-        {coords ? (
-          <MapView
-            style={s.map}
-            provider={PROVIDER_DEFAULT}
-            initialRegion={{ latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
-            scrollEnabled={false} zoomEnabled={false} pitchEnabled={false}
-          >
-            <Marker coordinate={coords} pinColor={Colors.light.accent} />
-          </MapView>
-        ) : (
-          <View style={s.mapFallback}>
-            <MaterialCommunityIcons name="map-marker-off-outline" size={32} color={Colors.light.border} />
-          </View>
-        )}
-        {/* Back button overlay */}
-        <TouchableOpacity style={s.backOverlay} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.light.primary} />
-        </TouchableOpacity>
-        {/* Navigate pill overlay */}
-        <TouchableOpacity style={s.navOverlay} onPress={handleNavigate}>
-          <Text style={{ fontSize: 13 }}>🗺️</Text>
-          <Text style={s.navOverlayTxt}>Navigate</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── PROPERTY NAME BAR ───────────────── */}
-      <View style={s.propBar}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.propName} numberOfLines={1}>{job.property_name ?? 'Job'}</Text>
-          {fullAddress ? <Text style={s.propAddr} numberOfLines={1}>{fullAddress}</Text> : null}
-        </View>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
-
-        {/* ── SAFETY ALERTS ───────────────── */}
-        {job.access_notes ? (
-          <View style={s.alertAccess}>
-            <MaterialCommunityIcons name="key-variant" size={18} color="#1D4ED8" />
-            <View style={{ flex: 1 }}>
-              <Text style={s.alertAccessTitle}>Access Notes</Text>
-              <Text style={s.alertAccessBody}>{job.access_notes}</Text>
-            </View>
-          </View>
-        ) : null}
-        {job.hazard_notes ? (
-          <View style={s.alertHazard}>
-            <MaterialCommunityIcons name="alert-outline" size={18} color={Colors.light.error} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.alertHazardTitle}>⚠️ Hazard Warning</Text>
-              <Text style={s.alertHazardBody}>{job.hazard_notes}</Text>
-            </View>
-          </View>
-        ) : null}
-
-        {/* ── INFO CHIPS ROW ───────────────── */}
-        <Animated.View entering={FadeInDown.delay(40).duration(350)}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.chipsRow}
-          >
-            <InfoChip icon="📅" label={fmtDate(job.scheduled_date)} />
-            {job.scheduled_time ? <InfoChip icon="🕐" label={fmtTime(job.scheduled_time)} /> : null}
-            <InfoChip icon="🔧" label={JOB_TYPE_LABEL[job.job_type] ?? job.job_type} />
-            <InfoChip 
-              icon="⚡" 
-              label={(PRIORITY_LABEL[job.priority] ?? job.priority) + ' Priority'} 
-              color={PRIORITY_COLOR[job.priority]}
-            />
-          </ScrollView>
-        </Animated.View>
-
-        {/* ── SITE CONTACT CARD ─────────────── */}
-        {job.site_contact_name ? (
-          <Animated.View entering={FadeInDown.delay(80).duration(350)} style={s.contactCard}>
-            <View style={s.contactRow}>
-              <View style={s.contactIcon}>
-                <MaterialCommunityIcons name="account-outline" size={16} color={Colors.light.primary} />
-              </View>
-              <Text style={s.contactName}>{job.site_contact_name}</Text>
-            </View>
-            {job.site_contact_phone ? (
-              <TouchableOpacity
-                style={s.contactRow}
-                onPress={() => Linking.openURL(`tel:${job.site_contact_phone}`)}
-              >
-                <View style={s.contactIcon}>
-                  <MaterialCommunityIcons name="phone-outline" size={16} color={Colors.light.accent} />
-                </View>
-                <Text style={s.contactPhone}>{job.site_contact_phone}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </Animated.View>
-        ) : null}
-
-        {/* ── CLOCK IN / TIME TRACKING ──────── */}
-        <Animated.View entering={FadeInDown.delay(120).duration(350)} style={s.clockCard}>
-          <Text style={s.clockTitle}>Time Tracking</Text>
-
-          {isScheduled && (
-            <TouchableOpacity
-              style={[s.startBtn, isClocking && s.startBtnLoading]}
-              onPress={handleStartJob}
-              disabled={isClocking}
-              activeOpacity={0.85}
-            >
-              {isClocking
-                ? <ActivityIndicator color="#FFFFFF" size="small" />
-                : <MaterialCommunityIcons name="map-marker-radius" size={20} color="#FFFFFF" />
-              }
-              <View>
-                <Text style={s.startBtnTitle}>Clock In & Start Job</Text>
-                <Text style={s.startBtnSub}>GPS location will be recorded</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {isInProgress && (
-            <View style={s.activeBox}>
-              <View style={s.activeTimerRow}>
-                <Text style={s.activeTimerTxt}>Started at {job.scheduled_time ? fmtTime(job.scheduled_time) : 'unknown'} — {fmtElapsed(elapsed)}</Text>
-              </View>
-              <View style={s.activeActions}>
-                <TouchableOpacity style={s.pauseBtn} onPress={handleClockOut} disabled={isClocking}>
-                  <Text style={{ fontSize: 14 }}>⏸</Text>
-                  <Text style={s.pauseBtnTxt}>Pause</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.completeBtn} onPress={handleCompleteRequest} disabled={isClocking}>
-                  <Text style={{ fontSize: 14 }}>✅</Text>
-                  <Text style={s.completeBtnTxt}>Complete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {isCompleted && (
-            <View style={s.completedBanner}>
-              <MaterialCommunityIcons name="check-circle" size={20} color={Colors.light.success} />
-              <View>
-                <Text style={s.completedBannerTxt}>Job Completed</Text>
-                {hasSig && <Text style={s.completedBannerSub}>Client signature recorded</Text>}
-              </View>
-            </View>
-          )}
-
-          {isCancelled && (
-            <View style={s.cancelledBanner}>
-              <MaterialCommunityIcons name="cancel" size={20} color={Colors.light.textSecondary} />
-              <Text style={s.cancelledBannerTxt}>Job Cancelled</Text>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* ── ASSET PROGRESS ────────────────── */}
-        {totalAssets > 0 && (
-          <Animated.View entering={FadeInDown.delay(150).duration(350)} style={s.progressCard}>
-            <View style={s.progressRow}>
-              <Text style={s.progressLabel}>{inspected}/{totalAssets} assets inspected</Text>
-              <Text style={[s.progressPct, { color: progressPct === 100 ? Colors.light.success : Colors.light.primary }]}>
-                {progressPct}%
+        {/* ── HEADER ────────────────────────────────────────────── */}
+        <ScreenHeader
+          eyebrow={`JOB #${job.id.substring(0, 8).toUpperCase()}`}
+          title={job.property_name || 'Job Details'}
+          subtitle={[job.property_address, job.property_suburb].filter(Boolean).join(', ') || 'No address on record'}
+          showBack={true}
+          curved={true}
+          rightComponent={
+            <View style={[s.statusBadge, {
+              backgroundColor: isCompleted  ? 'rgba(74,222,128,0.25)'
+                : isCancelled  ? 'rgba(255,255,255,0.15)'
+                : isInProgress ? 'rgba(249,115,22,0.28)'
+                : 'rgba(255,255,255,0.15)',
+            }]}>
+              <Text style={[s.statusBadgeTxt, {
+                color: isCompleted  ? '#4ADE80'
+                  : isCancelled  ? 'rgba(255,255,255,0.7)'
+                  : isInProgress ? '#FCD34D'
+                  : '#FFFFFF',
+              }]}>
+                {isInProgress ? '⏱ In Progress'
+                  : isCompleted  ? '✓ Completed'
+                  : isCancelled  ? '✗ Cancelled'
+                  : job.status.replace('_', ' ')}
               </Text>
             </View>
-            <View style={s.progressTrack}>
-              <View
-                style={[
-                  s.progressFill,
-                  {
-                    width: `${progressPct}%` as `${number}%`,
-                    backgroundColor: progressPct === 100 ? Colors.light.success : Colors.light.accent,
-                  },
-                ]}
+          }
+        />
+
+        <View style={s.body}>
+
+          {/* ── TIMER / CLOCK WIDGET ──────────────────────────────── */}
+          {!isCompleted && !isCancelled && (
+            <Animated.View entering={FadeInDown.delay(40).duration(360)}>
+              <View style={[s.timerCard, {
+                backgroundColor: isInProgress ? C.primary : C.surface,
+                borderColor:     isInProgress ? 'transparent' : C.border,
+                borderWidth:     isInProgress ? 0 : 1,
+              }]}>
+                <View style={s.timerLeft}>
+                  <MaterialCommunityIcons
+                    name="clock-outline"
+                    size={26}
+                    color={isInProgress ? 'rgba(255,255,255,0.85)' : C.primary}
+                  />
+                  <View>
+                    <Text style={[s.timerLabel, {
+                      color: isInProgress ? 'rgba(255,255,255,0.65)' : C.textSecondary,
+                    }]}>
+                      {isInProgress ? 'On-site time' : 'Job Timer'}
+                    </Text>
+                    <Text style={[s.timerTime, { color: isInProgress ? '#FFFFFF' : C.text }]}>
+                      {isInProgress ? fmtElapsed(elapsed) : 'Not Started'}
+                    </Text>
+                  </View>
+                </View>
+                {isInProgress ? (
+                  <View style={s.timerActions}>
+                    <TouchableOpacity
+                      style={s.timerPauseBtn}
+                      onPress={handleClockOut}
+                      disabled={isClocking}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name="pause" size={20} color={C.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.timerCompleteBtn, { backgroundColor: C.success }]}
+                      onPress={handleCompleteRequest}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={s.timerCompleteTxt}>Complete Job</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Button
+                    title="Clock In"
+                    onPress={handleStartJob}
+                    disabled={isClocking}
+                    isLoading={isClocking}
+                    style={{ borderRadius: 22, height: 44, minWidth: 110 }}
+                  />
+                )}
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Completed banner */}
+          {isCompleted && (
+            <View style={[s.statusBanner, { backgroundColor: C.successLight, borderColor: C.success }]}>
+              <MaterialCommunityIcons name="check-decagram" size={22} color={C.successDark} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.statusBannerTitle, { color: C.successDark }]}>Job Completed</Text>
+                {hasSig && (
+                  <Text style={[s.statusBannerSub, { color: C.successDark }]}>Client signature captured</Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Cancelled banner */}
+          {isCancelled && (
+            <View style={[s.statusBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+              <MaterialCommunityIcons name="cancel" size={22} color={C.textSecondary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.statusBannerTitle, { color: C.textSecondary }]}>Job Cancelled</Text>
+                <Text style={[s.statusBannerSub, { color: C.textTertiary }]}>
+                  Contact your manager for details.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* ── SAFETY ALERTS ─────────────────────────────────────── */}
+          {(job.hazard_notes || job.access_notes) && (
+            <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
+              {job.hazard_notes && (
+                <View style={[s.alertBox, { backgroundColor: C.errorLight, borderLeftColor: C.error }]}>
+                  <MaterialCommunityIcons name="alert" size={18} color={C.errorDark} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.alertTitle, { color: C.errorDark }]}>⚠️ Site Hazard</Text>
+                    <Text style={[s.alertBody, { color: C.error }]}>{job.hazard_notes}</Text>
+                  </View>
+                </View>
+              )}
+              {job.access_notes && (
+                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderLeftColor: C.infoDark }]}>
+                  <MaterialCommunityIcons name="key" size={18} color={C.infoDark} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.alertTitle, { color: C.infoDark }]}>🔑 Access Notes</Text>
+                    <Text style={[s.alertBody, { color: C.infoDark }]}>{job.access_notes}</Text>
+                  </View>
+                </View>
+              )}
+            </Animated.View>
+          )}
+
+          {/* ── INFO CHIPS ────────────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(80).duration(360)}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
+              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                <Text style={s.chipIcon}>📅</Text>
+                <Text style={[s.chipTxt, { color: C.text }]}>{fmtDate(job.scheduled_date)}</Text>
+              </View>
+              {job.scheduled_time && (
+                <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                  <Text style={s.chipIcon}>🕐</Text>
+                  <Text style={[s.chipTxt, { color: C.text }]}>{fmtTime(job.scheduled_time)}</Text>
+                </View>
+              )}
+              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                <Text style={s.chipIcon}>🔧</Text>
+                <Text style={[s.chipTxt, { color: C.text }]}>
+                  {JOB_TYPE_LABEL[job.job_type] ?? job.job_type}
+                </Text>
+              </View>
+              <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.primary) + '18' }]}>
+                <Text style={s.chipIcon}>⚡</Text>
+                <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.primary, fontWeight: '700' }]}>
+                  {PRIORITY_LABEL[job.priority] ?? job.priority}
+                </Text>
+              </View>
+            </ScrollView>
+          </Animated.View>
+
+          {/* ── INSPECTION PROGRESS ───────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(100).duration(360)}>
+            <View style={[s.progressCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <View style={s.progressHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.progressTitle, { color: C.text }]}>Inspection Progress</Text>
+                  <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
+                    {totalAssets === 0
+                      ? 'No assets registered for this property'
+                      : `${inspected} of ${totalAssets} assets inspected`}
+                  </Text>
+                </View>
+                <Text style={[s.progressPct, { color: progressPct === 100 ? C.success : C.primary }]}>
+                  {progressPct}%
+                </Text>
+              </View>
+              <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary }]}>
+                <View style={[s.progressFill, {
+                  width: totalAssets > 0 ? (`${progressPct}%` as `${number}%`) : '0%',
+                  backgroundColor: progressPct === 100 ? C.success : C.accent,
+                }]} />
+              </View>
+              {totalAssets > 0 && (
+                <View style={s.progressStatRow}>
+                  {[
+                    { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success },
+                    { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error },
+                    { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textTertiary },
+                  ].map(stat => (
+                    <View key={stat.label} style={s.progressStat}>
+                      <View style={[s.progressStatDot, { backgroundColor: stat.color }]} />
+                      <Text style={[s.progressStatTxt, { color: C.textSecondary }]}>
+                        {stat.count} {stat.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </Animated.View>
+
+          {/* ── OPEN INSPECTION FORM CTA ──────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(120).duration(360)}>
+            {/* FLOW-2 + FLOW-10 FIX: Only accessible when In Progress.
+                Scheduled = must clock in first. Completed = locked to protect compliance records. */}
+            <TouchableOpacity
+              style={[s.inspectCta, {
+                backgroundColor: isInProgress ? C.primary : C.backgroundTertiary,
+                opacity: isInProgress ? 1 : 0.7,
+              }]}
+              onPress={isInProgress ? () => router.push(`/jobs/${id}/inspect` as never) : undefined}
+              activeOpacity={0.88}
+              disabled={!isInProgress}
+            >
+              <View style={s.inspectCtaIcon}>
+                <MaterialCommunityIcons
+                  name="clipboard-check-outline"
+                  size={26}
+                  color={isInProgress ? 'rgba(255,255,255,0.9)' : C.textTertiary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.inspectCtaTitle, { color: isInProgress ? '#FFF' : C.text }]}>
+                  Open Inspection Form
+                </Text>
+                <Text style={[s.inspectCtaSub, { color: isInProgress ? 'rgba(255,255,255,0.72)' : C.textSecondary }]}>
+                  {isScheduled
+                    ? '🔒 Clock in first to begin the inspection'
+                    : isCancelled
+                    ? 'This job has been cancelled'
+                    : isCompleted
+                    ? '✓ Inspection locked after job completion'
+                    : totalAssets === 0
+                    ? 'Add assets and begin the on-site inspection'
+                    : progressPct === 100
+                    ? '✓ All assets inspected'
+                    : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`}
+                </Text>
+              </View>
+              {isInProgress && (
+                <MaterialCommunityIcons name="arrow-right" size={22} color="rgba(255,255,255,0.55)" />
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* ── QUICK ACTIONS GRID ────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(140).duration(360)}>
+            <Text style={[s.sectionLabel, { color: C.textTertiary }]}>QUICK ACTIONS</Text>
+            <View style={s.actionsRow}>
+              <ActionCard
+                icon="alert-circle-outline"
+                title="Defects"
+                subtitle={defects.length === 0 ? 'None logged' : `${defects.length} defect${defects.length !== 1 ? 's' : ''}`}
+                badge={defects.length}
+                badgeColor={C.error}
+                onPress={() => router.push(`/jobs/${id}/defects` as never)}
+                C={C}
+              />
+              <ActionCard
+                icon="camera-outline"
+                title="Photos"
+                subtitle={photos.length === 0 ? 'None captured' : `${photos.length} photo${photos.length !== 1 ? 's' : ''}`}
+                badge={photos.length}
+                badgeColor={C.accent}
+                onPress={() => router.push(`/jobs/${id}/photos` as never)}
+                C={C}
+              />
+            </View>
+            <View style={[s.actionsRow, { marginTop: 10 }]}>
+              <ActionCard
+                icon="file-document-outline"
+                title="Quote"
+                subtitle="Parts & labour"
+                onPress={() => router.push(`/jobs/${id}/quote` as never)}
+                C={C}
+              />
+              <ActionCard
+                icon="draw"
+                title="Signature"
+                subtitle={hasSig ? '✓ Captured' : 'Required for report'}
+                onPress={() => router.push(`/jobs/${id}/signature` as never)}
+                C={C}
               />
             </View>
           </Animated.View>
-        )}
 
-        {/* ── CUSTOM TAB BAR ───────────────── */}
-        <Animated.View entering={FadeInDown.delay(180).duration(350)}>
-          <View style={s.tabBar}>
-            {(Object.keys(TAB_LABELS) as TabKey[]).map(t => (
+          {/* ── NAVIGATE & CONTACT ────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(160).duration(360)} style={{ gap: 10 }}>
+            <TouchableOpacity
+              style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
+              onPress={handleNavigate}
+              activeOpacity={0.8}
+            >
+              <View style={[s.quickBtnIcon, { backgroundColor: C.primary + '18' }]}>
+                <MaterialCommunityIcons name="directions" size={18} color={C.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.quickBtnTitle, { color: C.text }]}>Navigate to Site</Text>
+                {[job.property_address, job.property_suburb].filter(Boolean).length > 0 && (
+                  <Text style={[s.quickBtnSub, { color: C.textSecondary }]} numberOfLines={1}>
+                    {[job.property_address, job.property_suburb].filter(Boolean).join(', ')}
+                  </Text>
+                )}
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
+            </TouchableOpacity>
+
+            {job.site_contact_phone && (
               <TouchableOpacity
-                key={t}
-                style={[s.tabItem, activeTab === t && s.tabItemActive]}
-                onPress={() => setActiveTab(t)}
+                style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
+                onPress={() => Linking.openURL(`tel:${job.site_contact_phone}`)}
+                activeOpacity={0.8}
               >
-                <Text style={[s.tabItemTxt, activeTab === t && s.tabItemTxtActive]} numberOfLines={1}>
-                  {TAB_LABELS[t]}
-                </Text>
+                <View style={[s.quickBtnIcon, { backgroundColor: C.success + '18' }]}>
+                  <MaterialCommunityIcons name="phone-outline" size={18} color={C.success} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.quickBtnTitle, { color: C.text }]}>
+                    {job.site_contact_name || 'Call Site Contact'}
+                  </Text>
+                  <Text style={[s.quickBtnSub, { color: C.textSecondary }]}>{job.site_contact_phone}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
               </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ── TAB CONTENT ──────────────────── */}
-          <View style={s.tabContent}>
-
-            {/* ASSETS */}
-            {activeTab === 'assets' && (
-              <View>
-                {assets.length === 0 ? (
-                  <View style={s.tabEmpty}>
-                    <Text style={{ fontSize: 32 }}>🧯</Text>
-                    <Text style={s.tabEmptyTitle}>No assets registered</Text>
-                    <Text style={s.tabEmptySub}>Contact office to add assets to this property</Text>
-                  </View>
-                ) : (
-                  assets.map((asset, i) => {
-                    const rc = asset.result ? RESULT_CFG[asset.result] : null;
-                    return (
-                      <TouchableOpacity
-                        key={asset.id}
-                        style={[s.assetRow, i < assets.length - 1 && s.rowBorder]}
-                        onPress={() => router.push(`/jobs/${id}/inspect` as never)}
-                      >
-                        <View style={s.assetIconCircle}>
-                          <Text style={{ fontSize: 16 }}>🔥</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.assetType}>{asset.asset_type}</Text>
-                          {asset.location_on_site ? (
-                            <Text style={s.assetLoc}>{asset.location_on_site}</Text>
-                          ) : null}
-                        </View>
-                        {rc ? (
-                          <View style={s.resultPill}>
-                            <MaterialCommunityIcons name={rc.icon} size={16} color={rc.color} />
-                            <Text style={[s.resultTxt, { color: rc.color }]}>
-                              {asset.result === InspectionResult.Pass ? 'Pass' : 'Fail'}
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={s.pendingPill}>
-                            <Text style={s.pendingTxt}>Pending</Text>
-                          </View>
-                        )}
-                        <MaterialCommunityIcons name="chevron-right" size={16} color={Colors.light.border} />
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-                {assets.length > 0 && (
-                  <TouchableOpacity style={s.tabActionBtn} onPress={() => router.push(`/jobs/${id}/inspect` as never)}>
-                    <MaterialCommunityIcons name="barcode-scan" size={18} color="#FFFFFF" />
-                    <Text style={s.tabActionTxt}>Inspect All Assets</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
             )}
+          </Animated.View>
 
-            {/* DEFECTS */}
-            {activeTab === 'defects' && (
-              <View>
-                {defects.length === 0 ? (
-                  <View style={s.tabEmpty}>
-                    <Text style={{ fontSize: 32 }}>✅</Text>
-                    <Text style={[s.tabEmptyTitle, { color: Colors.light.success }]}>No defects raised</Text>
-                  </View>
-                ) : (
-                  defects.map((d, i) => {
-                    const sc = SEVERITY_CFG[d.severity as DefectSeverity];
-                    return (
-                      <View key={d.id} style={[s.defectCard, { borderLeftColor: sc?.color ?? '#ccc' }]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.defectDesc}>{d.description}</Text>
-                          <Text style={s.defectMeta}>{sc?.label ?? d.severity} · {d.status.toUpperCase()}</Text>
-                        </View>
-                        <View style={[s.defectStatusPill, { backgroundColor: d.status === 'open' ? Colors.light.errorLight : Colors.light.successLight }]}>
-                          <Text style={{ fontSize: 10, fontWeight: '700', color: d.status === 'open' ? Colors.light.errorDark : Colors.light.successDark }}>
-                            {d.status.toUpperCase()}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
-                <TouchableOpacity
-                  style={[s.tabActionBtn, s.tabActionBtnOutline]}
-                  onPress={() => router.push(`/jobs/${id}/defects` as never)}
-                >
-                  <MaterialCommunityIcons name="plus" size={18} color={Colors.light.primary} />
-                  <Text style={[s.tabActionTxt, { color: Colors.light.primary }]}>Log Defect</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* PHOTOS */}
-            {activeTab === 'photos' && (
-              <View>
-                {photos.length === 0 ? (
-                  <View style={s.tabEmpty}>
-                    <Text style={{ fontSize: 32 }}>📷</Text>
-                    <Text style={s.tabEmptyTitle}>No photos yet</Text>
-                    <Text style={s.tabEmptySub}>Document your inspection with photos</Text>
-                  </View>
-                ) : (
-                  <View style={s.photoGrid}>
-                    {photos.map(p => (
-                      <View key={p.id} style={s.photoThumb}>
-                        <MaterialCommunityIcons name="image-outline" size={28} color={Colors.light.border} />
-                      </View>
-                    ))}
-                  </View>
-                )}
-                <TouchableOpacity style={s.tabActionBtn} onPress={() => router.push(`/jobs/${id}/photos` as never)}>
-                  <MaterialCommunityIcons name="camera-plus-outline" size={18} color="#FFFFFF" />
-                  <Text style={s.tabActionTxt}>Add Photo</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* NOTES */}
-            {activeTab === 'notes' && (
-              <View style={s.notesCard}>
-                {isEditingNotes ? (
-                  <View>
-                    <TextInput
-                      style={s.notesInput}
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Add job notes here..."
-                      placeholderTextColor={Colors.light.textTertiary}
-                      multiline
-                      textAlignVertical="top"
-                      maxLength={1000}
-                    />
-                    <Text style={s.notesCount}>{notes.length}/1000</Text>
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                      <TouchableOpacity style={[s.tabActionBtn, { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E2E8F0', marginTop: 0 }]} onPress={() => setIsEditingNotes(false)}>
-                        <Text style={[s.tabActionTxt, { color: '#64748B' }]}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.tabActionBtn, { flex: 1, marginTop: 0 }]} onPress={handleSaveNotes}>
-                        <Text style={s.tabActionTxt}>Save Notes</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <View>
-                    {notes ? (
-                      <Text style={{ fontSize: 14, color: '#0F172A', lineHeight: 22, marginBottom: 16 }}>{notes}</Text>
-                    ) : (
-                      <Text style={{ fontSize: 14, color: '#64748B', fontStyle: 'italic', marginBottom: 16 }}>No notes documented.</Text>
-                    )}
-                    <TouchableOpacity style={[s.tabActionBtn, s.tabActionBtnOutline]} onPress={() => setIsEditingNotes(true)}>
-                      <Text style={{ fontSize: 14 }}>✏️</Text>
-                      <Text style={[s.tabActionTxt, { color: Colors.light.primary }]}>Edit Notes</Text>
+          {/* ── FIELD NOTES ───────────────────────────────────────── */}
+          <Animated.View entering={FadeInDown.delay(180).duration(360)}>
+            <Text style={[s.sectionLabel, { color: C.textTertiary }]}>FIELD NOTES</Text>
+            <View style={[s.notesCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+              {isEditingNotes ? (
+                <>
+                  <TextInput
+                    style={[s.notesInput, { color: C.text, borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
+                    value={notes}
+                    onChangeText={setNotes}
+                    multiline
+                    placeholder="Document site conditions, access details, or follow-up actions…"
+                    placeholderTextColor={C.textTertiary}
+                    textAlignVertical="top"
+                  />
+                  <View style={s.notesActionRow}>
+                    <TouchableOpacity
+                      style={[s.notesCancelBtn, { borderColor: C.border }]}
+                      onPress={() => { setNotes(job.notes ?? ''); setIsEditingNotes(false); }}
+                    >
+                      <Text style={[s.notesCancelTxt, { color: C.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.notesSaveBtn, { backgroundColor: C.primary }]}
+                      onPress={handleSaveNotes}
+                    >
+                      <Text style={s.notesSaveTxt}>Save Notes</Text>
                     </TouchableOpacity>
                   </View>
-                )}
-              </View>
-            )}
-          </View>
-        </Animated.View>
+                </>
+              ) : (
+                <>
+                  <Text style={[notes ? s.notesText : s.notesEmpty, { color: notes ? C.text : C.textTertiary }]}>
+                    {notes || 'No notes yet. Tap edit to document site conditions or follow-up actions.'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[s.notesEditBtn, { borderColor: C.border }]}
+                    onPress={() => setIsEditingNotes(true)}
+                  >
+                    <MaterialCommunityIcons name="pencil-outline" size={14} color={C.primary} />
+                    <Text style={[s.notesEditTxt, { color: C.primary }]}>
+                      {notes ? 'Edit Notes' : 'Add Notes'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </Animated.View>
+
+        </View>
       </ScrollView>
 
-      {/* ── BOTTOM FIXED BUTTON ───────────── */}
-      <View style={s.bottomBar}>
-        <TouchableOpacity
-          style={[s.reportBtn, isCompleted ? s.reportBtnNavy : null]}
-          onPress={() => router.push(`/jobs/${id}/report` as never)}
-          activeOpacity={0.8}
-        >
-          <Text style={{ fontSize: 16 }}>📄</Text>
-          <Text style={s.reportBtnTxt}>{isCompleted ? 'View Report' : 'Generate Report'}</Text>
-        </TouchableOpacity>
+      {/* ── BOTTOM ACTION BAR ─────────────────────────────────────── */}
+      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+        {/* FLOW-6 FIX: Report only accessible after job has started.
+             Scheduled/Cancelled = disabled. InProgress = draft preview. Completed = full report. */}
+        <Button
+          title={
+            isCompleted  ? 'View Full Report' :
+            isInProgress ? 'Draft Preview' :
+            'Report Not Available'
+          }
+          variant={isCompleted ? 'secondary' : 'primary'}
+          disabled={isScheduled || isCancelled}
+          onPress={(isScheduled || isCancelled) ? undefined : () => router.push(`/jobs/${id}/report` as never)}
+          icon={
+            <MaterialCommunityIcons
+              name={isCompleted ? 'file-eye-outline' : 'file-chart-outline'}
+              size={20}
+              color={(isScheduled || isCancelled) ? C.textTertiary : '#FFFFFF'}
+            />
+          }
+          style={{ height: 52, borderRadius: 26 }}
+        />
       </View>
 
-      {/* Signature Modal */}
-      <SignatureModal
-        visible={showSigModal}
-        onClose={() => setShowSigModal(false)}
-        clientName={job?.site_contact_name ?? undefined}
-        onSign={handleSignatureSaved}
+
+      <CompletionBottomSheet
+        visible={showBottomSheet}
+        onClose={() => setShowBottomSheet(false)}
+        onConfirm={handleFinalizeConfirm}
+        onNeedSignature={() => {
+          setShowBottomSheet(false);
+          if (job) router.push(`/jobs/${job.id}/signature` as never);
+        }}
+        assetsTotal={totalAssets}
+        assetsInspected={inspected}
+        hasSignature={hasSig}
+        hasDefects={defects.length > 0}
       />
+
+      {/* Job completion celebration modal */}
+      <Modal
+        visible={showCompletionModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          setShowCompletionModal(false);
+        }}
+      >
+        <View style={cm.overlay}>
+          <View style={[cm.card, { backgroundColor: C.primary }]}>
+            <View style={[cm.checkCircle, { backgroundColor: C.success, shadowColor: C.success }]}>
+              <MaterialCommunityIcons name="check-bold" size={48} color="#FFFFFF" />
+            </View>
+            <Text style={cm.title}>Job Complete!</Text>
+            <Text style={cm.property}>{job?.property_name ?? 'Property'}</Text>
+
+            <View style={cm.statsRow}>
+              <View style={cm.statItem}>
+                <Text style={cm.statEmoji}>⏱</Text>
+                <Text style={cm.statValue}>{fmtElapsed(elapsed)}</Text>
+                <Text style={cm.statLabel}>On site</Text>
+              </View>
+              <View style={cm.statDivider} />
+              <View style={cm.statItem}>
+                <Text style={cm.statEmoji}>✅</Text>
+                <Text style={cm.statValue}>{assets.filter(a => a.result).length}/{assets.length}</Text>
+                <Text style={cm.statLabel}>Inspected</Text>
+              </View>
+              <View style={cm.statDivider} />
+              <View style={cm.statItem}>
+                <Text style={cm.statEmoji}>⚠️</Text>
+                <Text style={cm.statValue}>{defects.length}</Text>
+                <Text style={cm.statLabel}>Defects</Text>
+              </View>
+              <View style={cm.statDivider} />
+              <View style={cm.statItem}>
+                <Text style={cm.statEmoji}>📷</Text>
+                <Text style={cm.statValue}>{photos.length}</Text>
+                <Text style={cm.statLabel}>Photos</Text>
+              </View>
+            </View>
+
+            <View style={{ width: '100%', marginTop: 8 }}>
+              <Button
+                title="Generate Report"
+                icon={<MaterialCommunityIcons name="file-chart-outline" size={18} color="#FFF" />}
+                onPress={() => {
+                  if (countdownRef.current) clearInterval(countdownRef.current);
+                  setShowCompletionModal(false);
+                  router.push(`/jobs/${job?.id}/report` as never);
+                }}
+              />
+            </View>
+            <View style={{ width: '100%', marginTop: 8 }}>
+              <Button
+                variant="outline"
+                title="← Back to Schedule"
+                onPress={() => {
+                  if (countdownRef.current) clearInterval(countdownRef.current);
+                  setShowCompletionModal(false);
+                  router.replace('/jobs' as never);
+                }}
+              />
+            </View>
+            <Text style={cm.countdown}>Redirecting to report in {completionCountdown}s…</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────
+// ─── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  screen:   { flex: 1, backgroundColor: Colors.light.background },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  screen:        { flex: 1 },
+  centered:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  scrollContent: { paddingBottom: Platform.OS === 'ios' ? 108 : 88 },
+  body:          { padding: 16, gap: 16 },
+  notFound:      { fontSize: 16, marginTop: 12 },
 
-  // Map header
-  mapWrap:    { height: 160, backgroundColor: Colors.light.backgroundTertiary, position: 'relative' },
-  map:        { ...StyleSheet.absoluteFillObject },
-  mapFallback:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
-  backOverlay:{ position: 'absolute', top: 48, left: 16, backgroundColor: '#FFFFFF', padding: 8, borderRadius: 20, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
-  navOverlay: { position: 'absolute', top: 48, right: 16, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6, elevation: 4 },
-  navOverlayTxt: { fontSize: 13, fontWeight: '700', color: Colors.light.primary },
+  // Header status badge
+  statusBadge:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
 
-  // Property bar
-  propBar:  { backgroundColor: Colors.light.primary, padding: 16, flexDirection: 'row', alignItems: 'center' },
-  propName: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.2 },
-  propAddr: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 3, lineHeight: 16 },
+  // Timer card
+  timerCard:        { borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timerLeft:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  timerLabel:       { fontSize: 12, fontWeight: '600', marginBottom: 2 },
+  timerTime:        { fontSize: 18, fontWeight: '800' },
+  timerActions:     { flexDirection: 'row', gap: 8 },
+  timerPauseBtn:    { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  timerCompleteBtn: { paddingHorizontal: 16, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  timerCompleteTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
 
-  // Alert cards
-  alertAccess: { borderLeftWidth: 4, borderLeftColor: '#1D4ED8', backgroundColor: '#EFF6FF', flexDirection: 'row', gap: 10, padding: 14, marginHorizontal: 16, marginTop: 12, borderRadius: 12, alignItems: 'flex-start' },
-  alertAccessTitle: { fontSize: 12, fontWeight: '700', color: '#1E40AF', marginBottom: 3 },
-  alertAccessBody:  { fontSize: 12, color: '#1E40AF', lineHeight: 18 },
-  alertHazard: { borderLeftWidth: 4, borderLeftColor: Colors.light.error, backgroundColor: '#FEF2F2', flexDirection: 'row', gap: 10, padding: 14, marginHorizontal: 16, marginTop: 8, borderRadius: 12, alignItems: 'flex-start' },
-  alertHazardTitle: { fontSize: 12, fontWeight: '700', color: Colors.light.errorDark, marginBottom: 3 },
-  alertHazardBody:  { fontSize: 12, color: Colors.light.errorDark, lineHeight: 18 },
+  // Status banners (completed / cancelled)
+  statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  statusBannerTitle: { fontSize: 14, fontWeight: '700' },
+  statusBannerSub:   { fontSize: 12, marginTop: 2 },
+
+  // Safety alerts
+  alertBox:   { flexDirection: 'row', padding: 12, borderRadius: 12, gap: 10, borderLeftWidth: 4 },
+  alertTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  alertBody:  { fontSize: 13, lineHeight: 19 },
 
   // Info chips
-  chipsRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8, flexDirection: 'row' },
+  chipsRow: { gap: 8, flexDirection: 'row', paddingBottom: 2, paddingRight: 4 },
+  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  chipIcon: { fontSize: 13 },
+  chipTxt:  { fontSize: 13, fontWeight: '500' },
 
-  // Site contact
-  contactCard: { backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 4, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, gap: 10 },
-  contactRow:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  contactIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.light.background, alignItems: 'center', justifyContent: 'center' },
-  contactName: { fontSize: 14, fontWeight: '600', color: Colors.light.text },
-  contactPhone:{ fontSize: 14, fontWeight: '600', color: Colors.light.accent, textDecorationLine: 'underline' },
+  // Inspection progress card
+  progressCard:     { borderRadius: 18, padding: 16, borderWidth: 1 },
+  progressHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  progressTitle:    { fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  progressSubtitle: { fontSize: 12 },
+  progressPct:      { fontSize: 20, fontWeight: '800', marginLeft: 8 },
+  progressTrack:    { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
+  progressFill:     { height: 8, borderRadius: 4 },
+  progressStatRow:  { flexDirection: 'row', gap: 16 },
+  progressStat:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  progressStatDot:  { width: 6, height: 6, borderRadius: 3 },
+  progressStatTxt:  { fontSize: 11, fontWeight: '600' },
 
-  // Clock card
-  clockCard:  { backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 16, marginTop: 8, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, gap: 12 },
-  clockTitle: { fontSize: 14, fontWeight: '700', color: Colors.light.text },
+  // Inspection form CTA button
+  inspectCta:     { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  inspectCtaIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  inspectCtaTitle:{ fontSize: 15, fontWeight: '800', color: '#FFFFFF', marginBottom: 3 },
+  inspectCtaSub:  { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
 
-  startBtn:        { backgroundColor: Colors.light.accent, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 16, paddingHorizontal: 20, shadowColor: Colors.light.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  startBtnLoading: { opacity: 0.75 },
-  startBtnTitle:   { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  startBtnSub:     { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+  // Section label
+  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
 
-  activeBox:       { padding: 12 },
-  activeTimerRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  activeTimerTxt:  { fontSize: 13, color: Colors.light.textSecondary },
-  activeActions:   { flexDirection: 'row', gap: 10 },
-  pauseBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E2E8F0', paddingVertical: 12, borderRadius: 12 },
-  pauseBtnTxt:     { fontSize: 14, fontWeight: '600', color: Colors.light.textSecondary },
-  completeBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.light.success, paddingVertical: 12, borderRadius: 12 },
-  completeBtnTxt:  { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  // Action cards row
+  actionsRow: { flexDirection: 'row', gap: 10 },
 
-  completedBanner:    { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.light.successLight, borderRadius: 10, padding: 12 },
-  completedBannerTxt: { fontSize: 14, fontWeight: '700', color: Colors.light.successDark },
-  completedBannerSub: { fontSize: 11, color: Colors.light.success, marginTop: 2 },
-  cancelledBanner:    { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.light.backgroundSecondary, borderRadius: 10, padding: 12 },
-  cancelledBannerTxt: { fontSize: 14, fontWeight: '600', color: Colors.light.textSecondary },
+  // Quick navigate / contact buttons
+  quickBtn:      { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, padding: 14, borderWidth: 1 },
+  quickBtnIcon:  { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  quickBtnTitle: { fontSize: 14, fontWeight: '600', marginBottom: 1 },
+  quickBtnSub:   { fontSize: 12 },
 
-  // Progress
-  progressCard:  { backgroundColor: '#FFFFFF', borderRadius: 12, marginHorizontal: 16, marginTop: 10, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  progressRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  progressLabel: { fontSize: 13, fontWeight: '600', color: Colors.light.textSecondary },
-  progressPct:   { fontSize: 15, fontWeight: '800' },
-  progressTrack: { height: 6, backgroundColor: Colors.light.backgroundTertiary, borderRadius: 3, overflow: 'hidden' },
-  progressFill:  { height: 6, borderRadius: 3 },
+  // Notes card
+  notesCard:      { borderRadius: 16, padding: 16, borderWidth: 1 },
+  notesText:      { fontSize: 14, lineHeight: 22, marginBottom: 14 },
+  notesEmpty:     { fontSize: 14, lineHeight: 22, fontStyle: 'italic', marginBottom: 14 },
+  notesInput:     { borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 14, lineHeight: 22, minHeight: 110, marginBottom: 14 },
+  notesActionRow: { flexDirection: 'row', gap: 10 },
+  notesCancelBtn: { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  notesCancelTxt: { fontSize: 14, fontWeight: '600' },
+  notesSaveBtn:   { flex: 2, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  notesSaveTxt:   { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  notesEditBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1, paddingVertical: 9, justifyContent: 'center' },
+  notesEditTxt:   { fontSize: 13, fontWeight: '700' },
 
-  // Tab bar — orange underline active
-  tabBar:          { flexDirection: 'row', backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: Colors.light.border, marginTop: 12 },
-  tabItem:         { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabItemActive:   { borderBottomColor: Colors.light.accent },
-  tabItemTxt:      { fontSize: 12, fontWeight: '500', color: Colors.light.textSecondary },
-  tabItemTxtActive:{ fontSize: 12, fontWeight: '700', color: Colors.light.accent },
-  tabContent:      { backgroundColor: Colors.light.background, padding: 16 },
+  // Bottom action bar
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    padding: 16, paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+    borderTopWidth: 1,
+  },
+});
 
-  // Tab empty
-  tabEmpty:       { alignItems: 'center', gap: 8, paddingVertical: 28 },
-  tabEmptyTitle:  { fontSize: 15, fontWeight: '600', color: Colors.light.text },
-  tabEmptySub:    { fontSize: 13, color: Colors.light.textSecondary, textAlign: 'center' },
-
-  // Asset rows
-  assetRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10, backgroundColor: '#FFFFFF', marginBottom: 8, borderRadius: 12, paddingHorizontal: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
-  rowBorder:      {},
-  assetIconCircle:{ width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.light.errorLight, alignItems: 'center', justifyContent: 'center' },
-  assetType:      { fontSize: 14, fontWeight: '600', color: Colors.light.text },
-  assetLoc:       { fontSize: 12, color: Colors.light.textSecondary, marginTop: 2 },
-  resultPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.light.background, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  resultTxt:      { fontSize: 11, fontWeight: '700' },
-  pendingPill:    { backgroundColor: Colors.light.backgroundTertiary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  pendingTxt:     { fontSize: 11, color: Colors.light.textSecondary, fontWeight: '500' },
-
-  // Defect cards
-  defectCard:     { backgroundColor: '#FFFFFF', borderRadius: 12, borderLeftWidth: 4, flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
-  defectDesc:     { fontSize: 13, fontWeight: '600', color: Colors.light.text, flex: 1 },
-  defectMeta:     { fontSize: 11, color: Colors.light.textSecondary, marginTop: 2 },
-  defectStatusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, marginLeft: 8 },
-
-  // Photo grid
-  photoGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 12 },
-  photoThumb: { width: '31%', aspectRatio: 1, backgroundColor: Colors.light.backgroundTertiary, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-
-  // Notes
-  notesCard:  { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, margin: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  notesInput: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, minHeight: 120, fontSize: 14, color: Colors.light.text, lineHeight: 21, borderWidth: 1.5, borderColor: Colors.light.border, marginBottom: 4 },
-  notesCount: { fontSize: 11, color: Colors.light.textSecondary, textAlign: 'right', marginBottom: 12 },
-
-  // Tab action buttons
-  tabActionBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.light.accent, borderRadius: 12, height: 48, marginTop: 8 },
-  tabActionBtnOutline: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: Colors.light.primary },
-  tabActionTxt:        { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-
-  // Bottom Fixed Bar
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', padding: 16, paddingTop: 16, paddingBottom: 32, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 10 },
-  reportBtn: { backgroundColor: Colors.light.accent, borderRadius: 12, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' },
-  reportBtnNavy: { backgroundColor: Colors.light.primary },
-  reportBtnTxt: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-
-  notFound:  { fontSize: 16, color: Colors.light.textSecondary, marginTop: 12 },
-  backBtn:   { backgroundColor: Colors.light.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10, marginTop: 8 },
-  backBtnTxt:{ color: '#FFFFFF', fontWeight: '700' },
+// Completion modal styles
+const cm = StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 },
+  card:        { borderRadius: 28, padding: 28, alignItems: 'center', gap: 10 },
+  checkCircle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 8, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  title:       { fontSize: 28, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
+  property:    { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
+  statsRow:    { flexDirection: 'row', width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14, marginVertical: 8 },
+  statItem:    { flex: 1, alignItems: 'center', gap: 4 },
+  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  statEmoji:   { fontSize: 18 },
+  statValue:   { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
+  statLabel:   { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
+  countdown:   { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
 });

@@ -1,36 +1,141 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import Colors from '@/constants/Colors';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import { useColors } from '@/hooks/useColors';
+import { cardShadow } from '@/components/ui/Card';
+import { DefectSeverity, DefectStatus } from '@/constants/Enums';
+import { useDefectsStore } from '@/store/defectsStore';
+import DefectCard from '@/components/defects/DefectCard';
+import AddDefectSheet, { AddDefectSheetRef } from '@/components/defects/AddDefectSheet';
+import { getJobById } from '@/lib/database';
+import { SkeletonCard } from '@/components/ui/SkeletonCard';
+import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
+
+
 
 export default function DefectsScreen() {
-  return (
-    <View style={s.screen}>
-      <View style={s.header}>
-        <View style={s.headerInner}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} hitSlop={10}>
-            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Defects</Text>
-          <View style={{ width: 24 }} />
+  const C = useColors();
+  const navigation = useNavigation();
+  const { id: jobId } = useLocalSearchParams<{ id: string }>();
+  const store = useDefectsStore();
+  const [filter, setFilter] = useState<string>('All');
+  const sheetRef = useRef<AddDefectSheetRef>(null);
+
+  // Hide tab bar on this detail screen
+  useFocusEffect(useCallback(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]));
+
+  const [propertyId, setPropertyId] = useState<string>('');
+
+  useEffect(() => {
+    if (jobId) {
+      store.loadDefects(jobId);
+      const job = getJobById<{ property_id: string }>(jobId);
+      if (job) setPropertyId(job.property_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  const filteredDefects = useMemo(() => {
+    let list = store.defects;
+    if (filter === 'Critical')   list = list.filter(d => d.severity === DefectSeverity.Critical);
+    if (filter === 'Major')      list = list.filter(d => d.severity === DefectSeverity.Major);
+    if (filter === 'Minor')      list = list.filter(d => d.severity === DefectSeverity.Minor);
+    if (filter === 'Open')       list = list.filter(d => d.status === DefectStatus.Open);
+    if (filter === 'Quoted')     list = list.filter(d => d.status === DefectStatus.Quoted);
+    if (filter === 'Monitoring') list = list.filter(d => d.status === DefectStatus.Monitoring);
+    if (filter === 'Resolved')   list = list.filter(d => d.status === DefectStatus.Repaired);
+    return list;
+  }, [store.defects, filter]);
+
+  if (store.isLoading) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader curved={true} title="Defects" showBack={true} />
+        <View style={{ paddingTop: 24, gap: 12 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </View>
       </View>
-      <View style={s.content}>
-        <MaterialCommunityIcons name="alert-outline" size={64} color={Colors.light.border} />
-        <Text style={s.title}>Defect Management</Text>
-        <Text style={s.sub}>Coming in Phase 5</Text>
+    );
+  }
+
+  // BUG 30 FIX: added Monitoring + Quoted so all DefectStatus values are filterable
+  const filterOpts = ['All', 'Critical', 'Major', 'Minor', 'Open', 'Quoted', 'Monitoring', 'Resolved'];
+
+  return (
+    <View style={[s.screen, { backgroundColor: C.background }]}>
+      <ScreenHeader 
+        curved={true} 
+        title="Defects" 
+        showBack={true} 
+        rightComponent={
+          store.defects.length > 0 ? (
+            <View style={[s.countBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={s.countText}>{store.defects.length} defect{store.defects.length !== 1 ? 's' : ''}</Text>
+            </View>
+          ) : null
+        } 
+      />
+
+      <View style={s.filterRow}>
+        <FilterPills
+          options={filterOpts.map(t => ({ label: t }))}
+          activeIndex={filterOpts.indexOf(filter)}
+          onSelect={(idx) => setFilter(filterOpts[idx])}
+          variant="dark"
+        />
       </View>
+
+      {/* BUG 15 FIX: check filteredDefects.length so empty state also shows when a filter matches nothing */}
+      {filteredDefects.length === 0 ? (
+        <EmptyState
+          emoji={store.defects.length === 0 ? '🎉' : '🔍'}
+          title={store.defects.length === 0 ? 'No defects found' : 'No matches'}
+          subtitle={
+            store.defects.length === 0
+              ? 'Great work! No issues were raised for this job.'
+              : `No defects match the "${filter}" filter.`
+          }
+        />
+      ) : (
+        <FlatList
+          data={filteredDefects}
+          keyExtractor={i => i.id}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => <DefectCard defect={item as any} />}
+        />
+      )}
+
+      <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
+        <MaterialCommunityIcons name="plus" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <AddDefectSheet ref={sheetRef} jobId={jobId as string} propertyId={propertyId} onSaved={() => store.loadDefects(jobId as string)} />
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Colors.light.background },
-  header: { backgroundColor: Colors.light.primary, paddingTop: 52, paddingBottom: 20 },
-  headerInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.light.text },
-  sub: { fontSize: 14, color: Colors.light.textSecondary },
+  screen: { flex: 1 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  countText:  { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  filterRow:  { marginVertical: 8, paddingHorizontal: 16 },
+  fab: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 40 : 28,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

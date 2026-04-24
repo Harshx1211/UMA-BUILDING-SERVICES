@@ -5,11 +5,12 @@ import { Text } from 'react-native-paper';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
-import Colors from '@/constants/Colors';
+import { useColors } from '@/hooks/useColors';
 import { APP_NAME } from '@/constants/Config';
 
 export default function SplashScreen() {
   const { isLoading, isAuthenticated } = useAuthStore();
+  const C = useColors();
 
   useEffect(() => {
     if (isLoading) return;
@@ -24,13 +25,13 @@ export default function SplashScreen() {
   }, [isLoading, isAuthenticated]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: C.primary }]}>
       {/* ── Logo ─────────────────── */}
       <Animated.View entering={FadeIn.duration(600)} style={styles.content}>
         {/* Outer translucent ring */}
         <View style={styles.logoOuter}>
           {/* Inner solid circle */}
-          <View style={styles.logoInner}>
+          <View style={[styles.logoInner, { backgroundColor: C.accent, shadowColor: C.accent }]}>
             <Text style={styles.logoLetters}>ST</Text>
           </View>
         </View>
@@ -44,7 +45,7 @@ export default function SplashScreen() {
 
       {/* ── Loading indicator ─────── */}
       <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.footer}>
-        <ActivityIndicator size="small" color={Colors.light.accent} />
+        <ActivityIndicator size="small" color={C.accent} />
         <Text style={styles.loadingText}>Loading...</Text>
       </Animated.View>
     </View>
@@ -54,7 +55,6 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -75,10 +75,8 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: Colors.light.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.light.accent,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,

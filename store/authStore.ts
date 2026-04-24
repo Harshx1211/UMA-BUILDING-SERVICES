@@ -7,7 +7,8 @@ import { stopSync } from '@/lib/sync';
 import { SESSION_KEY } from '@/constants/Config';
 import type { User } from '@/types';
 
-const REMEMBER_ME_KEY = '@sitetrack/remember_me';
+const REMEMBER_ME_KEY    = '@sitetrack/remember_me';
+const USER_PROFILE_KEY   = '@sitetrack/user_profile'; // FLOW-11: offline session cache
 
 // ---------------------------------------------
 // Types
@@ -83,6 +84,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       if (rememberMe) {
         await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
       }
+      // FLOW-11: Cache profile so offline restoreSession can succeed without network
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
 
       set({
         user: profile as User,
@@ -91,7 +94,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isLoading: false,
         error: null,
       });
-    } catch (err) {
+    } catch {
       set({
         error: 'An unexpected error occurred. Please try again.',
         isLoading: false,
@@ -147,10 +150,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       );
 
       if (!profileResult || profileResult.error || !profileResult.data) {
-        // Profile fetch failed / timed out — still let user log in manually
+        // FLOW-11 FIX: Profile fetch failed or timed out (offline).
+        // Try the locally-cached profile so the user isn't kicked to login.
+        try {
+          const cached = await AsyncStorage.getItem(USER_PROFILE_KEY);
+          if (cached) {
+            set({ user: JSON.parse(cached) as User, session, isAuthenticated: true, isLoading: false });
+            return;
+          }
+        } catch { /* ignore cache read errors */ }
         set({ isLoading: false, isAuthenticated: false });
         return;
       }
+      // Keep the cache fresh for future offline starts
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileResult.data));
 
       set({
         user: profileResult.data as User,

@@ -5,7 +5,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -13,7 +12,9 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import Colors from '@/constants/Colors';
+import { useColors } from '@/hooks/useColors';
+import { Button } from '@/components/ui/Button';
+import { Card, Input } from '@/components/ui';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 type BannerState = { type: 'success' | 'error'; message: string } | null;
@@ -23,6 +24,7 @@ export default function ForgotPasswordScreen() {
   const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [banner, setBanner]       = useState<BannerState>(null);
+  const C = useColors();
 
   const validate = (): boolean => {
     if (!email.trim()) {
@@ -62,7 +64,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: C.primary }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
@@ -71,7 +73,7 @@ export default function ForgotPasswordScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Navy Hero Header ──────────── */}
-        <View style={styles.heroSection}>
+        <View style={[styles.heroSection, { backgroundColor: C.primary }]}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => router.back()}
@@ -84,62 +86,47 @@ export default function ForgotPasswordScreen() {
         </View>
 
         {/* ── Form Card ─────────────────── */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.formCard}>
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <Card style={[styles.formCard]}>
 
           {/* Success state replaces form */}
           {banner?.type === 'success' ? (
             <View style={styles.successCard}>
-              <View style={styles.successIcon}>
-                <MaterialCommunityIcons name="check-circle" size={36} color={Colors.light.success} />
+              <View style={[styles.successIcon, { backgroundColor: C.success }]}>
+                <MaterialCommunityIcons name="check-circle" size={36} color="#FFFFFF" />
               </View>
-              <Text style={styles.successTitle}>Email Sent!</Text>
-              <Text style={styles.successBody}>{banner.message}</Text>
-              <TouchableOpacity style={styles.backToLoginBtn} onPress={() => router.back()}>
-                <Text style={styles.backToLoginText}>Back to Login</Text>
-              </TouchableOpacity>
+              <Text style={[styles.successTitle, { color: C.text }]}>Email Sent!</Text>
+              <Text style={[styles.successBody, { color: C.textSecondary }]}>{banner.message}</Text>
+              <Button style={{ marginTop: 12, width: '100%' }} variant="secondary" title="Back to Login" onPress={() => router.back()} />
             </View>
           ) : (
             <>
               {/* Error banner */}
               {banner?.type === 'error' ? (
-                <View style={styles.errorBanner}>
-                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.light.errorDark} />
-                  <Text style={styles.errorBannerText}>{banner.message}</Text>
+                <View style={[styles.errorBanner, { backgroundColor: C.errorLight }]}>
+                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={C.errorDark} />
+                  <Text style={[styles.errorBannerText, { color: C.errorDark }]}>{banner.message}</Text>
                 </View>
               ) : null}
 
               {/* Email field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
-                <View style={[styles.inputWrap, !!emailError && styles.inputError]}>
-                  <MaterialCommunityIcons name="email-outline" size={18} color={Colors.light.textSecondary} />
-                  <TextInput
-                    style={styles.textInput}
-                    value={email}
-                    onChangeText={(t) => { setEmail(t); setEmailError(''); }}
-                    placeholder="you@company.com.au"
-                    placeholderTextColor={Colors.light.textTertiary}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-                {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
-              </View>
+              <Input
+                label="EMAIL ADDRESS"
+                value={email}
+                onChangeText={(t) => { setEmail(t); setEmailError(''); }}
+                placeholder="you@company.com.au"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                error={emailError}
+                leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textSecondary} />}
+                style={{ marginBottom: 20 }}
+              />
 
               {/* Send button */}
-              <TouchableOpacity
-                style={[styles.sendBtn, isLoading && styles.sendBtnLoading]}
-                onPress={handleSendReset}
-                disabled={isLoading}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.sendBtnText}>
-                  {isLoading ? 'Sending...' : 'Send Reset Email'}
-                </Text>
-              </TouchableOpacity>
+              <Button title="Send Reset Email" variant="secondary" onPress={handleSendReset} isLoading={isLoading} />
             </>
           )}
+          </Card>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -149,13 +136,11 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.primary,
   },
   scroll: { flexGrow: 1 },
 
   // Hero
   heroSection: {
-    backgroundColor: Colors.light.primary,
     paddingTop: 60,
     paddingBottom: 40,
     paddingHorizontal: 20,
@@ -184,16 +169,14 @@ const styles = StyleSheet.create({
 
   // Form card
   formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    marginHorizontal: 20,
+    borderRadius: 16,
+    marginHorizontal: 16,
     marginTop: -24,
-    padding: 24,
-    shadowColor: '#000',
+    padding: 16,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 3,
   },
 
   // Success
@@ -206,7 +189,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#22C55E',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -214,28 +196,13 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.light.text,
     marginBottom: 8,
   },
   successBody: {
     fontSize: 14,
-    color: Colors.light.textSecondary,
     textAlign: 'center',
     lineHeight: 21,
     marginBottom: 24,
-  },
-  backToLoginBtn: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 12,
-    height: 52,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backToLoginText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 
   // Error banner
@@ -243,14 +210,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.light.errorLight,
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
   },
   errorBannerText: {
     fontSize: 13,
-    color: Colors.light.errorDark,
     fontWeight: '500',
     flex: 1,
   },
@@ -260,46 +225,26 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.light.textSecondary,
     letterSpacing: 0.5,
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.light.border,
     borderRadius: 12,
     height: 52,
     paddingHorizontal: 14,
     backgroundColor: '#FFFFFF',
     gap: 10,
   },
-  inputError: { borderColor: Colors.light.error },
   textInput: {
     flex: 1,
     fontSize: 15,
-    color: Colors.light.text,
     paddingVertical: 0,
   },
   fieldError: {
     fontSize: 12,
-    color: Colors.light.error,
     marginTop: 2,
     marginLeft: 2,
-  },
-
-  // Send button
-  sendBtn: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 12,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnLoading: { opacity: 0.7 },
-  sendBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });

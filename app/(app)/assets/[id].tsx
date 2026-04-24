@@ -1,19 +1,17 @@
 // Asset detail screen — asset info, service history, defect history
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { router, useLocalSearchParams } from 'expo-router';
-import Colors from '@/constants/Colors';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import { useColors } from '@/hooks/useColors';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
+import { ScreenHeader, EmptyState, SectionTitle, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
-
-const NAVY   = '#0E2141';
-const ORANGE = '#EA6C00';
-const PAGE   = '#F2F5F9';
-const WHITE  = '#FFFFFF';
+import { formatAssetType } from '@/utils/assetHelpers';
 
 type ServiceRecord = {
   id: string;
@@ -28,36 +26,44 @@ type ServiceRecord = {
   technician_name: string | null;
 };
 
-const RESULT_CONFIG: Record<InspectionResult, { icon: string; color: string; label: string }> = {
-  [InspectionResult.Pass]:      { icon: '✅', color: Colors.light.successDark, label: 'Pass' },
-  [InspectionResult.Fail]:      { icon: '❌', color: Colors.light.errorDark,   label: 'Fail' },
-  [InspectionResult.NotTested]: { icon: '⬜', color: Colors.light.textTertiary, label: 'Not Tested' },
-};
+const getResultConfig = (C: any): Record<InspectionResult, { icon: string; color: string; label: string }> => ({
+  [InspectionResult.Pass]:      { icon: '✅', color: C.successDark || C.success, label: 'Pass' },
+  [InspectionResult.Fail]:      { icon: '❌', color: C.errorDark || C.error,   label: 'Fail' },
+  [InspectionResult.NotTested]: { icon: '⬜', color: C.textTertiary, label: 'Not Tested' },
+});
 
-const SEVERITY_CONFIG: Record<DefectSeverity, { color: string }> = {
-  [DefectSeverity.Critical]: { color: Colors.light.error },
-  [DefectSeverity.Major]:    { color: Colors.light.warning },
-  [DefectSeverity.Minor]:    { color: Colors.light.info },
-};
+const getSeverityConfig = (C: any): Record<DefectSeverity, { color: string }> => ({
+  [DefectSeverity.Critical]: { color: C.error },
+  [DefectSeverity.Major]:    { color: C.warning },
+  [DefectSeverity.Minor]:    { color: C.info },
+});
 
-function InfoRow({ icon, label, value, mono = false }: { icon: string; label: string; value: string; mono?: boolean }) {
+function InfoRow({ icon, label, value, mono = false, C }: { icon: string; label: string; value: string; mono?: boolean, C: any }) {
   return (
     <View style={s.infoRow}>
       <Text style={s.infoIcon}>{icon}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={s.infoLabel}>{label}</Text>
-        <Text style={[s.infoValue, mono && s.mono]}>{value}</Text>
+        <Text style={[s.infoLabel, { color: C.textTertiary }]}>{label}</Text>
+        <Text style={[s.infoValue, { color: C.text }, mono && s.mono]}>{value}</Text>
       </View>
     </View>
   );
 }
 
 export default function AssetDetailScreen() {
+  const C = useColors();
+  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [serviceHistory, setServiceHistory] = useState<ServiceRecord[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Hide tab bar on this detail screen
+  useFocusEffect(useCallback(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]));
 
   const load = useCallback(() => {
     if (!id) return;
@@ -80,20 +86,23 @@ export default function AssetDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={[s.screen, s.centered]}>
-        <ActivityIndicator color={NAVY} size="large" />
+      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
+        <ActivityIndicator color={C.primary} size="large" />
       </View>
     );
   }
 
   if (!asset) {
     return (
-      <View style={[s.screen, s.centered]}>
-        <MaterialCommunityIcons name="alert-circle-outline" size={44} color={ORANGE} />
-        <Text style={s.notFound}>Asset not found</Text>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
-          <Text style={s.backBtnTxt}>← Go Back</Text>
-        </TouchableOpacity>
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader curved={false} title="Not Found" showBack={true} />
+        <EmptyState 
+          emoji="⚠️" 
+          title="Asset not found" 
+          subtitle="We couldn't locate the asset record you're looking for." 
+          actionLabel="Go Back" 
+          onAction={() => router.back()} 
+        />
       </View>
     );
   }
@@ -103,81 +112,90 @@ export default function AssetDetailScreen() {
   const isActive  = asset.status === AssetStatus.Active;
 
   return (
-    <View style={s.screen}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity style={s.back} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={22} color={WHITE} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{asset.asset_type}</Text>
-        <View style={[s.statusBadge, { backgroundColor: isActive ? Colors.light.successLight : Colors.light.backgroundTertiary }]}>
-          <Text style={[s.statusBadgeText, { color: isActive ? Colors.light.successDark : Colors.light.textSecondary }]}>
-            {isActive ? 'Active' : 'Decommissioned'}
-          </Text>
-        </View>
-      </View>
+    <View style={[s.screen, { backgroundColor: C.background }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* ── ASSET HEADER ─────────────── */}
+        <ScreenHeader
+          eyebrow="ASSET RECORD"
+          title={formatAssetType(asset.asset_type)}
+          subtitle={asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No barcode'}
+          showBack={true}
+          rightComponent={
+            <View style={[s.statusBadge, { backgroundColor: isActive ? 'rgba(110,231,183,0.15)' : 'rgba(255,255,255,0.1)' }]}>
+              <Text style={[s.statusBadgeText, { color: isActive ? '#6EE7B7' : 'rgba(255,255,255,0.6)' }]}>
+                {isActive ? '✅ ACTIVE' : '❌ INACTIVE'}
+              </Text>
+            </View>
+          }
+        />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Overdue warning */}
         {isOverdue ? (
-          <View style={s.overdueBar}>
-            <MaterialCommunityIcons name="alert" size={18} color="#7F1D1D" />
-            <Text style={s.overdueText}>Service overdue — next service was {asset.next_service_date}</Text>
+          <View style={[s.overdueBar, { backgroundColor: C.errorLight, marginTop: 16 }]}>
+            <MaterialCommunityIcons name="alert" size={18} color={C.errorDark} />
+            <Text style={[s.overdueText, { color: C.errorDark }]}>Service overdue — next service was {asset.next_service_date}</Text>
           </View>
         ) : null}
 
         {/* Asset info */}
-        <Animated.View entering={FadeInDown.delay(60).duration(350)} style={s.section}>
-          <Text style={s.sectionTitle}>ASSET INFORMATION</Text>
-          <View style={s.card}>
+        <Animated.View entering={FadeInDown.delay(60).duration(350)} style={{ marginTop: !isOverdue ? 16 : 0 }}>
+          <SectionTitle title="ASSET INFORMATION" />
+          <Card style={{ marginHorizontal: 16 }}>
+            {asset.variant ? (
+              <InfoRow icon="format-list-bulleted" label="Variant" value={asset.variant} C={C} />
+            ) : null}
+            {asset.asset_ref ? (
+              <InfoRow icon="tag-outline" label="Ref" value={asset.asset_ref} mono C={C} />
+            ) : null}
             {asset.description ? (
-              <InfoRow icon="📋" label="Description" value={asset.description} />
+              <InfoRow icon="📋" label="Description" value={asset.description} C={C} />
             ) : null}
             {asset.serial_number ? (
-              <InfoRow icon="🔢" label="Serial Number" value={asset.serial_number} mono />
+              <InfoRow icon="🔢" label="Serial Number" value={asset.serial_number} mono C={C} />
             ) : null}
             {asset.barcode_id ? (
-              <InfoRow icon="📱" label="Barcode / QR ID" value={asset.barcode_id} mono />
+              <InfoRow icon="📱" label="Barcode / QR ID" value={asset.barcode_id} mono C={C} />
             ) : null}
             {asset.location_on_site ? (
-              <InfoRow icon="📍" label="Location on Site" value={asset.location_on_site} />
+              <InfoRow icon="📍" label="Location on Site" value={asset.location_on_site} C={C} />
             ) : null}
             {asset.install_date ? (
-              <InfoRow icon="🔧" label="Install Date" value={asset.install_date} />
+              <InfoRow icon="🔧" label="Install Date" value={asset.install_date} C={C} />
             ) : null}
             {asset.last_service_date ? (
-              <InfoRow icon="✅" label="Last Service" value={asset.last_service_date} />
+              <InfoRow icon="✅" label="Last Service" value={asset.last_service_date} C={C} />
             ) : null}
             {asset.next_service_date ? (
               <InfoRow
                 icon={isOverdue ? '⚠️' : '📅'}
                 label="Next Service"
                 value={asset.next_service_date}
+                C={C}
               />
             ) : null}
-          </View>
+          </Card>
+
         </Animated.View>
 
         {/* Service history */}
-        <Animated.View entering={FadeInDown.delay(120).duration(350)} style={s.section}>
-          <Text style={s.sectionTitle}>SERVICE HISTORY</Text>
-          <View style={s.card}>
+        <Animated.View entering={FadeInDown.delay(120).duration(350)}>
+          <SectionTitle title="SERVICE HISTORY" />
+          <Card noPadding style={{ marginHorizontal: 16 }}>
             {serviceHistory.length === 0 ? (
               <View style={s.emptyInCard}>
-                <Text style={s.emptyText}>No service history recorded</Text>
+                <Text style={[s.emptyText, { color: C.textTertiary }]}>No service history recorded</Text>
               </View>
             ) : (
               serviceHistory.map((rec, i) => {
-                const rc = rec.result ? RESULT_CONFIG[rec.result] : null;
+                const rc = rec.result ? getResultConfig(C)[rec.result] : null;
                 return (
-                  <View key={rec.id} style={[s.histRow, i < serviceHistory.length - 1 && s.histRowBorder]}>
+                  <View key={rec.id} style={[s.histRow, i < serviceHistory.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.histDate}>{rec.scheduled_date ?? '—'}</Text>
+                      <Text style={[s.histDate, { color: C.text }]}>{rec.scheduled_date ?? '—'}</Text>
                       {rec.technician_name ? (
-                        <Text style={s.histTech}>{rec.technician_name}</Text>
+                        <Text style={[s.histTech, { color: C.textSecondary }]}>{rec.technician_name}</Text>
                       ) : null}
                       {rec.technician_notes ? (
-                        <Text style={s.histNotes} numberOfLines={2}>{rec.technician_notes}</Text>
+                        <Text style={[s.histNotes, { color: C.textTertiary }]} numberOfLines={2}>{rec.technician_notes}</Text>
                       ) : null}
                     </View>
                     {rc ? (
@@ -186,33 +204,33 @@ export default function AssetDetailScreen() {
                         <Text style={[s.resultLabel, { color: rc.color }]}>{rc.label}</Text>
                       </View>
                     ) : (
-                      <Text style={s.noResult}>⬜ Not Tested</Text>
+                      <Text style={[s.noResult, { color: C.textTertiary }]}>⬜ Not Tested</Text>
                     )}
                   </View>
                 );
               })
             )}
-          </View>
+          </Card>
         </Animated.View>
 
         {/* Defect history */}
-        <Animated.View entering={FadeInDown.delay(180).duration(350)} style={s.section}>
-          <Text style={s.sectionTitle}>DEFECT HISTORY</Text>
-          <View style={s.card}>
+        <Animated.View entering={FadeInDown.delay(180).duration(350)}>
+          <SectionTitle title="DEFECT HISTORY" />
+          <Card noPadding style={{ marginHorizontal: 16 }}>
             {defects.length === 0 ? (
               <View style={s.emptyInCard}>
-                <MaterialCommunityIcons name="shield-check-outline" size={32} color={Colors.light.successDark} />
-                <Text style={[s.emptyText, { color: Colors.light.successDark }]}>No defects recorded ✓</Text>
+                <MaterialCommunityIcons name="shield-check-outline" size={32} color={C.successDark || C.success} />
+                <Text style={[s.emptyText, { color: C.successDark || C.success }]}>No defects recorded ✓</Text>
               </View>
             ) : (
               defects.map((d, i) => {
-                const sc = SEVERITY_CONFIG[d.severity as DefectSeverity];
+                const sc = getSeverityConfig(C)[d.severity as DefectSeverity];
                 return (
-                  <View key={d.id} style={[s.defectRow, i < defects.length - 1 && s.histRowBorder]}>
+                  <View key={d.id} style={[s.defectRow, i < defects.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
                     <View style={[s.severityBar, { backgroundColor: sc?.color ?? '#ccc' }]} />
                     <View style={{ flex: 1 }}>
-                      <Text style={s.defectDesc}>{d.description}</Text>
-                      <Text style={s.defectMeta}>
+                      <Text style={[s.defectDesc, { color: C.text }]}>{d.description}</Text>
+                      <Text style={[s.defectMeta, { color: C.textTertiary }]}>
                         {d.severity.toUpperCase()} · {d.status.toUpperCase().replace('_', ' ')}
                       </Text>
                     </View>
@@ -220,58 +238,53 @@ export default function AssetDetailScreen() {
                 );
               })
             )}
-          </View>
+          </Card>
         </Animated.View>
 
-        <View style={{ height: 32 }} />
       </ScrollView>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen:  { flex: 1, backgroundColor: PAGE },
+  screen:  { flex: 1 },
   centered:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  header:          { backgroundColor: NAVY, paddingTop: 52, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  back:            { padding: 4 },
-  headerTitle:     { flex: 1, fontSize: 18, fontWeight: '700', color: WHITE },
-  statusBadge:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 },
-  statusBadgeText: { fontSize: 12, fontWeight: '700' },
+  // Header
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, flexDirection: 'row', alignItems: 'center' },
+  statusBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
-  overdueBar:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FEE2E2', paddingHorizontal: 16, paddingVertical: 10 },
-  overdueText: { fontSize: 12, color: '#7F1D1D', fontWeight: '600', flex: 1 },
+  overdueBar:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, borderRadius: 12, marginBottom: 16 },
+  overdueText: { fontSize: 12, fontWeight: '600', flex: 1 },
 
   section:      { paddingHorizontal: 16, paddingTop: 16 },
   sectionTitle: { fontSize: 11, fontWeight: '800', color: '#8896A8', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8 },
 
-  card: { backgroundColor: WHITE, borderRadius: 14, padding: 14, gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3 },
+  card: { borderRadius: 16, padding: 16, gap: 12, shadowColor: '#0F1E3C', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
 
   infoRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 4 },
   infoIcon:  { fontSize: 16, width: 24, textAlign: 'center', marginTop: 2 },
-  infoLabel: { fontSize: 11, color: Colors.light.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
-  infoValue: { fontSize: 14, color: Colors.light.text, fontWeight: '500' },
+  infoLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
+  infoValue: { fontSize: 14, fontWeight: '500' },
   mono:      { fontFamily: 'monospace', fontSize: 13 },
 
   histRow:       { paddingVertical: 10, flexDirection: 'row', alignItems: 'flex-start' },
-  histRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F5F8' },
-  histDate:      { fontSize: 13, fontWeight: '700', color: Colors.light.text },
-  histTech:      { fontSize: 12, color: Colors.light.textSecondary, marginTop: 2 },
-  histNotes:     { fontSize: 12, color: Colors.light.textTertiary, fontStyle: 'italic', marginTop: 2 },
+  histRowBorder: { borderBottomWidth: 1 },
+  histDate:      { fontSize: 13, fontWeight: '700' },
+  histTech:      { fontSize: 12, marginTop: 2 },
+  histNotes:     { fontSize: 12, fontStyle: 'italic', marginTop: 2 },
   resultPill:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
   resultIcon:    { fontSize: 14 },
   resultLabel:   { fontSize: 12, fontWeight: '700' },
-  noResult:      { fontSize: 12, color: Colors.light.textTertiary },
+  noResult:      { fontSize: 12 },
 
   defectRow:   { paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
   severityBar: { width: 4, height: 40, borderRadius: 2 },
-  defectDesc:  { fontSize: 13, fontWeight: '600', color: Colors.light.text },
-  defectMeta:  { fontSize: 11, color: Colors.light.textTertiary, marginTop: 3 },
+  defectDesc:  { fontSize: 13, fontWeight: '600' },
+  defectMeta:  { fontSize: 11, marginTop: 3 },
 
   emptyInCard: { alignItems: 'center', gap: 8, paddingVertical: 16 },
-  emptyText:   { fontSize: 14, color: Colors.light.textTertiary },
+  emptyText:   { fontSize: 14 },
 
-  notFound:   { fontSize: 16, color: Colors.light.textSecondary, marginTop: 12 },
-  backBtn:    { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: NAVY, borderRadius: 10 },
-  backBtnTxt: { color: WHITE, fontWeight: '700' },
+  notFound:   { fontSize: 16, marginTop: 12 },
 });

@@ -11,11 +11,12 @@ const Colors = {
     accentDark: '#EA6C00',    // Darker orange
 
     // Backgrounds
-    background: '#F4F6F9',
-    backgroundSecondary: '#F4F6F9',
-    backgroundTertiary: '#E9EDF3',
+    background: '#F0F3F8',
+    backgroundSecondary: '#E8EDF5',
+    backgroundTertiary: '#DDE4EE',
     surface: '#FFFFFF',
-    surfaceElevated: '#F8FAFC',
+    surfaceElevated: '#FAFBFD',
+    cardBorder: 'rgba(30, 50, 90, 0.07)',
 
     // Text
     text: '#0F172A',
@@ -48,7 +49,7 @@ const Colors = {
     icon: '#475569',
     tabIconDefault: '#94A3B8',
     tabIconSelected: '#1B2D4F',
-    shadow: 'rgba(0, 0, 0, 0.08)',
+    shadow: 'rgba(15, 30, 60, 0.10)',
     overlay: 'rgba(0, 0, 0, 0.5)',
   },
   dark: {
@@ -61,11 +62,12 @@ const Colors = {
     accentDark: '#EA6C00',
 
     // Backgrounds
-    background: '#0D1117',
-    backgroundSecondary: '#161B22',
-    backgroundTertiary: '#21262D',
-    surface: '#161B22',
-    surfaceElevated: '#21262D',
+    background: '#0B0F17',
+    backgroundSecondary: '#111620',
+    backgroundTertiary: '#1A2130',
+    surface: '#141923',
+    surfaceElevated: '#1C2333',
+    cardBorder: 'rgba(255,255,255,0.06)',
 
     // Text
     text: '#F0F6FC',
@@ -96,10 +98,10 @@ const Colors = {
     // Misc
     tint: '#3B5EA6',
     icon: '#8B949E',
-    tabIconDefault: '#6E7681',
-    tabIconSelected: '#3B5EA6',
-    shadow: 'rgba(0, 0, 0, 0.4)',
-    overlay: 'rgba(0, 0, 0, 0.7)',
+    tabIconDefault: '#4A5568',
+    tabIconSelected: '#5B8DEF',
+    shadow: 'rgba(0, 0, 0, 0.5)',
+    overlay: 'rgba(0, 0, 0, 0.75)',
   },
 };
 

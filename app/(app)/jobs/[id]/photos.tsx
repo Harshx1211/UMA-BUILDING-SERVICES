@@ -1,36 +1,111 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Alert, View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import Colors from '@/constants/Colors';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import Toast from 'react-native-toast-message';
+import { useColors } from '@/hooks/useColors';
+import { cardShadow } from '@/components/ui/Card';
+import { usePhotosStore } from '@/store/photosStore';
+import PhotoGrid from '@/components/camera/PhotoGrid';
+import PhotoCaptureSheet, { PhotoCaptureSheetRef } from '@/components/camera/PhotoCaptureSheet';
+import { getJobById } from '@/lib/database';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 
 export default function PhotosScreen() {
-  return (
-    <View style={s.screen}>
-      <View style={s.header}>
-        <View style={s.headerInner}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} hitSlop={10}>
-            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Photos</Text>
-          <View style={{ width: 24 }} />
+  const C = useColors();
+  const navigation = useNavigation();
+  const { id: jobId } = useLocalSearchParams<{ id: string }>();
+  const store = usePhotosStore();
+  const sheetRef = useRef<PhotoCaptureSheetRef>(null);
+
+  const [propertyId, setPropertyId] = useState<string>('');
+
+  // Hide tab bar on this detail screen
+  useFocusEffect(useCallback(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]));
+
+  useEffect(() => {
+    if (jobId) {
+      // BUG 26 FIX: reset store state before loading so previous job's photos don't flash
+      store.loadPhotos(jobId);
+      const job = getJobById<{ property_id: string }>(jobId);
+      if (job) setPropertyId(job.property_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  /** Long-press handler — confirms then deletes photo from SQLite + syncs */
+  const handlePhotoLongPress = (photo: { id: string }) => {
+    Alert.alert(
+      'Delete Photo',
+      'Are you sure you want to delete this photo? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            store.deletePhoto(photo.id);
+            Toast.show({ type: 'success', text1: 'Photo deleted' });
+          },
+        },
+      ]
+    );
+  };
+
+  if (store.isLoading) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader curved={true} title="Job Photos" showBack={true} />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={C.accent} />
         </View>
       </View>
-      <View style={s.content}>
-        <MaterialCommunityIcons name="camera-outline" size={64} color={Colors.light.border} />
-        <Text style={s.title}>Photo Capture</Text>
-        <Text style={s.sub}>Coming in Phase 6</Text>
-      </View>
+    );
+  }
+
+  return (
+    <View style={[s.screen, { backgroundColor: C.background }]}>
+      <ScreenHeader 
+        curved={true} 
+        title="Job Photos" 
+        showBack={true} 
+        rightComponent={
+          store.photos.length > 0 ? (
+            <View style={[s.countBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={s.countText}>{store.photos.length} photo{store.photos.length !== 1 ? 's' : ''}</Text>
+            </View>
+          ) : null
+        } 
+      />
+
+      <PhotoGrid photos={store.photos} onPhotoLongPress={handlePhotoLongPress} />
+
+      <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
+        <MaterialCommunityIcons name="camera" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <PhotoCaptureSheet ref={sheetRef} jobId={jobId as string} propertyId={propertyId} />
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Colors.light.background },
-  header: { backgroundColor: Colors.light.primary, paddingTop: 52, paddingBottom: 20 },
-  headerInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.light.text },
-  sub: { fontSize: 14, color: Colors.light.textSecondary },
+  screen: { flex: 1 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  countText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  fab: { 
+    position: 'absolute', 
+    bottom: Platform.OS === 'ios' ? 40 : 28, 
+    right: 20, 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
 });

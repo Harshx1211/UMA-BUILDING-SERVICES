@@ -8,6 +8,13 @@ export enum JobStatus {
   Cancelled = 'cancelled',
 }
 
+/** Status of generated deficiency quotes */
+export enum QuoteStatus {
+  Draft = 'draft',
+  Approved = 'approved',
+  Rejected = 'rejected',
+}
+
 /** Category of work being performed */
 export enum JobType {
   RoutineService = 'routine_service',

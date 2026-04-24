@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import Toast from 'react-native-toast-message';
 
-const NAVY = '#0E2141', ORANGE = '#EA6C00', WHITE = '#FFFFFF', SUCCESS = '#15803D';
+const NAVY = '#0E2141', WHITE = '#FFFFFF', SUCCESS = '#15803D';
 
 interface Props {
   visible: boolean;
@@ -30,7 +30,7 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
     try {
       await onSign(signature);
       onClose();
-    } catch (err) {
+    } catch {
       Toast.show({ type: 'error', text1: 'Failed to save signature' });
     } finally {
       setIsSaving(false);

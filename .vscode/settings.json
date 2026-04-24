@@ -3,5 +3,16 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+
+  // Suppress Java extension false-positives from React Native / Expo Gradle plugins in node_modules
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/android/build/**",
+    "**/ios/build/**"
+  ],
+  "java.project.referencedLibraries": [],
+  "files.watcherExclude": {
+    "**/node_modules/**": true
   }
 }

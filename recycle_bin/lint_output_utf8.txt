@@ -1,0 +1,38 @@
+﻿
+F:\SiteTrack App\app\(app)\jobs\[id]\defects.tsx
+  37:6  warning  React Hook useEffect has a missing dependency: 'store'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+F:\SiteTrack App\app\(app)\jobs\[id]\inspect.tsx
+   51:6  warning  React Hook useEffect has a missing dependency: 'heightVal'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  188:6  warning  React Hook useEffect has a missing dependency: 'store'. Either include it or remove the dependency array      react-hooks/exhaustive-deps
+
+F:\SiteTrack App\app\(app)\jobs\[id]\photos.tsx
+  25:6  warning  React Hook useEffect has a missing dependency: 'store'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+F:\SiteTrack App\app\_layout.tsx
+  57:6  warning  React Hook useEffect has a missing dependency: 'restoreSession'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+F:\SiteTrack App\components\OfflineBanner.tsx
+   3:38  warning  'View' is defined but never used                                                                               @typescript-eslint/no-unused-vars
+  22:6   warning  React Hook useEffect has a missing dependency: 'translateY'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+F:\SiteTrack App\components\defects\AddDefectSheet.tsx
+   6:26  warning  'InspectionResult' is defined but never used  @typescript-eslint/no-unused-vars
+  26:24  error    Component definition is missing display name  react/display-name
+
+F:\SiteTrack App\components\defects\DefectCard.tsx
+   8:10  warning  'MaterialCommunityIcons' is defined but never used  @typescript-eslint/no-unused-vars
+  56:12  warning  'e' is defined but never used                       @typescript-eslint/no-unused-vars
+
+F:\SiteTrack App\components\jobs\SignatureModal.tsx
+   8:25  warning  'ORANGE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  33:14  warning  'err' is defined but never used              @typescript-eslint/no-unused-vars
+
+F:\SiteTrack App\lib\photoUpload.ts
+  16:13  warning  'data' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+F:\SiteTrack App\store\authStore.ts
+  94:14  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+Γ£û 15 problems (1 error, 14 warnings)
+

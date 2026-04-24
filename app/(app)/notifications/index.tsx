@@ -1,189 +1,220 @@
-// Notifications/Alerts screen — navy curved header + styled alert cards
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from 'react-native-paper';
+// app/(app)/notifications/index.tsx
+import React, { useEffect, useCallback } from 'react';
+import {
+  FlatList, StyleSheet, TouchableOpacity, View,
+} from 'react-native';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { EmptyState } from '@/components/ui/EmptyState';
-import Colors from '@/constants/Colors';
+import { router, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
+import { useColors } from '@/hooks/useColors';
+import { Card } from '@/components/ui/Card';
+import { ScreenHeader, EmptyState } from '@/components/ui';
+import {
+  useNotificationsStore, type AppNotification, type NotificationType,
+} from '@/store/notificationsStore';
+import { HEADER_TOP_PAD } from '@/constants/headerPad';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-type AlertItem = {
-  id: string;
-  icon: MCIcon;
-  iconColor: string;
-  title: string;
-  body: string;
-  time: string;
-  unread: boolean;
-};
+function timeAgo(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins  = Math.floor(diff / 60000);
+    const hours = Math.floor(mins / 60);
+    const days  = Math.floor(hours / 24);
+    if (days  > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (mins  > 0) return `${mins}m ago`;
+    return 'Just now';
+  } catch { return ''; }
+}
 
-const MOCK_ALERTS: AlertItem[] = [
-  {
-    id: '1',
-    icon: 'sync-circle',
-    iconColor: Colors.light.success,
-    title: 'Sync Complete',
-    body: 'All data synced to cloud successfully. 0 items pending.',
-    time: 'Just now',
-    unread: false,
-  },
-  {
-    id: '2',
-    icon: 'briefcase-clock-outline',
-    iconColor: Colors.light.accent,
-    title: 'Job scheduled for today',
-    body: 'Westfield Sydney CBD — Routine Service at 09:00 AM',
-    time: '2h ago',
-    unread: true,
-  },
-  {
-    id: '3',
-    icon: 'alert-circle-outline',
-    iconColor: Colors.light.error,
-    title: 'Defect requires attention',
-    body: 'Crown Melbourne — Sprinkler head defect status is still Open.',
-    time: 'Yesterday',
-    unread: true,
-  },
-];
+// ── Individual notification card ─────────────────────────
+function NotifCard({ item }: { item: AppNotification }) {
+  const C = useColors();
+  const { markAsRead } = useNotificationsStore();
+  
+  const TYPE_CONFIG: Record<NotificationType, { icon: MCIcon; color: string }> = {
+    new_job:       { icon: 'briefcase-outline',       color: C.info },
+    urgent_job:    { icon: 'flash',                    color: C.error },
+    sync_complete: { icon: 'cloud-check-outline',      color: C.success },
+    defect_flagged:{ icon: 'alert-circle-outline',     color: C.accent },
+    general:       { icon: 'information-outline',      color: C.textSecondary },
+  };
 
-export default function NotificationsScreen() {
-  const unreadCount = MOCK_ALERTS.filter((a) => a.unread).length;
+  const cfg = TYPE_CONFIG[item.type] ?? TYPE_CONFIG.general;
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!item.is_read) markAsRead(item.id);
+    if (item.job_id) {
+      router.push(`/jobs/${item.job_id}` as never);
+    }
+  };
 
   return (
-    <View style={s.screen}>
+    <Card
+      noPadding
+      color={!item.is_read ? C.warningLight : C.surface}
+      style={!item.is_read ? { borderLeftWidth: 3, borderLeftColor: C.accent } : undefined}
+    >
+      <TouchableOpacity
+        style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12, position: 'relative' }}
+        onPress={handlePress}
+        activeOpacity={0.75}
+      >
+      {/* Left icon circle */}
+      <View style={[s.iconWrap, { backgroundColor: cfg.color + '22' }]}>
+        <MaterialCommunityIcons name={cfg.icon} size={22} color={cfg.color} />
+      </View>
+
+      {/* Body */}
+      <View style={s.cardBody}>
+        <View style={s.cardTopRow}>
+          <Text
+            style={[s.cardTitle, { color: C.text }, item.is_read && { fontWeight: '500', color: C.textSecondary }]}
+            numberOfLines={1}
+          >
+            {item.title}
+          </Text>
+          <Text style={[s.cardTime, { color: C.textTertiary }]}>{timeAgo(item.created_at)}</Text>
+        </View>
+        <Text style={[s.cardMsg, { color: C.textSecondary }]} numberOfLines={2}>{item.message}</Text>
+      </View>
+
+      {/* Unread dot */}
+      {!item.is_read && <View style={[s.unreadDot, { backgroundColor: C.accent }]} />}
+      </TouchableOpacity>
+    </Card>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────
+export default function NotificationsScreen() {
+  const C = useColors();
+  const navigation = useNavigation();
+  const {
+    notifications, unreadCount, isLoading,
+    loadNotifications, markAllAsRead, clearAll,
+  } = useNotificationsStore();
+
+  // Hide tab bar on this detail/push screen
+  useFocusEffect(useCallback(() => {
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]));
+
+  useEffect(() => {
+    loadNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleMarkAll = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    markAllAsRead();
+  }, [markAllAsRead]);
+
+  return (
+    <View style={[s.screen, { backgroundColor: C.background }]}>
       {/* ── Navy curved header ──────────────── */}
-      <ScreenHeader
-        title="Alerts"
-        subtitle={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
-        showBack={true}
+      <ScreenHeader 
+        curved={true} 
+        title="Notifications" 
+        showBack={true} 
+        subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
         rightComponent={
           unreadCount > 0 ? (
-            <View style={s.unreadBadge}>
-              <Text style={s.unreadBadgeText}>{unreadCount}</Text>
-            </View>
+            <TouchableOpacity onPress={handleMarkAll} style={s.markAllBtn}>
+              <Text style={[s.markAllText, { color: C.accent }]}>Mark all read</Text>
+            </TouchableOpacity>
           ) : undefined
         }
       />
 
-      <ScrollView
-        contentContainerStyle={s.list}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Alert cards ─────────────────── */}
-        {MOCK_ALERTS.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={[s.card, item.unread && s.cardUnread]}
-            activeOpacity={0.75}
-          >
-            {/* Unread orange dot */}
-            {item.unread && <View style={s.unreadDot} />}
-
-            {/* Icon circle */}
-            <View style={[s.iconWrap, { backgroundColor: item.iconColor + '20' }]}>
-              <MaterialCommunityIcons name={item.icon} size={22} color={item.iconColor} />
-            </View>
-
-            {/* Body */}
-            <View style={s.cardBody}>
-              <View style={s.cardTopRow}>
-                <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={s.cardTime}>{item.time}</Text>
-              </View>
-              <Text style={s.cardBodyText} numberOfLines={2}>{item.body}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {/* ── Phase hint ─────────────────── */}
-        <View style={s.hintCard}>
-          <EmptyState
-            emoji="🔔"
-            title="Real-time alerts coming soon"
-            subtitle="Push notifications for job changes, sync status, and defects will be available in Phase 6"
-          />
+      {/* ── Content ─────────────────────────── */}
+      {isLoading ? (
+        <View style={s.centered}>
+          <ActivityIndicator color={C.accent} size="large" />
         </View>
-      </ScrollView>
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            s.list,
+            notifications.length === 0 && s.listEmpty,
+          ]}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => <NotifCard item={item} />}
+          ListEmptyComponent={
+            <EmptyState 
+              emoji="🔔" 
+              title="No notifications yet" 
+              subtitle="You're all caught up! New job assignments and system alerts will appear here." 
+            />
+          }
+          ListFooterComponent={
+            notifications.length > 0 ? (
+              <TouchableOpacity style={s.clearBtn} onPress={clearAll}>
+                <MaterialCommunityIcons name="delete-sweep-outline" size={16} color={C.textSecondary} />
+                <Text style={[s.clearBtnText, { color: C.textSecondary }]}>Clear all notifications</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+        />
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Colors.light.background },
+  screen: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Unread badge in header
-  unreadBadge: {
-    backgroundColor: Colors.light.accent,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerFull: {
+    paddingHorizontal: 16, paddingTop: HEADER_TOP_PAD, paddingBottom: 24,
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+    shadowColor: '#0F1E3C', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
-  unreadBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  backBtn:    { minHeight: 48, justifyContent: 'center' },
+  headerTitle:{ fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
+  headerSub:  { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
+  markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
+  markAllText:{ fontSize: 12, fontWeight: '700' },
 
-  // List
-  list: { padding: 16, gap: 10, paddingBottom: 32 },
+  list:      { padding: 16, gap: 10, paddingBottom: 32 },
+  listEmpty: { flex: 1, justifyContent: 'center' },
 
-  // Alert card
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 16, // Screen bible standardization
+    padding: 16,      // 16px padding
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
     position: 'relative',
   },
-  cardUnread: {
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.light.accent,
-  },
-
-  // Unread indicator dot (top-right)
-  unreadDot: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.light.accent,
-  },
-
-  // Icon
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-
-  // Card content
   cardBody:    { flex: 1 },
-  cardTopRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5, gap: 8 },
-  cardTitle:   { fontSize: 14, fontWeight: '700', color: Colors.light.text, flex: 1 },
-  cardTime:    { fontSize: 11, color: Colors.light.textSecondary, flexShrink: 0 },
-  cardBodyText:{ fontSize: 13, color: Colors.light.textSecondary, lineHeight: 19 },
+  cardTopRow:  { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, gap: 8 },
+  cardTitle:   { fontSize: 14, fontWeight: '700', flex: 1 },
+  cardTime:    { fontSize: 11, flexShrink: 0 },
+  cardMsg:     { fontSize: 13, lineHeight: 19 },
 
-  // Hint section
-  hintCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-    marginTop: 8,
+  unreadDot: {
+    position: 'absolute', top: 12, right: 12,
+    width: 8, height: 8, borderRadius: 4,
   },
+
+  emptyWrap:  { alignItems: 'center', paddingHorizontal: 32, paddingVertical: 48, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: '700' },
+  emptySub:   { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+
+  clearBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 20, paddingVertical: 12,
+  },
+  clearBtnText: { fontSize: 13, fontWeight: '500' },
 });

@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { getJobsForTechnician, updateRecord, addToSyncQueue } from '@/lib/database';
 import { JobStatus, SyncOperation } from '@/constants/Enums';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { Job } from '@/types';
 
 // ─── Extended type — includes property JOIN columns ───────────
@@ -10,7 +11,8 @@ export type JobWithProperty = Job & {
   property_address: string | null;
   property_suburb: string | null;
   property_state: string | null;
-  property_postcode?: string | null;
+  property_postcode: string | null;
+  property_compliance_status: string | null;
   access_notes: string | null;
   hazard_notes: string | null;
   site_contact_name: string | null;
@@ -46,10 +48,14 @@ interface JobsState {
   error: string | null;
   activeFilter: JobFilter;
   searchQuery: string;
+  /** Internal — ref to the current sync listener so we can cleanly unsubscribe */
+  _syncListenerRef: (() => void) | null;
 }
 
 interface JobsActions {
   loadJobs: (userId: string) => void;
+  subscribeToSync: (userId: string) => void;
+  unsubscribeFromSync: () => void;
   getFilteredJobs: () => JobWithProperty[];
   selectJob: (jobId: string) => void;
   clearSelectedJob: () => void;
@@ -67,6 +73,7 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   error: null,
   activeFilter: 'today',
   searchQuery: '',
+  _syncListenerRef: null,
 
   loadJobs: (userId) => {
     set({ isLoading: true, error: null });
@@ -76,6 +83,27 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
     } catch (err) {
       console.error('[JobsStore] loadJobs error:', err);
       set({ error: 'Failed to load jobs. Pull down to retry.', isLoading: false });
+    }
+  },
+
+  subscribeToSync: (userId) => {
+    // Clean up any previously registered listener before subscribing again
+    const prev = get()._syncListenerRef;
+    if (prev) offSyncComplete(prev);
+
+    const listener = () => {
+      if (__DEV__) console.log('[JobsStore] sync complete — reloading jobs');
+      useJobsStore.getState().loadJobs(userId);
+    };
+    onSyncComplete(listener);
+    set({ _syncListenerRef: listener });
+  },
+
+  unsubscribeFromSync: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) {
+      offSyncComplete(listener);
+      set({ _syncListenerRef: null });
     }
   },
 
@@ -95,14 +123,17 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
       );
     }
 
-    // Search filter
+    // Search filter — all relevant fields
     const q = searchQuery.toLowerCase().trim();
     if (q) {
       filtered = filtered.filter(
         (j) =>
           (j.property_name ?? '').toLowerCase().includes(q) ||
           (j.property_address ?? '').toLowerCase().includes(q) ||
-          (j.property_suburb ?? '').toLowerCase().includes(q)
+          (j.property_suburb ?? '').toLowerCase().includes(q) ||
+          (j.property_state ?? '').toLowerCase().includes(q) ||
+          (j.job_type ?? '').toLowerCase().includes(q) ||
+          (j.notes ?? '').toLowerCase().includes(q)
       );
     }
 

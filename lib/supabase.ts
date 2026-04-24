@@ -34,7 +34,9 @@ export async function getCurrentUser(): Promise<User | null> {
       error,
     } = await supabase.auth.getUser();
     if (error) {
-      console.error('[SiteTrack] getCurrentUser error:', error.message);
+      if (error.message !== 'Auth session missing!') {
+        console.warn('[SiteTrack] getCurrentUser warning:', error.message);
+      }
       return null;
     }
     return user;

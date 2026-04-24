@@ -3,21 +3,21 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { JobType } from '@/constants/Enums';
-import Colors from '@/constants/Colors';
+import { useColors } from '@/hooks/useColors';
 
 interface Props {
   jobType: JobType;
 }
 
-const CONFIG: Record<JobType, { bg: string; text: string; label: string; bold?: boolean }> = {
-  [JobType.RoutineService]: { bg: Colors.light.infoLight,    text: Colors.light.infoDark,    label: 'Routine Service' },
-  [JobType.DefectRepair]:   { bg: Colors.light.errorLight,   text: Colors.light.errorDark,   label: 'Defect Repair' },
-  [JobType.Installation]:   { bg: '#F3E8FF',                 text: '#6D28D9',                label: 'Installation' },
-  [JobType.Emergency]:      { bg: Colors.light.errorLight,   text: Colors.light.error,       label: 'EMERGENCY', bold: true },
-  [JobType.Quote]:          { bg: Colors.light.backgroundSecondary, text: Colors.light.textSecondary, label: 'Quote' },
-};
-
 export function JobTypeBadge({ jobType }: Props) {
+  const C = useColors();
+  const CONFIG: Record<JobType, { bg: string; text: string; label: string; bold?: boolean }> = {
+    [JobType.RoutineService]: { bg: C.infoLight || C.info + '20',    text: C.infoDark || C.info,    label: 'Routine Service' },
+    [JobType.DefectRepair]:   { bg: C.errorLight || C.error + '20',   text: C.errorDark || C.error,   label: 'Defect Repair' },
+    [JobType.Installation]:   { bg: '#F3E8FF',                 text: '#6D28D9',                label: 'Installation' },
+    [JobType.Emergency]:      { bg: C.errorLight || C.error + '20',   text: C.error,                 label: 'EMERGENCY', bold: true },
+    [JobType.Quote]:          { bg: C.backgroundSecondary || C.surface, text: C.textSecondary, label: 'Quote' },
+  };
   const cfg = CONFIG[jobType] ?? CONFIG[JobType.RoutineService];
   return (
     <View style={[styles.pill, { backgroundColor: cfg.bg }]}>

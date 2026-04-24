@@ -5,11 +5,16 @@ import { supabase, getCurrentUser } from '@/lib/supabase';
 import {
   getPendingSyncItems,
   markSyncItemComplete,
+  incrementSyncRetry,
   upsertRecord,
 } from '@/lib/database';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
+
+/** Max consecutive push failures before a sync queue item is permanently abandoned */
+const MAX_SYNC_RETRIES = 5;
 import type { SyncStatus } from '@/types';
+import { processPhotoQueue, processDefectPhotos } from '@/lib/photoUpload';
 
 // ─────────────────────────────────────────────
 // Internal state
@@ -19,16 +24,41 @@ let _syncInterval: ReturnType<typeof setInterval> | null = null;
 let _isSyncing = false;
 
 // ─────────────────────────────────────────────
+// Sync-complete event bus
+// Stores subscribe here and reload from SQLite
+// whenever a sync cycle finishes successfully.
+// ─────────────────────────────────────────────
+type SyncCompleteListener = () => void;
+const _syncListeners = new Set<SyncCompleteListener>();
+
+/** Subscribe to be notified after every successful sync run */
+export function onSyncComplete(listener: SyncCompleteListener): void {
+  _syncListeners.add(listener);
+}
+
+/** Unsubscribe a previously registered listener */
+export function offSyncComplete(listener: SyncCompleteListener): void {
+  _syncListeners.delete(listener);
+}
+
+/** Called internally after every successful sync to notify subscribers */
+function _emitSyncComplete(): void {
+  _syncListeners.forEach((fn) => {
+    try { fn(); } catch (e) { console.warn('[SiteTrack Sync] listener error:', e); }
+  });
+}
+
+// ─────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────
 
 /** Starts the background sync loop — call once from the root layout on mount */
 export function startSync(): void {
   if (_syncInterval) {
-    console.log('[SiteTrack Sync] Already running — skipping startSync()');
+    if (__DEV__) console.log('[SiteTrack Sync] Already running — skipping startSync()');
     return;
   }
-  console.log(`[SiteTrack Sync] Starting sync interval (${SYNC_INTERVAL_MS / 1000}s)`);
+  if (__DEV__) console.log(`[SiteTrack Sync] Starting sync interval (${SYNC_INTERVAL_MS / 1000}s)`);
   // Run immediately on start, then repeat on interval
   void runSync();
   _syncInterval = setInterval(() => {
@@ -41,7 +71,7 @@ export function stopSync(): void {
   if (_syncInterval) {
     clearInterval(_syncInterval);
     _syncInterval = null;
-    console.log('[SiteTrack Sync] Sync stopped');
+    if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
 }
 
@@ -75,7 +105,7 @@ export async function getSyncStatus(): Promise<SyncStatus> {
  */
 export async function runSync(): Promise<void> {
   if (_isSyncing) {
-    console.log('[SiteTrack Sync] Already in progress — skipping');
+    if (__DEV__) console.log('[SiteTrack Sync] Already in progress — skipping');
     return;
   }
 
@@ -85,17 +115,17 @@ export async function runSync(): Promise<void> {
     netState.isConnected === true && netState.isInternetReachable !== false;
 
   if (!isOnline) {
-    console.log('[SiteTrack Sync] Offline — skipping sync');
+    if (__DEV__) console.log('[SiteTrack Sync] Offline — skipping sync');
     return;
   }
 
   _isSyncing = true;
-  console.log('[SiteTrack Sync] Starting sync run...');
+  if (__DEV__) console.log('[SiteTrack Sync] Starting sync run...');
 
   try {
     const user = await getCurrentUser();
     if (!user) {
-      console.log('[SiteTrack Sync] No authenticated user — skipping sync');
+      if (__DEV__) console.log('[SiteTrack Sync] No authenticated user — skipping sync');
       return;
     }
 
@@ -103,12 +133,17 @@ export async function runSync(): Promise<void> {
     await _pullJobs(user.id);
 
     // ── 3. PUSH — Offline queue ──────────────────
+    await processPhotoQueue(); // process photo binaries first
+    await processDefectPhotos(); // upload locally attached defect photos
     await _pushQueue();
 
     // ── 4. Update last-synced timestamp ──────────
     const now = new Date().toISOString();
     await AsyncStorage.setItem(LAST_SYNCED_KEY, now);
-    console.log(`[SiteTrack Sync] Sync complete at ${now}`);
+    if (__DEV__) console.log(`[SiteTrack Sync] Sync complete at ${now}`);
+
+    // ── 5. Notify all subscribers (stores reload UI) ──
+    _emitSyncComplete();
   } catch (err) {
     console.error('[SiteTrack Sync] Unexpected error during sync:', err);
   } finally {
@@ -135,7 +170,7 @@ async function _pullJobs(userId: string): Promise<void> {
   }
 
   if (!jobs || jobs.length === 0) {
-    console.log('[SiteTrack Sync] No jobs to pull');
+    if (__DEV__) console.log('[SiteTrack Sync] No jobs to pull');
     return;
   }
 
@@ -162,7 +197,7 @@ async function _pullJobs(userId: string): Promise<void> {
       for (const prop of properties) {
         upsertRecord('properties', prop as Record<string, string | number | boolean | null>);
       }
-      console.log(`[SiteTrack Sync] PULL: upserted ${properties.length} property/ies`);
+      if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${properties.length} property/ies`);
 
       // Pull assets for these properties
       const { data: assets, error: assetError } = await supabase
@@ -177,7 +212,7 @@ async function _pullJobs(userId: string): Promise<void> {
         for (const asset of assets) {
           upsertRecord('assets', asset as Record<string, string | number | boolean | null>);
         }
-        console.log(`[SiteTrack Sync] PULL: upserted ${assets.length} asset(s)`);
+        if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${assets.length} asset(s)`);
       }
     }
   }
@@ -186,7 +221,7 @@ async function _pullJobs(userId: string): Promise<void> {
   for (const job of jobs) {
     upsertRecord('jobs', job as Record<string, string | number | boolean | null>);
   }
-  console.log(`[SiteTrack Sync] PULL: upserted ${jobs.length} job(s)`);
+  if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${jobs.length} job(s)`);
 
   // Pull job_assets, defects, and inspection_photos for these jobs
   if (jobIds.length > 0) {
@@ -195,6 +230,24 @@ async function _pullJobs(userId: string): Promise<void> {
     await _pullRelated('inspection_photos', 'job_id', jobIds);
     await _pullRelated('signatures', 'job_id', jobIds);
     await _pullRelated('time_logs', 'job_id', jobIds);
+    await _pullRelated('quotes', 'job_id', jobIds);
+
+    // quote_items — need quote IDs for this job batch first
+    const { data: quoteRows } = await supabase.from('quotes').select('id').in('job_id', jobIds);
+    if (quoteRows && quoteRows.length > 0) {
+      const parentQuoteIds = quoteRows.map((q) => q.id as string);
+      await _pullRelated('quote_items', 'quote_id', parentQuoteIds);
+    }
+  }
+
+  // Pull global inventory items
+  const { data: inventoryItems, error: invError } = await supabase.from('inventory_items').select('*');
+  if (invError) {
+    console.error('[SiteTrack Sync] PULL inventory_items error:', invError.message);
+  } else if (inventoryItems) {
+    for (const item of inventoryItems) {
+      upsertRecord('inventory_items', item as Record<string, string | number | boolean | null>);
+    }
   }
 }
 
@@ -218,23 +271,33 @@ async function _pullRelated(
       upsertRecord(table, row as Record<string, string | number | boolean | null>);
     }
     if (data.length > 0) {
-      console.log(`[SiteTrack Sync] PULL: upserted ${data.length} ${table} row(s)`);
+      if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${data.length} ${table} row(s)`);
     }
   }
 }
 
-/** Pushes all pending sync_queue items to Supabase, marking each complete on success */
+/**
+ * Pushes all pending sync_queue items to Supabase, marking each complete on success.
+ * Items that fail MAX_SYNC_RETRIES times are permanently abandoned to prevent infinite loops.
+ */
 async function _pushQueue(): Promise<void> {
   const pending = getPendingSyncItems();
 
   if (pending.length === 0) {
-    console.log('[SiteTrack Sync] PUSH: no pending items');
+    if (__DEV__) console.log('[SiteTrack Sync] PUSH: no pending items');
     return;
   }
 
-  console.log(`[SiteTrack Sync] PUSH: processing ${pending.length} queue item(s)`);
+  // Filter out permanently-failed items (synced = -1) before processing
+  const actionable = pending.filter((i) => (i.retry_count ?? 0) < MAX_SYNC_RETRIES);
+  const skipped = pending.length - actionable.length;
+  if (skipped > 0) {
+    if (__DEV__) console.warn(`[SiteTrack Sync] PUSH: skipping ${skipped} permanently-failed item(s)`);
+  }
 
-  for (const item of pending) {
+  if (__DEV__) console.log(`[SiteTrack Sync] PUSH: processing ${actionable.length} queue item(s)`);
+
+  for (const item of actionable) {
     try {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
       let error: { message: string } | null = null;
@@ -258,22 +321,20 @@ async function _pushQueue(): Promise<void> {
 
       if (error) {
         console.error(
-          `[SiteTrack Sync] PUSH failed for queue item ${item.id} (${item.table_name}/${item.operation}):`,
-          error.message
+          `[SiteTrack Sync] PUSH failed (retry ${(item.retry_count ?? 0) + 1}/${MAX_SYNC_RETRIES}) for item ${item.id} (${item.table_name}/${item.operation}): ${error.message}`
         );
-        // Leave in queue for retry on next sync cycle
+        // Increment retry counter; marks synced=-1 when limit is reached
+        incrementSyncRetry(item.id, error.message, MAX_SYNC_RETRIES);
       } else {
         markSyncItemComplete(item.id);
-        console.log(
+        if (__DEV__) console.log(
           `[SiteTrack Sync] PUSH: queue item ${item.id} (${item.table_name}/${item.operation}) complete`
         );
       }
     } catch (err) {
-      console.error(
-        `[SiteTrack Sync] PUSH unexpected error for queue item ${item.id}:`,
-        err
-      );
-      // Leave in queue for retry
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[SiteTrack Sync] PUSH unexpected error for queue item ${item.id}: ${msg}`);
+      incrementSyncRetry(item.id, msg, MAX_SYNC_RETRIES);
     }
   }
 }
