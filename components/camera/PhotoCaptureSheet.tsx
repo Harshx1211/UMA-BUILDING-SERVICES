@@ -12,6 +12,7 @@ import { getAssetsForProperty } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { Asset } from '@/types';
 import Toast from 'react-native-toast-message';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface Props {
   jobId: string;
@@ -82,16 +83,29 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
         );
 
-        let uri = manipResult.uri;
+        // Optionally save to gallery, but DON'T use the gallery URI for our app data
         if (mediaPerm?.granted) {
-          const asset = await MediaLibrary.createAssetAsync(manipResult.uri);
-          uri = asset.uri;
+          try {
+            await MediaLibrary.createAssetAsync(manipResult.uri);
+          } catch (e) {
+            console.warn('Failed to save to gallery', e);
+          }
+        }
+
+        // Save to document directory for permanent app access
+        const filename = `photo_${Date.now()}.jpg`;
+        const destUri = `${FileSystem.documentDirectory}${filename}`;
+        
+        try {
+          await FileSystem.copyAsync({ from: manipResult.uri, to: destUri });
+        } catch (e) {
+          console.warn('Failed to copy to document directory', e);
         }
 
         addPhoto({
           job_id: jobId,
           asset_id: assetId === '' ? null : assetId,
-          photo_url: uri,
+          photo_url: destUri,
           caption: caption.trim() || null,
           uploaded_by: useAuthStore.getState().user?.id || 'unknown',
         });

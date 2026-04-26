@@ -113,6 +113,10 @@ export interface Defect {
   status: DefectStatus;
   photos: string[];               // array of storage URLs
   created_at: string;
+  /** Uptick defect code (e.g. "bg", "hg") — null for free-text defects */
+  defect_code?: string | null;
+  /** Reference quote price in AUD from the Uptick code library */
+  quote_price?: number | null;
 }
 
 /** A photo taken during a job inspection */

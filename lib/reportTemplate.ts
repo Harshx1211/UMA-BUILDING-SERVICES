@@ -318,7 +318,7 @@ function buildAssetPhoto(photo: InspectionPhoto, small = true): string {
 function buildRawPhoto(url: string, caption = 'Defect photo', small = false): string {
   const cls = small ? 'photo-thumb' : 'photo-defect';
   return `
-  <div class="photo-wrap">
+  <div class="photo-wrap avoid-break">
     <img src="${url}" class="${cls}" alt="${caption}" />
     <div class="photo-caption">${caption}</div>
   </div>`;
@@ -350,20 +350,17 @@ function buildDefectBoxHtml(
 
     // Build photo grid — prefer inspection_photos; supplement with defect.photos[]
     const defectPhotosHtml = defectPhotoUrls
-      .filter(u => u && u.startsWith('data:')) // only include successfully-encoded images
+      .filter(u => u) // include original URLs even if not base64, so it doesn't just silently drop them
       .map((url, i) => buildRawPhoto(url, `Defect photo ${i + 1}`, false))
       .join('');
 
     // Combine: inspection photo first, then defect-specific photos
-    const allPhotosHtml = inspectionPhotoHtml
-      ? `<div class="photo-grid">${inspectionPhotoHtml}</div>`
-      : defectPhotosHtml
-        ? `<div class="photo-grid">${defectPhotosHtml}</div>`
-        : '';
+    const combinedPhotos = [inspectionPhotoHtml, defectPhotosHtml].filter(Boolean).join('');
+    const allPhotosHtml = combinedPhotos ? `<div class="photo-grid">${combinedPhotos}</div>` : '';
 
     return `
     <div class="defect-box ${boxCls}">
-      <div class="defect-header">
+      <div class="defect-header avoid-break">
         <div>
           <div class="defect-type">${typeLabel}</div>
           <div class="defect-id">ID: ${shortId(defect.id, 4)} &#x1F517;</div>
@@ -384,7 +381,7 @@ function buildDefectBoxHtml(
   const fallbackDate = fmtDateTimeFull(asset.actioned_at ?? new Date().toISOString());
   return `
   <div class="defect-box db-maj">
-    <div class="defect-header">
+    <div class="defect-header avoid-break">
       <div>
         <div class="defect-type">Non-critical defect</div>
         <div class="defect-id">ID: ${shortId(asset.id, 4)}</div>
@@ -405,7 +402,6 @@ function buildAssetRowHtml(
 ): string {
   const isPass = asset.result === 'pass';
   const isFail = asset.result === 'fail';
-  const isNT   = asset.result === 'not_tested';
 
   const pillCls   = isPass ? 'pill-pass' : isFail ? 'pill-fail' : 'pill-nt';
   const pillLabel = isPass ? 'PASS' : isFail ? 'FAIL' : 'N/T';
@@ -424,8 +420,8 @@ function buildAssetRowHtml(
   const defectHtml    = isFail ? buildDefectBoxHtml(asset, linkedDefect, assetPhoto) : '';
 
   return `
-  <div class="asset-block avoid-break">
-    <div class="asset-row">
+  <div class="asset-block">
+    <div class="asset-row avoid-break">
       <div class="asset-left">
         <span class="asset-ref">${refCode} - ${typeLabel}</span>
         ${location ? `<span class="asset-loc">${location}</span>` : ''}
@@ -636,9 +632,9 @@ const REPORT_CSS = `
     position: relative;
   }
 
-  /* Page 2+ gets a page break before it */
-  .maint-page  { page-break-before: always; break-before: page; padding-top: 28px; }
-  .quote-page  { page-break-before: always; break-before: page; }
+  /* Page 2+ flows naturally to avoid blank pages if previous page spills over */
+  .maint-page  { padding-top: 28px; }
+  .quote-page  { padding-top: 28px; }
 
   /* ══════════════════════════════════════════════════════════
      PAGE 1 — HEADER BAR
@@ -863,9 +859,9 @@ const REPORT_CSS = `
   /* ── Photos ── */
   .photo-grid    { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .photo-wrap    { display: flex; flex-direction: column; align-items: center; }
-  .photo-thumb   { width: 110px; height: 110px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; }
-  .photo-inline  { width: 140px; height: 140px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; }
-  .photo-defect  { width: 100%; max-width: 460px; max-height: 320px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; }
+  .photo-thumb   { width: 110px; height: 110px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
+  .photo-inline  { width: 140px; height: 140px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
+  .photo-defect  { width: 100%; max-width: 460px; aspect-ratio: 4/3; max-height: 320px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
   .photo-caption { font-size: 9px; color: #94A3B8; margin-top: 4px; text-align: center; }
 
   /* ── Defect box — full border card ── */

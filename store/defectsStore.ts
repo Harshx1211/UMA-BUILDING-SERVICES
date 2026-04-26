@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { Defect } from '@/types';
 import {
   getDefectsForJob,
+  getAllDefects,
   insertRecord,
   updateRecord,
   deleteRecord,
@@ -19,8 +20,10 @@ interface DefectsState {
   error: string | null;
 
   loadDefects: (jobId: string) => void;
-  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'status'>) => void;
+  loadAllDefects: (statusFilter?: string) => void;
+  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'status'>) => string | null;
   updateDefect: (defectId: string, updates: Partial<Defect>) => void;
+  updateDefectStatus: (defectId: string, status: DefectStatus) => void;
   deleteDefect: (defectId: string) => void;
   clearError: () => void;
 }
@@ -28,6 +31,16 @@ interface DefectsState {
 // ─── Helper — extract a message from an unknown catch value ─
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'An unexpected error occurred.';
+}
+
+// ─── Helper — normalise photos from SQLite JSON string ────
+function normaliseDefects(records: Defect[]): Defect[] {
+  return records.map((d) => ({
+    ...d,
+    photos: typeof d.photos === 'string'
+      ? (() => { try { return JSON.parse(d.photos as unknown as string) as string[]; } catch { return []; } })()
+      : (d.photos ?? []),
+  }));
 }
 
 // ─── Store ────────────────────────────────────────────────
@@ -42,16 +55,20 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       // BUG 26 FIX: clear previous job's defects before fetch so stale data doesn't flash
       set({ isLoading: true, error: null, defects: [] });
       const records = getDefectsForJob<Defect>(jobId);
-      // SQLite stores `photos` as a JSON string — normalise to string[]
-      const normalised = records.map((d) => ({
-        ...d,
-        photos: typeof d.photos === 'string'
-          ? (() => { try { return JSON.parse(d.photos as unknown as string) as string[]; } catch { return []; } })()
-          : (d.photos ?? []),
-      }));
-      set({ defects: normalised, isLoading: false });
+      set({ defects: normaliseDefects(records), isLoading: false });
     } catch (err: unknown) {
       console.error('[DefectsStore] loadDefects error:', err);
+      set({ error: errorMessage(err), isLoading: false });
+    }
+  },
+
+  loadAllDefects: (statusFilter) => {
+    try {
+      set({ isLoading: true, error: null, defects: [] });
+      const records = getAllDefects<Defect>(statusFilter);
+      set({ defects: normaliseDefects(records), isLoading: false });
+    } catch (err: unknown) {
+      console.error('[DefectsStore] loadAllDefects error:', err);
       set({ error: errorMessage(err), isLoading: false });
     }
   },
@@ -68,7 +85,12 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       };
 
       // Serialise photos array to JSON string for SQLite
-      const dbPayload = { ...payload, photos: JSON.stringify(payload.photos) };
+      const dbPayload = {
+        ...payload,
+        photos: JSON.stringify(payload.photos),
+        defect_code: payload.defect_code ?? null,
+        quote_price: payload.quote_price ?? null,
+      };
       insertRecord('defects', dbPayload as Record<string, string | number | boolean | null>);
       addToSyncQueue('defects', id, SyncOperation.Insert, dbPayload as Record<string, string | number | boolean | null>);
 
@@ -76,9 +98,12 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         defects: [payload, ...state.defects],
         isSaving: false,
       }));
+
+      return id;
     } catch (err: unknown) {
       console.error('[DefectsStore] addDefect error:', err);
       set({ error: errorMessage(err), isSaving: false });
+      return null;
     }
   },
 
@@ -106,6 +131,23 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     } catch (err: unknown) {
       console.error('[DefectsStore] updateDefect error:', err);
       set({ error: errorMessage(err), isSaving: false });
+    }
+  },
+
+  updateDefectStatus: (defectId, status) => {
+    try {
+      const dbUpdates = { status, updated_at: new Date().toISOString() };
+      updateRecord('defects', defectId, dbUpdates);
+      addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+
+      set((state) => ({
+        defects: state.defects.map((d) =>
+          d.id === defectId ? { ...d, status } : d
+        ),
+      }));
+    } catch (err: unknown) {
+      console.error('[DefectsStore] updateDefectStatus error:', err);
+      set({ error: errorMessage(err) });
     }
   },
 

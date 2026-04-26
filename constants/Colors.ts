@@ -1,107 +1,108 @@
-// SiteTrack colour palette — light and dark variants for all UI tokens
+// SiteTrack colour palette — professional enterprise field-service app
+// Design principle: navy authority + white clarity + orange precision
 
 const Colors = {
   light: {
     // Brand
-    primary: '#1B2D4F',       // Navy Blue — main brand colour
-    primaryLight: '#2A4070',  // Lighter navy for hover/active states
-    primaryDark: '#0D1B2E',   // Darker navy for pressed states
-    accent: '#F97316',        // Orange — call-to-action, highlights
-    accentLight: '#FB923C',   // Lighter orange
-    accentDark: '#EA6C00',    // Darker orange
+    primary: '#1B2D4F',       // Deep Navy — authority, trust
+    primaryLight: '#253D6B',  // Lighter navy for hover/active states
+    primaryDark: '#0F1D35',   // Darkest navy for pressed states
+    accent: '#E8650A',        // Refined orange — precise, not garish
+    accentLight: '#F07D28',   // Lighter orange
+    accentDark: '#C4540A',    // Darker orange for text on light bg
 
-    // Backgrounds
-    background: '#F0F3F8',
-    backgroundSecondary: '#E8EDF5',
-    backgroundTertiary: '#DDE4EE',
-    surface: '#FFFFFF',
-    surfaceElevated: '#FAFBFD',
-    cardBorder: 'rgba(30, 50, 90, 0.07)',
+    // Backgrounds — clean, not grey-soup
+    background: '#F4F6FA',          // Slightly blue-tinted white, clean
+    backgroundSecondary: '#EDF0F7', // Slightly deeper tier
+    backgroundTertiary: '#E4E8F2',  // Inputs, chips
+    surface: '#FFFFFF',             // Pure white for cards
+    surfaceElevated: '#FAFBFE',     // Very slightly off-white, elevated surfaces
+    cardBorder: 'rgba(27, 45, 79, 0.09)', // Visible navy-tinted border
 
-    // Text
-    text: '#0F172A',
-    textSecondary: '#475569',
-    textTertiary: '#94A3B8',
+    // Text — strong typographic hierarchy
+    text: '#0D1526',            // Near-black with navy hue
+    textSecondary: '#44546A',   // Slate — readable secondary
+    textTertiary: '#8898AA',    // Muted — for labels, timestamps
     textInverse: '#FFFFFF',
     textOnPrimary: '#FFFFFF',
     textOnAccent: '#FFFFFF',
 
     // Borders
-    border: '#E2E8F0',
-    borderStrong: '#CBD5E1',
+    border: '#DCE3EE',
+    borderStrong: '#C4CEDF',
 
-    // Status
-    success: '#22C55E',
+    // Status — clear, professional
+    success: '#16A34A',
     successLight: '#DCFCE7',
-    successDark: '#15803D',
-    warning: '#EAB308',
-    warningLight: '#FEF9C3',
-    warningDark: '#A16207',
-    error: '#EF4444',
+    successDark: '#14532D',
+    warning: '#D97706',
+    warningLight: '#FEF3C7',
+    warningDark: '#92400E',
+    error: '#DC2626',
     errorLight: '#FEE2E2',
-    errorDark: '#B91C1C',
-    info: '#3B82F6',
+    errorDark: '#991B1B',
+    info: '#2563EB',
     infoLight: '#DBEAFE',
-    infoDark: '#1D4ED8',
+    infoDark: '#1E3A8A',
 
     // Misc
     tint: '#1B2D4F',
-    icon: '#475569',
-    tabIconDefault: '#94A3B8',
+    icon: '#44546A',
+    tabIconDefault: '#8898AA',
     tabIconSelected: '#1B2D4F',
-    shadow: 'rgba(15, 30, 60, 0.10)',
+    shadow: 'rgba(13, 21, 38, 0.10)',
     overlay: 'rgba(0, 0, 0, 0.5)',
   },
   dark: {
     // Brand
-    primary: '#3B5EA6',       // Lighter navy — readable on dark backgrounds
-    primaryLight: '#4E72BC',
+    primary: '#4A6FA5',
+    primaryLight: '#5C82BA',
     primaryDark: '#2A4070',
-    accent: '#F97316',
-    accentLight: '#FB923C',
-    accentDark: '#EA6C00',
+    accent: '#E8650A',
+    accentLight: '#F07D28',
+    accentDark: '#C4540A',
 
     // Backgrounds
-    background: '#0B0F17',
-    backgroundSecondary: '#111620',
-    backgroundTertiary: '#1A2130',
-    surface: '#141923',
-    surfaceElevated: '#1C2333',
-    cardBorder: 'rgba(255,255,255,0.06)',
+    background: '#0A0E18',
+    backgroundSecondary: '#10141F',
+    backgroundTertiary: '#181D2B',
+    surface: '#131825',
+    surfaceElevated: '#1A2035',
+    cardBorder: 'rgba(255,255,255,0.07)',
 
     // Text
-    text: '#F0F6FC',
-    textSecondary: '#8B949E',
-    textTertiary: '#6E7681',
-    textInverse: '#0D1117',
+    text: '#EEF2FA',
+    textSecondary: '#8B99B5',
+    textTertiary: '#5D6B85',
+    textInverse: '#0A0E18',
     textOnPrimary: '#FFFFFF',
     textOnAccent: '#FFFFFF',
 
     // Borders
-    border: '#30363D',
-    borderStrong: '#484F58',
+    border: '#252D42',
+    borderStrong: '#3A4560',
 
     // Status
-    success: '#3FB950',
-    successLight: '#0D2818',
-    successDark: '#238636',
-    warning: '#D29922',
-    warningLight: '#272115',
-    warningDark: '#9E6A03',
-    error: '#F85149',
-    errorLight: '#2D1117',
-    errorDark: '#DA3633',
-    info: '#58A6FF',
-    infoLight: '#0D2345',
-    infoDark: '#1F6FEB',
+    success: '#22C55E',
+    successLight: '#052E16',
+    successDark: '#16A34A',
+    warning: '#F59E0B',
+    warningLight: '#1C1407',
+    warningDark: '#D97706',
+    error: '#EF4444',
+    errorLight: '#1F0A0A',
+    errorDark: '#DC2626',
+    info: '#3B82F6',
+    infoLight: '#0A1628',
+    infoDark: '#2563EB',
 
     // Misc
-    tint: '#3B5EA6',
-    icon: '#8B949E',
-    tabIconDefault: '#4A5568',
-    tabIconSelected: '#5B8DEF',
-    shadow: 'rgba(0, 0, 0, 0.5)',
-    overlay: 'rgba(0, 0, 0, 0.75)',
+    tint: '#4A6FA5',
+    icon: '#8B99B5',
+    tabIconDefault: '#3A4560',
+    tabIconSelected: '#4A6FA5',
+    shadow: 'rgba(0, 0, 0, 0.6)',
+    overlay: 'rgba(0, 0, 0, 0.8)',
   },
 };
 

@@ -3,7 +3,8 @@ import { DB_NAME } from "@/constants/Config";
 import { SyncOperation } from "@/constants/Enums";
 import type { SyncQueueItem } from "@/types";
 import * as SQLite from "expo-sqlite";
-
+import { DEFECT_CODES } from "@/constants/DefectCodes";
+import { generateUUID } from "@/utils/uuid";
 // ─────────────────────────────────────────────
 // Database connection
 // ─────────────────────────────────────────────
@@ -36,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -393,10 +394,52 @@ export function initializeSchema(): void {
     );
   }
 
+  // Migration 6: defect_code + quote_price on defects table (Uptick code library integration)
+  if (currentVersion < 6) {
+    try {
+      db.runSync("ALTER TABLE defects ADD COLUMN defect_code TEXT;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 6a: added defects.defect_code");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 6a failed:", msg);
+      }
+    }
+    try {
+      db.runSync("ALTER TABLE defects ADD COLUMN quote_price REAL;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 6b: added defects.quote_price");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 6b failed:", msg);
+      }
+    }
+    // Also add item_name to quote_items to support custom (non-inventory) line items
+    try {
+      db.runSync("ALTER TABLE quote_items ADD COLUMN item_name TEXT;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 6c: added quote_items.item_name");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 6c failed:", msg);
+      }
+    }
+    currentVersion = 6;
+    db.runSync(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '6')`,
+    );
+  }
+
   if (__DEV__)
     console.log(
       `[SiteTrack DB] Schema initialised at version ${currentVersion}`,
     );
+
+  // Seed inventory from Uptick defect codes on first run
+  seedInventoryFromDefectCodes();
 }
 
 // ─────────────────────────────────────────────
@@ -923,6 +966,26 @@ export function getServiceHistoryForAsset<T = RecordData>(
   }
 }
 
+/**
+ * Returns the local status and updated_at timestamp for a job.
+ * Used by the sync engine for conflict resolution — prevents a PULL from
+ * reverting a local in_progress/completed status back to scheduled.
+ */
+export function getJobStatus(jobId: string): { status: string; updated_at: string } | null {
+  try {
+    const db = openDatabase();
+    return (
+      db.getFirstSync<{ status: string; updated_at: string }>(
+        `SELECT status, updated_at FROM jobs WHERE id = ?`,
+        [jobId],
+      ) ?? null
+    );
+  } catch (err) {
+    console.error(`[SiteTrack DB] getJobStatus(${jobId}) error:`, err);
+    return null;
+  }
+}
+
 /** Returns all defects linked to a specific asset */
 export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
   try {
@@ -940,3 +1003,87 @@ export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
     return [];
   }
 }
+
+/**
+ * Retrieves ALL defects across all jobs, with joined asset and property info.
+ * Used by the global defects screen. Optionally filter by status.
+ */
+export function getAllDefects<T = RecordData>(status?: string): T[] {
+  try {
+    const db = openDatabase();
+    const where = status ? `WHERE d.status = '${status}'` : '';
+    return db.getAllSync<T>(
+      `SELECT d.*,
+              a.asset_type, a.location_on_site,
+              p.name AS property_name,
+              j.scheduled_date, j.job_type
+       FROM defects d
+       LEFT JOIN assets a ON d.asset_id = a.id
+       LEFT JOIN properties p ON d.property_id = p.id
+       LEFT JOIN jobs j ON d.job_id = j.id
+       ${where}
+       ORDER BY d.created_at DESC`,
+    );
+  } catch (err) {
+    console.error('[SiteTrack DB] getAllDefects error:', err);
+    return [];
+  }
+}
+
+/**
+ * Retrieves a single defect by ID with all joined fields.
+ */
+export function getDefectById<T = RecordData>(defectId: string): T | null {
+  try {
+    const db = openDatabase();
+    return db.getFirstSync<T>(
+      `SELECT d.*,
+              a.asset_type, a.location_on_site, a.serial_number,
+              p.name AS property_name,
+              j.scheduled_date, j.job_type, j.id AS job_id_resolved
+       FROM defects d
+       LEFT JOIN assets a ON d.asset_id = a.id
+       LEFT JOIN properties p ON d.property_id = p.id
+       LEFT JOIN jobs j ON d.job_id = j.id
+       WHERE d.id = ?`,
+      [defectId],
+    ) ?? null;
+  } catch (err) {
+    console.error(`[SiteTrack DB] getDefectById(${defectId}) error:`, err);
+    return null;
+  }
+}
+
+/**
+ * Seeds the local inventory_items table with Uptick defect codes that have a price.
+ * Only runs if inventory is completely empty — never overwrites existing data.
+ * Prices are reference rates from the Uptick codebook and can be edited on the quote screen.
+ */
+export function seedInventoryFromDefectCodes(): void {
+  try {
+    const db = openDatabase();
+    const count = db.getFirstSync<{ n: number }>('SELECT COUNT(*) as n FROM inventory_items');
+    if (count && count.n > 0) return; // Already seeded
+
+
+    const pricedCodes = DEFECT_CODES.filter(d => d.quote_price !== undefined);
+    const now = new Date().toISOString();
+
+    db.withTransactionSync(() => {
+      for (const code of pricedCodes) {
+        const id = generateUUID();
+        db.runSync(
+          `INSERT OR IGNORE INTO inventory_items (id, name, description, price, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, `[${code.code.toUpperCase()}] ${code.category}`, code.description.substring(0, 120), code.quote_price!, now],
+        );
+      }
+    });
+
+    if (__DEV__) console.log(`[SiteTrack DB] Seeded ${pricedCodes.length} inventory items from Uptick codes`);
+  } catch (err) {
+    // Non-fatal — inventory seeding is best-effort
+    console.warn('[SiteTrack DB] seedInventoryFromDefectCodes failed:', err);
+  }
+}
+

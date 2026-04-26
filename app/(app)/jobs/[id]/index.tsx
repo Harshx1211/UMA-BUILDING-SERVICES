@@ -8,24 +8,23 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import * as Location from 'expo-location';
 import Toast from 'react-native-toast-message';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   JobStatus, JobType, Priority, InspectionResult, SyncOperation,
 } from '@/constants/Enums';
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
-  getTimeLogsForJob, getSignatureForJob, insertRecord, updateRecord, addToSyncQueue,
+  getSignatureForJob, updateRecord, addToSyncQueue,
 } from '@/lib/database';
-import { generateUUID } from '@/utils/uuid';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button } from '@/components/ui';
-import type { Asset, Defect, InspectionPhoto, TimeLog } from '@/types';
+import { cardShadow } from '@/components/ui/Card';
+import type { Asset, Defect, InspectionPhoto } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -58,10 +57,6 @@ function fmtTime(hhmm: string) {
     return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
   } catch { return hhmm; }
 }
-function fmtElapsed(s: number) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m ${sec}s`;
-}
 
 const PRIORITY_LABEL: Record<Priority, string> = {
   [Priority.Urgent]: 'Urgent', [Priority.High]: 'High',
@@ -85,7 +80,7 @@ function ActionCard({
 }) {
   return (
     <TouchableOpacity
-      style={[ac.card, { backgroundColor: C.surface, borderColor: C.border }]}
+      style={[ac.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}
       onPress={onPress}
       activeOpacity={0.75}
     >
@@ -103,26 +98,20 @@ function ActionCard({
   );
 }
 const ac = StyleSheet.create({
-  card:     { flex: 1, borderRadius: 16, padding: 14, gap: 5, borderWidth: 1, minHeight: 90, position: 'relative' },
-  title:    { fontSize: 13, fontWeight: '700' },
-  sub:      { fontSize: 11 },
-  badge:    { position: 'absolute', top: 10, right: 10, minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  card:     { flex: 1, borderRadius: 16, padding: 18, gap: 10, borderWidth: 1, minHeight: 110, position: 'relative' },
+  title:    { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  sub:      { fontSize: 13, marginTop: -2 },
+  badge:    { position: 'absolute', top: 12, right: 12, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, borderWidth: 2, borderColor: '#FFFFFF' },
   badgeTxt: { fontSize: 10, fontWeight: '800', color: '#FFF' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function JobDetailScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { updateJobStatus } = useJobsStore();
 
-  // Hide bottom tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
 
   const PRIORITY_COLOR: Record<Priority, string> = {
     [Priority.Urgent]: C.error,
@@ -138,23 +127,12 @@ export default function JobDetailScreen() {
   const [photos,  setPhotos]  = useState<InspectionPhoto[]>([]);
   const [notes,   setNotes]   = useState('');
   const [isEditingNotes,   setIsEditingNotes]   = useState(false);
-  const [isClocking,       setIsClocking]       = useState(false);
   const [isLoading,        setIsLoading]        = useState(true);
   const [hasSig,           setHasSig]           = useState(false);
   const [showBottomSheet,  setShowBottomSheet]  = useState(false);
-  const [elapsed,          setElapsed]          = useState(0);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completionCountdown, setCompletionCountdown] = useState(5);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Timer for on-site elapsed time ─────────────────────────────────────────
-  useEffect(() => {
-    if (job?.status === JobStatus.InProgress) {
-      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [job?.status]);
 
   useEffect(() => {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
@@ -182,45 +160,18 @@ export default function JobDetailScreen() {
 
   useEffect(() => { loadJob(); }, [loadJob]);
   // Refresh data whenever we navigate back to this screen
-  useFocusEffect(useCallback(() => { loadJob(); }, [id]));
+  useFocusEffect(useCallback(() => { loadJob(); }, [loadJob]));
 
   // ── Job actions ────────────────────────────────────────────────────────────
   const handleStartJob = async () => {
     if (!job || !user) return;
-    setIsClocking(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      let lat: number | null = null, lng: number | null = null;
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        lat = loc.coords.latitude; lng = loc.coords.longitude;
-      }
-      const now = new Date().toISOString(), logId = generateUUID();
-      insertRecord('time_logs', { id: logId, job_id: job.id, user_id: user.id, clock_in: now, gps_lat: lat, gps_lng: lng });
-      addToSyncQueue('time_logs', logId, SyncOperation.Insert, { id: logId, job_id: job.id, user_id: user.id, clock_in: now, gps_lat: lat, gps_lng: lng });
       updateJobStatus(job.id, JobStatus.InProgress);
       setJob(p => p ? { ...p, status: JobStatus.InProgress } : p);
-      setElapsed(0);
-      Toast.show({ type: 'success', text1: 'Clocked In ✓', text2: lat ? 'GPS location recorded' : 'No GPS available' });
+      Toast.show({ type: 'success', text1: 'Job Started ✓' });
     } catch {
-      Toast.show({ type: 'error', text1: 'Failed to clock in' });
-    } finally { setIsClocking(false); }
-  };
-
-  const handleClockOut = async () => {
-    if (!job || !user) return;
-    setIsClocking(true);
-    try {
-      const now = new Date().toISOString();
-      const logs = getTimeLogsForJob<TimeLog>(job.id);
-      const open = logs.find(l => !l.clock_out);
-      if (open) {
-        updateRecord('time_logs', open.id, { clock_out: now });
-        addToSyncQueue('time_logs', open.id, SyncOperation.Update, { clock_out: now });
-      }
-      if (timerRef.current) clearInterval(timerRef.current);
-      Toast.show({ type: 'info', text1: 'Timer Paused', text2: `Time logged — ${fmtElapsed(elapsed)}` });
-    } catch { /* ignore */ } finally { setIsClocking(false); }
+      Toast.show({ type: 'error', text1: 'Failed to start job' });
+    }
   };
 
   const handleCompleteRequest = () => setShowBottomSheet(true);
@@ -229,27 +180,16 @@ export default function JobDetailScreen() {
 
   const finalizeCompletion = () => {
     if (!job) return;
-    try {
-      const now = new Date().toISOString();
-      const logs = getTimeLogsForJob<TimeLog>(job.id);
-      const open = logs.find(l => !l.clock_out);
-      if (open) {
-        updateRecord('time_logs', open.id, { clock_out: now });
-        addToSyncQueue('time_logs', open.id, SyncOperation.Update, { clock_out: now });
-      }
-    } catch (err) { console.warn('[JobDetail] finalizeCompletion:', err); }
     updateJobStatus(job.id, JobStatus.Completed);
     setJob(p => p ? { ...p, status: JobStatus.Completed } : p);
-    if (timerRef.current) clearInterval(timerRef.current);
     setShowCompletionModal(true);
     setCompletionCountdown(5);
-    const jobId = job.id;
+    // Auto-DISMISS only (no forced redirect) — user controls navigation via buttons
     countdownRef.current = setInterval(() => {
       setCompletionCountdown(prev => {
         if (prev <= 1) {
           if (countdownRef.current) clearInterval(countdownRef.current);
-          setShowCompletionModal(false);
-          router.replace(`/jobs/${jobId}/report` as never);
+          setShowCompletionModal(false); // just close, stay on job detail
           return 0;
         }
         return prev - 1;
@@ -340,59 +280,34 @@ export default function JobDetailScreen() {
 
         <View style={s.body}>
 
-          {/* ── TIMER / CLOCK WIDGET ──────────────────────────────── */}
+          {/* ── JOB ACTIONS WIDGET ──────────────────────────────── */}
           {!isCompleted && !isCancelled && (
             <Animated.View entering={FadeInDown.delay(40).duration(360)}>
-              <View style={[s.timerCard, {
-                backgroundColor: isInProgress ? C.primary : C.surface,
-                borderColor:     isInProgress ? 'transparent' : C.border,
-                borderWidth:     isInProgress ? 0 : 1,
-              }]}>
-                <View style={s.timerLeft}>
-                  <MaterialCommunityIcons
-                    name="clock-outline"
-                    size={26}
-                    color={isInProgress ? 'rgba(255,255,255,0.85)' : C.primary}
-                  />
-                  <View>
-                    <Text style={[s.timerLabel, {
-                      color: isInProgress ? 'rgba(255,255,255,0.65)' : C.textSecondary,
-                    }]}>
-                      {isInProgress ? 'On-site time' : 'Job Timer'}
-                    </Text>
-                    <Text style={[s.timerTime, { color: isInProgress ? '#FFFFFF' : C.text }]}>
-                      {isInProgress ? fmtElapsed(elapsed) : 'Not Started'}
-                    </Text>
+              {isInProgress ? (
+                <View style={[s.timerCard, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                  <View style={{ flex: 1, marginRight: 16 }}>
+                    <Text style={[s.timerLabel, { color: C.text }]}>Job In Progress</Text>
+                    <Text style={[s.timerSub, { color: C.textSecondary }]}>You can now perform inspections.</Text>
                   </View>
-                </View>
-                {isInProgress ? (
-                  <View style={s.timerActions}>
-                    <TouchableOpacity
-                      style={s.timerPauseBtn}
-                      onPress={handleClockOut}
-                      disabled={isClocking}
-                      activeOpacity={0.8}
-                    >
-                      <MaterialCommunityIcons name="pause" size={20} color={C.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.timerCompleteBtn, { backgroundColor: C.success }]}
-                      onPress={handleCompleteRequest}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={s.timerCompleteTxt}>Complete Job</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
                   <Button
-                    title="Clock In"
+                    title="Complete Job"
+                    onPress={handleCompleteRequest}
+                    style={{ borderRadius: 22, height: 44, backgroundColor: C.success }}
+                  />
+                </View>
+              ) : (
+                <View style={[s.timerCard, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                  <View style={{ flex: 1, marginRight: 16 }}>
+                    <Text style={[s.timerLabel, { color: C.text }]}>Job Scheduled</Text>
+                    <Text style={[s.timerSub, { color: C.textSecondary }]}>Start the job to begin work.</Text>
+                  </View>
+                  <Button
+                    title="Start Job"
                     onPress={handleStartJob}
-                    disabled={isClocking}
-                    isLoading={isClocking}
                     style={{ borderRadius: 22, height: 44, minWidth: 110 }}
                   />
-                )}
-              </View>
+                </View>
+              )}
             </Animated.View>
           )}
 
@@ -426,7 +341,7 @@ export default function JobDetailScreen() {
           {(job.hazard_notes || job.access_notes) && (
             <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
               {job.hazard_notes && (
-                <View style={[s.alertBox, { backgroundColor: C.errorLight, borderLeftColor: C.error }]}>
+                <View style={[s.alertBox, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
                   <MaterialCommunityIcons name="alert" size={18} color={C.errorDark} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.alertTitle, { color: C.errorDark }]}>⚠️ Site Hazard</Text>
@@ -435,7 +350,7 @@ export default function JobDetailScreen() {
                 </View>
               )}
               {job.access_notes && (
-                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderLeftColor: C.infoDark }]}>
+                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderColor: C.info + '40' }]}>
                   <MaterialCommunityIcons name="key" size={18} color={C.infoDark} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.alertTitle, { color: C.infoDark }]}>🔑 Access Notes</Text>
@@ -517,44 +432,53 @@ export default function JobDetailScreen() {
 
           {/* ── OPEN INSPECTION FORM CTA ──────────────────────────── */}
           <Animated.View entering={FadeInDown.delay(120).duration(360)}>
-            {/* FLOW-2 + FLOW-10 FIX: Only accessible when In Progress.
-                Scheduled = must clock in first. Completed = locked to protect compliance records. */}
             <TouchableOpacity
-              style={[s.inspectCta, {
-                backgroundColor: isInProgress ? C.primary : C.backgroundTertiary,
-                opacity: isInProgress ? 1 : 0.7,
-              }]}
+              style={{ borderRadius: 16, overflow: 'hidden' }}
               onPress={isInProgress ? () => router.push(`/jobs/${id}/inspect` as never) : undefined}
               activeOpacity={0.88}
               disabled={!isInProgress}
             >
-              <View style={s.inspectCtaIcon}>
-                <MaterialCommunityIcons
-                  name="clipboard-check-outline"
-                  size={26}
-                  color={isInProgress ? 'rgba(255,255,255,0.9)' : C.textTertiary}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.inspectCtaTitle, { color: isInProgress ? '#FFF' : C.text }]}>
-                  Open Inspection Form
-                </Text>
-                <Text style={[s.inspectCtaSub, { color: isInProgress ? 'rgba(255,255,255,0.72)' : C.textSecondary }]}>
-                  {isScheduled
-                    ? '🔒 Clock in first to begin the inspection'
-                    : isCancelled
-                    ? 'This job has been cancelled'
-                    : isCompleted
-                    ? '✓ Inspection locked after job completion'
-                    : totalAssets === 0
-                    ? 'Add assets and begin the on-site inspection'
-                    : progressPct === 100
-                    ? '✓ All assets inspected'
-                    : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`}
-                </Text>
-              </View>
-              {isInProgress && (
-                <MaterialCommunityIcons name="arrow-right" size={22} color="rgba(255,255,255,0.55)" />
+              {isInProgress ? (
+                <LinearGradient
+                  colors={['#10B981', '#059669']} // Energetic green gradient when active
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={[s.inspectCta, { borderWidth: 0 }]}
+                >
+                  <View style={s.inspectCtaIcon}>
+                    <MaterialCommunityIcons name="clipboard-check" size={26} color="#FFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.inspectCtaTitle, { color: '#FFF' }]}>
+                      Open Inspection Form
+                    </Text>
+                    <Text style={[s.inspectCtaSub, { color: 'rgba(255,255,255,0.85)' }]}>
+                      {totalAssets === 0
+                        ? 'Add assets and begin the on-site inspection'
+                        : progressPct === 100
+                        ? '✓ All assets inspected'
+                        : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="arrow-right" size={24} color="#FFF" />
+                </LinearGradient>
+              ) : (
+                <View style={[s.inspectCta, { backgroundColor: C.backgroundTertiary, opacity: 0.7 }]}>
+                  <View style={s.inspectCtaIcon}>
+                    <MaterialCommunityIcons name="clipboard-check-outline" size={26} color={C.textTertiary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.inspectCtaTitle, { color: C.text }]}>
+                      Open Inspection Form
+                    </Text>
+                    <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
+                      {isScheduled
+                        ? '🔒 Start job first to begin the inspection'
+                        : isCancelled
+                        ? 'This job has been cancelled'
+                        : '✓ Inspection locked after job completion'}
+                    </Text>
+                  </View>
+                </View>
               )}
             </TouchableOpacity>
           </Animated.View>
@@ -601,14 +525,14 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── NAVIGATE & CONTACT ────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(160).duration(360)} style={{ gap: 10 }}>
+          <Animated.View entering={FadeInDown.delay(160).duration(360)} style={{ gap: 12 }}>
             <TouchableOpacity
               style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={handleNavigate}
               activeOpacity={0.8}
             >
-              <View style={[s.quickBtnIcon, { backgroundColor: C.primary + '18' }]}>
-                <MaterialCommunityIcons name="directions" size={18} color={C.primary} />
+              <View style={[s.quickBtnIcon, { backgroundColor: C.info + '18' }]}>
+                <MaterialCommunityIcons name="map-marker-path" size={22} color={C.infoDark} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[s.quickBtnTitle, { color: C.text }]}>Navigate to Site</Text>
@@ -618,7 +542,7 @@ export default function JobDetailScreen() {
                   </Text>
                 )}
               </View>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
+              <MaterialCommunityIcons name="chevron-right" size={20} color={C.borderStrong} />
             </TouchableOpacity>
 
             {job.site_contact_phone && (
@@ -628,7 +552,7 @@ export default function JobDetailScreen() {
                 activeOpacity={0.8}
               >
                 <View style={[s.quickBtnIcon, { backgroundColor: C.success + '18' }]}>
-                  <MaterialCommunityIcons name="phone-outline" size={18} color={C.success} />
+                  <MaterialCommunityIcons name="phone-in-talk" size={22} color={C.successDark} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.quickBtnTitle, { color: C.text }]}>
@@ -636,7 +560,7 @@ export default function JobDetailScreen() {
                   </Text>
                   <Text style={[s.quickBtnSub, { color: C.textSecondary }]}>{job.site_contact_phone}</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
+                <MaterialCommunityIcons name="chevron-right" size={20} color={C.borderStrong} />
               </TouchableOpacity>
             )}
           </Animated.View>
@@ -705,7 +629,7 @@ export default function JobDetailScreen() {
           }
           variant={isCompleted ? 'secondary' : 'primary'}
           disabled={isScheduled || isCancelled}
-          onPress={(isScheduled || isCancelled) ? undefined : () => router.push(`/jobs/${id}/report` as never)}
+          onPress={() => { if (!isScheduled && !isCancelled) router.push(`/jobs/${id}/report` as never); }}
           icon={
             <MaterialCommunityIcons
               name={isCompleted ? 'file-eye-outline' : 'file-chart-outline'}
@@ -745,18 +669,14 @@ export default function JobDetailScreen() {
         <View style={cm.overlay}>
           <View style={[cm.card, { backgroundColor: C.primary }]}>
             <View style={[cm.checkCircle, { backgroundColor: C.success, shadowColor: C.success }]}>
-              <MaterialCommunityIcons name="check-bold" size={48} color="#FFFFFF" />
+              <Animated.View entering={FadeInDown.delay(100).springify()}>
+                <MaterialCommunityIcons name="check-bold" size={48} color="#FFFFFF" />
+              </Animated.View>
             </View>
             <Text style={cm.title}>Job Complete!</Text>
             <Text style={cm.property}>{job?.property_name ?? 'Property'}</Text>
 
             <View style={cm.statsRow}>
-              <View style={cm.statItem}>
-                <Text style={cm.statEmoji}>⏱</Text>
-                <Text style={cm.statValue}>{fmtElapsed(elapsed)}</Text>
-                <Text style={cm.statLabel}>On site</Text>
-              </View>
-              <View style={cm.statDivider} />
               <View style={cm.statItem}>
                 <Text style={cm.statEmoji}>✅</Text>
                 <Text style={cm.statValue}>{assets.filter(a => a.result).length}/{assets.length}</Text>
@@ -776,15 +696,16 @@ export default function JobDetailScreen() {
               </View>
             </View>
 
-            <View style={{ width: '100%', marginTop: 8 }}>
+            <View style={{ width: '100%', marginTop: 12 }}>
               <Button
                 title="Generate Report"
-                icon={<MaterialCommunityIcons name="file-chart-outline" size={18} color="#FFF" />}
+                icon={<MaterialCommunityIcons name="file-chart-outline" size={20} color="#FFF" />}
                 onPress={() => {
                   if (countdownRef.current) clearInterval(countdownRef.current);
                   setShowCompletionModal(false);
                   router.push(`/jobs/${job?.id}/report` as never);
                 }}
+                style={{ borderRadius: 20 }}
               />
             </View>
             <View style={{ width: '100%', marginTop: 8 }}>
@@ -796,9 +717,11 @@ export default function JobDetailScreen() {
                   setShowCompletionModal(false);
                   router.replace('/jobs' as never);
                 }}
+                style={{ borderRadius: 20, borderColor: 'rgba(255,255,255,0.3)' }}
+                textStyle={{ color: '#FFF' }}
               />
             </View>
-            <Text style={cm.countdown}>Redirecting to report in {completionCountdown}s…</Text>
+            <Text style={cm.countdown}>This will close in {completionCountdown}s</Text>
           </View>
         </View>
       </Modal>
@@ -810,46 +733,43 @@ export default function JobDetailScreen() {
 const s = StyleSheet.create({
   screen:        { flex: 1 },
   centered:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  scrollContent: { paddingBottom: Platform.OS === 'ios' ? 108 : 88 },
-  body:          { padding: 16, gap: 16 },
+  scrollContent: { paddingBottom: Platform.OS === 'ios' ? 140 : 120 },
+  body:          { padding: 16, gap: 18 },
   notFound:      { fontSize: 16, marginTop: 12 },
 
   // Header status badge
-  statusBadge:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  statusBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
 
   // Timer card
-  timerCard:        { borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  timerLeft:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  timerLabel:       { fontSize: 12, fontWeight: '600', marginBottom: 2 },
-  timerTime:        { fontSize: 18, fontWeight: '800' },
-  timerActions:     { flexDirection: 'row', gap: 8 },
-  timerPauseBtn:    { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  timerCompleteBtn: { paddingHorizontal: 16, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  timerCompleteTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  timerCard:        { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      shadowColor: '#0D1526', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 6 },
+  timerLabel:       { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  timerSub:         { fontSize: 13, marginTop: 2 },
 
-  // Status banners (completed / cancelled)
-  statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  // Status banners
+  statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1 },
   statusBannerTitle: { fontSize: 14, fontWeight: '700' },
   statusBannerSub:   { fontSize: 12, marginTop: 2 },
 
   // Safety alerts
-  alertBox:   { flexDirection: 'row', padding: 12, borderRadius: 12, gap: 10, borderLeftWidth: 4 },
-  alertTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  alertBody:  { fontSize: 13, lineHeight: 19 },
+  alertBox:   { flexDirection: 'row', padding: 16, borderRadius: 16, gap: 12, borderWidth: 1 },
+  alertTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  alertBody:  { fontSize: 13, lineHeight: 20 },
 
   // Info chips
   chipsRow: { gap: 8, flexDirection: 'row', paddingBottom: 2, paddingRight: 4 },
-  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   chipIcon: { fontSize: 13 },
   chipTxt:  { fontSize: 13, fontWeight: '500' },
 
   // Inspection progress card
-  progressCard:     { borderRadius: 18, padding: 16, borderWidth: 1 },
-  progressHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  progressTitle:    { fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  progressCard:     { borderRadius: 16, padding: 18, borderWidth: 1,
+                      shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  progressHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  progressTitle:    { fontSize: 15, fontWeight: '700', marginBottom: 3 },
   progressSubtitle: { fontSize: 12 },
-  progressPct:      { fontSize: 20, fontWeight: '800', marginLeft: 8 },
+  progressPct:      { fontSize: 22, fontWeight: '800', marginLeft: 8 },
   progressTrack:    { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
   progressFill:     { height: 8, borderRadius: 4 },
   progressStatRow:  { flexDirection: 'row', gap: 16 },
@@ -857,29 +777,31 @@ const s = StyleSheet.create({
   progressStatDot:  { width: 6, height: 6, borderRadius: 3 },
   progressStatTxt:  { fontSize: 11, fontWeight: '600' },
 
-  // Inspection form CTA button
-  inspectCta:     { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  inspectCtaIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  inspectCtaTitle:{ fontSize: 15, fontWeight: '800', color: '#FFFFFF', marginBottom: 3 },
-  inspectCtaSub:  { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
+  // Inspection form CTA
+  inspectCta:     { borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
+  inspectCtaIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  inspectCtaTitle:{ fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 4 },
+  inspectCtaSub:  { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
 
   // Section label
-  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
+  sectionLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, marginBottom: 10, marginTop: 6 },
 
   // Action cards row
-  actionsRow: { flexDirection: 'row', gap: 10 },
+  actionsRow: { flexDirection: 'row', gap: 12 },
 
   // Quick navigate / contact buttons
-  quickBtn:      { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, padding: 14, borderWidth: 1 },
-  quickBtnIcon:  { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  quickBtnTitle: { fontSize: 14, fontWeight: '600', marginBottom: 1 },
-  quickBtnSub:   { fontSize: 12 },
+  quickBtn:      { flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 16, padding: 18, borderWidth: 1,
+                   shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  quickBtnIcon:  { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  quickBtnTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  quickBtnSub:   { fontSize: 13 },
 
   // Notes card
-  notesCard:      { borderRadius: 16, padding: 16, borderWidth: 1 },
+  notesCard:      { borderRadius: 16, padding: 18, borderWidth: 1,
+                    shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3 },
   notesText:      { fontSize: 14, lineHeight: 22, marginBottom: 14 },
   notesEmpty:     { fontSize: 14, lineHeight: 22, fontStyle: 'italic', marginBottom: 14 },
-  notesInput:     { borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 14, lineHeight: 22, minHeight: 110, marginBottom: 14 },
+  notesInput:     { borderRadius: 10, borderWidth: 1, padding: 14, fontSize: 14, lineHeight: 22, minHeight: 110, marginBottom: 14 },
   notesActionRow: { flexDirection: 'row', gap: 10 },
   notesCancelBtn: { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   notesCancelTxt: { fontSize: 14, fontWeight: '600' },
@@ -891,9 +813,10 @@ const s = StyleSheet.create({
   // Bottom action bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 16, paddingTop: 14,
+    padding: 16, paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 36 : 16,
     borderTopWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
 });
 

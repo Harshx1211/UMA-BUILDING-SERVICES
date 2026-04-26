@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';
@@ -15,18 +14,12 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 
 export default function PhotosScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = usePhotosStore();
   const sheetRef = useRef<PhotoCaptureSheetRef>(null);
 
   const [propertyId, setPropertyId] = useState<string>('');
 
-  // Hide tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
 
   useEffect(() => {
     if (jobId) {

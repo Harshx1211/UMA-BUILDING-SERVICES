@@ -7,14 +7,28 @@ import {
   markSyncItemComplete,
   incrementSyncRetry,
   upsertRecord,
+  getJobStatus,
 } from '@/lib/database';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
-
-/** Max consecutive push failures before a sync queue item is permanently abandoned */
-const MAX_SYNC_RETRIES = 5;
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, processDefectPhotos } from '@/lib/photoUpload';
+/** Max consecutive push failures before a sync queue item is permanently abandoned */
+const MAX_SYNC_RETRIES = 5;
+
+/**
+ * Status priority ladder for conflict resolution.
+ * Higher number = further along in the job lifecycle.
+ * A local status should never be overwritten by a server status with a lower priority
+ * unless the local change is stale (> 6 hours old).
+ */
+const STATUS_PRIORITY: Record<string, number> = {
+  cancelled: 0,
+  scheduled: 1,
+  in_progress: 2,
+  completed: 3,
+};
+const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // ─────────────────────────────────────────────
 // Internal state
@@ -217,11 +231,41 @@ async function _pullJobs(userId: string): Promise<void> {
     }
   }
 
-  // Now safe to upsert jobs since properties and user exist locally
+  // Now safe to upsert jobs since properties and user exist locally.
+  // Use conflict-aware upsert: never let the server overwrite a locally-advanced
+  // status (in_progress or completed) with a less-advanced one (scheduled)
+  // unless the local change is older than STALE_THRESHOLD_MS.
+  let upsertedCount = 0;
+  let preservedCount = 0;
   for (const job of jobs) {
+    const localStatus = getJobStatus(job.id as string);
+    if (localStatus) {
+      const serverPriority = STATUS_PRIORITY[job.status as string] ?? 1;
+      const localPriority  = STATUS_PRIORITY[localStatus.status]  ?? 1;
+      if (localPriority > serverPriority) {
+        // Local is ahead — only allow override if the local change is stale
+        const localUpdateMs = new Date(localStatus.updated_at).getTime();
+        const isStale = Date.now() - localUpdateMs > STALE_THRESHOLD_MS;
+        if (!isStale) {
+          // Preserve local status — still upsert all other fields from server
+          if (__DEV__) {
+            console.log(
+              `[SiteTrack Sync] PULL: preserving local '${localStatus.status}' over server '${job.status}' for job ${job.id}`
+            );
+          }
+          const { status: _ignored, ...rest } = job as Record<string, unknown>;
+          upsertRecord('jobs', { ...rest, status: localStatus.status } as Record<string, string | number | boolean | null>);
+          preservedCount++;
+          continue;
+        }
+      }
+    }
     upsertRecord('jobs', job as Record<string, string | number | boolean | null>);
+    upsertedCount++;
   }
-  if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${jobs.length} job(s)`);
+  if (__DEV__) {
+    console.log(`[SiteTrack Sync] PULL: upserted ${upsertedCount} job(s), preserved local status on ${preservedCount}`);
+  }
 
   // Pull job_assets, defects, and inspection_photos for these jobs
   if (jobIds.length > 0) {
@@ -302,6 +346,15 @@ async function _pushQueue(): Promise<void> {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
       let error: { message: string } | null = null;
 
+      // Ensure defects photos is an array, not a stringified array
+      if (item.table_name === 'defects' && typeof payload.photos === 'string') {
+        try {
+          payload.photos = JSON.parse(payload.photos);
+        } catch {
+          payload.photos = [];
+        }
+      }
+
       if (item.operation === SyncOperation.Insert) {
         const result = await supabase.from(item.table_name).insert(payload);
         error = result.error;
@@ -320,7 +373,7 @@ async function _pushQueue(): Promise<void> {
       }
 
       if (error) {
-        console.error(
+        console.warn(
           `[SiteTrack Sync] PUSH failed (retry ${(item.retry_count ?? 0) + 1}/${MAX_SYNC_RETRIES}) for item ${item.id} (${item.table_name}/${item.operation}): ${error.message}`
         );
         // Increment retry counter; marks synced=-1 when limit is reached
@@ -333,7 +386,7 @@ async function _pushQueue(): Promise<void> {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[SiteTrack Sync] PUSH unexpected error for queue item ${item.id}: ${msg}`);
+      console.warn(`[SiteTrack Sync] PUSH unexpected error for queue item ${item.id}: ${msg}`);
       incrementSyncRetry(item.id, msg, MAX_SYNC_RETRIES);
     }
   }

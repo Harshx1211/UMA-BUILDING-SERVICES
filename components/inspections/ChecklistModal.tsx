@@ -6,6 +6,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { ChecklistItem } from '@/constants/Checklists';
 
@@ -22,6 +23,7 @@ export default function ChecklistModal({
   visible, assetType, items, initialData, onSave, onCancel,
 }: ChecklistModalProps) {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const [answers, setAnswers] = useState<Record<string, any>>({});
 
   useEffect(() => {
@@ -75,25 +77,19 @@ export default function ChecklistModal({
       <View style={[s.container, { backgroundColor: C.background }]}>
 
         {/* ── HEADER ──────────────────────────────────────── */}
-        <View style={[s.header, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
+        <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16) }]}>
           <TouchableOpacity onPress={onCancel} style={s.headerIconBtn} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={22} color={C.textSecondary} />
+            <MaterialCommunityIcons name="close" size={24} color={C.textSecondary} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[s.headerTitle, { color: C.text }]}>Inspection Checklist</Text>
-            <Text style={[s.headerSub, { color: C.textTertiary }]}>{assetType}</Text>
+            <Text style={[s.headerSub, { color: C.textTertiary }]} numberOfLines={1}>{assetType}</Text>
           </View>
-          <TouchableOpacity
-            style={[s.headerSaveBtn, { backgroundColor: allAnswered ? C.primary : C.backgroundTertiary }]}
-            onPress={handleSave}
-            activeOpacity={0.8}
-          >
-            <Text style={[s.headerSaveTxt, { color: allAnswered ? '#FFF' : C.textTertiary }]}>Submit</Text>
-          </TouchableOpacity>
+          <View style={{ width: 44 }} />
         </View>
 
         {/* ── PROGRESS BAR ────────────────────────────────── */}
-        <View style={[s.progressTrack, { backgroundColor: C.border }]}>
+        <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary }]}>
           <View style={[s.progressFill, {
             width: `${progressPct}%` as `${number}%`,
             backgroundColor: failing > 0 ? C.error : C.success,
@@ -155,9 +151,9 @@ export default function ChecklistModal({
                       ? C.errorLight
                       : C.surface,
                     borderColor: isPassed
-                      ? C.success
+                      ? C.success + '40'
                       : isFailed
-                      ? C.error
+                      ? C.error + '40'
                       : C.border,
                   },
                 ]}
@@ -210,26 +206,27 @@ export default function ChecklistModal({
             );
           })}
 
-          {/* ── SUBMIT BUTTON ──────────────────────────────── */}
+          {/* Spacing at bottom of scroll */}
+          <View style={{ height: 16 }} />
+        </ScrollView>
+
+        {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
           <TouchableOpacity
-            style={[s.submitBtn, { backgroundColor: allAnswered ? C.primary : C.backgroundTertiary }]}
+            style={[s.bottomBtn, { backgroundColor: allAnswered ? C.primary : C.backgroundTertiary }]}
             onPress={handleSave}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons
               name="clipboard-check"
               size={20}
-              color={allAnswered ? '#FFF' : C.textTertiary}
+              color={allAnswered ? '#FFF' : C.textSecondary}
             />
-            <Text style={[s.submitBtnTxt, { color: allAnswered ? '#FFF' : C.textTertiary }]}>
+            <Text style={[s.bottomBtnTxt, { color: allAnswered ? '#FFF' : C.textSecondary }]}>
               {allAnswered ? 'Submit Checklist' : `Answer ${required.length - answered.length} More Required`}
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
-            <Text style={[s.cancelBtnTxt, { color: C.textTertiary }]}>Cancel Checklist</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        </View>
       </View>
     </Modal>
   );
@@ -241,58 +238,58 @@ const s = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 14 : 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 16,
   },
-  headerIconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   headerTitle:   { fontSize: 16, fontWeight: '800' },
-  headerSub:     { fontSize: 11, marginTop: 1 },
-  headerSaveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18 },
-  headerSaveTxt: { fontWeight: '800', fontSize: 13, letterSpacing: 0.3 },
+  headerSub:     { fontSize: 12, marginTop: 2, fontWeight: '500' },
 
   // Progress
-  progressTrack: { height: 4, width: '100%' },
-  progressFill:  { height: 4, borderRadius: 2 },
+  progressTrack: { height: 6, width: '100%' },
+  progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
 
   // Stats row
   statsRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 16,
+    paddingVertical: 14, paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
   statItem:    { flex: 1, alignItems: 'center', gap: 2 },
-  statValue:   { fontSize: 16, fontWeight: '800' },
-  statLabel:   { fontSize: 10, fontWeight: '600', letterSpacing: 0.2, textTransform: 'uppercase' },
-  statDivider: { width: 1, height: 28, marginHorizontal: 4 },
+  statValue:   { fontSize: 18, fontWeight: '800' },
+  statLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
+  statDivider: { width: 1, height: 32, marginHorizontal: 4 },
 
   // Disclaimer
   disclaimer: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    marginHorizontal: 16, marginTop: 14, marginBottom: 4,
-    padding: 12, borderRadius: 10, borderWidth: 1,
+    marginHorizontal: 16, marginTop: 16, marginBottom: 6,
+    padding: 14, borderRadius: 12, borderWidth: 1,
   },
-  disclaimerTxt: { fontSize: 12, lineHeight: 17, flex: 1 },
+  disclaimerTxt: { fontSize: 13, lineHeight: 19, flex: 1 },
 
-  scrollContent: { padding: 16, paddingBottom: 48, gap: 10 },
+  scrollContent: { padding: 16, paddingBottom: 120, gap: 12 },
 
   // Question card
   questionCard: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 14, borderRadius: 14, borderWidth: 1.5,
+    padding: 14, borderRadius: 16, borderWidth: 1,
   },
-  questionNum:    { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  questionNum:    { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   questionNumTxt: { fontSize: 12, fontWeight: '800' },
-  questionText:   { fontSize: 14, fontWeight: '500', lineHeight: 20 },
+  questionText:   { fontSize: 15, fontWeight: '600', lineHeight: 22 },
   requiredRow:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
-  requiredTxt:    { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
-  toggleWrap:     { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  requiredTxt:    { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+  toggleWrap:     { width: 40, height: 40, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Submit / cancel
-  submitBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 54, marginTop: 8 },
-  submitBtnTxt: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
-  cancelBtn:    { marginTop: 10, alignItems: 'center', padding: 8 },
-  cancelBtnTxt: { fontSize: 13, fontWeight: '500' },
+  // Bottom action bar
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    padding: 16, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+    borderTopWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
+  },
+  bottomBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 54 },
+  bottomBtnTxt: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
 });

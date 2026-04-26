@@ -24,7 +24,7 @@ import { FilterPills } from '@/components/ui/FilterPills';
 import { useColors } from '@/hooks/useColors';
 import RouteMapView from '@/components/jobs/RouteMapView';
 import { JobStatus } from '@/constants/Enums';
-import { HEADER_TOP_PAD } from '@/constants/headerPad';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 // Computed as functions so the date stays fresh even if the app runs past midnight
@@ -56,11 +56,11 @@ function DateSectionHeader({ title, count, bgColor, textColor, accentColor }: { 
   );
 }
 const sh = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 9 },
-  leftBar:   { width: 3, height: 14, borderRadius: 2 },
-  label:     { fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
-  badge:     { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
-  badgeText: { fontSize: 10, fontWeight: '700' },
+  row:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  leftBar:   { width: 4, height: 16, borderRadius: 2 },
+  label:     { fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
+  badge:     { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  badgeText: { fontSize: 11, fontWeight: '800' },
 });
 
 const TABS: { key: JobFilter; label: string }[] = [
@@ -78,10 +78,10 @@ export default function JobsScreen() {
   } = useJobsStore();
   const [search, setSearch]   = useState(searchQuery);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const insets = useSafeAreaInsets();
 
   // Computed fresh each render so date stays correct if app runs past midnight
   const TODAY    = getToday();
-  const TOMORROW = getTomorrow();
 
   const load = useCallback(() => { if (user?.id) loadJobs(user.id); }, [user?.id, loadJobs]);
   useEffect(() => { load(); }, [load]);
@@ -131,7 +131,7 @@ export default function JobsScreen() {
       map.get(key)!.push(job);
     }
     return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => b.localeCompare(a))
       .map(([date, data]) => ({
         date, title: dateLabel(date),
         data: data.sort((a, b) =>
@@ -142,8 +142,8 @@ export default function JobsScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-      {/* ── HEADER ── */}
-      <View style={[s.header, { backgroundColor: C.primary }]}>
+      {/* ── Navy Header ────────────────────────────────────── */}
+      <View style={[s.header, { backgroundColor: C.primary, paddingTop: Math.max(insets.top, 14) + 10 }]}>
         <View style={[s.heroDot1, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
         <View style={[s.heroDot2, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
         <View style={s.headerContent}>
@@ -191,7 +191,7 @@ export default function JobsScreen() {
         />
 
         {/* Search Bar */}
-        <View style={[s.searchRow, { backgroundColor: 'rgba(0,0,0,0.05)' }]}>
+        <View style={[s.searchRow, { backgroundColor: C.backgroundSecondary, borderColor: C.border }]}>
           <MaterialCommunityIcons name="magnify" size={19} color={C.textSecondary} />
           <TextInput
             style={[s.searchInput, { color: C.text }]}
@@ -298,24 +298,23 @@ export default function JobsScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
 
-  // Header — identical spec to Home & Profile
+  // Header
   header: {
-    paddingTop: HEADER_TOP_PAD,
-    paddingBottom: 24,
+    paddingBottom: 20,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#0F1E3C',
+    shadowColor: '#0D1526',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 10,
   },
   heroDot1: {
     position: 'absolute',
-    width: 260, height: 260, borderRadius: 130,
-    top: -100, right: -90,
+    width: 280, height: 280, borderRadius: 140,
+    top: -110, right: -100,
   },
   heroDot2: {
     position: 'absolute',
@@ -326,54 +325,57 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
-  headerLeft: { gap: 2, flex: 1 },
+  headerLeft: { gap: 3, flex: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: 2, marginBottom: 2 },
-  headerTitle: { fontSize: 26, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.5 },
-  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 3, fontWeight: '400' },
+  headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: 2.5, marginBottom: 2 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
+  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3, fontWeight: '400' },
 
   headerIconBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   pendingChip: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 12, gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 10, gap: 4,
   },
   pendingChipTxt: { color: '#FFF', fontSize: 11, fontWeight: '700' },
 
-  // Header bottom (pills & search) — white card
+  // Header bottom (pills & search)
   headerBottom: {
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 16,
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 3,
     zIndex: 9,
-    gap: 10,
+    gap: 12,
   },
 
   searchRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 14,
-    paddingHorizontal: 12, height: 44,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 16,
+    paddingHorizontal: 16, height: 50,
+    borderWidth: 1.5,
   },
-  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0, fontWeight: '400' },
+  searchInput: { flex: 1, fontSize: 15, paddingVertical: 0, fontWeight: '500' },
 
   // Error bar
-  errorBar:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, borderRadius: 12, marginBottom: 8, marginTop: 8 },
+  errorBar:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, borderRadius: 10, marginBottom: 8, marginTop: 8 },
   errorText:   { fontSize: 13, flex: 1 },
   errorRetry:  { fontSize: 13, fontWeight: '700' },
 
   // List
-  list:     { flexGrow: 1, paddingBottom: 16, paddingTop: 8 },
-  cardWrap: { paddingHorizontal: 16, marginBottom: 10 },
+  list:     { flexGrow: 1, paddingBottom: 20, paddingTop: 8 },
+  cardWrap: { paddingHorizontal: 16, marginBottom: 12 },
 });

@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
@@ -13,22 +12,18 @@ import AddDefectSheet, { AddDefectSheetRef } from '@/components/defects/AddDefec
 import { getJobById } from '@/lib/database';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
+import * as Haptics from 'expo-haptics';
 
 
 
 export default function DefectsScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDefectsStore();
   const [filter, setFilter] = useState<string>('All');
   const sheetRef = useRef<AddDefectSheetRef>(null);
 
-  // Hide tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   const [propertyId, setPropertyId] = useState<string>('');
 
@@ -71,17 +66,17 @@ export default function DefectsScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-      <ScreenHeader 
-        curved={true} 
-        title="Defects" 
-        showBack={true} 
+      <ScreenHeader
+        curved={true}
+        title="Defects"
+        showBack={true}
         rightComponent={
           store.defects.length > 0 ? (
             <View style={[s.countBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
               <Text style={s.countText}>{store.defects.length} defect{store.defects.length !== 1 ? 's' : ''}</Text>
             </View>
           ) : null
-        } 
+        }
       />
 
       <View style={s.filterRow}>
@@ -108,9 +103,17 @@ export default function DefectsScreen() {
         <FlatList
           data={filteredDefects}
           keyExtractor={i => i.id}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <DefectCard defect={item as any} />}
+          renderItem={({ item }) => (
+            <DefectCard
+              defect={item as any}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(`/jobs/${jobId}/defects/${item.id}` as never);
+              }}
+            />
+          )}
         />
       )}
 
@@ -139,3 +142,4 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

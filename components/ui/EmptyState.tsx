@@ -16,8 +16,8 @@ export function EmptyState({ emoji, title, subtitle, actionLabel, onAction }: Pr
   const C = useColors();
   return (
     <View style={styles.wrap}>
-      {/* Emoji container with soft background */}
-      <View style={[styles.emojiContainer, { backgroundColor: C.backgroundSecondary }]}>
+      {/* Icon container */}
+      <View style={[styles.emojiContainer, { backgroundColor: C.backgroundSecondary, borderColor: C.border, borderWidth: 1 }]}>
         <Text style={styles.emoji}>{emoji}</Text>
       </View>
       <Text style={[styles.title, { color: C.text }]}>{title}</Text>
@@ -26,11 +26,11 @@ export function EmptyState({ emoji, title, subtitle, actionLabel, onAction }: Pr
       ) : null}
       {actionLabel && onAction ? (
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: C.accent + '15', borderColor: C.accent + '40', borderWidth: 1.5 }]}
+          style={[styles.actionBtn, { backgroundColor: C.accent }]}
           onPress={onAction}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.actionText, { color: C.accent }]}>{actionLabel}</Text>
+          <Text style={styles.actionText}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -41,17 +41,17 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 52,
+    paddingVertical: 56,
     paddingHorizontal: 32,
-    gap: 4,
+    gap: 6,
   },
   emojiContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
+    width: 80,
+    height: 80,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   emoji: {
     fontSize: 36,
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    marginTop: 8,
+    marginTop: 4,
     textAlign: 'center',
     letterSpacing: -0.2,
   },
@@ -72,13 +72,14 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     marginTop: 20,
-    borderRadius: 12,
+    borderRadius: 10,
     height: 44,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   actionText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

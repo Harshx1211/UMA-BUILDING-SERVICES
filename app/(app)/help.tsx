@@ -14,8 +14,6 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { Card, ScreenHeader, SectionTitle, Button } from '@/components/ui';
@@ -212,15 +210,10 @@ const FAQ_ITEMS: { item: AccordionItem; icon: string }[] = [
 // ─── Main Screen ─────────────────────────────
 export default function HelpScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
-  // Hide tab bar — help is a push screen, not a primary tab
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   const handleFeedback = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

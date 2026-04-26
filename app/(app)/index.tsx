@@ -2,13 +2,11 @@
  * SiteTrack — Home Dashboard
  * Premium design: navy hero → 2×2 stat grid → quick actions → next up → today's jobs → weekly summary
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   Dimensions,
-  Platform,
   RefreshControl,
   ScrollView,
-  StatusBar,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -21,7 +19,7 @@ import { ActivityIndicator, Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStore } from '@/store/dashboardStore';
-import { HEADER_TOP_PAD } from '@/constants/headerPad';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { JobCard } from '@/components/jobs/JobCard';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -72,16 +70,18 @@ function StatCard({ label, value, icon, iconBg, iconColor, accentColor, bgColor,
   return (
     <View style={[stat.card, {
       backgroundColor: bgColor,
-      borderColor: (C as any).cardBorder || 'rgba(30,50,90,0.06)',
+      borderColor: (C as any).cardBorder || 'rgba(27,45,79,0.09)',
     }]}>
-      {/* Top accent line */}
-      <View style={[stat.topBar, { backgroundColor: accentColor }]} />
-      <View style={{ padding: 16, gap: 10 }}>
+      {/* Left accent bar */}
+      <View style={[stat.leftBar, { backgroundColor: accentColor }]} />
+      <View style={{ flex: 1, padding: 16, gap: 12 }}>
         <View style={[stat.iconCircle, { backgroundColor: iconBg }]}>
-          <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
+          <MaterialCommunityIcons name={icon} size={22} color={iconColor} />
         </View>
-        <Text style={[stat.value, { color: textColor }]}>{value}</Text>
-        <Text style={[stat.label, { color: subColor }]}>{label}</Text>
+        <View>
+          <Text style={[stat.value, { color: textColor }]}>{value}</Text>
+          <Text style={[stat.label, { color: subColor }]}>{label}</Text>
+        </View>
       </View>
     </View>
   );
@@ -89,38 +89,38 @@ function StatCard({ label, value, icon, iconBg, iconColor, accentColor, bgColor,
 const stat = StyleSheet.create({
   card: {
     width: CARD_W,
-    borderRadius: 16,
+    borderRadius: 18,
+    flexDirection: 'row',
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 12,
+    elevation: 4,
+    minHeight: 130,
   },
-  topBar: {
-    height: 3,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  leftBar: {
+    width: 4,
   },
   iconCircle: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   value: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: '800',
-    letterSpacing: -1,
-    lineHeight: 40,
+    letterSpacing: -1.5,
+    lineHeight: 44,
   },
   label: {
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+    marginTop: 2,
   },
 });
 
@@ -137,7 +137,6 @@ interface QuickActionProps {
   onPress: () => void;
 }
 function QuickAction({ icon, iconColor, label, subtitle, bgColor, borderColor, textColor, subColor, onPress }: QuickActionProps) {
-  const C = useColors();
   return (
     <TouchableOpacity
       style={[qa.card, {
@@ -162,32 +161,33 @@ function QuickAction({ icon, iconColor, label, subtitle, bgColor, borderColor, t
 const qa = StyleSheet.create({
   card: {
     width: CARD_W,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
-    gap: 6,
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    gap: 8,
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    minHeight: 130,
   },
   iconCircle: {
     width: 46,
     height: 46,
-    borderRadius: 15,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  label: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
-  subtitle: { fontSize: 11, lineHeight: 16 },
+  label: { fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
+  subtitle: { fontSize: 12, lineHeight: 17, marginTop: 1 },
   arrowChip: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: 6,
     alignSelf: 'flex-start',
   },
 });
@@ -263,7 +263,7 @@ const nu = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
     shadowColor: '#0F1E3C',
@@ -338,14 +338,14 @@ const ws = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 5,
   },
   decor: {
     position: 'absolute',
@@ -355,21 +355,22 @@ const ws = StyleSheet.create({
     top: -60,
     right: -50,
   },
-  inner: { padding: 16, gap: 12 },
+  inner: { padding: 20, gap: 14 },
   row:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
-  sub:   { fontSize: 12, marginTop: 3 },
-  pct:   { fontSize: 32, fontWeight: '800', letterSpacing: -1 },
-  trackBg: { height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
-  fill:    { height: 7, borderRadius: 4 },
+  sub:   { fontSize: 13, marginTop: 3 },
+  pct:   { fontSize: 34, fontWeight: '800', letterSpacing: -1 },
+  trackBg: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
+  fill:    { height: 8, borderRadius: 4 },
 });
 
 // ─── Main Screen ─────────────────────────────
 export default function HomeScreen() {
   const C = useColors();
   const { user, firstName } = useAuth();
-  const { todayJobs, todayStats, allStats, weekStats, openDefectsCount, isLoading, error, loadDashboard, clearError } = useDashboardStore();
+  const { todayJobs, todayStats, weekStats, openDefectsCount, isLoading, error, loadDashboard, clearError } = useDashboardStore();
   const { unreadCount, loadNotifications } = useNotificationsStore();
+  const insets = useSafeAreaInsets();
 
 
   const load = useCallback(() => {
@@ -434,19 +435,13 @@ export default function HomeScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <OfflineBanner />
       <ScrollView
-        contentContainerStyle={s.scroll}
+        style={s.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={load}
-            colors={[C.accent]}
-            tintColor={C.accent}
-          />
-        }
+        contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} />}
       >
-        {/* ══ SECTION 1 — Hero Header ══════════════════ */}
-        <View style={[s.header, { backgroundColor: C.primary }]}>
+        {/* ── HERO HEADER ──────────────────────────────── */}
+        <View style={[s.header, { backgroundColor: C.primary, paddingTop: Math.max(insets.top, 14) + 10 }]}>
           <View style={[s.heroDot1, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
           <View style={[s.heroDot2, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
 
@@ -558,7 +553,10 @@ export default function HomeScreen() {
                 }
                 bgColor={C.surface} borderColor={C.cardBorder}
                 textColor={C.text} subColor={C.textSecondary}
-                onPress={() => { import('react-native-toast-message').then(m => m.default.show({ type: openDefectsCount === 0 ? 'success' : 'error', text1: openDefectsCount === 0 ? 'All clear ✓' : `${openDefectsCount} defect${openDefectsCount > 1 ? 's' : ''} need attention` })); }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/defects' as never);
+                }}
               />
             </View>
           </View>
@@ -660,18 +658,17 @@ const s = StyleSheet.create({
   header: {
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    paddingTop: HEADER_TOP_PAD,
-    paddingBottom: 24,
+    paddingBottom: 20,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#0F1E3C',
+    shadowColor: '#0D1526',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 10,
   },
   heroDot1: {
-    position: 'absolute', width: 260, height: 260, borderRadius: 130, top: -100, right: -90,
+    position: 'absolute', width: 280, height: 280, borderRadius: 140, top: -110, right: -100,
   },
   heroDot2: {
     position: 'absolute', width: 180, height: 180, borderRadius: 90, bottom: -70, left: -50,
@@ -680,9 +677,9 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
-  headerLeft: { gap: 2, flex: 1 },
+  headerLeft: { gap: 3, flex: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   headerIconBtn: {
@@ -690,6 +687,8 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   bellBadge: {
     position: 'absolute', top: -3, right: -3,
@@ -698,9 +697,9 @@ const s = StyleSheet.create({
     borderWidth: 2,
   },
   bellBadgeText: { fontSize: 9, fontWeight: '800', color: '#FFFFFF' },
-  headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: 2, marginBottom: 2 },
-  headerTitle: { fontSize: 26, color: '#FFFFFF', fontWeight: '900', letterSpacing: -0.5 },
-  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 3, fontWeight: '400' },
+  headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: 2.5, marginBottom: 2 },
+  headerTitle: { fontSize: 28, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.5 },
+  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3, fontWeight: '400' },
 
   summaryStripOut: {
     flexDirection: 'row', gap: 8,
@@ -709,23 +708,23 @@ const s = StyleSheet.create({
   },
   summaryPillOut: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
     borderWidth: 1, borderColor: 'transparent',
   },
-  summaryPillTxtOut: { fontSize: 12, fontWeight: '700' },
+  summaryPillTxtOut: { fontSize: 12, fontWeight: '600' },
   pulseDot: { width: 6, height: 6, borderRadius: 3 },
   statsGrid: {
-    marginTop: 16,
+    marginTop: 20,
     paddingHorizontal: 16,
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   statsRow: { flexDirection: 'row', gap: 12 },
 
   qaGrid: {
     paddingHorizontal: 16,
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   jobList: {
     paddingHorizontal: 16,
@@ -740,23 +739,23 @@ const s = StyleSheet.create({
   },
 
   activeBanner: {
-    borderRadius: 16,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    borderWidth: 1.5,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
     shadowRadius: 10,
     elevation: 4,
   },
-  activePulseDot: { width: 10, height: 10, borderRadius: 5 },
+  activePulseDot: { width: 8, height: 8, borderRadius: 4 },
   activeBannerTitle: { fontSize: 14, fontWeight: '700' },
   activeBannerSub:   { fontSize: 12, marginTop: 1 },
 
   loadingText: { fontSize: 14, marginTop: 8 },
   errorMsg:    { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
-  retryBtn:    { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12, marginTop: 4 },
+  retryBtn:    { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10, marginTop: 4 },
   retryTxt:    { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 });

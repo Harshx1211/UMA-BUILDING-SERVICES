@@ -1,7 +1,7 @@
 // Main app tab navigator — premium tab bar with active top indicator
 import { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
 import { startSync, runSync } from '@/lib/sync';
@@ -42,6 +42,17 @@ export default function AppLayout() {
   const { isAuthenticated, user } = useAuthStore();
   const { subscribeToSync: jobsSubscribe, unsubscribeFromSync: jobsUnsub } = useJobsStore();
   const { subscribeToSync: dashSubscribe, unsubscribeFromSync: dashUnsub } = useDashboardStore();
+
+  const segments = useSegments();
+  
+  // Only show the tab bar on the three main screens. All detail routes hide it.
+  const segs = segments as string[];
+  const isMainTab = 
+    (segs.length === 1 && segs[0] === '(app)') ||
+    (segs.length === 2 && ['index', 'jobs', 'profile'].includes(segs[1])) ||
+    (segs.length === 3 && ['index', 'jobs', 'profile'].includes(segs[1]) && segs[2] === 'index');
+    
+  const hideTabBar = !isMainTab;
 
   // Always mount the network listener at the root so it fires on ALL tabs
   useNetworkStatus();
@@ -89,25 +100,25 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
+        tabBarStyle: hideTabBar ? { display: 'none' } : {
           backgroundColor: C.surface,
-          borderTopColor: C.cardBorder,
+          borderTopColor: C.border,
           borderTopWidth: 1,
           elevation: 0,
-          shadowColor: 'rgba(15,30,60,0.12)',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 1,
-          shadowRadius: 20,
-          height: Platform.OS === 'ios' ? 80 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 10,
-          paddingTop: 0,
+          shadowColor: '#0D1526',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.10,
+          shadowRadius: 16,
+          height: Platform.OS === 'ios' ? 82 : 72,
+          paddingBottom: Platform.OS === 'ios' ? 22 : 12,
+          paddingTop: 2,
         },
-        tabBarActiveTintColor: C.primary,
+        tabBarActiveTintColor: C.accent,
         tabBarInactiveTintColor: C.tabIconDefault,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
-          letterSpacing: 0.3,
+          letterSpacing: 0.2,
         },
         tabBarItemStyle: {
           paddingTop: 4,
@@ -127,7 +138,7 @@ export default function AppLayout() {
               size={size}
               focused={focused}
               label="Home"
-              activeColor={C.primary}
+              activeColor={C.accent}
             />
           ),
         }}
@@ -144,7 +155,7 @@ export default function AppLayout() {
               size={size}
               focused={focused}
               label="Schedule"
-              activeColor={C.primary}
+              activeColor={C.accent}
             />
           ),
         }}
@@ -161,7 +172,7 @@ export default function AppLayout() {
               size={size}
               focused={focused}
               label="Profile"
-              activeColor={C.primary}
+              activeColor={C.accent}
             />
           ),
         }}
@@ -172,6 +183,7 @@ export default function AppLayout() {
       <Tabs.Screen name="properties" options={{ href: null }} />
       <Tabs.Screen name="assets" options={{ href: null }} />
       <Tabs.Screen name="help" options={{ href: null }} />
+      <Tabs.Screen name="defects/index" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -180,21 +192,21 @@ const styles = StyleSheet.create({
   tabIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 44,
-    height: 30,
+    width: 48,
+    height: 32,
     borderRadius: 10,
     position: 'relative',
     paddingTop: 4,
   },
   tabIconWrapActive: {
-    // no background fill — just the top bar indicator
+    // top bar indicator handles the active state
   },
   activeBar: {
     position: 'absolute',
     top: 0,
-    left: '25%',
-    right: '25%',
-    height: 3,
+    left: '20%',
+    right: '20%',
+    height: 2.5,
     borderRadius: 2,
   },
 });

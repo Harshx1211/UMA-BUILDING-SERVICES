@@ -1,7 +1,7 @@
 // components/ui/FilterPills.tsx
-// Segmented control style filter — clean, no broken shadow on ScrollView content
-import React, { useRef } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, ViewStyle, Animated } from 'react-native';
+// Clean segmented control — professional tab-style filter
+import React from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@/hooks/useColors';
 
@@ -28,8 +28,13 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
     <View style={[
       styles.track,
       isDark
-        ? { backgroundColor: '#FFFFFF', borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }
-        : { backgroundColor: 'rgba(255,255,255,0.12)' },
+        ? {
+            backgroundColor: C.backgroundSecondary,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: C.border,
+          }
+        : { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10 },
       style,
     ]}>
       <ScrollView
@@ -47,7 +52,16 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
                 styles.pill,
                 isActive && [
                   styles.activePill,
-                  { backgroundColor: isDark ? C.primary : '#FFFFFF' },
+                  {
+                    backgroundColor: isDark ? C.surface : '#FFFFFF',
+                    borderColor: isDark ? C.border : 'transparent',
+                    borderWidth: isDark ? 1 : 0,
+                    shadowColor: '#0D1526',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  },
                 ],
               ]}
               onPress={() => onSelect(i)}
@@ -56,15 +70,21 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
               <Text
                 style={[
                   styles.pillText,
-                  { color: isActive
-                      ? (isDark ? '#FFFFFF' : C.primary)
-                      : (isDark ? C.textSecondary : 'rgba(255,255,255,0.75)') },
+                  {
+                    color: isActive
+                      ? (isDark ? C.primary : C.primary)
+                      : (isDark ? C.textSecondary : 'rgba(255,255,255,0.75)'),
+                  },
                   isActive && styles.activePillText,
                 ]}
                 numberOfLines={1}
               >
                 {opt.label}
               </Text>
+              {/* Active underline accent */}
+              {isActive && isDark && (
+                <View style={[styles.activeUnderline, { backgroundColor: C.accent }]} />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -75,8 +95,7 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
 
 const styles = StyleSheet.create({
   track: {
-    borderRadius: 25,
-    padding: 3,
+    padding: 4,
   },
   container: {
     flexDirection: 'row',
@@ -84,16 +103,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   pill: {
-    borderRadius: 20,
+    borderRadius: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
   },
   activePill: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 8,
   },
   pillText: {
     fontSize: 13,
@@ -101,5 +117,13 @@ const styles = StyleSheet.create({
   },
   activePillText: {
     fontWeight: '700',
+  },
+  activeUnderline: {
+    position: 'absolute',
+    bottom: 4,
+    left: '30%',
+    right: '30%',
+    height: 2,
+    borderRadius: 1,
   },
 });

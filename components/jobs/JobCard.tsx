@@ -1,7 +1,6 @@
 /**
- * JobCard — premium card with priority strip, compliance badge, and swipe actions.
- * Swipe left → Cancel (red)   Swipe right → Start (green)
- * Compliance dot shows property standing at a glance.
+ * JobCard — professional enterprise card with priority strip, status badge, and swipe actions.
+ * Clean, data-rich layout with strong typography and clear visual hierarchy.
  */
 import React, { useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, Linking, Alert } from 'react-native';
@@ -19,7 +18,6 @@ interface Props {
   job: JobWithProperty;
   onPress: () => void;
   showNavigate?: boolean;
-  /** When true, swipe-to-Start and swipe-to-Cancel are rendered (Jobs list only) */
   swipeable?: boolean;
   onStart?: () => void;
   onCancel?: () => void;
@@ -54,9 +52,9 @@ function CancelAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeo
 CancelAction.displayName = 'CancelAction';
 
 const sw = StyleSheet.create({
-  startAction:  { justifyContent: 'center', alignItems: 'center', width: 80, borderRadius: 18, marginLeft: 6, gap: 4 },
-  cancelAction: { justifyContent: 'center', alignItems: 'center', width: 80, borderRadius: 18, marginRight: 6, gap: 4 },
-  actionLabel:  { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  startAction:  { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginLeft: 8, gap: 4 },
+  cancelAction: { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginRight: 8, gap: 4 },
+  actionLabel:  { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
 });
 
 // ─── Main card ───────────────────────────────
@@ -69,28 +67,27 @@ export const JobCard = React.memo(function JobCard({
   const getPriorityColor = (p: Priority): string => {
     switch(p) {
       case Priority.Urgent: return C.error;
-      case Priority.High: return C.warning;
+      case Priority.High:   return C.warning;
       case Priority.Normal: return C.primary;
-      case Priority.Low: return C.textTertiary;
-      default: return C.info;
+      case Priority.Low:    return C.textTertiary;
+      default:              return C.info;
     }
   };
 
   const getComplianceCfg = (status: string) => {
     switch(status) {
-      case ComplianceStatus.Compliant: return { dot: C.success, label: 'Compliant' };
+      case ComplianceStatus.Compliant:    return { dot: C.success, label: 'Compliant' };
       case ComplianceStatus.NonCompliant: return { dot: C.error, label: 'Non-Compliant' };
-      case ComplianceStatus.Overdue: return { dot: C.warning, label: 'Overdue' };
-      case ComplianceStatus.Pending: return { dot: C.textTertiary, label: 'Pending' };
+      case ComplianceStatus.Overdue:      return { dot: C.warning, label: 'Overdue' };
+      case ComplianceStatus.Pending:      return { dot: C.textTertiary, label: 'Pending' };
       default: return null;
     }
   };
 
-  const stripColor  = getPriorityColor(job.priority as Priority);
+  const stripColor    = getPriorityColor(job.priority as Priority);
   const complianceCfg = getComplianceCfg(job.property_compliance_status ?? '');
-
-  const suburb      = [job.property_suburb, job.property_state].filter(Boolean).join(', ');
-  const timeLabel   = job.scheduled_time ? parseTime(job.scheduled_time) : null;
+  const suburb        = [job.property_suburb, job.property_state].filter(Boolean).join(', ');
+  const timeLabel     = job.scheduled_time ? parseTime(job.scheduled_time) : null;
 
   const handleNavigate = (e: { stopPropagation: () => void }) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -131,34 +128,39 @@ export const JobCard = React.memo(function JobCard({
         borderColor: C.cardBorder,
       }]}
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
-      activeOpacity={0.78}
+      activeOpacity={0.82}
     >
-      {/* Priority strip */}
+      {/* Priority strip — left edge */}
       <View style={[s.strip, { backgroundColor: stripColor }]} />
 
       {/* Content */}
       <View style={s.content}>
         {/* Row 1: Property name + Status badge */}
         <View style={s.row1}>
-          <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>{job.property_name ?? 'Unknown Property'}</Text>
+          <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>
+            {job.property_name ?? 'Unknown Property'}
+          </Text>
           <StatusBadge status={job.status as JobStatus} small />
         </View>
 
         {/* Row 2: Address */}
         {suburb ? (
           <View style={s.row2}>
-            <MaterialCommunityIcons name="map-marker-outline" size={12} color={C.textTertiary} />
+            <MaterialCommunityIcons name="map-marker-outline" size={13} color={C.textTertiary} />
             <Text style={[s.address, { color: C.textSecondary }]} numberOfLines={1}>
               {[job.property_address, suburb].filter(Boolean).join(', ')}
             </Text>
           </View>
         ) : null}
 
+        {/* Divider */}
+        <View style={[s.divider, { backgroundColor: C.border }]} />
+
         {/* Row 3: Type badge + time + navigate */}
         <View style={s.row3}>
           <JobTypeBadge jobType={job.job_type as JobType} />
           {timeLabel ? (
-            <View style={[s.timeChip, { backgroundColor: C.backgroundTertiary }]}>
+            <View style={[s.timeChip, { backgroundColor: C.backgroundSecondary }]}>
               <MaterialCommunityIcons name="clock-outline" size={11} color={C.textSecondary} />
               <Text style={[s.timeText, { color: C.textSecondary }]}>{timeLabel}</Text>
             </View>
@@ -166,7 +168,7 @@ export const JobCard = React.memo(function JobCard({
           <View style={{ flex: 1 }} />
           {showNavigate && (
             <TouchableOpacity
-              style={[s.navBtn, { backgroundColor: C.primary + '12', borderColor: C.primary + '20', borderWidth: 1 }]}
+              style={[s.navBtn, { backgroundColor: C.backgroundSecondary, borderColor: C.border, borderWidth: 1 }]}
               onPress={handleNavigate as never}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
@@ -176,7 +178,7 @@ export const JobCard = React.memo(function JobCard({
           )}
         </View>
 
-        {/* Row 4: Compliance dot — only when data present */}
+        {/* Row 4: Compliance dot */}
         {complianceCfg ? (
           <View style={s.complianceRow}>
             <View style={[s.complianceDot, { backgroundColor: complianceCfg.dot }]} />
@@ -185,7 +187,10 @@ export const JobCard = React.memo(function JobCard({
         ) : null}
       </View>
 
-      <MaterialCommunityIcons name="chevron-right" size={16} color={C.borderStrong} style={s.chevron} />
+      {/* Right chevron */}
+      <View style={s.chevronWrap}>
+        <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
+      </View>
     </TouchableOpacity>
   );
 
@@ -208,35 +213,37 @@ export const JobCard = React.memo(function JobCard({
 
 const s = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'stretch',
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 4,
   },
-  strip:   { width: 5 },
-  content: { flex: 1, padding: 15, gap: 6 },
+  strip:   { width: 6 },
+  content: { flex: 1, paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
 
   row1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  propertyName: { fontSize: 15, fontWeight: '700', flex: 1, letterSpacing: -0.1 },
+  propertyName: { fontSize: 15, fontWeight: '700', flex: 1, letterSpacing: -0.2 },
 
-  row2: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  address: { fontSize: 12, flex: 1 },
+  row2: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  address: { fontSize: 12, flex: 1, lineHeight: 17 },
 
-  row3: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 },
-  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
+
+  row3: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   timeText:  { fontSize: 11, fontWeight: '500' },
-  navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
-  navText:   { fontSize: 10, fontWeight: '700' },
+  navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  navText:   { fontSize: 11, fontWeight: '600' },
 
-  complianceRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
-  complianceDot:  { width: 6, height: 6, borderRadius: 3 },
-  complianceLabel:{ fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
+  complianceRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  complianceDot:   { width: 6, height: 6, borderRadius: 3 },
+  complianceLabel: { fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
 
-  chevron: { marginRight: 12, alignSelf: 'center' },
+  chevronWrap: { justifyContent: 'center', paddingRight: 12 },
 });

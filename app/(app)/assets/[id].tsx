@@ -4,8 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
@@ -52,18 +51,13 @@ function InfoRow({ icon, label, value, mono = false, C }: { icon: string; label:
 
 export default function AssetDetailScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [serviceHistory, setServiceHistory] = useState<ServiceRecord[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Hide tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   const load = useCallback(() => {
     if (!id) return;

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
-import { addToSyncQueue, getPendingSyncItems, markSyncItemComplete, updateRecord } from '@/lib/database';
+import { addToSyncQueue, getPendingSyncItems, markSyncItemComplete, updateRecord, openDatabase } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export async function uploadPhoto(localUri: string, jobId: string, assetId?: string): Promise<string | null> {
   try {
@@ -9,17 +10,28 @@ export async function uploadPhoto(localUri: string, jobId: string, assetId?: str
     const fileName = `${timestamp}-${random}.jpg`;
     const filePath = `jobs/${jobId}/${fileName}`;
 
-    // Convert local URI to Blob for Supabase Storage
-    const response = await fetch(localUri);
-    const blob = await response.blob();
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 
-    const { error } = await supabase.storage
-      .from('job-photos')
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
-      });
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/job-photos/${filePath}`;
 
-    if (error) throw error;
+    // Fix: Use native FileSystem upload to bypass React Native fetch/blob 'Network request failed' issues
+    const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        Authorization: `Bearer ${token || anonKey}`,
+        apikey: anonKey,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'true',
+      },
+    });
+
+    if (uploadResult.status !== 200) {
+      throw new Error(`Upload failed with status ${uploadResult.status}: ${uploadResult.body}`);
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('job-photos')
@@ -84,7 +96,7 @@ export async function processDefectPhotos(): Promise<void> {
 
     if (defectTasks.length === 0) return;
 
-    const db = require('@/lib/database').openDatabase();
+    const db = openDatabase();
 
     for (const task of defectTasks) {
       const payload = JSON.parse(task.payload);

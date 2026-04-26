@@ -5,8 +5,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, FilterPills, Button } from '@/components/ui';
 import { InspectionResult, DefectSeverity } from '@/constants/Enums';
@@ -31,9 +30,10 @@ function assetIconName(type: string): React.ComponentProps<typeof MaterialCommun
 }
 
 // ─── Individual asset card ────────────────────────────────────
-const AssetCard = React.memo(({ asset, index }: {
+const AssetCard = React.memo(({ asset, index, jobId }: {
   asset: AssetWithResult;
   index: number;
+  jobId: string;
 }) => {
   const C = useColors();
   const { updateAssetResult } = useInspectionStore();
@@ -74,9 +74,16 @@ const AssetCard = React.memo(({ asset, index }: {
     }
   };
 
-  const handleSaveFail = (reason: string, notes: string, photos: string[], severity?: DefectSeverity) => {
+  const handleSaveFail = (
+    reason: string,
+    notes: string,
+    photos: string[],
+    severity?: DefectSeverity,
+    defectCode?: string | null,
+    quotePrice?: number | null,
+  ) => {
     // BUG 4 FIX: pass photos[] and severity through to the store so they're persisted
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, reason, notes, photos, severity);
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, reason, notes, photos, severity, defectCode, quotePrice);
     setShowFailModal(false);
   };
 
@@ -102,11 +109,7 @@ const AssetCard = React.memo(({ asset, index }: {
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).duration(350)} style={s.cardWrapper}>
-      <View style={[s.assetCard, { backgroundColor: cardBg, borderColor: cardAccentColor }]}>
-
-        {/* ── RESULT STRIPE ──────────────────────────── */}
-        <View style={[s.resultStripe, { backgroundColor: cardAccentColor }]} />
-
+      <View style={[s.assetCard, { backgroundColor: cardBg, borderColor: cardAccentColor }, cardShadow]}>
         <View style={s.cardInner}>
           {/* ── CARD HEADER ─────────────────────────────── */}
           <View style={s.cardHeader}>
@@ -306,6 +309,7 @@ const AssetCard = React.memo(({ asset, index }: {
       <AssetInspectModal
         visible={showFailModal}
         asset={asset}
+        jobId={jobId as string}
         onClose={() => setShowFailModal(false)}
         onSaveFail={handleSaveFail}
       />
@@ -319,7 +323,6 @@ AssetCard.displayName = 'AssetCard';
 // ═══════════════════════════════════════════════════════════════
 export default function AssetInspectionScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useInspectionStore();
 
@@ -354,12 +357,6 @@ export default function AssetInspectionScreen() {
     nt:        store.assets.filter(a => a.result === InspectionResult.NotTested).length,
     remaining: store.assets.filter(a => a.result === null).length,
   }), [store.assets]);
-
-  // Hide tab bar
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
 
   useEffect(() => {
     if (jobId) store.loadAssetsForInspection(jobId);
@@ -414,9 +411,10 @@ export default function AssetInspectionScreen() {
       <AssetCard
         asset={item}
         index={index}
+        jobId={jobId as string}
       />
     ),
-    []
+    [jobId]
   );
 
   // Progress percentage
@@ -489,127 +487,136 @@ export default function AssetInspectionScreen() {
         rightComponent={progressBadge}
       />
 
-      {/* ── FORM INFO BAR ────────────────────────────────── */}
-      {(jobTitle || jobDate) && (
-        <View style={[s.formInfoBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-          <View style={s.formInfoItem}>
-            <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>PROPERTY</Text>
-            <Text style={[s.formInfoValue, { color: C.text }]} numberOfLines={1}>
-              {jobTitle || '—'}
-            </Text>
-          </View>
-          <View style={[s.formInfoDivider, { backgroundColor: C.border }]} />
-          <View style={s.formInfoItem}>
-            <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>DATE</Text>
-            <Text style={[s.formInfoValue, { color: C.text }]}>
-              {jobDate
-                ? new Date(jobDate + 'T00:00:00').toLocaleDateString('en-AU', {
-                    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-                  })
-                : '—'}
-            </Text>
-          </View>
-        </View>
-      )}
+      {/* ── SCROLLABLE LIST WITH HEADER & EMPTY STATES ──────────────────────────────────── */}
+      <FlatList
+        ref={listRef}
+        data={filteredAssets}
+        keyExtractor={i => i.id}
+        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: 120 }}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={8}
+        ListHeaderComponent={
+          <View>
+            {/* ── OVERVIEW CARD ────────────────────────────────── */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+              <View style={[s.overviewCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
+                
+                {/* Form Info */}
+                {(jobTitle || jobDate) && (
+                  <View style={[s.formInfoBar, { borderBottomColor: C.border }]}>
+                    <View style={s.formInfoItem}>
+                      <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>PROPERTY</Text>
+                      <Text style={[s.formInfoValue, { color: C.text }]} numberOfLines={1}>
+                        {jobTitle || '—'}
+                      </Text>
+                    </View>
+                    <View style={[s.formInfoDivider, { backgroundColor: C.border }]} />
+                    <View style={s.formInfoItem}>
+                      <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>DATE</Text>
+                      <Text style={[s.formInfoValue, { color: C.text }]}>
+                        {jobDate
+                          ? new Date(jobDate + 'T00:00:00').toLocaleDateString('en-AU', {
+                              weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+                            })
+                          : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-      {/* ── PROGRESS BAR ────────────────────────────────── */}
-      <View style={[s.progressTrack, { backgroundColor: C.primary + '40' }]}>
-        <Animated.View style={[
-          s.progressFill,
-          {
-            backgroundColor: allDone ? C.success : C.accent,
-            width: `${fillPct}%` as `${number}%`,
-          },
-        ]} />
-      </View>
+                {/* Progress Bar */}
+                <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary }]}>
+                  <Animated.View style={[
+                    s.progressFill,
+                    {
+                      backgroundColor: allDone ? C.success : C.primary,
+                      width: `${fillPct}%` as `${number}%`,
+                    },
+                  ]} />
+                </View>
 
-      {/* ── SUMMARY STATS BAR ───────────────────────────── */}
-      {store.assets.length > 0 && (
-        <View style={[s.summaryBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-          <View style={s.summaryItem}>
-            <View style={[s.summaryDot, { backgroundColor: C.success }]} />
-            <Text style={[s.summaryCount, { color: C.success }]}>{counts.passed}</Text>
-            <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Passed</Text>
-          </View>
-          <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-          <View style={s.summaryItem}>
-            <View style={[s.summaryDot, { backgroundColor: C.error }]} />
-            <Text style={[s.summaryCount, { color: C.error }]}>{counts.failed}</Text>
-            <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Failed</Text>
-          </View>
-          <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-          <View style={s.summaryItem}>
-            <View style={[s.summaryDot, { backgroundColor: C.textTertiary }]} />
-            <Text style={[s.summaryCount, { color: C.textTertiary }]}>{counts.nt}</Text>
-            <Text style={[s.summaryLabel, { color: C.textTertiary }]}>N/T</Text>
-          </View>
-          <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-          <View style={s.summaryItem}>
-            <View style={[s.summaryDot, { backgroundColor: C.accent }]} />
-            <Text style={[s.summaryCount, { color: C.accent }]}>{counts.remaining}</Text>
-            <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Remaining</Text>
-          </View>
-        </View>
-      )}
+                {/* Summary Stats */}
+                {store.assets.length > 0 && (
+                  <View style={s.summaryBar}>
+                    <View style={s.summaryItem}>
+                      <View style={[s.summaryDot, { backgroundColor: C.success }]} />
+                      <Text style={[s.summaryCount, { color: C.success }]}>{counts.passed}</Text>
+                      <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Passed</Text>
+                    </View>
+                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                    <View style={s.summaryItem}>
+                      <View style={[s.summaryDot, { backgroundColor: C.error }]} />
+                      <Text style={[s.summaryCount, { color: C.error }]}>{counts.failed}</Text>
+                      <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Failed</Text>
+                    </View>
+                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                    <View style={s.summaryItem}>
+                      <View style={[s.summaryDot, { backgroundColor: C.textTertiary }]} />
+                      <Text style={[s.summaryCount, { color: C.textTertiary }]}>{counts.nt}</Text>
+                      <Text style={[s.summaryLabel, { color: C.textTertiary }]}>N/T</Text>
+                    </View>
+                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                    <View style={s.summaryItem}>
+                      <View style={[s.summaryDot, { backgroundColor: C.primary }]} />
+                      <Text style={[s.summaryCount, { color: C.primary }]}>{counts.remaining}</Text>
+                      <Text style={[s.summaryLabel, { color: C.textTertiary }]}>Remaining</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
 
-      {/* ── FILTER PILLS ────────────────────────────────── */}
-      <View style={s.filterWrap}>
-        <FilterPills
-          options={filterOptions}
-          activeIndex={filterOptions.findIndex(o => o.label === filter)}
-          onSelect={(idx) => setFilter(filterOptions[idx].label)}
-          variant="dark"
-        />
-      </View>
-
-      {/* ── ASSET LIST ──────────────────────────────────── */}
-      {store.assets.length === 0 ? (
-        <View style={s.emptyState}>
-          <View style={[s.emptyIconWrap, { backgroundColor: C.backgroundTertiary }]}>
-            <MaterialCommunityIcons name="shield-search" size={40} color={C.textTertiary} />
+            {/* ── FILTER PILLS ────────────────────────────────── */}
+            <View style={s.filterWrap}>
+              <FilterPills
+                options={filterOptions}
+                activeIndex={filterOptions.findIndex(o => o.label === filter)}
+                onSelect={(idx) => setFilter(filterOptions[idx].label)}
+                variant="dark"
+              />
+            </View>
           </View>
-          <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
-          <Text style={[s.emptySub, { color: C.textSecondary }]}>
-            No fire safety assets are on record for this property.
-          </Text>
-          <View style={{ marginTop: 24, width: '100%', paddingHorizontal: 32, gap: 12 }}>
-            <Button
-              title="➕  Add Asset On-Site"
-              onPress={() => setShowAddAsset(true)}
-              style={{ borderRadius: 14 }}
-            />
-            <Button variant="outline" title="Go Back" onPress={() => router.back()} />
-          </View>
-        </View>
-      ) : filteredAssets.length === 0 ? (
-        <View style={s.emptyState}>
-          <Text style={{ fontSize: 40 }}>✨</Text>
-          <Text style={[s.emptyTitle, { color: C.text }]}>All Clear</Text>
-          <Text style={[s.emptySub, { color: C.textSecondary }]}>
-            No assets match this filter.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          ref={listRef}
-          data={filteredAssets}
-          keyExtractor={i => i.id}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 120 }}
-          renderItem={renderItem}
-          removeClippedSubviews
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={8}
-          showsVerticalScrollIndicator={false}
-          onScrollToIndexFailed={(info) => {
-            // Graceful fallback: scroll to approximate position if item is not yet rendered
-            listRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
-              animated: true,
-            });
-          }}
-        />
-      )}
+        }
+        ListEmptyComponent={
+          store.assets.length === 0 ? (
+            <View style={s.emptyState}>
+              <View style={[s.emptyIconWrap, { backgroundColor: C.backgroundTertiary }]}>
+                <MaterialCommunityIcons name="shield-search" size={40} color={C.textTertiary} />
+              </View>
+              <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
+              <Text style={[s.emptySub, { color: C.textSecondary }]}>
+                No fire safety assets are on record for this property.
+              </Text>
+              <View style={{ marginTop: 24, width: '100%', paddingHorizontal: 32, gap: 12 }}>
+                <Button
+                  title="➕  Add Asset On-Site"
+                  onPress={() => setShowAddAsset(true)}
+                  style={{ borderRadius: 14 }}
+                />
+                <Button variant="outline" title="Go Back" onPress={() => router.back()} />
+              </View>
+            </View>
+          ) : (
+            <View style={s.emptyState}>
+              <Text style={{ fontSize: 40 }}>✨</Text>
+              <Text style={[s.emptyTitle, { color: C.text }]}>All Clear</Text>
+              <Text style={[s.emptySub, { color: C.textSecondary }]}>
+                No assets match this filter.
+              </Text>
+            </View>
+          )
+        }
+        renderItem={renderItem}
+        onScrollToIndexFailed={(info) => {
+          listRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: true,
+          });
+        }}
+      />
 
       {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
       {store.assets.length > 0 && (
@@ -665,45 +672,47 @@ export default function AssetInspectionScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
 
+  // Overview Card
+  overviewCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+
   // Progress
-  progressTrack: { height: 5, width: '100%' },
-  progressFill:  { height: 5, borderTopRightRadius: 5, borderBottomRightRadius: 5 },
+  progressTrack: { height: 6, width: '100%' },
+  progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
 
   // Progress badge in header
   progressBadge:    { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   progressBadgeTxt: { fontWeight: '800', fontSize: 13, letterSpacing: 0.3 },
 
   // Summary bar
-  summaryBar:     { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
+  summaryBar:     { flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 16 },
   summaryItem:    { flex: 1, alignItems: 'center', gap: 2 },
   summaryDot:     { width: 6, height: 6, borderRadius: 3, marginBottom: 2 },
-  summaryCount:   { fontSize: 16, fontWeight: '800' },
-  summaryLabel:   { fontSize: 10, fontWeight: '600', letterSpacing: 0.2, textTransform: 'uppercase' },
+  summaryCount:   { fontSize: 18, fontWeight: '800' },
+  summaryLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
   summaryDivider: { width: 1, height: 32, alignSelf: 'center', marginHorizontal: 4 },
 
   // Form info bar (property + date)
-  formInfoBar:     { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  formInfoBar:     { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
   formInfoItem:    { flex: 1 },
-  formInfoLabel:   { fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 3, textTransform: 'uppercase' },
-  formInfoValue:   { fontSize: 13, fontWeight: '600' },
+  formInfoLabel:   { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
+  formInfoValue:   { fontSize: 14, fontWeight: '700' },
   formInfoDivider: { width: 1, marginHorizontal: 16, alignSelf: 'stretch' },
 
   // Filters
   filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
 
   // Asset card
-  cardWrapper: { marginHorizontal: 14, marginBottom: 12 },
-  assetCard:   { borderRadius: 18, borderWidth: 1.5, overflow: 'hidden', flexDirection: 'row' },
-  resultStripe:{ width: 5 },
-  cardInner:   { flex: 1, padding: 14 },
+  cardWrapper: { marginHorizontal: 16, marginBottom: 14 },
+  assetCard:   { borderRadius: 16, borderWidth: 1 },
+  cardInner:   { padding: 18 },
 
   // Card header
-  cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  assetIconWrap:   { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  assetType:       { fontSize: 15, fontWeight: '800', marginBottom: 1 },
-  assetVariant:    { fontSize: 12, fontWeight: '600', marginTop: 1, opacity: 0.85 },
-  assetLocation:   { fontSize: 12, marginTop: 1 },
-  assetSerial:     { fontSize: 11, fontFamily: 'monospace', marginTop: 3, opacity: 0.7 },
+  cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  assetIconWrap:   { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  assetType:       { fontSize: 16, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },
+  assetVariant:    { fontSize: 13, fontWeight: '600', marginTop: 1, opacity: 0.85 },
+  assetLocation:   { fontSize: 13, marginTop: 2 },
+  assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
   cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
 
   photoBadge:      { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10 },
@@ -720,33 +729,29 @@ const s = StyleSheet.create({
   defectEditTxt:     { fontSize: 12, fontWeight: '700' },
 
   // Result buttons
-  resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    {
-    flex: 1, height: 46, borderRadius: 12,
+    flex: 1, height: 42, borderRadius: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, borderWidth: 1.5,
+    gap: 6, borderWidth: 1,
   },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
 
   // Checklist button
   checklistBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 7, height: 42, borderRadius: 10, borderWidth: 1.5, marginTop: 10,
+    gap: 8, height: 42, borderRadius: 14, borderWidth: 1, marginTop: 12,
   },
-  checklistBtnTxt: { fontSize: 13, fontWeight: '700' },
+  checklistBtnTxt: { fontSize: 14, fontWeight: '700' },
 
   // Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    padding: 16, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
     borderTopWidth: 1,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },
@@ -757,15 +762,15 @@ const s = StyleSheet.create({
   emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8, marginBottom: 8 },
   emptySub:      { fontSize: 14, textAlign: 'center', lineHeight: 21 },
 
-  // Add-asset FAB (pill style, bottom-left corner so it doesn't clash with the Complete button)
+  // Add-asset FAB (classic bottom-right corner)
   addAssetFab:    {
-    position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, left: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 22, borderWidth: 1,
+    position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 16,
+    width: 56, height: 56,
+    borderRadius: 28, borderWidth: 1,
     backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
   },
-  addAssetFabTxt: { fontSize: 13, fontWeight: '700' },
+  addAssetFabTxt: { display: 'none' }, // hidden on classic FAB
 
 
 });

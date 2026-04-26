@@ -4,7 +4,7 @@
  * one source of truth.
  */
 
-import { getAssetTypeIcon, getAssetTypeColor, ASSET_TYPE_MAP } from '@/constants/AssetData';
+import { getAssetTypeIcon, ASSET_TYPE_MAP } from '@/constants/AssetData';
 export { getInspectionRoutine, getVariantsForType, getAssetTypeIcon, getAssetTypeColor } from '@/constants/AssetData';
 
 // ─── formatAssetType ──────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -23,7 +23,7 @@ import { supabase } from '@/lib/supabase';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { Card, Button } from '@/components/ui';
-import { HEADER_TOP_PAD } from '@/constants/headerPad';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineBanner } from '@/components/OfflineBanner';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -41,6 +41,7 @@ export default function ProfileScreen() {
   const C = useColors();
   const { user, signOut, updateUser } = useAuth();
   const { isOnline } = useNetworkStatus();
+  const insets = useSafeAreaInsets();
 
   const [pendingCount, setPendingCount] = useState(0);
   const [lastSync, setLastSync]         = useState<Date | null>(null);
@@ -204,7 +205,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Navy Curved Header ───────────── */}
-        <View style={[s.header, { backgroundColor: C.primary }]}>
+        <View style={[s.header, { backgroundColor: C.primary, paddingTop: Math.max(insets.top, 14) + 10 }]}>
           <View style={[s.headerDot1, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
           <View style={[s.headerDot2, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
 
@@ -257,7 +258,7 @@ export default function ProfileScreen() {
 
         {/* ── Sync Status Card ──────────────── */}
         <Animated.View entering={FadeInDown.delay(60).duration(360)}>
-          <Card style={s.syncCard} padding={16}>
+          <Card style={[s.syncCard, { borderLeftColor: C.accent }]} padding={16}>
             <View style={s.syncCardHeader}>
               <View style={s.syncCardTitleRow}>
                 <MaterialCommunityIcons name="cloud-sync-outline" size={16} color={C.primary} />
@@ -446,13 +447,12 @@ const s = StyleSheet.create({
   header: {
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    paddingTop: HEADER_TOP_PAD,
     paddingBottom: 20,
-    shadowColor: '#0F1E3C',
+    shadowColor: '#0D1526',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.20,
+    shadowRadius: 14,
+    elevation: 10,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -522,19 +522,19 @@ const s = StyleSheet.create({
 
   // ── Large Avatar ───────────────────────────────
   avatarOuter: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(232, 101, 10, 0.7)',
   },
   avatarInner: {
-    width: 60, height: 60, borderRadius: 30,
+    width: 68, height: 68, borderRadius: 34,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
@@ -579,55 +579,56 @@ const s = StyleSheet.create({
   scroll: { paddingTop: 0, paddingBottom: 20 },
 
   // ── Section ────────────────────────────────────
-  section: { marginBottom: 12, marginHorizontal: 16 },
+  section: { marginBottom: 16, marginHorizontal: 16 },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.4,
     marginBottom: 8,
-    marginTop: 16,
+    marginTop: 20,
     paddingHorizontal: 2,
   },
 
   // ── Menu card ──────────────────────────────────
   menuCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#0F1E3C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
+    shadowColor: '#0D1526',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 3,
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    gap: 12,
-    minHeight: 58,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    gap: 14,
+    minHeight: 64,
   },
   menuRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   menuIconWrap: {
-    width: 38, height: 38,
-    borderRadius: 11,
+    width: 42, height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuText: { flex: 1 },
   menuLabel: { fontSize: 14, fontWeight: '600', letterSpacing: -0.1 },
-  menuSub:   { fontSize: 11, marginTop: 2, letterSpacing: 0.1 },
+  menuSub:   { fontSize: 12, marginTop: 2, letterSpacing: 0.1 },
 
   // ── Sync card ──────────────────────────────────
   syncCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 20,
     marginBottom: 0,
     gap: 12,
+    borderLeftWidth: 5,
   },
   syncCardHeader: {
     flexDirection: 'row',

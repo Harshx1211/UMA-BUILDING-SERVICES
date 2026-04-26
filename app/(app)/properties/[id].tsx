@@ -1,14 +1,12 @@
 // Property detail screen — professional inspection-officer view inspired by Uptick
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Linking, ScrollView, StyleSheet, TouchableOpacity, View,
-  Animated as RNAnimated,
 } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeInRight, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@/hooks/useColors';
 import { ComplianceStatus, AssetStatus, JobStatus, JobType } from '@/constants/Enums';
 import { getRecord, getAssetsForProperty, getJobsForProperty } from '@/lib/database';
@@ -27,22 +25,6 @@ const getComplianceConfig = (C: any): Record<ComplianceStatus, {
   [ComplianceStatus.Pending]:      { bg: C.backgroundTertiary, border: C.border, text: C.textSecondary, subtext: C.textTertiary, icon: 'clock-outline', label: 'Pending Review', badge: C.textSecondary },
 });
 
-// ─── Asset type icon ─────────────────────────────────────────
-function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
-  const t = type.toLowerCase();
-  if (t.includes('extinguisher'))              return 'fire-extinguisher';
-  if (t.includes('sprinkler'))                 return 'water';
-  if (t.includes('door') || t.includes('exit'))return 'door';
-  if (t.includes('emergency') || t.includes('light')) return 'led-strip';
-  if (t.includes('fire'))                      return 'fire';
-  if (t.includes('hose'))                      return 'pipe';
-  if (t.includes('alarm'))                     return 'bell-ring';
-  return 'shield-check-outline';
-}
-
-function assetStatusColor(status: string, C: any) {
-  return status === AssetStatus.Active ? C.success : C.textTertiary;
-}
 
 type JobHistory = Job & {
   technician_name: string | null;
@@ -99,9 +81,9 @@ function SectionHeader({ icon, title, count, actionLabel, onAction }: {
 const sh = StyleSheet.create({
   row:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   left:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  title:    { fontSize: 13, fontWeight: '800', letterSpacing: 0.2, textTransform: 'uppercase' },
-  badge:    { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  iconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  title:    { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
+  badge:    { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   badgeTxt: { fontSize: 11, fontWeight: '700' },
   action:   { fontSize: 13, fontWeight: '600' },
 });
@@ -142,18 +124,13 @@ const infoRow = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 export default function PropertyDetailScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
   const [jobHistory, setJobHistory] = useState<JobHistory[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
 
-  // Hide tab bar
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   const load = useCallback(() => {
     if (!id) return;
@@ -519,7 +496,8 @@ const s = StyleSheet.create({
   alertBody:    { fontSize: 12, lineHeight: 18 },
 
   // Cards
-  card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden',
+          shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
   divider: { height: 1, marginHorizontal: -16 },
 
   // Asset rows

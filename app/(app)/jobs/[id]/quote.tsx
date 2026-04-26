@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';
 import { ScreenHeader } from '@/components/ui';
@@ -15,7 +14,6 @@ import { QuoteStatus } from '@/constants/Enums';
 
 export default function QuoteScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const quoteStore = useQuotesStore();
   const inventoryStore = useInventoryStore();
@@ -23,11 +21,6 @@ export default function QuoteScreen() {
   const [showInventory, setShowInventory] = useState(false);
   const [pendingQty, setPendingQty] = useState(1); // FLOW-5: quantity before adding to quote
 
-  // Hide tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
 
   useEffect(() => {
     if (jobId) {
@@ -200,7 +193,7 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 40, padding: 32, borderRadius: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '700', marginVertical: 8 },
   emptySub: { fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  actionBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actionBtnTxt: { color: '#FFF', fontWeight: '700', fontSize: 15 },
   actionBtnSecondary: { borderWidth: 1, marginTop: 8 },
   

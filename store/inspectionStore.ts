@@ -42,7 +42,9 @@ interface InspectionState {
     defectReason?: string,
     notes?: string,
     photos?: string[],
-    severity?: DefectSeverity
+    severity?: DefectSeverity,
+    defectCode?: string | null,
+    quotePrice?: number | null,
   ) => void;
   addPhotoToAsset: (assetId: string, photoUri: string) => void;
   /** Returns true if the inspection meets completion criteria (has at least one Pass/Fail, all assets answered) */
@@ -121,7 +123,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
     }
   },
 
-  updateAssetResult: (assetId, result, checklistData, isCompliant, defectReason, notes, photos, severity) => {
+  updateAssetResult: (assetId, result, checklistData, isCompliant, defectReason, notes, photos, severity, defectCode, quotePrice) => {
     try {
       set({ isSaving: true, error: null });
       const { assets, currentJobId } = get();
@@ -170,6 +172,8 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             status: DefectStatus.Open,
             photos: resolvedPhotos,
             created_at: new Date().toISOString(),
+            defect_code: defectCode ?? null,
+            quote_price: quotePrice ?? null,
           };
           insertRecord('defects', defectPayload);
           addToSyncQueue('defects', defectId, SyncOperation.Insert, defectPayload);

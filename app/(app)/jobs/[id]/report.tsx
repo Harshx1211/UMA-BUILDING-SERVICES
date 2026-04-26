@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, Alert, Platform, Image, TouchableOpacity } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { getJobById, getAssetsWithJobResults, getDefectsForJob, getSignatureForJob, getRecord } from '@/lib/database';
 import { generateJobReport } from '@/lib/pdfGenerator';
 import { useColors } from '@/hooks/useColors';
@@ -13,6 +13,7 @@ import Toast from 'react-native-toast-message';
 import { formatAssetType, getAssetEmoji } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
 import type { Defect, Signature } from '@/types';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -41,7 +42,6 @@ const SEVERITY_CONFIG: Record<string, { color: string; label: string; icon: MCIc
 
 export default function ReportScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
 
   const [job, setJob]             = useState<JobWithProperty | null>(null);
@@ -49,21 +49,19 @@ export default function ReportScreen() {
   const [defects, setDefects]     = useState<Defect[]>([]);
   const [signature, setSignature] = useState<Signature | null>(null);
   const [techName, setTechName]   = useState<string>('Field Technician');
-  const [isLoading, setIsLoading]       = useState(true);
-  const [loadError, setLoadError]       = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading]         = useState(true);
+  const [loadError, setLoadError]         = useState<string | null>(null);
+  const [isGenerating, setIsGenerating]   = useState(false);
   const [progressStage, setProgressStage] = useState<string>('');
+  // Cache the generated PDF URI — avoids re-generating on every tap
+  const [generatedPdfUri, setGeneratedPdfUri] = useState<string | null>(null);
 
-  // Hide tab bar on this detail screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   useEffect(() => {
     if (!jobId) return;
     try {
-      const j = getJobById(jobId);
+      const j = getJobById<JobWithProperty>(jobId);
       if (j) {
         setJob(j);
         // BUG 25: getDefectsForJob already JOINs assets and returns asset_type
@@ -95,12 +93,22 @@ export default function ReportScreen() {
   };
 
   const handleGenerate = async () => {
+    // If already generated this session, just re-share — no need to rebuild
+    if (generatedPdfUri) {
+      try {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(generatedPdfUri, { mimeType: 'application/pdf', dialogTitle: 'Share Inspection Report', UTI: 'com.adobe.pdf' });
+        }
+      } catch { /* ignore */ }
+      return;
+    }
     setIsGenerating(true);
     setProgressStage('Starting…');
     try {
-      await generateJobReport(jobId, (stage) => {
+      const uri = await generateJobReport(jobId, (stage) => {
         setProgressStage(STAGE_LABELS[stage] ?? stage);
       });
+      setGeneratedPdfUri(uri);
       Toast.show({ type: 'success', text1: '✅ PDF Exported Successfully!' });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -157,7 +165,7 @@ export default function ReportScreen() {
           : 'Not scheduled'
         }
         showBack={true}
-        curved={true}
+        curved={false}
         rightComponent={
           <View style={[s.complianceBanner, {
             backgroundColor: isCompliant ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)',
@@ -306,10 +314,24 @@ export default function ReportScreen() {
                         </View>
                       </View>
                       <Text style={[s.defectDesc, { color: C.text }]}>{defect.description}</Text>
-                      {defect.asset_type ? (
-                        <Text style={[s.defectAsset, { color: C.textSecondary }]}>
-                          {getAssetEmoji(defect.asset_type)} {formatAssetType(defect.asset_type)}
-                        </Text>
+                      {defect.asset_type || defect.defect_code ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                          {defect.asset_type && (
+                            <Text style={[s.defectAsset, { color: C.textSecondary, marginTop: 0 }]}>
+                              {getAssetEmoji(defect.asset_type)} {formatAssetType(defect.asset_type)}
+                            </Text>
+                          )}
+                          {defect.defect_code && (
+                            <View style={[s.reportCodeBadge, { backgroundColor: C.primary + '15', borderColor: C.primary + '30' }]}>
+                              <Text style={[s.reportCodeTxt, { color: C.primary }]}>{defect.defect_code.toUpperCase()}</Text>
+                            </View>
+                          )}
+                          {defect.quote_price != null && (
+                            <Text style={[s.reportPriceTxt, { color: '#10B981' }]}>
+                              • Ref: ${defect.quote_price}
+                            </Text>
+                          )}
+                        </View>
                       ) : null}
                     </View>
                   </View>
@@ -330,13 +352,24 @@ export default function ReportScreen() {
               </Text>
             </View>
             <View style={[s.dividerLine, { backgroundColor: C.border }]} />
-            <View style={s.checklistItem}>
-              <View style={[s.checkDot, { backgroundColor: signature ? C.success : C.error }]} />
+            <View style={[s.checklistItem, { alignItems: 'flex-start' }]}>
+              <View style={[s.checkDot, { backgroundColor: signature ? C.success : C.error, marginTop: 4 }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[s.checklistTxt, { color: C.text }]}>
                   {signature ? 'Client Signature captured' : 'Missing Client Signature'}
                 </Text>
-                {signature && <Text style={[s.checklistSub, { color: C.textSecondary }]}>Signed by: {signature.signed_by_name}</Text>}
+                {signature && (
+                  <Text style={[s.checklistSub, { color: C.textSecondary }]}>Signed by: {signature.signed_by_name}</Text>
+                )}
+                {signature?.signature_url && (
+                  <View style={[s.sigImageBox, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+                    <Image
+                      source={{ uri: getValidLocalUri(signature.signature_url) }}
+                      style={s.sigImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                )}
               </View>
             </View>
           </Card>
@@ -364,7 +397,6 @@ export default function ReportScreen() {
       </ScrollView>
 
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {/* BUG 21 FIX: guard PDF export — require at least one inspected asset */}
         {assets.filter((a: any) => a.result !== null).length === 0 && (
           <Text style={[s.exportWarning, { color: C.warning }]}>
             ⚠️  No assets have been inspected. The PDF will be empty.
@@ -373,14 +405,33 @@ export default function ReportScreen() {
         {isGenerating && progressStage ? (
           <Text style={[s.progressLabel, { color: C.textSecondary }]}>{progressStage}</Text>
         ) : null}
-        <Button
-          title={isGenerating ? 'Generating PDF…' : 'Compile & Export PDF'}
-          onPress={handleGenerate}
-          disabled={isGenerating}
-          isLoading={isGenerating}
-          icon={!isGenerating ? <MaterialCommunityIcons name="export-variant" size={20} color="#FFF" /> : undefined}
-          style={{ height: 56, borderRadius: 28 }}
-        />
+        {generatedPdfUri ? (
+          <View style={{ gap: 8 }}>
+            <Button
+              title="Share PDF"
+              onPress={handleGenerate}
+              icon={<MaterialCommunityIcons name="share-variant" size={20} color="#FFF" />}
+              style={{ height: 56, borderRadius: 28 }}
+            />
+            <TouchableOpacity
+              style={s.regenBtn}
+              onPress={() => { setGeneratedPdfUri(null); }}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="refresh" size={14} color={C.textSecondary} />
+              <Text style={[s.regenTxt, { color: C.textSecondary }]}>Re-generate PDF</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Button
+            title={isGenerating ? 'Generating PDF…' : 'Compile & Export PDF'}
+            onPress={handleGenerate}
+            disabled={isGenerating}
+            isLoading={isGenerating}
+            icon={!isGenerating ? <MaterialCommunityIcons name="export-variant" size={20} color="#FFF" /> : undefined}
+            style={{ height: 56, borderRadius: 28 }}
+          />
+        )}
       </View>
     </View>
   );
@@ -403,14 +454,14 @@ const s = StyleSheet.create({
   divider:     { height: 1, marginVertical: 8 },
 
   // Stat grid
-  statsGrid:   { flexDirection: 'row', gap: 10, marginBottom: 24, flexWrap: 'wrap' },
-  statCard:    { flex: 1, minWidth: 70, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1 },
-  statIconWrap:{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  statVal:     { fontSize: 22, fontWeight: '800', marginBottom: 2 },
-  statLabel:   { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  statsGrid:   { flexDirection: 'row', gap: 12, marginBottom: 26, flexWrap: 'wrap' },
+  statCard:    { flex: 1, minWidth: 70, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  statIconWrap:{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  statVal:     { fontSize: 24, fontWeight: '800', marginBottom: 2 },
+  statLabel:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
 
   // Asset table (5C)
-  assetRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, gap: 10 },
+  assetRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 10 },
   assetRowBorder: { borderBottomWidth: 1 },
   assetEmoji:     { fontSize: 20, width: 28, textAlign: 'center' },
   assetName:      { fontSize: 13, fontWeight: '700' },
@@ -422,35 +473,44 @@ const s = StyleSheet.create({
   emptyText:      { fontSize: 14 },
 
   // Defect list (5D)
-  defectRow:      { flexDirection: 'row', alignItems: 'stretch' },
+  defectRow:      { flexDirection: 'row', alignItems: 'stretch', paddingVertical: 12 },
   defectRowBorder:{ borderBottomWidth: 1 },
   defectBar:      { width: 4 },
-  defectTopRow:   { flexDirection: 'row', gap: 8, marginVertical: 10, alignItems: 'center' },
+  defectTopRow:   { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
   sevBadge:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   sevBadgeTxt:    { fontSize: 10, fontWeight: '700' },
   statusPill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   statusPillTxt:  { fontSize: 10, fontWeight: '700' },
-  defectDesc:     { fontSize: 13, fontWeight: '600', marginBottom: 4 },
-  defectAsset:    { fontSize: 11, marginBottom: 10 },
+  defectDesc:     { fontSize: 13, lineHeight: 18, marginBottom: 4 },
+  defectAsset:    { fontSize: 11 },
+  reportCodeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  reportCodeTxt: { fontSize: 10, fontWeight: '800' },
+  reportPriceTxt: { fontSize: 11, fontWeight: '700' },
 
   // No-defect card
-  noDefCard: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24, padding: 16, borderRadius: 16 },
-  noDefTxt:  { fontSize: 14, fontWeight: '700', flex: 1 },
+  noDefCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 26, padding: 18, borderRadius: 16 },
+  noDefTxt:  { fontSize: 15, fontWeight: '800', flex: 1 },
 
   // Checklist
-  checklistItem: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 14 },
+  checklistItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   checkDot:      { width: 12, height: 12, borderRadius: 6, marginTop: 3 },
   checklistTxt:  { fontSize: 14, fontWeight: '600', flex: 1 },
   checklistSub:  { fontSize: 12, marginTop: 4 },
   dividerLine:   { height: 1 },
 
   // Signature CTA
-  signatureCTA: { padding: 16, borderRadius: 16, marginBottom: 24 },
-  sigCopy:      { marginBottom: 16 },
-  sigCTATitle:  { fontSize: 16, fontWeight: '800', marginBottom: 4 },
-  sigCTASub:    { fontSize: 13, lineHeight: 18 },
+  signatureCTA: { padding: 18, borderRadius: 16, marginBottom: 26, shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  sigCopy:      { marginBottom: 18 },
+  sigCTATitle:  { fontSize: 18, fontWeight: '800', marginBottom: 6 },
+  sigCTASub:    { fontSize: 14, lineHeight: 20 },
 
-  bottomBar:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 24, borderTopWidth: 1, gap: 8 },
+  // Signature image inside checklist
+  sigImageBox: { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden', marginTop: 12, height: 96 },
+  sigImage:    { width: '100%', height: '100%' },
+
+  bottomBar:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 24, borderTopWidth: 1, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   exportWarning: { fontSize: 12, textAlign: 'center', fontWeight: '600' },
   progressLabel: { fontSize: 12, textAlign: 'center', fontWeight: '500', letterSpacing: 0.2 },
+  regenBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
+  regenTxt:      { fontSize: 12, fontWeight: '600' },
 });

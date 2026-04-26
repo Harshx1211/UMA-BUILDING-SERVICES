@@ -14,8 +14,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
@@ -228,7 +227,6 @@ AssetInspectCard.displayName = 'AssetInspectCard';
 // ═══════════════════════════════════════════════════════════════
 export default function SiteInspectScreen() {
   const C          = useColors();
-  const navigation = useNavigation();
   const { id: propertyId } = useLocalSearchParams<{ id: string }>();
   const { user }   = useAuth();
 
@@ -242,11 +240,7 @@ export default function SiteInspectScreen() {
   const [showComplete,  setShowComplete]  = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  // Hide tab bar while on this screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+  // Hide tab bar while
 
   // ── Load property + assets ────────────────────────────────
   const load = useCallback(() => {

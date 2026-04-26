@@ -4,8 +4,8 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { HEADER_TOP_PAD } from '@/constants/headerPad';
 
 interface Props {
   title: string;
@@ -18,11 +18,12 @@ interface Props {
 
 export function ScreenHeader({ title, subtitle, rightComponent, showBack = false, curved = true, eyebrow = 'SITETRACK' }: Props) {
   const C = useColors();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={[
       styles.header,
-      { backgroundColor: C.primary },
+      { backgroundColor: C.primary, paddingTop: Math.max(insets.top, 14) + 10 },
       !curved && styles.headerNoCurve,
     ]}>
       {/* Decorative circles — same size as main nav screens */}
@@ -54,16 +55,15 @@ export function ScreenHeader({ title, subtitle, rightComponent, showBack = false
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: HEADER_TOP_PAD,
-    paddingBottom: 24,
-    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#0F1E3C',
+    shadowColor: '#0D1526',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 10,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -94,28 +94,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   titleBlock: {
     flex: 1,
-    gap: 1,
+    gap: 2,
   },
   eyebrow: {
     fontSize: 10,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 2,
-    marginBottom: 1,
+    letterSpacing: 2.5,
+    marginBottom: 2,
   },
   title: {
     fontSize: 26,
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.55)',
     marginTop: 3,
   },
   right: {

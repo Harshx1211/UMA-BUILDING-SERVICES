@@ -2,6 +2,7 @@
 import 'react-native-url-polyfill/auto';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
 import { Slot, ErrorBoundaryProps } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -80,23 +81,27 @@ export default function RootLayout() {
   if (isLoading) {
     return (
       <GestureHandlerRootView style={styles.container}>
-        <PaperProvider theme={theme}>
-          <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
-            <ActivityIndicator color={theme.colors.secondary} size="large" />
-          </View>
-          <StatusBar style="light" />
-        </PaperProvider>
+        <SafeAreaProvider>
+          <PaperProvider theme={theme}>
+            <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
+              <ActivityIndicator color={theme.colors.secondary} size="large" />
+            </View>
+            <StatusBar style="light" />
+          </PaperProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     );
   }
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <PaperProvider theme={theme}>
-        <Slot />
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        <Toast />
-      </PaperProvider>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <Slot />
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <Toast />
+        </PaperProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

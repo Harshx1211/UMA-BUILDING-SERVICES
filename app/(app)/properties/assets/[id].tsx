@@ -4,7 +4,6 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@/hooks/useColors';
 import { getRecord, getAssetsForProperty } from '@/lib/database';
 import { AssetStatus } from '@/constants/Enums';
@@ -30,18 +29,13 @@ function assetStatusColor(status: string, C: any) {
 
 export default function PropertyAssetsScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
   const [showAddAsset, setShowAddAsset] = useState(false);
 
-  // Hide tab bar
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   const load = useCallback(() => {
     if (!id) return;

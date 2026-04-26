@@ -1,14 +1,15 @@
 // components/ui/Card.tsx
+// Professional card — real depth, clean borders, spring press feedback
 import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 
 export const cardShadow = {
-  shadowColor: '#0F1E3C', // Using standard shadow color string but opacity via style below, actually using 0.06
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.06,
-  shadowRadius: 10,
-  elevation: 3,
+  shadowColor: '#0D1526',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 4,
 };
 
 interface Props {
@@ -30,7 +31,7 @@ export function Card({ children, style, padding = 16, noPadding, color, onPress 
     {
       padding: noPadding ? 0 : padding,
       backgroundColor: color || C.surface,
-      borderColor: (C as any).cardBorder || 'rgba(30,50,90,0.06)',
+      borderColor: (C as any).cardBorder || 'rgba(27,45,79,0.09)',
     },
     style,
   ];
@@ -41,10 +42,10 @@ export function Card({ children, style, padding = 16, noPadding, color, onPress 
         <Pressable
           onPress={onPress}
           onPressIn={() =>
-            Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start()
+            Animated.spring(scaleAnim, { toValue: 0.975, useNativeDriver: true, friction: 10 }).start()
           }
           onPressOut={() =>
-            Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 4, tension: 40 }).start()
+            Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }).start()
           }
           style={containerStyle}
         >

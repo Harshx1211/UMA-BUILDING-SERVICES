@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SiteTrack — Daily Summary Notification Scheduler
  * Schedules a local "Job summary" notification at 6:00 PM each day.
  * Requires expo-notifications (already installed).

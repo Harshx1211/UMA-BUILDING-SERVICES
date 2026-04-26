@@ -18,8 +18,8 @@
 
 import * as Print   from 'expo-print';
 import * as Sharing from 'expo-sharing';
-// SDK 54: File/Paths are stable exports from 'expo-file-system' (not /next)
-import { File, Paths } from 'expo-file-system';
+// Use stable FileSystem imports for robust base64 and cache operations
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import {
@@ -42,6 +42,7 @@ import {
   User,
 } from '@/types';
 import { buildReportHtml, ReportData, AssetWithResult } from '@/lib/reportTemplate';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 
 // ─── Public types ─────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ async function toDataUri(
   cache: Map<string, string>
 ): Promise<string | null> {
   if (!url?.trim()) return null;
+  url = getValidLocalUri(url);
   if (url.startsWith('data:')) return url;
 
   // Cache key includes dimensions so different size requests stay separate
@@ -128,9 +130,9 @@ async function toDataUri(
   try {
     // ── Step 1: Download remote → local cache ──────────────
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      // SDK 54: File.downloadFileAsync(url, dir) → Promise<File>
-      // Paths.cache is already a Directory — no wrapper needed.
-      const downloaded = await File.downloadFileAsync(url, Paths.cache);
+      const fileName = url.split('/').pop()?.split('?')[0] || `temp-${Date.now()}.jpg`;
+      const destPath = `${FileSystem.cacheDirectory}${fileName}`;
+      const downloaded = await FileSystem.downloadAsync(url, destPath);
       downloadedPath = downloaded.uri;
       localUri = downloadedPath;
     }
@@ -150,7 +152,7 @@ async function toDataUri(
     }
 
     // ── Step 3: Read as base64 ─────────────────────────────
-    const b64  = await new File(localUri).base64();
+    const b64  = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
     const mime = format === ImageManipulator.SaveFormat.PNG ? 'image/png' : 'image/jpeg';
     dataUri = `data:${mime};base64,${b64}`;
 
@@ -161,12 +163,11 @@ async function toDataUri(
     return null;
   } finally {
     // Clean up temp files ONLY — never delete the original source (user's photos).
-    // IMPORTANT: only clean up AFTER base64 read is complete (dataUri already set above).
     if (downloadedPath) {
-      try { new File(downloadedPath).delete(); } catch {}
+      try { await FileSystem.deleteAsync(downloadedPath, { idempotent: true }); } catch {}
     }
     if (compressedPath && compressedPath !== downloadedPath) {
-      try { new File(compressedPath).delete(); } catch {}
+      try { await FileSystem.deleteAsync(compressedPath, { idempotent: true }); } catch {}
     }
   }
 }
@@ -285,36 +286,39 @@ async function processPhotos(data: ReportData): Promise<ReportData> {
   // Which asset IDs have a defect? Used to select correct quality level
   const defectAssetIds = new Set(data.defects.map(d => d.asset_id));
 
-  // Encode ALL photos in parallel (they're I/O-bound; parallel is faster than serial batches)
-  const encodedPhotos = await Promise.all(
-    relevantPhotos.map(photo =>
-      encodePhoto(photo, !!(photo.asset_id && defectAssetIds.has(photo.asset_id)), cache)
-    )
-  );
+  // Encode ALL photos sequentially to prevent Out of Memory (OOM) errors and dropped images
+  const encodedPhotos: InspectionPhoto[] = [];
+  for (const photo of relevantPhotos) {
+    const isDefectPhoto = !!(photo.asset_id && defectAssetIds.has(photo.asset_id));
+    const encoded = await encodePhoto(photo, isDefectPhoto, cache);
+    encodedPhotos.push(encoded);
+  }
 
   // ── Encode defect.photos[] JSON arrays ────────────────────
   // Defects store their own photo URIs in a JSON text column (separate from inspection_photos).
   // These ALSO need base64 encoding before they can render in the sandboxed WebView PDF.
-  const encodedDefects = await Promise.all(
-    data.defects.map(async (defect) => {
-      let rawPhotos: string[] = [];
-      try {
-        // photos column is stored as JSON string in SQLite
-        rawPhotos = typeof defect.photos === 'string'
-          ? JSON.parse(defect.photos as unknown as string)
-          : (Array.isArray(defect.photos) ? defect.photos : []);
-      } catch { rawPhotos = []; }
+  const encodedDefects: Defect[] = [];
+  for (const defect of data.defects) {
+    let rawPhotos: string[] = [];
+    try {
+      rawPhotos = typeof defect.photos === 'string'
+        ? JSON.parse(defect.photos as unknown as string)
+        : (Array.isArray(defect.photos) ? defect.photos : []);
+    } catch { rawPhotos = []; }
 
-      if (rawPhotos.length === 0) return defect;
+    if (rawPhotos.length === 0) {
+      encodedDefects.push(defect);
+      continue;
+    }
 
-      const encodedUrls = await Promise.all(
-        rawPhotos.map(url => encodeRawUrl(url, cache))
-      );
-      // Filter nulls; keep original if encode failed
-      const finalPhotos = encodedUrls.map((enc, i) => enc ?? rawPhotos[i]);
-      return { ...defect, photos: finalPhotos } as Defect;
-    })
-  );
+    const finalPhotos: string[] = [];
+    for (const url of rawPhotos) {
+      const enc = await encodeRawUrl(url, cache);
+      finalPhotos.push(enc ?? url); // keep original if encode failed
+    }
+
+    encodedDefects.push({ ...defect, photos: finalPhotos } as Defect);
+  }
 
   return { ...data, signature, photos: encodedPhotos, defects: encodedDefects };
 }

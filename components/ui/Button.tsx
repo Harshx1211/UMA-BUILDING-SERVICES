@@ -1,5 +1,5 @@
 // components/ui/Button.tsx
-// Professional, premium Button — aligns with SiteTrack visual identity
+// Professional enterprise Button — clean, purposeful, no gimmicks
 import React, { useRef } from 'react';
 import { Pressable, Text, StyleSheet, Animated, ActivityIndicator, ViewStyle, TextStyle, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
@@ -39,7 +39,7 @@ export function Button({
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.965, useNativeDriver: true, friction: 8 }).start();
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, friction: 10 }).start();
   };
 
   const handlePressOut = () => {
@@ -53,13 +53,13 @@ export function Button({
     }
   };
 
-  const height = size === 'large' ? 52 : 44;
+  const height = size === 'large' ? 54 : 44;
+  const fontSize = size === 'large' ? 15 : 14;
 
   let bgColor = C.accent;
   let textColor = '#FFFFFF';
   let borderWidth = 0;
   let borderColor = 'transparent';
-  let fontSize = size === 'large' ? 16 : 14;
 
   switch (variant) {
     case 'primary':
@@ -87,7 +87,7 @@ export function Button({
   }
 
   if (color) bgColor = color;
-  const opacity = disabled || resolvedLoading ? 0.55 : 1;
+  const opacity = disabled || resolvedLoading ? 0.5 : 1;
 
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }], opacity }, style]}>
@@ -114,11 +114,10 @@ export function Button({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 12,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
     paddingHorizontal: 20,
     gap: 8,
   },

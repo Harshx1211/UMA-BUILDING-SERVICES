@@ -5,8 +5,7 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { Card } from '@/components/ui/Card';
@@ -14,7 +13,6 @@ import { ScreenHeader, EmptyState } from '@/components/ui';
 import {
   useNotificationsStore, type AppNotification, type NotificationType,
 } from '@/store/notificationsStore';
-import { HEADER_TOP_PAD } from '@/constants/headerPad';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -94,17 +92,12 @@ function NotifCard({ item }: { item: AppNotification }) {
 // ── Main Screen ───────────────────────────────────────────
 export default function NotificationsScreen() {
   const C = useColors();
-  const navigation = useNavigation();
   const {
     notifications, unreadCount, isLoading,
     loadNotifications, markAllAsRead, clearAll,
   } = useNotificationsStore();
 
-  // Hide tab bar on this detail/push screen
-  useFocusEffect(useCallback(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]));
+
 
   useEffect(() => {
     loadNotifications();
@@ -172,29 +165,23 @@ export default function NotificationsScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  headerFull: {
-    paddingHorizontal: 16, paddingTop: HEADER_TOP_PAD, paddingBottom: 24,
-    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
-    shadowColor: '#0F1E3C', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
-  },
   backBtn:    { minHeight: 48, justifyContent: 'center' },
   headerTitle:{ fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
   headerSub:  { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
   markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
   markAllText:{ fontSize: 12, fontWeight: '700' },
 
-  list:      { padding: 16, gap: 10, paddingBottom: 32 },
+  list:      { padding: 16, gap: 12, paddingBottom: 32 },
   listEmpty: { flex: 1, justifyContent: 'center' },
 
   card: {
-    borderRadius: 16, // Screen bible standardization
-    padding: 16,      // 16px padding
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
     position: 'relative',
   },
   iconWrap: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 44, height: 44, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   cardBody:    { flex: 1 },
