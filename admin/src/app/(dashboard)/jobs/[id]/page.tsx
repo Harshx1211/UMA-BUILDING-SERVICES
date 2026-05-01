@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead } from '@/lib/admin-api';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { getJobTypeLabel } from '@/constants/jobTypes';
 import Badge from '@/components/ui/Badge';
 import { ArrowLeft, CheckCircle2, XCircle, Edit3, FileText, Download, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -101,9 +102,14 @@ export default function JobDetailPage() {
 
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold" style={{ color:'var(--text)', letterSpacing:'-0.03em' }}>{job.property?.name}</h2>
-          <p className="text-sm mt-1" style={{ color:'var(--text-secondary)' }}>
-            {job.job_type.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase())} · {formatDate(job.scheduled_date)}
+          <h1 className="text-2xl font-extrabold" style={{ color: 'var(--text)', letterSpacing: '-0.02em' }}>
+            {job.property?.name ?? 'Unknown Property'}
+          </h1>
+          <p className="text-sm font-medium flex items-center gap-2 mt-1" style={{ color: 'var(--text-secondary)' }}>
+            <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{ background: '#f1f5f9', color: 'var(--text)' }}>
+              {job.id.split('-')[0].toUpperCase()}
+            </span>
+            {getJobTypeLabel(job.job_type)} · {formatDate(job.scheduled_date)}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">

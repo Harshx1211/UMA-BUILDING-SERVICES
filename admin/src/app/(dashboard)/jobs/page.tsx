@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { adminApi, adminRead } from '@/lib/admin-api';
 import { formatDate } from '@/lib/utils';
 import { exportToCsv, JOB_CSV_COLUMNS } from '@/lib/csv';
+import { getJobTypeLabel, JOB_TYPE_FILTER_OPTIONS, getJobTypeCategory } from '@/constants/jobTypes';
 import Badge from '@/components/ui/Badge';
 import PageHeader from '@/components/ui/PageHeader';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -15,14 +16,8 @@ import toast from 'react-hot-toast';
 import CreateJobModal from './CreateJobModal';
 
 const STATUSES   = ['', 'scheduled', 'in_progress', 'completed', 'cancelled'];
-const JOB_TYPES  = ['', 'routine_service', 'defect_repair', 'installation', 'emergency', 'quote'];
 const PRIORITIES = ['', 'urgent', 'high', 'normal', 'low'];
 const PAGE_SIZE  = 12;
-
-const JOB_TYPE_LABELS: Record<string, string> = {
-  routine_service: 'Routine Service', defect_repair: 'Defect Repair',
-  installation: 'Installation', emergency: 'Emergency', quote: 'Quote',
-};
 
 export default function JobsPage() {
   const [jobs,         setJobs]         = useState<any[]>([]);
@@ -165,37 +160,39 @@ export default function JobsPage() {
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {[
-            { value: statusF,   set: (v: string) => { setStatusF(v);   setPage(0); }, options: STATUSES,   placeholder: 'Status'   },
-            { value: typeF,     set: (v: string) => { setTypeF(v);     setPage(0); }, options: JOB_TYPES,  placeholder: 'Type'     },
-            { value: priorityF, set: (v: string) => { setPriorityF(v); setPage(0); }, options: PRIORITIES, placeholder: 'Priority' },
-          ].map((f, i) => (
-            <select key={i} value={f.value} onChange={e => f.set(e.target.value)}
-              className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-              style={{
-                borderColor: f.value ? 'var(--primary)' : 'var(--border)',
-                color: 'var(--text)',
-                background: f.value ? '#f0f4ff' : '#f8fafc',
-                fontWeight: f.value ? 600 : 400,
-              }}>
-              <option value="">{f.placeholder}: All</option>
-              {f.options.filter(Boolean).map(o => (
-                <option key={o} value={o}>
-                  {JOB_TYPE_LABELS[o] ?? o.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                </option>
-              ))}
-            </select>
-          ))}
+          {/* Status filter */}
+          <select value={statusF} onChange={e => { setStatusF(e.target.value); setPage(0); }}
+            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
+            style={{ borderColor: statusF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: statusF ? '#f0f4ff' : '#f8fafc', fontWeight: statusF ? 600 : 400 }}>
+            <option value="">Status: All</option>
+            {STATUSES.filter(Boolean).map(o => (
+              <option key={o} value={o}>{o.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+            ))}
+          </select>
+
+          {/* Type filter — granular routine service options */}
+          <select value={typeF} onChange={e => { setTypeF(e.target.value); setPage(0); }}
+            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
+            style={{ borderColor: typeF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: typeF ? '#f0f4ff' : '#f8fafc', fontWeight: typeF ? 600 : 400 }}>
+            {JOB_TYPE_FILTER_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+
+          {/* Priority filter */}
+          <select value={priorityF} onChange={e => { setPriorityF(e.target.value); setPage(0); }}
+            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
+            style={{ borderColor: priorityF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: priorityF ? '#f0f4ff' : '#f8fafc', fontWeight: priorityF ? 600 : 400 }}>
+            <option value="">Priority: All</option>
+            {PRIORITIES.filter(Boolean).map(o => (
+              <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>
+            ))}
+          </select>
 
           {/* PDF / Report filter */}
           <select value={reportF} onChange={e => { setReportF(e.target.value); setPage(0); }}
             className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-            style={{
-              borderColor: reportF ? 'var(--primary)' : 'var(--border)',
-              color: 'var(--text)',
-              background: reportF ? '#f0f4ff' : '#f8fafc',
-              fontWeight: reportF ? 600 : 400,
-            }}>
+            style={{ borderColor: reportF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: reportF ? '#f0f4ff' : '#f8fafc', fontWeight: reportF ? 600 : 400 }}>
             <option value="">Report: All</option>
             <option value="yes">Has PDF</option>
             <option value="no">No PDF yet</option>
@@ -210,6 +207,7 @@ export default function JobsPage() {
             </button>
           )}
         </div>
+
       </div>
 
       {/* Jobs Table */}
@@ -268,13 +266,21 @@ export default function JobsPage() {
                         </div>
                       </td>
 
-                      {/* Type */}
-                      <td className="px-4 py-3.5">
-                        <span className="text-xs font-medium px-2.5 py-1 rounded-lg"
-                          style={{ background: '#f1f5f9', color: 'var(--text-secondary)' }}>
-                          {JOB_TYPE_LABELS[job.job_type] ?? job.job_type}
-                        </span>
-                      </td>
+                        {/* Type — use getJobTypeLabel for compound routine types */}
+                        <td className="px-4 py-3.5">
+                          {(() => {
+                            const cat = getJobTypeCategory(job.job_type);
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                {cat && <span className="text-sm">{cat.icon}</span>}
+                                <span className="text-xs font-medium px-2 py-1 rounded-lg"
+                                  style={{ background: cat?.bg ?? '#f1f5f9', color: cat?.color ?? 'var(--text-secondary)' }}>
+                                  {getJobTypeLabel(job.job_type)}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
 
                       {/* Technician */}
                       <td className="px-4 py-3.5">
