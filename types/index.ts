@@ -124,6 +124,7 @@ export interface InspectionPhoto {
   id: string;
   job_id: string;
   asset_id: string | null;
+  defect_id: string | null;
   photo_url: string;
   caption: string | null;
   uploaded_at: string;

@@ -4,11 +4,12 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
-import { startSync, runSync } from '@/lib/sync';
+import { startSync } from '@/lib/sync';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useJobsStore } from '@/store/jobsStore';
 import { useDashboardStore } from '@/store/dashboardStore';
+import { useCatalogueStore } from '@/store/catalogueStore';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -58,32 +59,36 @@ export default function AppLayout() {
   useNetworkStatus();
 
   // Start background sync interval on mount (runs immediately + every 60s)
-  useEffect(() => { startSync(); }, []);
+  // NOTE: startSync() is intentionally called AFTER the stores subscribe
+  // to sync-complete events (below), so the first sync always triggers a UI reload.
 
   // When user logs in / session restores:
   //  1. Subscribe stores to auto-reload on every future sync
   //  2. Eagerly load from SQLite cache so the UI isn't blank
-  //  3. Fire an immediate sync so Supabase data is fetched right away
-  //     (don't wait for the 60-second interval to tick)
+  //  3. Start the sync loop (runs immediately + every 60s)
+  //     The loop is started AFTER subscribing so the first sync-complete fires correctly
   const { loadJobs } = useJobsStore();
   const { loadDashboard } = useDashboardStore();
+  const { load: loadCatalogue } = useCatalogueStore();
 
   useEffect(() => {
     if (!user?.id) return;
 
-    // Subscribe to future sync completions
+    // Subscribe to future sync completions first
     jobsSubscribe(user.id);
     dashSubscribe(user.id);
 
     // Load whatever is already in the local SQLite cache immediately
     loadJobs(user.id);
     loadDashboard(user.id);
+    loadCatalogue();
 
-    // Kick off a live sync in the background — stores will reload via the
-    // event bus once it completes, giving the user fresh data ASAP
-    runSync().catch((e) =>
-      console.warn('[AppLayout] login sync failed:', e)
-    );
+    // Now start the background sync loop — fires runSync() immediately,
+    // then repeats every 60s. The store listeners above are already
+    // registered, so the first sync-complete event will reload the UI.
+    // Pass user.id directly so sync never has to call getCurrentUser()
+    // (which can fail if Supabase auth hasn't hydrated from AsyncStorage yet).
+    startSync(user.id);
 
     return () => {
       jobsUnsub();

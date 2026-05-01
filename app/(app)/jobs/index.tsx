@@ -16,6 +16,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore, type JobFilter, type JobWithProperty } from '@/store/jobsStore';
 import { runSync } from '@/lib/sync';
 import { getPendingSyncItems } from '@/lib/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LAST_SYNCED_KEY } from '@/constants/Config';
 import Toast from 'react-native-toast-message';
 import { JobCard } from '@/components/jobs/JobCard';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
@@ -30,6 +32,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Computed as functions so the date stays fresh even if the app runs past midnight
 const getToday    = () => new Date().toISOString().slice(0, 10);
 const getTomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+/** Returns a human-friendly "X min ago" string from an ISO timestamp */
+function formatRelativeTime(iso: string): string {
+  try {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diffMs / 60_000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  } catch { return ''; }
+}
 
 function dateLabel(iso: string): string {
   if (iso === getToday())    return 'Today';
@@ -87,18 +103,27 @@ export default function JobsScreen() {
   useEffect(() => { load(); }, [load]);
   
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  // Load last-synced timestamp from storage
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_SYNCED_KEY).then(setLastSynced).catch(() => {});
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsSyncing(true);
     try {
-      await runSync();
+      await runSync(user?.id ?? undefined);
       load();
-      Toast.show({ type: 'success', text1: 'Sync complete' });
+      const ts = await AsyncStorage.getItem(LAST_SYNCED_KEY);
+      setLastSynced(ts);
+      Toast.show({ type: 'success', text1: '✓ Sync complete', text2: 'Jobs updated from server' });
     } catch {
-      Toast.show({ type: 'error', text1: 'Sync failed' });
+      Toast.show({ type: 'error', text1: 'Sync failed', text2: 'Check your internet connection' });
     } finally {
       setIsSyncing(false);
     }
-  }, [load]);
+  }, [load, user?.id]);
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -131,7 +156,7 @@ export default function JobsScreen() {
       map.get(key)!.push(job);
     }
     return [...map.entries()]
-      .sort(([a], [b]) => b.localeCompare(a))
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, data]) => ({
         date, title: dateLabel(date),
         data: data.sort((a, b) =>
@@ -152,6 +177,13 @@ export default function JobsScreen() {
             <Text style={s.headerTitle}>Schedule</Text>
             <Text style={s.headerSub}>
               {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Text>
+            <Text style={s.headerSyncLabel}>
+              {isSyncing
+                ? '⟳ Syncing...'
+                : lastSynced
+                  ? `Synced ${formatRelativeTime(lastSynced)}`
+                  : '⚠ Never synced — pull to refresh'}
             </Text>
           </View>
           <View style={s.headerRight}>
@@ -283,9 +315,25 @@ export default function JobsScreen() {
             }
             ListEmptyComponent={
               <EmptyState
-                emoji={search.length > 0 ? '🔍' : activeFilter === 'today' ? '🎉' : activeFilter === 'week' ? '📅' : '📋'}
-                title={search.length > 0 ? 'No results found' : activeFilter === 'today' ? 'No jobs today' : activeFilter === 'week' ? 'No jobs this week' : 'No jobs assigned'}
-                subtitle={search.length > 0 ? 'Try a different property or address' : activeFilter === 'today' ? 'Nothing scheduled for today' : activeFilter === 'week' ? 'Check after next sync' : 'Contact your office'}
+                emoji={search.length > 0 ? '🔍' : lastSynced ? '📋' : '☁️'}
+                title={
+                  search.length > 0
+                    ? 'No results found'
+                    : lastSynced
+                      ? (activeFilter === 'today' ? 'No jobs today' : activeFilter === 'week' ? 'No jobs this week' : 'No jobs assigned')
+                      : 'No data yet'
+                }
+                subtitle={
+                  search.length > 0
+                    ? 'Try a different property, address, or job type'
+                    : lastSynced
+                      ? (activeFilter === 'today'
+                          ? 'Switch to "All Jobs" to see your full schedule'
+                          : activeFilter === 'week'
+                            ? 'No jobs scheduled this week — try "All Jobs"'
+                            : 'Your admin hasn\'t assigned any jobs yet')
+                      : 'Pull down to sync your jobs from the server'
+                }
               />
             }
           />
@@ -331,7 +379,8 @@ const s = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: 2.5, marginBottom: 2 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
-  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3, fontWeight: '400' },
+  headerSub:      { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3, fontWeight: '400' },
+  headerSyncLabel: { fontSize: 11, color: 'rgba(255,255,255,0.40)', marginTop: 2, fontWeight: '500' },
 
   headerIconBtn: {
     width: 44, height: 44, borderRadius: 22,

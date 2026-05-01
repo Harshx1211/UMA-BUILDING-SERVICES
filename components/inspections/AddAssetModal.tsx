@@ -13,7 +13,7 @@ import { cardShadow } from '@/components/ui/Card';
 import { useColors } from '@/hooks/useColors';
 import { insertRecord, addToSyncQueue } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
-import { ASSET_TYPES, getInspectionRoutine } from '@/constants/AssetData';
+import { useCatalogueStore } from '@/store/catalogueStore';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
@@ -29,6 +29,7 @@ interface AddAssetModalProps {
 export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdded }: AddAssetModalProps) {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  const { assetTypes } = useCatalogueStore();
 
   // ── Step state ────────────────────────────────────────────────
   const [step, setStep]               = useState<Step>('type');
@@ -47,9 +48,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [errors,       setErrors]       = useState<{ location?: string; type?: string }>({});
 
   // ── Derived ───────────────────────────────────────────────────
-  const typeDef    = useMemo(() => ASSET_TYPES.find(t => t.value === selectedType), [selectedType]);
-  const variants   = useMemo(() => typeDef?.variants ?? [], [typeDef]);
-  const routine    = selectedType ? getInspectionRoutine(selectedType) : '';
+  const typeDef  = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
+  const variants  = useMemo(() => typeDef?.variants ?? [], [typeDef]);
+  const routine   = useMemo(() => typeDef?.inspectionRoutine ?? '', [typeDef]);
 
   const filteredVariants = useMemo(() => {
     if (!variantSearch.trim()) return variants;
@@ -80,7 +81,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     setSelectedType(value);
     setSelectedVariant('');
     setVariantSearch('');
-    const def = ASSET_TYPES.find(t => t.value === value);
+    const def = assetTypes.find(t => t.value === value);
     if (def && def.variants.length > 0) {
       setStep('variant');
     } else {
@@ -220,7 +221,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             )}
             <View style={s.typeGrid}>
-              {ASSET_TYPES.map(t => (
+              {assetTypes.map(t => (
                 <TouchableOpacity
                   key={t.value}
                   style={[s.typeCard, {
@@ -326,6 +327,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             ) : null}
 
+            <Text style={[s.sectionTitle, { color: C.textSecondary }]}>Core Details</Text>
+            <View style={[s.formCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
+
             {/* Location */}
             <View style={s.field}>
               <Text style={[s.fieldLabel, { color: C.text }]}>Location on Site *</Text>
@@ -363,6 +367,24 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 maxLength={15}
               />
             </View>
+
+            {/* Notes */}
+            <View style={[s.field, { marginBottom: 0 }]}>
+              <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
+              <TextInput
+                style={[s.input, s.textArea, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
+                placeholder="Condition, age, additional info…"
+                placeholderTextColor={C.textTertiary}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+
+          <Text style={[s.sectionTitle, { color: C.textSecondary, marginTop: 4 }]}>Specification</Text>
+          <View style={[s.formCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
 
             {/* Quantity */}
             <View style={s.field}>
@@ -413,7 +435,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
 
             {/* Serial number (single asset only) */}
             {quantity === 1 && (
-              <View style={s.field}>
+              <View style={[s.field, { marginBottom: 0 }]}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
                 <Text style={[s.fieldHint, { color: C.textTertiary }]}>
                   Found on the asset tag or compliance label.
@@ -428,20 +450,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 />
               </View>
             )}
-
-            {/* Notes */}
-            <View style={s.field}>
-              <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
-              <TextInput
-                style={[s.input, s.textArea, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
-                placeholder="Condition, age, additional info…"
-                placeholderTextColor={C.textTertiary}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
+          </View>
 
             {/* Spacer for bottom bar */}
             <View style={{ height: 16 }} />
@@ -518,9 +527,12 @@ const s = StyleSheet.create({
   // Details
   detailsScroll: { padding: 16, paddingBottom: 48, gap: 4 },
 
-  routineBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  routineBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
   routineLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
   routineValue: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+
+  sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4 },
+  formCard:     { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 20 },
 
   field:      { marginBottom: 16 },
   fieldLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6 },

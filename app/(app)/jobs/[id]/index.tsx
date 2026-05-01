@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking, Modal, Platform, ScrollView, StyleSheet,
-  View, TouchableOpacity, TextInput,
+  View, TouchableOpacity, TextInput, Alert,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
   getSignatureForJob, updateRecord, addToSyncQueue,
 } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button } from '@/components/ui';
@@ -41,6 +42,7 @@ type JobDetail = {
   property_suburb: string | null; property_state: string | null; property_postcode: string | null;
   site_contact_name: string | null; site_contact_phone: string | null;
   access_notes: string | null; hazard_notes: string | null;
+  report_url: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -206,6 +208,41 @@ export default function JobDetailScreen() {
     Toast.show({ type: 'success', text1: 'Notes saved ✓' });
   };
 
+  // ── Continue Working ────────────────────────────────────────────────────────
+  const handleContinueWorking = () => {
+    if (!job) return;
+    Alert.alert(
+      'Continue Working?',
+      'This will re-open the job and unlock the inspection form. The existing data is preserved — you can add more and re-generate the report when done.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue Working',
+          onPress: async () => {
+            const now = new Date().toISOString();
+            // Update local DB first for instant UI response
+            updateRecord('jobs', job.id, { status: JobStatus.InProgress, report_url: null, updated_at: now });
+            // Update jobsStore so list reflects change
+            updateJobStatus(job.id, JobStatus.InProgress);
+            // Update local state
+            setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
+            Toast.show({ type: 'success', text1: '🔓 Job re-opened', text2: 'Inspection form unlocked' });
+            // Directly update Supabase (we need connectivity for this)
+            try {
+              await supabase.from('jobs')
+                .update({ status: 'in_progress', report_url: null, updated_at: now })
+                .eq('id', job.id);
+            } catch (e) {
+              console.warn('[SiteTrack] Could not sync continue-working to Supabase:', e);
+              // Add to sync queue as fallback
+              addToSyncQueue('jobs', job.id, SyncOperation.Update, { status: JobStatus.InProgress, report_url: null, updated_at: now });
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleNavigate = () => {
     if (!job) return;
     const addr = [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ');
@@ -321,6 +358,13 @@ export default function JobDetailScreen() {
                   <Text style={[s.statusBannerSub, { color: C.successDark }]}>Client signature captured</Text>
                 )}
               </View>
+              <TouchableOpacity
+                onPress={handleContinueWorking}
+                style={[s.continueBtn, { backgroundColor: C.successDark + '18', borderColor: C.success }]}
+              >
+                <MaterialCommunityIcons name="pencil-outline" size={14} color={C.successDark} />
+                <Text style={[s.continueBtnTxt, { color: C.successDark }]}>Continue</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -619,20 +663,27 @@ export default function JobDetailScreen() {
 
       {/* ── BOTTOM ACTION BAR ─────────────────────────────────────── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {/* FLOW-6 FIX: Report only accessible after job has started.
-             Scheduled/Cancelled = disabled. InProgress = draft preview. Completed = full report. */}
         <Button
           title={
-            isCompleted  ? 'View Full Report' :
-            isInProgress ? 'Draft Preview' :
+            isCompleted && job?.report_url ? 'View Report' :
+            isCompleted                    ? 'Generate Report' :
+            isInProgress                   ? 'Draft Preview' :
             'Report Not Available'
           }
           variant={isCompleted ? 'secondary' : 'primary'}
           disabled={isScheduled || isCancelled}
-          onPress={() => { if (!isScheduled && !isCancelled) router.push(`/jobs/${id}/report` as never); }}
+          onPress={() => {
+            if (isScheduled || isCancelled) return;
+            if (isCompleted && job?.report_url) {
+              // Already have a report — go to report screen which shows Open + Re-generate
+              router.push(`/jobs/${id}/report` as never);
+            } else {
+              router.push(`/jobs/${id}/report` as never);
+            }
+          }}
           icon={
             <MaterialCommunityIcons
-              name={isCompleted ? 'file-eye-outline' : 'file-chart-outline'}
+              name={isCompleted && job?.report_url ? 'file-check-outline' : isCompleted ? 'file-chart-outline' : 'file-eye-outline'}
               size={20}
               color={(isScheduled || isCancelled) ? C.textTertiary : '#FFFFFF'}
             />
@@ -751,6 +802,8 @@ const s = StyleSheet.create({
   statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1 },
   statusBannerTitle: { fontSize: 14, fontWeight: '700' },
   statusBannerSub:   { fontSize: 12, marginTop: 2 },
+  continueBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  continueBtnTxt:    { fontSize: 12, fontWeight: '700' },
 
   // Safety alerts
   alertBox:   { flexDirection: 'row', padding: 16, borderRadius: 16, gap: 12, borderWidth: 1 },

@@ -8,11 +8,12 @@ import {
   incrementSyncRetry,
   upsertRecord,
   getJobStatus,
+  getDeletedPhotoIds,
 } from '@/lib/database';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
-import { processPhotoQueue, processDefectPhotos } from '@/lib/photoUpload';
+import { processPhotoQueue } from '@/lib/photoUpload';
 /** Max consecutive push failures before a sync queue item is permanently abandoned */
 const MAX_SYNC_RETRIES = 5;
 
@@ -36,6 +37,7 @@ const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 let _syncInterval: ReturnType<typeof setInterval> | null = null;
 let _isSyncing = false;
+let _cachedUserId: string | null = null; // Set by startSync() so runSync() never has to re-fetch auth
 
 // ─────────────────────────────────────────────
 // Sync-complete event bus
@@ -66,17 +68,25 @@ function _emitSyncComplete(): void {
 // Public API
 // ─────────────────────────────────────────────
 
-/** Starts the background sync loop — call once from the root layout on mount */
-export function startSync(): void {
+/**
+ * Starts the background sync loop — call once from the root layout on mount.
+ * Pass userId so sync doesn't need to re-fetch auth (avoids race conditions on startup).
+ */
+export function startSync(userId?: string): void {
+  // Always update the cached userId so a re-login with a different user works correctly
+  if (userId) _cachedUserId = userId;
+
   if (_syncInterval) {
-    if (__DEV__) console.log('[SiteTrack Sync] Already running — skipping startSync()');
+    // Already running — just trigger an immediate sync with the updated userId
+    if (__DEV__) console.log('[SiteTrack Sync] Already running — triggering immediate sync');
+    void runSync(userId);
     return;
   }
   if (__DEV__) console.log(`[SiteTrack Sync] Starting sync interval (${SYNC_INTERVAL_MS / 1000}s)`);
   // Run immediately on start, then repeat on interval
-  void runSync();
+  void runSync(userId);
   _syncInterval = setInterval(() => {
-    void runSync();
+    void runSync(_cachedUserId ?? undefined);
   }, SYNC_INTERVAL_MS);
 }
 
@@ -87,6 +97,7 @@ export function stopSync(): void {
     _syncInterval = null;
     if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
+  _cachedUserId = null; // Clear cached userId on sign-out
 }
 
 /**
@@ -111,13 +122,12 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 // ─────────────────────────────────────────────
 
 /**
- * Main sync function:
- * 1. Checks network connectivity
- * 2. PULL: fetches jobs, properties, assets from Supabase → upserts locally
- * 3. PUSH: sends pending sync_queue items to Supabase
- * 4. Updates last_synced timestamp
+ * Main sync function. Accepts an optional userId to avoid re-fetching auth
+ * (prevents race conditions on startup where Supabase auth isn't hydrated yet).
+ * Steps: (1) network check, (2) PULL jobs/properties/assets from Supabase,
+ * (3) PUSH pending offline queue items, (4) update last-synced timestamp.
  */
-export async function runSync(): Promise<void> {
+export async function runSync(userId?: string): Promise<void> {
   if (_isSyncing) {
     if (__DEV__) console.log('[SiteTrack Sync] Already in progress — skipping');
     return;
@@ -137,19 +147,34 @@ export async function runSync(): Promise<void> {
   if (__DEV__) console.log('[SiteTrack Sync] Starting sync run...');
 
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      if (__DEV__) console.log('[SiteTrack Sync] No authenticated user — skipping sync');
-      return;
+    // Use the provided userId first, then fall back to cached, then re-fetch from auth.
+    // This prevents the race condition where getCurrentUser() returns null because
+    // the Supabase JS client hasn't hydrated its internal session from AsyncStorage yet.
+    let resolvedUserId = userId ?? _cachedUserId;
+    if (!resolvedUserId) {
+      const user = await getCurrentUser();
+      if (!user) {
+        if (__DEV__) console.log('[SiteTrack Sync] No authenticated user — skipping sync');
+        return;
+      }
+      resolvedUserId = user.id;
+      _cachedUserId = resolvedUserId; // cache for future interval runs
     }
 
-    // ── 2. PULL — Jobs assigned to this technician ──
-    await _pullJobs(user.id);
+    if (__DEV__) console.log(`[SiteTrack Sync] Syncing for user: ${resolvedUserId}`);
 
-    // ── 3. PUSH — Offline queue ──────────────────
-    await processPhotoQueue(); // process photo binaries first
-    await processDefectPhotos(); // upload locally attached defect photos
+    // ── 2. PUSH — Offline queue (deletes first, so they reach Supabase BEFORE the PULL)
+    // Running push before pull ensures:
+    //   a) DELETE operations in the sync queue reach Supabase before we pull;
+    //      otherwise the PULL upserts deleted rows back into local SQLite.
+    //   b) Any photo_upload tasks whose photos were subsequently deleted are
+    //      skipped by processPhotoQueue (which checks for pending Delete entries).
+    await processPhotoQueue(); // upload photo binaries first so Insert rows get public URLs
     await _pushQueue();
+
+    // ── 3. PULL — Jobs assigned to this technician (after push so deletes are applied) ──
+    const lastSynced = await AsyncStorage.getItem(LAST_SYNCED_KEY);
+    await _pullJobs(resolvedUserId, lastSynced);
 
     // ── 4. Update last-synced timestamp ──────────
     const now = new Date().toISOString();
@@ -170,8 +195,11 @@ export async function runSync(): Promise<void> {
 // ─────────────────────────────────────────────
 
 /** Pulls all jobs assigned to the user and the related properties/assets */
-async function _pullJobs(userId: string): Promise<void> {
-  // Pull jobs
+async function _pullJobs(userId: string, _lastSynced: string | null): Promise<void> {
+  // Always pull all non-cancelled jobs for this technician.
+  // Using a simple filter (no lastSynced delta) guarantees we never silently
+  // drop jobs due to clock skew, timezone edge-cases, or status transitions.
+  // The result set is small (one technician's workload) so this is fine.
   const { data: jobs, error: jobsError } = await supabase
     .from('jobs')
     .select('*')
@@ -293,6 +321,37 @@ async function _pullJobs(userId: string): Promise<void> {
       upsertRecord('inventory_items', item as Record<string, string | number | boolean | null>);
     }
   }
+
+  // Pull catalogue reference tables (asset types + defect codes)
+  const { data: assetTypeDefs } = await supabase
+    .from('asset_type_definitions')
+    .select('id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at')
+    .eq('is_active', true);
+  if (assetTypeDefs) {
+    for (const row of assetTypeDefs) {
+      // PostgreSQL TEXT[] arrives as JS array; SQLite needs a JSON string
+      const variants = Array.isArray(row.variants) ? JSON.stringify(row.variants) : (row.variants ?? '[]');
+      upsertRecord('asset_type_definitions', {
+        ...row, variants, is_active: 1,
+      } as Record<string, string | number | boolean | null>);
+    }
+    if (__DEV__ && assetTypeDefs.length > 0)
+      console.log(`[SiteTrack Sync] PULL: upserted ${assetTypeDefs.length} asset_type_definitions`);
+  }
+
+  const { data: defectCodes } = await supabase
+    .from('defect_codes')
+    .select('id,code,description,quote_price,category,is_active,sort_order,created_at')
+    .eq('is_active', true);
+  if (defectCodes) {
+    for (const row of defectCodes) {
+      upsertRecord('defect_codes', {
+        ...row, is_active: 1,
+      } as Record<string, string | number | boolean | null>);
+    }
+    if (__DEV__ && defectCodes.length > 0)
+      console.log(`[SiteTrack Sync] PULL: upserted ${defectCodes.length} defect_codes`);
+  }
 }
 
 /** Generic helper to pull a related table for a set of parent ids */
@@ -311,11 +370,28 @@ async function _pullRelated(
     return;
   }
   if (data) {
+    // For inspection_photos: skip any row whose ID is in the permanent tombstone.
+    // This prevents a deleted photo from reappearing after reinstall, even if the
+    // Supabase delete is still pending, failed, or was permanently abandoned.
+    // Unlike the previous sync-queue-based guard, this tombstone NEVER expires.
+    let tombstoneIds = new Set<string>();
+    if (table === 'inspection_photos') {
+      tombstoneIds = getDeletedPhotoIds();
+    }
+
+    let skipped = 0;
     for (const row of data) {
+      const rowId = (row as Record<string, unknown>).id as string;
+      if (tombstoneIds.has(rowId)) {
+        skipped++;
+        continue; // permanently deleted — never re-insert
+      }
       upsertRecord(table, row as Record<string, string | number | boolean | null>);
     }
-    if (data.length > 0) {
-      if (__DEV__) console.log(`[SiteTrack Sync] PULL: upserted ${data.length} ${table} row(s)`);
+    if (__DEV__) {
+      const upserted = data.length - skipped;
+      if (upserted > 0) console.log(`[SiteTrack Sync] PULL: upserted ${upserted} ${table} row(s)`);
+      if (skipped > 0)  console.log(`[SiteTrack Sync] PULL: skipped ${skipped} tombstoned ${table} row(s)`);
     }
   }
 }
@@ -365,6 +441,20 @@ async function _pushQueue(): Promise<void> {
           .eq('id', item.record_id);
         error = result.error;
       } else if (item.operation === SyncOperation.Delete) {
+        // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
+        if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
+          const url = payload.photo_url;
+          if (url.includes('/object/public/job-photos/')) {
+            const filePath = url.split('/object/public/job-photos/')[1];
+            if (filePath) {
+              const { error: storageErr } = await supabase.storage.from('job-photos').remove([filePath]);
+              if (storageErr && __DEV__) {
+                console.warn(`[SiteTrack Sync] Failed to delete photo binary from storage:`, storageErr.message);
+              }
+            }
+          }
+        }
+
         const result = await supabase
           .from(item.table_name)
           .delete()

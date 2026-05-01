@@ -1,5 +1,4 @@
 // Root layout — providers, theme, toast. NO navigation logic here.
-import 'react-native-url-polyfill/auto';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

@@ -1,6 +1,10 @@
 /**
  * Defect Detail Screen — app/(app)/jobs/[id]/defects/[defectId].tsx
- * Full view of a single defect with status update, photos lightbox, and edit/delete.
+ *
+ * Access rules:
+ *   - Job is IN PROGRESS  → read-only info card + Delete button (mistake correction)
+ *   - Job is COMPLETED    → fully read-only, no delete, locked notice shown
+ *   - Status changes and pricing are ALWAYS admin-only (no chips on mobile)
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -15,9 +19,9 @@ import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
-import { getDefectById } from '@/lib/database';
+import { getDefectById, getJobById } from '@/lib/database';
 import { useDefectsStore } from '@/store/defectsStore';
-import { DefectSeverity, DefectStatus } from '@/constants/Enums';
+import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -47,52 +51,52 @@ const SEVERITY_CONFIG: Record<DefectSeverity, { color: string; label: string; ic
   [DefectSeverity.Minor]:    { color: '#2563EB', label: 'Minor',    icon: 'alert-circle-outline', bg: '#DBEAFE' },
 };
 
-const STATUS_OPTIONS: { value: DefectStatus; label: string; color: string; icon: string }[] = [
-  { value: DefectStatus.Open,       label: 'Open',       color: '#DC2626', icon: 'alert-circle' },
-  { value: DefectStatus.Monitoring, label: 'Monitoring', color: '#D97706', icon: 'eye-outline' },
-  { value: DefectStatus.Quoted,     label: 'Quoted',     color: '#2563EB', icon: 'file-document-outline' },
-  { value: DefectStatus.Repaired,   label: 'Repaired',   color: '#16A34A', icon: 'check-circle' },
-];
+const STATUS_COLORS: Record<DefectStatus, string> = {
+  [DefectStatus.Open]:       '#DC2626',
+  [DefectStatus.Monitoring]: '#D97706',
+  [DefectStatus.Quoted]:     '#2563EB',
+  [DefectStatus.Repaired]:   '#16A34A',
+};
 
 export default function DefectDetailScreen() {
   const C = useColors();
   const { id: jobId, defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
-  const { updateDefectStatus, deleteDefect } = useDefectsStore();
+  const { deleteDefect } = useDefectsStore();
 
-  const [defect,        setDefect]        = useState<FullDefect | null>(null);
-  const [isLoading,     setIsLoading]     = useState(true);
-  const [lightboxUri,   setLightboxUri]   = useState<string | null>(null);
+  const [defect,      setDefect]      = useState<FullDefect | null>(null);
+  const [isLoading,   setIsLoading]   = useState(true);
+  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [jobLocked,   setJobLocked]   = useState(false); // true when job is completed
 
   const loadDefect = useCallback(() => {
     if (!defectId) return;
     setIsLoading(true);
     const d = getDefectById<FullDefect>(defectId);
     setDefect(d);
+
+    // Determine lock state from the job record
+    if (d?.job_id) {
+      const job = getJobById<{ status: string }>(d.job_id);
+      setJobLocked(job?.status === JobStatus.Completed);
+    }
     setIsLoading(false);
   }, [defectId]);
 
   useEffect(() => { loadDefect(); }, [loadDefect]);
 
-  const handleStatusChange = (status: DefectStatus) => {
-    if (!defect) return;
-    updateDefectStatus(defect.id, status);
-    setDefect(prev => prev ? { ...prev, status } : prev);
-    Toast.show({ type: 'success', text1: `Status updated to ${status}` });
-  };
-
   const handleDelete = () => {
     Alert.alert(
-      'Delete Defect',
-      'This cannot be undone. The defect record will be permanently removed.',
+      'Remove Defect',
+      'This will permanently remove the defect record. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Remove',
           style: 'destructive',
           onPress: () => {
             if (!defect) return;
             deleteDefect(defect.id);
-            Toast.show({ type: 'success', text1: 'Defect deleted' });
+            Toast.show({ type: 'success', text1: 'Defect removed' });
             router.back();
           },
         },
@@ -120,9 +124,9 @@ export default function DefectDetailScreen() {
     );
   }
 
-  const sev = SEVERITY_CONFIG[defect.severity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
-  const statusOpt = STATUS_OPTIONS.find(s => s.value === defect.status) ?? STATUS_OPTIONS[0];
-  const codeInfo = defect.defect_code ? findDefectCode(defect.defect_code) : null;
+  const sev        = SEVERITY_CONFIG[defect.severity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
+  const statusColor = STATUS_COLORS[defect.status as DefectStatus] ?? C.textSecondary;
+  const codeInfo   = defect.defect_code ? findDefectCode(defect.defect_code) : null;
 
   let photosArr: string[] = [];
   try {
@@ -138,17 +142,28 @@ export default function DefectDetailScreen() {
         showBack
         curved
         rightComponent={
-          <View
-            style={[s.statusChip, { backgroundColor: statusOpt.color + '22', borderColor: statusOpt.color + '55' }]}
-          >
-            <MaterialCommunityIcons name={statusOpt.icon as any} size={13} color={statusOpt.color} />
-            <Text style={[s.statusChipTxt, { color: statusOpt.color }]}>{statusOpt.label.toUpperCase()}</Text>
-            <MaterialCommunityIcons name="chevron-down" size={12} color={statusOpt.color} />
+          <View style={[s.statusChip, { backgroundColor: statusColor + '22', borderColor: statusColor + '55' }]}>
+            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={[s.statusChipTxt, { color: statusColor }]}>
+              {defect.status.charAt(0).toUpperCase() + defect.status.slice(1)}
+            </Text>
           </View>
         }
       />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+
+        {/* Locked notice — shown when job is completed */}
+        {jobLocked && (
+          <Animated.View entering={FadeInDown.delay(20).duration(300)}>
+            <View style={[s.lockedBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+              <MaterialCommunityIcons name="lock-outline" size={15} color={C.textTertiary} />
+              <Text style={[s.lockedTxt, { color: C.textTertiary }]}>
+                Quote & status managed by admin · Read-only view
+              </Text>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Severity Banner */}
         <Animated.View entering={FadeInDown.delay(40).duration(380)}>
@@ -162,15 +177,21 @@ export default function DefectDetailScreen() {
                 Logged {new Date(defect.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
               </Text>
             </View>
-            {defect.quote_price && (
+            {defect.quote_price ? (
               <View style={[s.priceBadge, { backgroundColor: '#10B981' + '18', borderColor: '#10B981' + '40' }]}>
-                <Text style={s.priceBadgeTxt}>Ref: ${defect.quote_price}</Text>
+                <MaterialCommunityIcons name="tag-outline" size={11} color="#10B981" />
+                <Text style={s.priceBadgeTxt}>${defect.quote_price}</Text>
+              </View>
+            ) : (
+              <View style={[s.priceBadge, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+                <MaterialCommunityIcons name="tag-outline" size={11} color={C.textTertiary} />
+                <Text style={[s.priceBadgeTxt, { color: C.textTertiary }]}>Unquoted</Text>
               </View>
             )}
           </View>
         </Animated.View>
 
-        {/* Code badge */}
+        {/* Defect Code */}
         {codeInfo && (
           <Animated.View entering={FadeInDown.delay(70).duration(380)}>
             <View style={[s.codeBanner, { backgroundColor: C.primary + '0D', borderColor: C.primary + '30' }]}>
@@ -248,65 +269,39 @@ export default function DefectDetailScreen() {
           </Animated.View>
         )}
 
-        {/* Status history hint */}
+        {/* Status info (read-only) */}
         <Animated.View entering={FadeInDown.delay(190).duration(380)}>
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-            <Text style={[s.cardLabel, { color: C.textTertiary }]}>STATUS</Text>
-            <View style={s.statusRow}>
-              {STATUS_OPTIONS.map(opt => {
-                const isActive = defect.status === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      s.statusOption,
-                      {
-                        backgroundColor: isActive ? opt.color : C.backgroundTertiary,
-                        borderColor: isActive ? opt.color : C.border,
-                      },
-                    ]}
-                    onPress={() => handleStatusChange(opt.value)}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons
-                      name={opt.icon as any}
-                      size={14}
-                      color={isActive ? '#FFF' : C.textSecondary}
-                    />
-                    <Text style={[s.statusOptionTxt, { color: isActive ? '#FFF' : C.textSecondary }]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={[s.cardLabel, { color: C.textTertiary }]}>CURRENT STATUS</Text>
+            <View style={s.statusReadRow}>
+              <View style={[s.statusReadPill, { backgroundColor: statusColor + '18', borderColor: statusColor + '40' }]}>
+                <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={[s.statusReadTxt, { color: statusColor }]}>
+                  {defect.status.charAt(0).toUpperCase() + defect.status.slice(1)}
+                </Text>
+              </View>
+              <Text style={[s.statusAdminNote, { color: C.textTertiary }]}>
+                Status updates managed by admin
+              </Text>
             </View>
           </View>
         </Animated.View>
 
       </ScrollView>
 
-      {/* Bottom action bar */}
-      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {/* Navigate to quote */}
-        <TouchableOpacity
-          style={[s.bottomBtn, { backgroundColor: C.primary + '18', borderColor: C.primary + '30' }]}
-          onPress={() => router.push(`/jobs/${jobId}/quote` as never)}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons name="file-document-edit-outline" size={18} color={C.primary} />
-          <Text style={[s.bottomBtnTxt, { color: C.primary }]}>Add to Quote</Text>
-        </TouchableOpacity>
-
-        {/* Delete */}
-        <TouchableOpacity
-          style={[s.bottomBtn, { backgroundColor: C.error + '12', borderColor: C.error + '30' }]}
-          onPress={handleDelete}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons name="delete-outline" size={18} color={C.error} />
-          <Text style={[s.bottomBtnTxt, { color: C.error }]}>Delete</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bottom action bar — Delete only when job is in_progress */}
+      {!jobLocked && (
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+          <TouchableOpacity
+            style={[s.bottomBtn, { backgroundColor: C.error + '12', borderColor: C.error + '30' }]}
+            onPress={handleDelete}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="delete-outline" size={18} color={C.error} />
+            <Text style={[s.bottomBtnTxt, { color: C.error }]}>Remove Defect</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Photo Lightbox */}
       <Modal visible={!!lightboxUri} transparent animationType="fade" onRequestClose={() => setLightboxUri(null)}>
@@ -328,11 +323,19 @@ const s = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
 
   statusChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 10, borderWidth: 1,
   },
+  statusDot:    { width: 7, height: 7, borderRadius: 4 },
   statusChipTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+
+  lockedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 10, borderWidth: 1, marginBottom: 12,
+  },
+  lockedTxt: { fontSize: 12, fontStyle: 'italic', flex: 1 },
 
   sevBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -342,7 +345,10 @@ const s = StyleSheet.create({
   sevIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   sevLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
   sevDate:     { fontSize: 11, marginTop: 2 },
-  priceBadge:  { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+  priceBadge:  {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
+  },
   priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#10B981' },
 
   codeBanner: {
@@ -373,27 +379,26 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statusOption: {
+  statusReadRow:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statusReadPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 12, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1,
   },
-  statusOptionTxt: { fontSize: 12, fontWeight: '700' },
+  statusReadTxt:   { fontSize: 13, fontWeight: '700' },
+  statusAdminNote: { fontSize: 11, fontStyle: 'italic', flex: 1 },
 
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', gap: 12,
     padding: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
   },
   bottomBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, height: 50, borderRadius: 14, borderWidth: 1,
   },
   bottomBtnTxt: { fontSize: 14, fontWeight: '700' },
 
-  // Lightbox
   lightbox:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   lightboxClose: {
     position: 'absolute', top: Platform.OS === 'ios' ? 56 : 20, right: 20,

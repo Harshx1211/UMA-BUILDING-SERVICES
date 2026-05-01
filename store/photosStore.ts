@@ -7,6 +7,8 @@ import {
   updateRecord,
   deleteRecord,
   addToSyncQueue,
+  cancelPendingPhotoUpload,
+  recordDeletedPhoto,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { queuePhotoUpload } from '@/lib/photoUpload';
@@ -76,14 +78,36 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   deletePhoto: (photoId) => {
     try {
+      const photo = get().photos.find((p) => p.id === photoId);
+      const photoUrl = photo?.photo_url;
+
+      // 1. Remove from local SQLite immediately
       deleteRecord('inspection_photos', photoId);
-      addToSyncQueue('inspection_photos', photoId, SyncOperation.Delete, { id: photoId });
+
+      // 2. Permanently record in tombstone — survives retries/reinstalls
+      recordDeletedPhoto(photoId);
+
+      if (photoUrl?.startsWith('https://')) {
+        // Photo already uploaded to Supabase — queue a delete for both the DB row
+        // and the Storage binary (sync.ts _pushQueue handles the binary deletion).
+        addToSyncQueue('inspection_photos', photoId, SyncOperation.Delete, {
+          id: photoId,
+          photo_url: photoUrl,
+        });
+      } else {
+        // Photo only exists locally (file:// URI, never uploaded).
+        // Cancel the pending photo_upload task so it is never sent to Supabase.
+        // No Supabase row exists yet, so no DB delete is needed.
+        cancelPendingPhotoUpload(photoId);
+      }
+
       set((state) => ({ photos: state.photos.filter((p) => p.id !== photoId) }));
     } catch (err: unknown) {
       console.error('[PhotosStore] deletePhoto error:', err);
       set({ error: errorMessage(err) });
     }
   },
+
 
   updateCaption: (photoId, caption) => {
     try {

@@ -20,6 +20,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Card, Input } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 const REMEMBER_ME_KEY = '@sitetrack/remember_me';
 
@@ -27,6 +28,7 @@ export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
   const C = useColors();
   const scrollRef = useRef<ScrollView>(null);
+  const { isOnline } = useNetworkStatus();
 
   const [email, setEmail]                   = useState('');
   const [password, setPassword]             = useState('');
@@ -157,6 +159,14 @@ export default function LoginScreen() {
 
             <Text style={[styles.formTitle, { color: C.text }]}>Welcome back 👋</Text>
             <Text style={[styles.formSub, { color: C.textSecondary }]}>Sign in to your account to continue</Text>
+
+            {/* Offline banner */}
+            {!isOnline && (
+              <View style={[styles.errorBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40', borderWidth: 1 }]}>
+                <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />
+                <Text style={[styles.errorBannerText, { color: C.warningDark }]}>You are offline. Please connect to the internet to sign in.</Text>
+              </View>
+            )}
 
             {/* Error banner */}
             {error && (

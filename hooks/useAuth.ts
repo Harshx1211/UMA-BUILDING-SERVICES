@@ -21,6 +21,7 @@ export function useAuth() {
         .replace('Invalid login credentials', 'Incorrect email or password.')
         .replace('Email not confirmed', 'Please verify your email before signing in.')
         .replace('User not found', 'No account found with that email address.')
+        .replace(/Network request failed|fetch failed/i, 'Network Error: Please check your internet connection and ensure the server is reachable.')
     : null;
 
   return {

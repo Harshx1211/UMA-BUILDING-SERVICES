@@ -287,6 +287,12 @@ CREATE POLICY "photos_insert_via_job" ON public.inspection_photos
     EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = job_id AND j.assigned_to = auth.uid())
   );
 
+-- DELETE: technician can delete photos they uploaded, for jobs assigned to them
+CREATE POLICY "photos_delete_via_job" ON public.inspection_photos
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = job_id AND j.assigned_to = auth.uid())
+  );
+
 
 -- ────────────────────────────────────────────────────────────
 -- TABLE: signatures

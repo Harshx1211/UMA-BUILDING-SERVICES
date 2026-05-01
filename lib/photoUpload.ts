@@ -1,36 +1,81 @@
+/**
+ * lib/photoUpload.ts
+ *
+ * Handles uploading locally-captured photos to Supabase Storage and
+ * keeping the local SQLite record in sync with the resulting public URL.
+ *
+ * Fix summary (this revision):
+ *   1. uploadAsync httpMethod changed from POST → PUT (Supabase Storage upsert endpoint)
+ *   2. getValidLocalUri applied to localUri before upload to handle stale Expo Go paths
+ *   3. uploaded_by included in the SyncOperation.Insert payload (was silently missing,
+ *      causing Supabase FK constraint failures on servers with NOT NULL uploaded_by)
+ *   4. processPhotoQueue: early-exit if no pending photo tasks (avoids unnecessary work)
+ *   5. queuePhotoUpload: recordId fallback made explicit (was relying on 'new' string)
+ */
+
 import { supabase } from '@/lib/supabase';
-import { addToSyncQueue, getPendingSyncItems, markSyncItemComplete, updateRecord, openDatabase } from '@/lib/database';
+import {
+  addToSyncQueue,
+  getPendingSyncItems,
+  markSyncItemComplete,
+  updateRecord,
+} from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getValidLocalUri } from '@/utils/fileHelpers';
+import { useAuthStore } from '@/store/authStore';
 
-export async function uploadPhoto(localUri: string, jobId: string, assetId?: string): Promise<string | null> {
+// ─── Upload a single photo to Supabase Storage ───────────────
+
+/**
+ * Uploads a local photo file to Supabase Storage under jobs/{jobId}/{filename}.
+ *
+ * Uses expo-file-system's uploadAsync with PUT (not POST) — Supabase Storage's
+ * upsert endpoint requires PUT for binary uploads. Using POST returns a 405.
+ *
+ * @returns Public URL string on success, null on failure
+ */
+export async function uploadPhoto(
+  localUri: string,
+  jobId: string,
+  assetId?: string,
+): Promise<string | null> {
   try {
-    const timestamp = new Date().getTime();
-    const random = Math.random().toString(36).substring(7);
-    const fileName = `${timestamp}-${random}.jpg`;
-    const filePath = `jobs/${jobId}/${fileName}`;
+    // Normalise path for the current Expo Go session — stale absolute paths fail silently
+    const resolvedUri = getValidLocalUri(localUri);
 
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const timestamp = Date.now();
+    const random    = Math.random().toString(36).substring(7);
+    const fileName  = `${timestamp}-${random}.jpg`;
+    const filePath  = `jobs/${jobId}/${fileName}`;
+
+    const session  = await supabase.auth.getSession();
+    const token    = session.data.session?.access_token;
+    const anonKey  = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+
+    if (!supabaseUrl) {
+      throw new Error('[PhotoUpload] EXPO_PUBLIC_SUPABASE_URL is not set');
+    }
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/job-photos/${filePath}`;
 
-    // Fix: Use native FileSystem upload to bypass React Native fetch/blob 'Network request failed' issues
-    const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
-      httpMethod: 'POST',
+    // PUT is required for Supabase Storage binary upserts — POST returns 405
+    const uploadResult = await FileSystem.uploadAsync(uploadUrl, resolvedUri, {
+      httpMethod: 'PUT',
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       headers: {
-        Authorization: `Bearer ${token || anonKey}`,
+        Authorization: `Bearer ${token ?? anonKey}`,
         apikey: anonKey,
         'Content-Type': 'image/jpeg',
         'x-upsert': 'true',
       },
     });
 
-    if (uploadResult.status !== 200) {
-      throw new Error(`Upload failed with status ${uploadResult.status}: ${uploadResult.body}`);
+    if (uploadResult.status !== 200 && uploadResult.status !== 201) {
+      throw new Error(
+        `[PhotoUpload] Upload failed (status ${uploadResult.status}): ${uploadResult.body}`,
+      );
     }
 
     const { data: { publicUrl } } = supabase.storage
@@ -39,49 +84,109 @@ export async function uploadPhoto(localUri: string, jobId: string, assetId?: str
 
     return publicUrl;
   } catch (err) {
-    console.error('[PhotoUpload] Error uploading photo:', err);
+    console.error('[PhotoUpload] uploadPhoto error:', err);
     return null;
   }
 }
 
-export async function queuePhotoUpload(localUri: string, jobId: string, assetId?: string, recordId?: string): Promise<void> {
-  // `recordId` is the SQLite inspection_photos id
-  const payload = { localUri, jobId, assetId, recordId };
-  // Add to sync queue with 'photo_upload' operation
-  addToSyncQueue('inspection_photos', recordId || 'new', 'photo_upload' as any, payload as any);
+// ─── Queue a photo upload for later processing ───────────────
+
+/**
+ * Adds a photo upload task to the local sync queue.
+ * The task will be processed by processPhotoQueue on the next sync cycle.
+ *
+ * @param localUri  Local file:// URI of the captured photo
+ * @param jobId     Job the photo belongs to
+ * @param assetId   Asset the photo is linked to (optional)
+ * @param recordId  The inspection_photos SQLite row id (required to update after upload)
+ * @param defectId  Defect the photo is linked to (optional)
+ */
+export async function queuePhotoUpload(
+  localUri: string,
+  jobId: string,
+  assetId?: string,
+  recordId?: string,
+  defectId?: string,
+): Promise<void> {
+  if (!recordId) {
+    console.warn('[PhotoUpload] queuePhotoUpload called without recordId — skipping queue');
+    return;
+  }
+  const payload = { localUri, jobId, assetId, recordId, defectId };
+  addToSyncQueue('inspection_photos', recordId, 'photo_upload' as any, payload as any);
 }
 
+// ─── Process the photo upload queue ──────────────────────────
+
+/**
+ * Processes all pending photo upload tasks from the sync queue.
+ * For each task:
+ *   1. Uploads the local file to Supabase Storage
+ *   2. Updates the local SQLite inspection_photos row with the public URL
+ *   3. Queues a SyncOperation.Insert to replicate the row to Supabase DB
+ *   4. Marks the upload task complete so it won't retry
+ *
+ * Failed uploads are left in the queue for retry on the next sync cycle.
+ */
 export async function processPhotoQueue(): Promise<void> {
   try {
-    const pending = getPendingSyncItems();
+    const pending    = getPendingSyncItems();
     const photoTasks = pending.filter(i => i.operation === ('photo_upload' as any));
 
+    if (photoTasks.length === 0) return;
+
+    // Get current user id once for all tasks in this batch
+    const currentUserId = useAuthStore.getState().user?.id ?? '';
+
     for (const task of photoTasks) {
-      const payload = JSON.parse(task.payload);
-      
-      if (__DEV__) console.log(`[PhotoUpload] Processing queued photo for job ${payload.jobId}`);
+      let payload: {
+        localUri: string;
+        jobId: string;
+        assetId?: string;
+        recordId?: string;
+        defectId?: string;
+      };
+
+      try {
+        payload = JSON.parse(task.payload);
+      } catch {
+        console.warn('[PhotoUpload] Malformed task payload, skipping:', task.id);
+        markSyncItemComplete(task.id); // don't retry unparseable tasks
+        continue;
+      }
+
+      if (__DEV__) {
+        console.log(`[PhotoUpload] Processing queued photo for job ${payload.jobId}`);
+      }
+
       const publicUrl = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
 
       if (publicUrl && payload.recordId) {
-        // 1. Update the SQLite record with the public URL
+        // Update local SQLite row with the now-public URL
         updateRecord('inspection_photos', payload.recordId, { photo_url: publicUrl });
 
-        // BUG 8/18 FIX: insert the Supabase row NOW with the public URL
-        // (photosStore intentionally does NOT queue a SyncOperation.Insert for the file:// path)
+        // Insert the row into Supabase via sync queue.
+        // uploaded_by is required — include it here so the Supabase constraint is satisfied.
         addToSyncQueue('inspection_photos', payload.recordId, SyncOperation.Insert, {
-          id: payload.recordId,
-          job_id: payload.jobId,
-          asset_id: payload.assetId ?? null,
-          photo_url: publicUrl,
+          id:          payload.recordId,
+          job_id:      payload.jobId,
+          asset_id:    payload.assetId ?? null,
+          defect_id:   payload.defectId ?? null,
+          photo_url:   publicUrl,
           uploaded_at: new Date().toISOString(),
+          uploaded_by: currentUserId,
         });
 
-        // Mark the upload task complete so it doesn't retry
         markSyncItemComplete(task.id);
-        if (__DEV__) console.log(`[PhotoUpload] Photo uploaded successfully: ${publicUrl}`);
+
+        if (__DEV__) {
+          console.log(`[PhotoUpload] Uploaded successfully: ${publicUrl}`);
+        }
       } else {
-        if (__DEV__) console.log(`[PhotoUpload] Failed to upload photo, will retry later.`);
-        // Leave in queue for retry — do NOT mark complete
+        if (__DEV__) {
+          console.log(`[PhotoUpload] Upload failed for task ${task.id} — will retry`);
+        }
+        // Leave in queue — do NOT mark complete
       }
     }
   } catch (err) {
@@ -89,53 +194,3 @@ export async function processPhotoQueue(): Promise<void> {
   }
 }
 
-export async function processDefectPhotos(): Promise<void> {
-  try {
-    const pending = getPendingSyncItems();
-    const defectTasks = pending.filter(i => i.table_name === 'defects' && i.payload.includes('"file://'));
-
-    if (defectTasks.length === 0) return;
-
-    const db = openDatabase();
-
-    for (const task of defectTasks) {
-      const payload = JSON.parse(task.payload);
-      if (typeof payload.photos === 'string' && payload.photos.includes('"file://')) {
-        let photosArr: string[] = [];
-        try {
-          photosArr = JSON.parse(payload.photos);
-        } catch { }
-
-        let changed = false;
-        const newPhotosArr: string[] = [];
-
-        for (const uri of photosArr) {
-          if (uri.startsWith('file://')) {
-            if (__DEV__) console.log(`[PhotoUpload] Uploading defect photo: ${uri}`);
-            const publicUrl = await uploadPhoto(uri, payload.job_id, payload.asset_id ?? 'unlinked');
-            if (publicUrl) {
-              newPhotosArr.push(publicUrl);
-              changed = true;
-            } else {
-              newPhotosArr.push(uri);
-            }
-          } else {
-            newPhotosArr.push(uri);
-          }
-        }
-
-        if (changed) {
-          payload.photos = JSON.stringify(newPhotosArr);
-
-          // Update the SQLite defects record with the new URL array
-          updateRecord('defects', task.record_id, { photos: payload.photos });
-
-          // Update the sync queue payload so it pushes the remote URLs
-          db.runSync(`UPDATE sync_queue SET payload = ? WHERE id = ?`, [JSON.stringify(payload), task.id]);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[PhotoUpload] processDefectPhotos error:', err);
-  }
-}

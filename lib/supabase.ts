@@ -1,17 +1,18 @@
 // Supabase client initialisation — uses AsyncStorage for session persistence across app restarts
-import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// Add fallbacks to bypass Expo cache issues if .env was just created
+const fallbackUrl = 'https://vnrmgcxmcspdgqcnmmdx.supabase.co';
+const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucm1nY3htY3NwZGdxY25tbWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTU1NjUsImV4cCI6MjA5MDUzMTU2NX0.1k6VgJQiUrg83_dFKiKkisVeeJ83kZGj87810elmPKc';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    '[SiteTrack] Supabase env vars missing. Set EXPO_PUBLIC_SUPABASE_URL ' +
-      'and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.'
-  );
+const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || fallbackUrl).trim();
+const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || fallbackKey).trim();
+
+if (!process.env.EXPO_PUBLIC_SUPABASE_URL) {
+  console.warn('[SiteTrack] Using fallback Supabase URL. If this persists, restart Expo with --clear.');
 }
+if (__DEV__) console.log(`[SiteTrack] Supabase initialized with URL: ${supabaseUrl}`);
 
 /** Typed Supabase client — import this everywhere you need backend access */
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -21,6 +22,19 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     persistSession: true,
     detectSessionInUrl: false,
   },
+  global: {
+    fetch: async (url, options) => {
+      if (__DEV__) console.log(`[Supabase Fetch] -> ${url}`);
+      try {
+        const res = await fetch(url, options);
+        if (__DEV__) console.log(`[Supabase Fetch] <- ${res.status} ${url}`);
+        return res;
+      } catch (err) {
+        console.error(`[Supabase Fetch] ERROR for ${url}:`, err);
+        throw err;
+      }
+    }
+  }
 });
 
 /**

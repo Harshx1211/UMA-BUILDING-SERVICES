@@ -1,23 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform, Image, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Image,
+  TouchableOpacity,
+  RefreshControl,
+  Linking,
+  Alert,
+} from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { getJobById, getAssetsWithJobResults, getDefectsForJob, getSignatureForJob, getRecord } from '@/lib/database';
-import { generateJobReport } from '@/lib/pdfGenerator';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import {
+  getJobById,
+  getAssetsWithJobResults,
+  getDefectsForJob,
+  getSignatureForJob,
+  getRecord,
+} from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, SectionTitle, Card } from '@/components/ui';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import Toast from 'react-native-toast-message';
+import Animated, { FadeInDown, FadeIn, SlideInRight } from 'react-native-reanimated';
 import { formatAssetType, getAssetEmoji } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
 import type { Defect, Signature } from '@/types';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { supabase } from '@/lib/supabase';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-// Flat job+property type returned by getJobById JOIN query
 type JobWithProperty = {
   id: string; property_id: string; assigned_to: string;
   job_type: string; status: string; scheduled_date: string;
@@ -25,20 +38,162 @@ type JobWithProperty = {
   property_name: string | null; property_address: string | null;
   property_suburb: string | null; property_state: string | null;
   site_contact_name: string | null;
+  report_url: string | null;
 };
 
-// Asset with its inspection result for this job (returned by getAssetsWithJobResults JOIN)
 type ReportAsset = {
   id: string; asset_type: string; location_on_site: string | null;
   result: string | null; defect_reason: string | null;
   technician_notes: string | null; is_compliant: number | boolean;
 };
 
-const SEVERITY_CONFIG: Record<string, { color: string; label: string; icon: MCIcon }> = {
-  [DefectSeverity.Critical]: { color: '#DC2626', label: 'Critical', icon: 'alert-circle' },
-  [DefectSeverity.Major]:    { color: '#EA580C', label: 'Major',    icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: '#2563EB', label: 'Minor',    icon: 'information' },
+const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string; icon: MCIcon }> = {
+  [DefectSeverity.Critical]: { color: '#DC2626', bg: '#FEF2F2', label: 'Critical',      icon: 'alert-circle' },
+  [DefectSeverity.Major]:    { color: '#D97706', bg: '#FFFBEB', label: 'Major',          icon: 'alert' },
+  [DefectSeverity.Minor]:    { color: '#2563EB', bg: '#EFF6FF', label: 'Non-conformance', icon: 'information' },
 };
+
+// ─── Stat card ─────────────────────────────────────────────────────────────────
+
+type StatCardProps = {
+  icon: MCIcon; iconColor: string; iconBg: string;
+  value: number | string; label: string; valueColor: string;
+  surface: string; border: string;
+};
+
+function StatCard({ icon, iconColor, iconBg, value, label, valueColor, surface, border }: StatCardProps) {
+  return (
+    <View style={[s.statCard, { backgroundColor: surface, borderColor: border }]}>
+      <View style={[s.statIconWrap, { backgroundColor: iconBg }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
+      </View>
+      <Text style={[s.statVal, { color: valueColor }]}>{value}</Text>
+      <Text style={[s.statLabel, { color: '#94A3B8' }]}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Asset row ─────────────────────────────────────────────────────────────────
+
+type AssetRowProps = {
+  asset: ReportAsset;
+  index: number;
+  isLast: boolean;
+  colors: ReturnType<typeof useColors>;
+};
+
+function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
+  const isPass   = asset.result === 'pass';
+  const isFail   = asset.result === 'fail';
+  const isNT     = !isPass && !isFail;
+
+  const pillStyle = isPass
+    ? { bg: '#D1FAE5', text: '#065F46', border: '#6EE7B7', label: 'PASS' }
+    : isFail
+    ? { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', label: 'FAIL' }
+    : { bg: '#F1F5F9', text: '#64748B', border: '#CBD5E1', label: 'N/T' };
+
+  return (
+    <View style={[
+      s.assetRow,
+      !isLast && { borderBottomWidth: 1, borderBottomColor: C.border },
+      isFail && { backgroundColor: '#FFF8F8' },
+    ]}>
+      <View style={[s.assetIndexBadge, { backgroundColor: isPass ? '#D1FAE5' : isFail ? '#FEE2E2' : '#F1F5F9' }]}>
+        <Text style={[s.assetIndexText, { color: isPass ? '#065F46' : isFail ? '#991B1B' : '#64748B' }]}>
+          {String(index + 1).padStart(2, '0')}
+        </Text>
+      </View>
+      <View style={s.assetMiddle}>
+        <Text style={[s.assetName, { color: C.text }]}>
+          {getAssetEmoji(asset.asset_type)} {formatAssetType(asset.asset_type)}
+        </Text>
+        {asset.location_on_site ? (
+          <Text style={[s.assetLoc, { color: C.textSecondary }]}>
+            <MaterialCommunityIcons name="map-marker-outline" size={10} color={C.textSecondary} />{' '}
+            {asset.location_on_site}
+          </Text>
+        ) : null}
+        {isFail && asset.defect_reason ? (
+          <View style={s.defectReasonRow}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={11} color="#DC2626" />
+            <Text style={s.defectReasonTxt}>{asset.defect_reason}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={[s.resultPill, { backgroundColor: pillStyle.bg, borderColor: pillStyle.border }]}>
+        <Text style={[s.resultPillTxt, { color: pillStyle.text }]}>{pillStyle.label}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Defect card ───────────────────────────────────────────────────────────────
+
+type DefectCardProps = {
+  defect: Defect;
+  index: number;
+  colors: ReturnType<typeof useColors>;
+};
+
+function DefectCard({ defect, index, colors: C }: DefectCardProps) {
+  const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
+  const isOpen = !defect.status || defect.status === 'open';
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 60).duration(300)}>
+      <View style={[s.defectCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+        {/* Severity stripe */}
+        <View style={[s.defectStripe, { backgroundColor: sev.color }]} />
+
+        <View style={s.defectContent}>
+          {/* Header row */}
+          <View style={s.defectHeaderRow}>
+            <View style={[s.sevBadge, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
+              <MaterialCommunityIcons name={sev.icon} size={11} color={sev.color} />
+              <Text style={[s.sevBadgeTxt, { color: sev.color }]}>{sev.label.toUpperCase()}</Text>
+            </View>
+            <View style={[
+              s.statusBadge,
+              { backgroundColor: isOpen ? '#FFFBEB' : '#F0FDF4', borderColor: isOpen ? '#FDE68A' : '#BBF7D0' },
+            ]}>
+              <View style={[s.statusDot, { backgroundColor: isOpen ? '#D97706' : '#16A34A' }]} />
+              <Text style={[s.statusBadgeTxt, { color: isOpen ? '#D97706' : '#16A34A' }]}>
+                {defect.status?.replace('_', ' ').toUpperCase() ?? 'OPEN'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Description */}
+          <Text style={[s.defectDesc, { color: C.text }]}>{defect.description}</Text>
+
+          {/* Meta row */}
+          <View style={s.defectMetaRow}>
+            {(defect as any).asset_type ? (
+              <Text style={[s.defectMeta, { color: C.textSecondary }]}>
+                {getAssetEmoji((defect as any).asset_type)} {formatAssetType((defect as any).asset_type)}
+              </Text>
+            ) : null}
+            {(defect as any).defect_code ? (
+              <View style={[s.codeChip, { backgroundColor: C.primary + '15', borderColor: C.primary + '30' }]}>
+                <Text style={[s.codeChipTxt, { color: C.primary }]}>
+                  {(defect as any).defect_code.toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+            {(defect as any).quote_price != null ? (
+              <Text style={[s.defectPrice, { color: '#10B981' }]}>
+                Ref: ${(defect as any).quote_price}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ReportScreen() {
   const C = useColors();
@@ -49,88 +204,77 @@ export default function ReportScreen() {
   const [defects, setDefects]     = useState<Defect[]>([]);
   const [signature, setSignature] = useState<Signature | null>(null);
   const [techName, setTechName]   = useState<string>('Field Technician');
-  const [isLoading, setIsLoading]         = useState(true);
-  const [loadError, setLoadError]         = useState<string | null>(null);
-  const [isGenerating, setIsGenerating]   = useState(false);
-  const [progressStage, setProgressStage] = useState<string>('');
-  // Cache the generated PDF URI — avoids re-generating on every tap
-  const [generatedPdfUri, setGeneratedPdfUri] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-
-
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!jobId) return;
     try {
       const j = getJobById<JobWithProperty>(jobId);
       if (j) {
         setJob(j);
-        // BUG 25: getDefectsForJob already JOINs assets and returns asset_type
         setAssets(getAssetsWithJobResults(jobId, (j as any).property_id as string));
         setDefects(getDefectsForJob(jobId));
         setSignature(getSignatureForJob(jobId));
-        // Fetch technician full name from local users table
         const tech = getRecord<{ full_name: string }>('users', (j as any).assigned_to as string);
         if (tech?.full_name) setTechName(tech.full_name);
+        setLoadError(null);
       } else {
-        // BUG 35 FIX: explicit error state when job is not found
         setLoadError('Job data not found. It may have been deleted or not yet synced.');
       }
     } catch (e) {
       console.error(e);
-      // BUG 35 FIX: set loadError so we render an error state, not silently empty UI
       setLoadError('Failed to load job data. Please go back and try again.');
     } finally {
       setIsLoading(false);
+      setRefreshing(false);
     }
   }, [jobId]);
 
-  const STAGE_LABELS: Record<string, string> = {
-    fetching_data:     'Loading job data…',
-    processing_photos: 'Encoding photos…',
-    building_html:     'Building report…',
-    generating_pdf:    'Generating PDF…',
-    sharing:           'Opening share sheet…',
-  };
+  // ── Reload data every time this screen comes into focus ───────────────────
+  // This is critical: after navigating to preview → generating → coming back,
+  // the job.report_url in local state must reflect the newly uploaded URL.
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
-  const handleGenerate = async () => {
-    // If already generated this session, just re-share — no need to rebuild
-    if (generatedPdfUri) {
-      try {
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(generatedPdfUri, { mimeType: 'application/pdf', dialogTitle: 'Share Inspection Report', UTI: 'com.adobe.pdf' });
-        }
-      } catch { /* ignore */ }
-      return;
-    }
-    setIsGenerating(true);
-    setProgressStage('Starting…');
-    try {
-      const uri = await generateJobReport(jobId, (stage) => {
-        setProgressStage(STAGE_LABELS[stage] ?? stage);
-      });
-      setGeneratedPdfUri(uri);
-      Toast.show({ type: 'success', text1: '✅ PDF Exported Successfully!' });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      console.error('Failed to generate PDF:', e);
-      Alert.alert('Export Failed', 'There was a problem generating the PDF.\n\n' + msg);
-    } finally {
-      setIsGenerating(false);
-      setProgressStage('');
-    }
-  };
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadData();
+  }, [loadData]);
 
+  // ── Derived stats ──────────────────────────────────────────────────────────
+  const passCount  = assets.filter(a => a.result === 'pass').length;
+  const failCount  = assets.filter(a => a.result === 'fail').length;
+  const ntCount    = assets.filter(a => a.result === 'not_tested').length;
+  const isCompliant = assets.length > 0 && passCount > 0 && failCount === 0;
+  const inspectedCount = assets.filter(a => a.result !== null && a.result !== 'not_tested').length;
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
-    return <View style={[s.center, { backgroundColor: C.background }]}><ActivityIndicator color={C.primary} size="large" /></View>;
+    return (
+      <View style={[s.center, { backgroundColor: C.background }]}>
+        <ActivityIndicator color={C.primary} size="large" />
+        <Text style={[s.loadingText, { color: C.textSecondary }]}>Loading report…</Text>
+      </View>
+    );
   }
 
-  // BUG 35 FIX: show explicit error state instead of silently empty screen
+  // ── Error ──────────────────────────────────────────────────────────────────
   if (loadError) {
     return (
       <View style={[s.center, { backgroundColor: C.background }]}>
-        <Text style={{ fontSize: 40 }}>⚠️</Text>
-        <Text style={{ marginTop: 10, color: C.error, textAlign: 'center', paddingHorizontal: 32 }}>{loadError}</Text>
-        <View style={{ marginTop: 16 }}><Button title="Go Back" onPress={() => router.back()} /></View>
+        <View style={s.errorIcon}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color={C.error} />
+        </View>
+        <Text style={[s.errorTitle, { color: C.text }]}>Unable to Load Report</Text>
+        <Text style={[s.errorSub, { color: C.textSecondary }]}>{loadError}</Text>
+        <View style={{ marginTop: 20 }}>
+          <Button title="Go Back" onPress={() => router.back()} />
+        </View>
       </View>
     );
   }
@@ -138,23 +282,34 @@ export default function ReportScreen() {
   if (!job) {
     return (
       <View style={[s.center, { backgroundColor: C.background }]}>
-        <Text style={{ fontSize: 40 }}>📄</Text>
-        <Text style={{ marginTop: 10, color: C.textSecondary }}>Report data not found</Text>
-        <View style={{ marginTop: 16 }}><Button title="Go Back" onPress={() => router.back()} /></View>
+        <MaterialCommunityIcons name="file-document-outline" size={52} color={C.textSecondary} />
+        <Text style={[s.errorTitle, { color: C.text }]}>Report Not Found</Text>
+        <View style={{ marginTop: 16 }}>
+          <Button title="Go Back" onPress={() => router.back()} />
+        </View>
       </View>
     );
   }
 
-  const passCount  = assets.filter((a: any) => a.result === 'pass').length;
-  const failCount  = assets.filter((a: any) => a.result === 'fail').length;
-  const ntCount    = assets.filter((a: any) => a.result === 'not_tested').length;
-  // Compliant only when at least one asset was inspected and none failed
-  const isCompliant = assets.length > 0 && passCount > 0 && failCount === 0;
+  // ── Compliance badge ───────────────────────────────────────────────────────
+  const complianceBadge = (
+    <View style={[s.complianceBadge, {
+      backgroundColor: isCompliant ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)',
+      borderColor: isCompliant ? 'rgba(74,222,128,0.35)' : 'rgba(239,68,68,0.35)',
+    }]}>
+      <MaterialCommunityIcons
+        name={isCompliant ? 'shield-check' : 'shield-alert'}
+        size={13}
+        color={isCompliant ? '#4ADE80' : '#F87171'}
+      />
+      <Text style={[s.complianceTxt, { color: isCompliant ? '#4ADE80' : '#F87171' }]}>
+        {isCompliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
+      </Text>
+    </View>
+  );
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-
-      {/* ── REPORT HEADER ──── */}
       <ScreenHeader
         eyebrow="INSPECTION REPORT"
         title={job.property_name ?? 'Inspection Report'}
@@ -164,272 +319,311 @@ export default function ReportScreen() {
             })
           : 'Not scheduled'
         }
-        showBack={true}
+        showBack
         curved={false}
-        rightComponent={
-          <View style={[s.complianceBanner, {
-            backgroundColor: isCompliant ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)',
-            borderColor: isCompliant ? 'rgba(74,222,128,0.4)' : 'rgba(239,68,68,0.4)',
-          }]}>
-            <MaterialCommunityIcons name={isCompliant ? 'shield-check' : 'shield-alert'} size={14} color={isCompliant ? '#4ADE80' : '#FCA5A5'} />
-            <Text style={[s.heroStatus, { color: isCompliant ? '#4ADE80' : '#FCA5A5' }]}>
-              {isCompliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
-            </Text>
-          </View>
-        }
+        rightComponent={complianceBadge}
       />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
-
-        {/* Meta card — property info + Fix 5B technician name */}
-        <Animated.View entering={FadeInDown.delay(80).duration(380)}>
-          <Card style={s.metaCard}>
-            <Text style={[s.metaTitle, { color: C.text }]}>{job.property_name ?? 'Unknown Site'}</Text>
-            <Text style={[s.metaSub, { color: C.textSecondary }]}>
-              {job.property_address
-                ? [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ')
-                : 'Address not listed'}
-            </Text>
-            <View style={[s.divider, { backgroundColor: C.border }]} />
-            <View style={s.metaRow}>
-              <MaterialCommunityIcons name="account-hard-hat-outline" size={15} color={C.textSecondary} />
-              <Text style={[s.metaRowTxt, { color: C.textSecondary }]}>
-                Technician: <Text style={{ color: C.text, fontWeight: '700' }}>{techName}</Text>
-              </Text>
-            </View>
-            <View style={s.metaRow}>
-              <MaterialCommunityIcons name="calendar-check-outline" size={15} color={C.textSecondary} />
-              <Text style={[s.metaRowTxt, { color: C.textSecondary }]}>
-                Date: <Text style={{ color: C.text, fontWeight: '700' }}>{job.scheduled_date}</Text>
-              </Text>
-            </View>
-          </Card>
-        </Animated.View>
-
-        {/* Stat grid */}
-        <Animated.View entering={FadeInDown.delay(140).duration(380)}>
-          <SectionTitle title="Inspection Outcomes" />
-          <View style={s.statsGrid}>
-            <View style={[s.statCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={[s.statIconWrap, { backgroundColor: C.textTertiary + '20' }]}>
-                <MaterialCommunityIcons name="tools" size={20} color={C.textSecondary} />
-              </View>
-              <Text style={[s.statVal, { color: C.text }]}>{assets.length}</Text>
-              <Text style={[s.statLabel, { color: C.textSecondary }]}>Total</Text>
-            </View>
-            <View style={[s.statCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={[s.statIconWrap, { backgroundColor: C.success + '20' }]}>
-                <MaterialCommunityIcons name="check-circle" size={20} color={C.success} />
-              </View>
-              <Text style={[s.statVal, { color: C.success }]}>{passCount}</Text>
-              <Text style={[s.statLabel, { color: C.textSecondary }]}>Passed</Text>
-            </View>
-            <View style={[s.statCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={[s.statIconWrap, { backgroundColor: C.error + '20' }]}>
-                <MaterialCommunityIcons name="close-circle" size={20} color={C.error} />
-              </View>
-              <Text style={[s.statVal, { color: C.error }]}>{failCount}</Text>
-              <Text style={[s.statLabel, { color: C.textSecondary }]}>Failed</Text>
-            </View>
-            {ntCount > 0 && (
-              <View style={[s.statCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <View style={[s.statIconWrap, { backgroundColor: C.backgroundTertiary }]}>
-                  <MaterialCommunityIcons name="minus-circle-outline" size={20} color={C.textTertiary} />
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+      >
+        {/* ── Property card ── */}
+        <Animated.View entering={FadeInDown.delay(60).duration(350)}>
+          <View style={[s.propertyCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={[s.propertyAccent, { backgroundColor: C.primary }]} />
+            <View style={s.propertyBody}>
+              <Text style={[s.propertyName, { color: C.text }]}>{job.property_name ?? 'Unknown Site'}</Text>
+              {(job.property_address || job.property_suburb) ? (
+                <Text style={[s.propertyAddress, { color: C.textSecondary }]}>
+                  {[job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ')}
+                </Text>
+              ) : null}
+              <View style={[s.propertyDivider, { backgroundColor: C.border }]} />
+              <View style={s.propertyMeta}>
+                <View style={s.metaItem}>
+                  <MaterialCommunityIcons name="account-hard-hat-outline" size={13} color={C.textSecondary} />
+                  <Text style={[s.metaText, { color: C.textSecondary }]}>
+                    Technician: <Text style={[s.metaValue, { color: C.text }]}>{techName}</Text>
+                  </Text>
                 </View>
-                <Text style={[s.statVal, { color: C.textTertiary }]}>{ntCount}</Text>
-                <Text style={[s.statLabel, { color: C.textSecondary }]}>N/T</Text>
+                <View style={s.metaItem}>
+                  <MaterialCommunityIcons name="calendar-check-outline" size={13} color={C.textSecondary} />
+                  <Text style={[s.metaText, { color: C.textSecondary }]}>
+                    Date: <Text style={[s.metaValue, { color: C.text }]}>{job.scheduled_date}</Text>
+                  </Text>
+                </View>
+                {job.site_contact_name ? (
+                  <View style={s.metaItem}>
+                    <MaterialCommunityIcons name="account-outline" size={13} color={C.textSecondary} />
+                    <Text style={[s.metaText, { color: C.textSecondary }]}>
+                      Contact: <Text style={[s.metaValue, { color: C.text }]}>{job.site_contact_name}</Text>
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-            )}
+            </View>
           </View>
         </Animated.View>
 
-        {/* Fix 5C — Per-asset results table */}
-        <Animated.View entering={FadeInDown.delay(200).duration(380)}>
-          <SectionTitle title="Asset Inspection Results" count={assets.length} />
-          <Card noPadding style={{ marginBottom: 24 }}>
-            {assets.length === 0 ? (
-              <View style={s.emptyInCard}>
-                <Text style={[s.emptyText, { color: C.textTertiary }]}>No assets tested</Text>
-              </View>
-            ) : (
-              assets.map((asset: any, i: number) => {
-                const isPass = asset.result === 'pass';
-                const isFail = asset.result === 'fail';
-                const resultColor = isPass ? C.success : isFail ? C.error : '#64748B';
-                const resultBg    = isPass ? (C.successLight ?? C.success + '18') : isFail ? (C.errorLight ?? C.error + '18') : '#F1F5F9';
-                const resultLabel = isPass ? '✅ Pass' : isFail ? '❌ Fail' : '⬜ N/T';
-                return (
-                  <View
-                    key={asset.id}
-                    style={[
-                      s.assetRow,
-                      i < assets.length - 1 && [s.assetRowBorder, { borderBottomColor: C.border }],
-                      isFail && { backgroundColor: C.errorLight ?? (C.error + '0A') },
-                    ]}
-                  >
-                    <Text style={s.assetEmoji}>{getAssetEmoji(asset.asset_type)}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.assetName, { color: C.text }]}>{formatAssetType(asset.asset_type)}</Text>
-                      {asset.location_on_site ? <Text style={[s.assetLoc, { color: C.textSecondary }]}>{asset.location_on_site}</Text> : null}
-                      {isFail && asset.defect_reason ? <Text style={[s.defectReasonTxt, { color: C.error }]}>⚠️ {asset.defect_reason}</Text> : null}
-                    </View>
-                    <View style={[s.resultPill, { backgroundColor: resultBg }]}>
-                      <Text style={[s.resultPillTxt, { color: resultColor }]}>{resultLabel}</Text>
-                    </View>
-                  </View>
-                );
-              })
+        {/* ── Stats grid ── */}
+        <Animated.View entering={FadeInDown.delay(120).duration(350)}>
+          <Text style={[s.sectionLabel, { color: C.textSecondary }]}>INSPECTION OUTCOMES</Text>
+          <View style={s.statsRow}>
+            <StatCard
+              icon="tools" iconColor={C.textSecondary} iconBg={C.backgroundTertiary ?? '#F1F5F9'}
+              value={assets.length} label="Total" valueColor={C.text}
+              surface={C.surface} border={C.border}
+            />
+            <StatCard
+              icon="check-circle" iconColor="#16A34A" iconBg="#D1FAE5"
+              value={passCount} label="Passed" valueColor="#16A34A"
+              surface={C.surface} border={C.border}
+            />
+            <StatCard
+              icon="close-circle" iconColor="#DC2626" iconBg="#FEE2E2"
+              value={failCount} label="Failed" valueColor="#DC2626"
+              surface={C.surface} border={C.border}
+            />
+            {ntCount > 0 && (
+              <StatCard
+                icon="minus-circle-outline" iconColor="#64748B" iconBg="#F1F5F9"
+                value={ntCount} label="N/T" valueColor="#64748B"
+                surface={C.surface} border={C.border}
+              />
             )}
-          </Card>
-        </Animated.View>
-
-        {/* Fix 5D — Defects list section */}
-        <Animated.View entering={FadeInDown.delay(260).duration(380)}>
-          <SectionTitle title="Defects Identified" count={defects.length} />
-          {defects.length === 0 ? (
-            <Card style={[s.noDefCard, { backgroundColor: C.successLight ?? (C.success + '15'), borderColor: C.success + '30', borderWidth: 1 }]}>
-              <MaterialCommunityIcons name="shield-check-outline" size={22} color={C.success} />
-              <Text style={[s.noDefTxt, { color: C.successDark ?? C.success }]}>No defects recorded — great work!</Text>
-            </Card>
-          ) : (
-            <Card noPadding style={{ marginBottom: 24 }}>
-              {defects.map((defect: any, i: number) => {
-                const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
-                return (
-                  <View
-                    key={defect.id}
-                    style={[s.defectRow, i < defects.length - 1 && [s.defectRowBorder, { borderBottomColor: C.border }]]}
-                  >
-                    <View style={[s.defectBar, { backgroundColor: sev.color }]} />
-                    <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                      <View style={s.defectTopRow}>
-                        <View style={[s.sevBadge, { backgroundColor: sev.color + '18' }]}>
-                          <MaterialCommunityIcons name={sev.icon} size={12} color={sev.color} />
-                          <Text style={[s.sevBadgeTxt, { color: sev.color }]}>{sev.label.toUpperCase()}</Text>
-                        </View>
-                        <View style={[s.statusPill, { backgroundColor: defect.status === 'open' ? C.warning + '20' : C.success + '20' }]}>
-                          <Text style={[s.statusPillTxt, { color: defect.status === 'open' ? C.warning : C.success }]}>
-                            {defect.status?.toUpperCase().replace('_', ' ') ?? 'OPEN'}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[s.defectDesc, { color: C.text }]}>{defect.description}</Text>
-                      {defect.asset_type || defect.defect_code ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                          {defect.asset_type && (
-                            <Text style={[s.defectAsset, { color: C.textSecondary, marginTop: 0 }]}>
-                              {getAssetEmoji(defect.asset_type)} {formatAssetType(defect.asset_type)}
-                            </Text>
-                          )}
-                          {defect.defect_code && (
-                            <View style={[s.reportCodeBadge, { backgroundColor: C.primary + '15', borderColor: C.primary + '30' }]}>
-                              <Text style={[s.reportCodeTxt, { color: C.primary }]}>{defect.defect_code.toUpperCase()}</Text>
-                            </View>
-                          )}
-                          {defect.quote_price != null && (
-                            <Text style={[s.reportPriceTxt, { color: '#10B981' }]}>
-                              • Ref: ${defect.quote_price}
-                            </Text>
-                          )}
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </Card>
+          </View>
+          {/* Progress bar */}
+          {assets.length > 0 && (
+            <View style={[s.progressWrap, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <View style={s.progressBarTrack}>
+                {passCount > 0 && (
+                  <View style={[s.progressSegment, { flex: passCount, backgroundColor: '#16A34A' }]} />
+                )}
+                {failCount > 0 && (
+                  <View style={[s.progressSegment, { flex: failCount, backgroundColor: '#DC2626' }]} />
+                )}
+                {ntCount > 0 && (
+                  <View style={[s.progressSegment, { flex: ntCount, backgroundColor: '#CBD5E1' }]} />
+                )}
+              </View>
+              <Text style={[s.progressLabel, { color: C.textSecondary }]}>
+                {inspectedCount} of {assets.length} assets inspected
+              </Text>
+            </View>
           )}
         </Animated.View>
 
-        {/* Documentation checklist */}
-        <Animated.View entering={FadeInDown.delay(320).duration(380)}>
-          <SectionTitle title="Documentation Checklist" />
-          <Card noPadding style={{ marginBottom: 24 }}>
-            <View style={s.checklistItem}>
-              <View style={[s.checkDot, { backgroundColor: defects.length > 0 ? C.warning : C.success }]} />
-              <Text style={[s.checklistTxt, { color: C.text }]}>
-                {defects.length === 0 ? 'No defects recorded' : `${defects.length} defect(s) logged on site`}
-              </Text>
+        {/* ── Asset results ── */}
+        <Animated.View entering={FadeInDown.delay(180).duration(350)}>
+          <View style={s.sectionHeader}>
+            <Text style={[s.sectionLabel, { color: C.textSecondary }]}>ASSET INSPECTION RESULTS</Text>
+            <View style={[s.countChip, { backgroundColor: C.primary + '18' }]}>
+              <Text style={[s.countChipTxt, { color: C.primary }]}>{assets.length}</Text>
             </View>
-            <View style={[s.dividerLine, { backgroundColor: C.border }]} />
-            <View style={[s.checklistItem, { alignItems: 'flex-start' }]}>
-              <View style={[s.checkDot, { backgroundColor: signature ? C.success : C.error, marginTop: 4 }]} />
+          </View>
+          <View style={[s.tableCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            {assets.length === 0 ? (
+              <View style={s.emptyState}>
+                <MaterialCommunityIcons name="clipboard-outline" size={32} color={C.textSecondary} />
+                <Text style={[s.emptyText, { color: C.textSecondary }]}>No assets tested</Text>
+              </View>
+            ) : (
+              assets.map((asset, i) => (
+                <AssetRow
+                  key={asset.id}
+                  asset={asset}
+                  index={i}
+                  isLast={i === assets.length - 1}
+                  colors={C}
+                />
+              ))
+            )}
+          </View>
+        </Animated.View>
+
+        {/* ── Defects ── */}
+        <Animated.View entering={FadeInDown.delay(240).duration(350)}>
+          <View style={s.sectionHeader}>
+            <Text style={[s.sectionLabel, { color: C.textSecondary }]}>DEFECTS IDENTIFIED</Text>
+            {defects.length > 0 && (
+              <View style={[s.countChip, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={[s.countChipTxt, { color: '#DC2626' }]}>{defects.length}</Text>
+              </View>
+            )}
+          </View>
+          {defects.length === 0 ? (
+            <View style={[s.noDefectsCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+              <MaterialCommunityIcons name="shield-check-outline" size={24} color="#16A34A" />
+              <Text style={[s.noDefectsText, { color: '#15803D' }]}>No defects recorded — great work!</Text>
+            </View>
+          ) : (
+            <View style={s.defectList}>
+              {defects.map((d, i) => (
+                <DefectCard key={d.id} defect={d} index={i} colors={C} />
+              ))}
+            </View>
+          )}
+        </Animated.View>
+
+        {/* ── Documentation checklist ── */}
+        <Animated.View entering={FadeInDown.delay(300).duration(350)}>
+          <Text style={[s.sectionLabel, { color: C.textSecondary }]}>DOCUMENTATION CHECKLIST</Text>
+          <View style={[s.checklistCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            {/* Assets inspected */}
+            <View style={s.checklistRow}>
+              <View style={[s.checkDot, { backgroundColor: inspectedCount > 0 ? '#16A34A' : '#D97706' }]} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.checklistTxt, { color: C.text }]}>
-                  {signature ? 'Client Signature captured' : 'Missing Client Signature'}
+                <Text style={[s.checklistTitle, { color: C.text }]}>
+                  {inspectedCount > 0
+                    ? `${inspectedCount} asset${inspectedCount !== 1 ? 's' : ''} inspected`
+                    : 'No assets inspected yet'}
                 </Text>
-                {signature && (
-                  <Text style={[s.checklistSub, { color: C.textSecondary }]}>Signed by: {signature.signed_by_name}</Text>
-                )}
-                {signature?.signature_url && (
-                  <View style={[s.sigImageBox, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+              </View>
+              <MaterialCommunityIcons
+                name={inspectedCount > 0 ? 'check-circle' : 'clock-outline'}
+                size={18}
+                color={inspectedCount > 0 ? '#16A34A' : '#D97706'}
+              />
+            </View>
+
+            <View style={[s.checklistDivider, { backgroundColor: C.border }]} />
+
+            {/* Defects */}
+            <View style={s.checklistRow}>
+              <View style={[s.checkDot, { backgroundColor: defects.length > 0 ? '#D97706' : '#16A34A' }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.checklistTitle, { color: C.text }]}>
+                  {defects.length === 0 ? 'No defects recorded' : `${defects.length} defect${defects.length !== 1 ? 's' : ''} logged`}
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name={defects.length === 0 ? 'check-circle' : 'alert-circle-outline'}
+                size={18}
+                color={defects.length === 0 ? '#16A34A' : '#D97706'}
+              />
+            </View>
+
+            <View style={[s.checklistDivider, { backgroundColor: C.border }]} />
+
+            {/* Signature */}
+            <View style={[s.checklistRow, { alignItems: 'flex-start' }]}>
+              <View style={[s.checkDot, { backgroundColor: signature ? '#16A34A' : '#DC2626', marginTop: 3 }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.checklistTitle, { color: C.text }]}>
+                  {signature ? 'Client signature captured' : 'Client signature missing'}
+                </Text>
+                {signature?.signed_by_name ? (
+                  <Text style={[s.checklistSub, { color: C.textSecondary }]}>
+                    Signed by {signature.signed_by_name}
+                  </Text>
+                ) : null}
+                {signature?.signature_url ? (
+                  <View style={[s.sigImageBox, { backgroundColor: C.backgroundTertiary ?? '#F8FAFC', borderColor: C.border }]}>
                     <Image
                       source={{ uri: getValidLocalUri(signature.signature_url) }}
                       style={s.sigImage}
                       resizeMode="contain"
                     />
                   </View>
-                )}
+                ) : null}
               </View>
+              <MaterialCommunityIcons
+                name={signature ? 'check-circle' : 'close-circle'}
+                size={18}
+                color={signature ? '#16A34A' : '#DC2626'}
+              />
             </View>
-          </Card>
+          </View>
         </Animated.View>
 
+        {/* ── Signature CTA ── */}
         {!signature && (
-          <Animated.View entering={FadeIn.delay(500)}>
-            <View style={[s.signatureCTA, { backgroundColor: C.error + '10', borderColor: C.error + '40', borderWidth: 1 }]}>
-              <View style={s.sigCopy}>
-                <Text style={[s.sigCTATitle, { color: C.text }]}>Action Required</Text>
-                <Text style={[s.sigCTASub, { color: C.textSecondary }]}>
-                  Generating compliance reports without a signature violates industry standards.
-                </Text>
+          <Animated.View entering={FadeIn.delay(420).duration(300)}>
+            <View style={[s.signatureCTA, { borderColor: '#FCA5A5' }]}>
+              <MaterialCommunityIcons name="pen-lock" size={22} color="#DC2626" style={{ marginBottom: 8 }} />
+              <Text style={[s.ctaTitle, { color: C.text }]}>Signature Required</Text>
+              <Text style={[s.ctaSub, { color: C.textSecondary }]}>
+                Compliance reports must include a client signature. Please capture it before generating the PDF.
+              </Text>
+              <View style={{ marginTop: 14 }}>
+                <Button
+                  title="Capture Signature Now"
+                  onPress={() => router.push(`/jobs/${jobId}/signature` as never)}
+                  icon={<MaterialCommunityIcons name="draw-pen" size={16} color="#FFFFFF" />}
+                  style={{ borderRadius: 22 }}
+                />
               </View>
-              <Button
-                title="Capture Signature"
-                onPress={() => router.push(`/jobs/${jobId}/signature` as never)}
-                icon={<MaterialCommunityIcons name="pen" size={16} color="#FFFFFF" />}
-                style={{ borderRadius: 20 }}
-              />
             </View>
           </Animated.View>
         )}
 
+        <View style={{ height: 16 }} />
       </ScrollView>
 
+      {/* ── Bottom action bar ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {assets.filter((a: any) => a.result !== null).length === 0 && (
-          <Text style={[s.exportWarning, { color: C.warning }]}>
-            ⚠️  No assets have been inspected. The PDF will be empty.
-          </Text>
+        {inspectedCount === 0 && !job?.report_url && (
+          <View style={[s.warningBanner, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+            <MaterialCommunityIcons name="alert" size={14} color="#D97706" />
+            <Text style={s.warningText}>No assets inspected — PDF will be empty</Text>
+          </View>
         )}
-        {isGenerating && progressStage ? (
-          <Text style={[s.progressLabel, { color: C.textSecondary }]}>{progressStage}</Text>
-        ) : null}
-        {generatedPdfUri ? (
+
+        {job?.report_url ? (
+          // ── Report already uploaded ──────────────────────────────────────────
           <View style={{ gap: 8 }}>
-            <Button
-              title="Share PDF"
-              onPress={handleGenerate}
-              icon={<MaterialCommunityIcons name="share-variant" size={20} color="#FFF" />}
-              style={{ height: 56, borderRadius: 28 }}
-            />
-            <TouchableOpacity
-              style={s.regenBtn}
-              onPress={() => { setGeneratedPdfUri(null); }}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="refresh" size={14} color={C.textSecondary} />
-              <Text style={[s.regenTxt, { color: C.textSecondary }]}>Re-generate PDF</Text>
-            </TouchableOpacity>
+            {/* Notification banner — tells tech the report is live on the server */}
+            <View style={[s.uploadedBanner, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
+              <View style={[s.uploadedIconWrap, { backgroundColor: '#BBF7D0' }]}>
+                <MaterialCommunityIcons name="cloud-check" size={18} color="#15803D" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.uploadedTitle, { color: '#15803D' }]}>Report Live on Server ✓</Text>
+                <Text style={[s.uploadedSub, { color: '#166534' }]}>
+                  Admin can view &amp; download this report.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => { if (job.report_url) Linking.openURL(job.report_url); }}
+                style={[s.uploadedOpenBtn, { backgroundColor: '#16A34A' }]}>
+                <MaterialCommunityIcons name="open-in-new" size={14} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button
+                title="Open Report"
+                onPress={() => { if (job.report_url) Linking.openURL(job.report_url); }}
+                icon={<MaterialCommunityIcons name="open-in-new" size={18} color="#FFF" />}
+                style={{ height: 52, borderRadius: 26, flex: 1 }}
+              />
+              <TouchableOpacity
+                style={[s.regenBtn, { borderColor: C.border, backgroundColor: C.surface }]}
+                onPress={() =>
+                  Alert.alert(
+                    'Re-generate Report?',
+                    'This creates a new PDF and replaces the current one on the server. Continue?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Re-generate', style: 'destructive',
+                        onPress: () => router.push(`/jobs/${jobId}/preview` as never) },
+                    ]
+                  )
+                }
+              >
+                <MaterialCommunityIcons name="refresh" size={22} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
+          // ── No report yet: generate & upload for the first time
           <Button
-            title={isGenerating ? 'Generating PDF…' : 'Compile & Export PDF'}
-            onPress={handleGenerate}
-            disabled={isGenerating}
-            isLoading={isGenerating}
-            icon={!isGenerating ? <MaterialCommunityIcons name="export-variant" size={20} color="#FFF" /> : undefined}
-            style={{ height: 56, borderRadius: 28 }}
+            title="Generate & Upload PDF"
+            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+            icon={<MaterialCommunityIcons name="cloud-upload-outline" size={20} color="#FFF" />}
+            style={{ height: 54, borderRadius: 27 }}
           />
         )}
       </View>
@@ -437,80 +631,204 @@ export default function ReportScreen() {
   );
 }
 
+
+// ─── Styles ────────────────────────────────────────────────────────────────────
+
 const s = StyleSheet.create({
-  screen: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  screen:  { flex: 1 },
+  center:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
 
-  // Hero
-  heroStatus:       { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  complianceBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
+  loadingText: { marginTop: 12, fontSize: 14 },
 
-  // Meta card
-  metaCard:    { marginBottom: 20, gap: 8 },
-  metaTitle:   { fontSize: 18, fontWeight: '800' },
-  metaSub:     { fontSize: 13 },
-  metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaRowTxt:  { fontSize: 13 },
-  divider:     { height: 1, marginVertical: 8 },
+  // Error
+  errorIcon:  { marginBottom: 12 },
+  errorTitle: { fontSize: 17, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  errorSub:   { fontSize: 13, textAlign: 'center', lineHeight: 20 },
 
-  // Stat grid
-  statsGrid:   { flexDirection: 'row', gap: 12, marginBottom: 26, flexWrap: 'wrap' },
-  statCard:    { flex: 1, minWidth: 70, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  statIconWrap:{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  statVal:     { fontSize: 24, fontWeight: '800', marginBottom: 2 },
-  statLabel:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+  scrollContent: { padding: 16, paddingBottom: 140 },
 
-  // Asset table (5C)
-  assetRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 10 },
-  assetRowBorder: { borderBottomWidth: 1 },
-  assetEmoji:     { fontSize: 20, width: 28, textAlign: 'center' },
+  // Compliance badge in header
+  complianceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 10, borderWidth: 1,
+  },
+  complianceTxt: { fontSize: 9.5, fontWeight: '900', letterSpacing: 0.8 },
+
+  // Property card
+  propertyCard: {
+    flexDirection: 'row',
+    borderRadius: 16, borderWidth: 1,
+    overflow: 'hidden', marginBottom: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+  },
+  propertyAccent: { width: 4 },
+  propertyBody:   { flex: 1, padding: 14 },
+  propertyName:   { fontSize: 16, fontWeight: '800', marginBottom: 3 },
+  propertyAddress:{ fontSize: 12, lineHeight: 17 },
+  propertyDivider:{ height: 1, marginVertical: 10 },
+  propertyMeta:   { gap: 5 },
+  metaItem:       { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText:       { fontSize: 12 },
+  metaValue:      { fontWeight: '700' },
+
+  // Section headings
+  sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8 },
+  sectionHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  countChip:    { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  countChipTxt: { fontSize: 11, fontWeight: '800' },
+
+  // Stats
+  statsRow:     { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  statCard:     {
+    flex: 1, borderRadius: 14, padding: 12,
+    alignItems: 'center', borderWidth: 1,
+    shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  statIconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  statVal:      { fontSize: 22, fontWeight: '900', marginBottom: 1 },
+  statLabel:    { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+
+  // Progress bar
+  progressWrap: {
+    borderRadius: 12, borderWidth: 1,
+    padding: 12, marginBottom: 20,
+    gap: 8,
+  },
+  progressBarTrack: {
+    flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: '#F1F5F9',
+  },
+  progressSegment:  { borderRadius: 3 },
+  progressLabel:    { fontSize: 11, fontWeight: '500' },
+
+  // Asset table
+  tableCard: {
+    borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 20,
+  },
+  assetRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 14, gap: 10,
+  },
+  assetIndexBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  assetIndexText: { fontSize: 10, fontWeight: '800' },
+  assetMiddle:    { flex: 1 },
   assetName:      { fontSize: 13, fontWeight: '700' },
-  assetLoc:       { fontSize: 11, marginTop: 2 },
-  defectReasonTxt:{ fontSize: 11, marginTop: 3, fontWeight: '600' },
-  resultPill:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  resultPillTxt:  { fontSize: 11, fontWeight: '700' },
-  emptyInCard:    { alignItems: 'center', paddingVertical: 24 },
-  emptyText:      { fontSize: 14 },
+  assetLoc:       { fontSize: 10.5, marginTop: 2 },
+  defectReasonRow:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  defectReasonTxt:{ fontSize: 11, fontWeight: '600', color: '#DC2626', flex: 1 },
+  resultPill:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  resultPillTxt:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
-  // Defect list (5D)
-  defectRow:      { flexDirection: 'row', alignItems: 'stretch', paddingVertical: 12 },
-  defectRowBorder:{ borderBottomWidth: 1 },
-  defectBar:      { width: 4 },
-  defectTopRow:   { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
-  sevBadge:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  sevBadgeTxt:    { fontSize: 10, fontWeight: '700' },
-  statusPill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  statusPillTxt:  { fontSize: 10, fontWeight: '700' },
-  defectDesc:     { fontSize: 13, lineHeight: 18, marginBottom: 4 },
-  defectAsset:    { fontSize: 11 },
-  reportCodeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
-  reportCodeTxt: { fontSize: 10, fontWeight: '800' },
-  reportPriceTxt: { fontSize: 11, fontWeight: '700' },
+  // Empty state
+  emptyState: { alignItems: 'center', padding: 28, gap: 8 },
+  emptyText:  { fontSize: 13 },
 
-  // No-defect card
-  noDefCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 26, padding: 18, borderRadius: 16 },
-  noDefTxt:  { fontSize: 15, fontWeight: '800', flex: 1 },
+  // Defects
+  defectList: { gap: 10, marginBottom: 20 },
+  defectCard: {
+    borderRadius: 14, borderWidth: 1,
+    flexDirection: 'row', overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+  },
+  defectStripe:  { width: 4 },
+  defectContent: { flex: 1, padding: 12 },
+  defectHeaderRow: { flexDirection: 'row', gap: 7, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' },
+  sevBadge:     {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 8, borderWidth: 1,
+  },
+  sevBadgeTxt:  { fontSize: 9.5, fontWeight: '800' },
+  statusBadge:  {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 8, borderWidth: 1,
+  },
+  statusDot:     { width: 6, height: 6, borderRadius: 3 },
+  statusBadgeTxt:{ fontSize: 9.5, fontWeight: '700' },
+  defectDesc:   { fontSize: 13, lineHeight: 18.5, marginBottom: 6 },
+  defectMetaRow:{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  defectMeta:   { fontSize: 11 },
+  codeChip:     { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  codeChipTxt:  { fontSize: 9.5, fontWeight: '800' },
+  defectPrice:  { fontSize: 11, fontWeight: '700' },
+
+  // No defects
+  noDefectsCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 20,
+  },
+  noDefectsText: { fontSize: 14, fontWeight: '700', flex: 1 },
 
   // Checklist
-  checklistItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  checkDot:      { width: 12, height: 12, borderRadius: 6, marginTop: 3 },
-  checklistTxt:  { fontSize: 14, fontWeight: '600', flex: 1 },
-  checklistSub:  { fontSize: 12, marginTop: 4 },
-  dividerLine:   { height: 1 },
+  checklistCard: {
+    borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 20,
+  },
+  checklistRow:    { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  checklistDivider:{ height: 1 },
+  checkDot:        { width: 10, height: 10, borderRadius: 5 },
+  checklistTitle:  { fontSize: 13, fontWeight: '600' },
+  checklistSub:    { fontSize: 11.5, marginTop: 3 },
+  sigImageBox:     { borderRadius: 10, borderWidth: 1.5, overflow: 'hidden', marginTop: 10, height: 80 },
+  sigImage:        { width: '100%', height: '100%' },
 
   // Signature CTA
-  signatureCTA: { padding: 18, borderRadius: 16, marginBottom: 26, shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  sigCopy:      { marginBottom: 18 },
-  sigCTATitle:  { fontSize: 18, fontWeight: '800', marginBottom: 6 },
-  sigCTASub:    { fontSize: 14, lineHeight: 20 },
+  signatureCTA: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 16, borderWidth: 1.5,
+    padding: 18, marginBottom: 20,
+    alignItems: 'center',
+  },
+  ctaTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  ctaSub:   { fontSize: 13, lineHeight: 19, textAlign: 'center' },
 
-  // Signature image inside checklist
-  sigImageBox: { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden', marginTop: 12, height: 96 },
-  sigImage:    { width: '100%', height: '100%' },
+  // Bottom bar
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1, gap: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 8,
+  },
+  warningBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    padding: 9, borderRadius: 10, borderWidth: 1,
+  },
+  warningText: { fontSize: 12, fontWeight: '600', color: '#D97706', flex: 1 },
 
-  bottomBar:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 24, borderTopWidth: 1, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
-  exportWarning: { fontSize: 12, textAlign: 'center', fontWeight: '600' },
-  progressLabel: { fontSize: 12, textAlign: 'center', fontWeight: '500', letterSpacing: 0.2 },
-  regenBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
-  regenTxt:      { fontSize: 12, fontWeight: '600' },
+  // Existing report (small badge, kept for reference styles)
+  reportUploadedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    padding: 9, borderRadius: 10, borderWidth: 1,
+  },
+  reportUploadedText: { fontSize: 12, fontWeight: '600', flex: 1 },
+
+  // Prominent uploaded notification banner
+  uploadedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 12, borderRadius: 14, borderWidth: 1.5,
+  },
+  uploadedIconWrap: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  uploadedTitle: { fontSize: 13, fontWeight: '800', marginBottom: 2 },
+  uploadedSub:   { fontSize: 11, fontWeight: '500', lineHeight: 15 },
+  uploadedOpenBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+
+  // Re-generate icon button
+  regenBtn: {
+    width: 52, height: 52, borderRadius: 26, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

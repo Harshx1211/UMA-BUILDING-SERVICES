@@ -11,6 +11,8 @@ import {
 } from '@/lib/database';
 import { DefectStatus, SyncOperation } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
+import { queuePhotoUpload } from '@/lib/photoUpload';
+import { useAuthStore } from '@/store/authStore';
 
 // ─── State & Actions ──────────────────────────────────────
 interface DefectsState {
@@ -77,22 +79,47 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     try {
       set({ isSaving: true, error: null });
       const id = generateUUID();
+      
+      const { photos, ...defectWithoutPhotos } = defectData;
+
       const payload: Defect = {
-        ...defectData,
+        ...defectWithoutPhotos,
+        photos: photos || [], // keep for memory
         id,
         status: DefectStatus.Open,
         created_at: new Date().toISOString(),
       };
 
-      // Serialise photos array to JSON string for SQLite
       const dbPayload = {
         ...payload,
-        photos: JSON.stringify(payload.photos),
+        photos: JSON.stringify(photos || []), // save actual photos to SQLite
         defect_code: payload.defect_code ?? null,
         quote_price: payload.quote_price ?? null,
       };
+
       insertRecord('defects', dbPayload as Record<string, string | number | boolean | null>);
       addToSyncQueue('defects', id, SyncOperation.Insert, dbPayload as Record<string, string | number | boolean | null>);
+
+      const userId = useAuthStore.getState().user?.id ?? '';
+
+      // Insert photos into inspection_photos and queue them
+      if (photos && photos.length > 0) {
+        for (const uri of photos) {
+          const photoId = generateUUID();
+          const photoObj = {
+            id: photoId,
+            job_id: payload.job_id,
+            asset_id: payload.asset_id === 'unlinked' ? null : payload.asset_id,
+            defect_id: id,
+            photo_url: uri,
+            caption: null,
+            uploaded_at: new Date().toISOString(),
+            uploaded_by: userId,
+          };
+          insertRecord('inspection_photos', photoObj as unknown as Record<string, string | number | boolean | null>);
+          queuePhotoUpload(uri, payload.job_id, photoObj.asset_id ?? undefined, photoId, id);
+        }
+      }
 
       set((state) => ({
         defects: [payload, ...state.defects],

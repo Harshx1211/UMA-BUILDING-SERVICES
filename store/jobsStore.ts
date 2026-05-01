@@ -71,7 +71,7 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   selectedJob: null,
   isLoading: false,
   error: null,
-  activeFilter: 'today',
+  activeFilter: 'all',
   searchQuery: '',
   _syncListenerRef: null,
 

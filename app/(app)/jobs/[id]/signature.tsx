@@ -1,4 +1,8 @@
 // app/(app)/jobs/[id]/signature.tsx
+// Fix: signature is now saved as a local file:// PNG so pdfGenerator can always
+// encode it as a data: URI — even when the device is offline. The Supabase public
+// URL is still uploaded and used in the sync-queue payload for cloud replication,
+// but the local file path is what goes into the signatures SQLite row.
 // Fixed: signature canvas scroll conflict, sign detection improved,
 // existing signature image shown in read-only view, captured sig shown in success overlay
 import React, { useRef, useState } from 'react';
@@ -6,6 +10,7 @@ import {
   View, StyleSheet, TouchableOpacity, Alert,
   Platform, ScrollView, Image,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -89,13 +94,28 @@ export default function SignatureScreen() {
         ? base64
         : `data:image/png;base64,${base64}`;
 
-      // Store locally for preview in success overlay
+      // Store for preview in success overlay
       setCapturedSigUri(signatureDataUri);
 
-      let signatureUrl = signatureDataUri;
+      const pureB64 = signatureDataUri.split(',')[1];
 
+      // ── 1. Save to a permanent local file so pdfGenerator can encode it ──
+      // This works offline and survives app restarts (documentDirectory is stable).
+      const localFilename = `sig_${jobId}.png`;
+      const localPath     = `${FileSystem.documentDirectory}${localFilename}`;
+      let   localSigUrl   = signatureDataUri; // fallback: use data: URI if write fails
       try {
-        const pureB64   = signatureDataUri.split(',')[1];
+        await FileSystem.writeAsStringAsync(localPath, pureB64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        localSigUrl = localPath;
+      } catch (writeErr) {
+        console.warn('[Signature] Could not write local file — falling back to data: URI:', writeErr);
+      }
+
+      // ── 2. Try uploading to Supabase (for cloud sync / other devices) ──
+      let supabaseUrl: string | null = null;
+      try {
         const byteChars = atob(pureB64);
         const byteArr   = new Uint8Array(byteChars.length);
         for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
@@ -104,23 +124,45 @@ export default function SignatureScreen() {
           .from('job-photos')
           .upload(storagePath, byteArr, { contentType: 'image/png', upsert: true });
         if (!uploadErr) {
-          const { data: { publicUrl } } = supabase.storage.from('job-photos').getPublicUrl(storagePath);
-          signatureUrl = publicUrl;
+          const { data: { publicUrl } } = supabase.storage
+            .from('job-photos')
+            .getPublicUrl(storagePath);
+          supabaseUrl = publicUrl;
         }
       } catch (up) {
-        console.warn('[Signature] Upload failed — using data URI:', up);
+        console.warn('[Signature] Supabase upload failed (will retry on next sync):', up);
       }
 
-      const sigId   = generateUUID();
-      const now     = new Date().toISOString();
+      // ── 3. Resolve the row id — reuse existing if re-signing ──────────────────
+      // The signatures table has UNIQUE(job_id). If we always generate a new UUID,
+      // a re-sign attempt produces a new id that doesn't conflict on 'id' — but DOES
+      // conflict on 'job_id' — and upsertRecord's ON CONFLICT(id) handler won't fire.
+      // Fix: look up any existing row and reuse its id so the upsert updates in-place.
+      const existingRow = queryRecords<{ id: string }>('signatures', { job_id: jobId })[0];
+      const sigId = existingRow?.id ?? generateUUID();
+      const now   = new Date().toISOString();
+      const isUpdate = Boolean(existingRow);
+
+      // SQLite row stores the LOCAL file:// URI so pdfGenerator always finds it.
+      // If the file write failed we fall back to the data: URI (large but safe).
       const payload = {
-        id: sigId, job_id: jobId,
-        signature_url: signatureUrl,
+        id: sigId,
+        job_id: jobId,
+        signature_url: localSigUrl,
         signed_by_name: clientName.trim(),
         signed_at: now,
       };
-      upsertRecord('signatures', payload); // FLOW-3 FIX: upsert prevents UNIQUE constraint crash on re-sign
-      addToSyncQueue('signatures', sigId, SyncOperation.Insert, payload);
+      upsertRecord('signatures', payload);
+
+      // Sync-queue uses the Supabase URL if available so the cloud row has a real URL.
+      // If offline, the data: URI is queued and will be synced on the next run.
+      const syncPayload = {
+        ...payload,
+        signature_url: supabaseUrl ?? signatureDataUri,
+      };
+      // Use Update if overwriting an existing signature, Insert if brand new.
+      addToSyncQueue('signatures', sigId, isUpdate ? SyncOperation.Update : SyncOperation.Insert, syncPayload);
+
 
       setShowSuccess(true);
       Toast.show({ type: 'success', text1: '✅ Signature Saved', text2: `Signed by ${clientName.trim()}` });
@@ -142,7 +184,7 @@ export default function SignatureScreen() {
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;
-      background: transparent;
+      background: #ffffff;
       overflow: hidden;
       touch-action: none;
       user-select: none;
@@ -161,10 +203,10 @@ export default function SignatureScreen() {
       inset: 0;
       border: none;
       border-radius: 0;
-      background: transparent;
+      background: #ffffff;
     }
     .m-signature-pad--footer { display: none !important; }
-    canvas { width: 100% !important; height: 100% !important; }
+    canvas { width: 100% !important; height: 100% !important; background: #ffffff; }
   `;
 
   // ── EXISTING SIGNATURE — read-only, professional view ──────
@@ -316,7 +358,7 @@ export default function SignatureScreen() {
           onEmpty={handleEmpty}
           onBegin={() => setHasSig(true)}
           webStyle={webStyle}
-          backgroundColor="transparent"
+          backgroundColor="rgb(255,255,255)"
           imageType="image/png"
           dataURL="image/png"
           descriptionText=""

@@ -4,7 +4,7 @@ import { Text } from 'react-native-paper';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useColors } from '@/hooks/useColors';
 import { CameraView, useCameraPermissions, FlashMode } from 'expo-camera';
-import * as MediaLibrary from 'expo-media-library';
+
 import * as ImageManipulator from 'expo-image-manipulator';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePhotosStore } from '@/store/photosStore';
@@ -32,7 +32,6 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
   const { addPhoto } = usePhotosStore();
   const [permission, requestPermission] = useCameraPermissions();
-  const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions();
   
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
@@ -51,7 +50,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
       setAssetId('');
       setPhotosTaken(0);
       if (!permission?.granted) await requestPermission();
-      if (!mediaPerm?.granted) await requestMediaPerm();
+
       bottomSheetRef.current?.expand();
     },
     close: () => {
@@ -83,15 +82,6 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
         );
 
-        // Optionally save to gallery, but DON'T use the gallery URI for our app data
-        if (mediaPerm?.granted) {
-          try {
-            await MediaLibrary.createAssetAsync(manipResult.uri);
-          } catch (e) {
-            console.warn('Failed to save to gallery', e);
-          }
-        }
-
         // Save to document directory for permanent app access
         const filename = `photo_${Date.now()}.jpg`;
         const destUri = `${FileSystem.documentDirectory}${filename}`;
@@ -105,6 +95,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
         addPhoto({
           job_id: jobId,
           asset_id: assetId === '' ? null : assetId,
+          defect_id: null,
           photo_url: destUri,
           caption: caption.trim() || null,
           uploaded_by: useAuthStore.getState().user?.id || 'unknown',
@@ -146,16 +137,15 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
               facing={facing} 
               flash={flash}
               animateShutter={false}
-            >
-              <View style={s.cameraOverlay}>
-                <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
-                  <MaterialCommunityIcons name="camera-flip" size={24} color="#FFF" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={cycleFlash} style={s.camBtn}>
-                  <MaterialCommunityIcons name={getFlashIcon()} size={24} color={flash === 'on' ? C.warning : '#FFF'} />
-                </TouchableOpacity>
-              </View>
-            </CameraView>
+            />
+            <View style={s.cameraOverlay}>
+              <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
+                <MaterialCommunityIcons name="camera-flip" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={cycleFlash} style={s.camBtn}>
+                <MaterialCommunityIcons name={getFlashIcon()} size={24} color={flash === 'on' ? C.warning : '#FFF'} />
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <View style={[s.cameraContainer, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -255,7 +245,7 @@ const s = StyleSheet.create({
   content: { paddingBottom: 64 },
   cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: '#000', overflow: 'hidden' },
   camera: { flex: 1 },
-  cameraOverlay: { flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
+  cameraOverlay: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
   camBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   form: { padding: 16 },
   label: { fontSize: 13, fontWeight: '700', marginBottom: 8 },

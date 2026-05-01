@@ -6,6 +6,8 @@ import { supabase, signOut as supabaseSignOut } from '@/lib/supabase';
 import { stopSync } from '@/lib/sync';
 import { SESSION_KEY } from '@/constants/Config';
 import type { User } from '@/types';
+import { UserRole } from '@/constants/Enums';
+
 
 const REMEMBER_ME_KEY    = '@sitetrack/remember_me';
 const USER_PROFILE_KEY   = '@sitetrack/user_profile'; // FLOW-11: offline session cache
@@ -57,11 +59,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       });
 
       if (error) {
+        console.error('[AuthStore] signIn error:', error.message, error);
         set({ error: error.message, isLoading: false });
         return;
       }
 
       if (!data.session || !data.user) {
+        console.error('[AuthStore] signIn failed: No session or user returned.', data);
         set({ error: 'Sign in failed — no session returned.', isLoading: false });
         return;
       }
@@ -71,13 +75,27 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         .from('users')
         .select('*')
         .eq('id', data.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError || !profile) {
-        set({
-          error: 'Account profile not found. Contact your administrator.',
-          isLoading: false,
-        });
+        // No profile row — could be an admin account (no technician row).
+        // Build a minimal fallback from the auth session so they can still log in.
+        const fallback: User = {
+          id: data.user.id,
+          email: data.user.email ?? '',
+          full_name:
+            (data.user.user_metadata?.full_name as string) ??
+            data.user.email?.split('@')[0] ??
+            'User',
+          role: 'admin' as unknown as UserRole,
+          phone: null,
+          avatar_url: null,
+          is_active: true,
+          created_at: data.user.created_at ?? new Date().toISOString(),
+        };
+        if (rememberMe) await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
+        await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(fallback));
+        set({ user: fallback, session: data.session, isAuthenticated: true, isLoading: false, error: null });
         return;
       }
 
@@ -94,7 +112,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isLoading: false,
         error: null,
       });
-    } catch {
+    } catch (err) {
+      console.error('[AuthStore] signIn unexpected exception:', err);
       set({
         error: 'An unexpected error occurred. Please try again.',
         isLoading: false,
@@ -150,16 +169,27 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       );
 
       if (!profileResult || profileResult.error || !profileResult.data) {
-        // FLOW-11 FIX: Profile fetch failed or timed out (offline).
-        // Try the locally-cached profile so the user isn't kicked to login.
+        // Profile fetch failed / timed out — try local cache first
         try {
           const cached = await AsyncStorage.getItem(USER_PROFILE_KEY);
           if (cached) {
             set({ user: JSON.parse(cached) as User, session, isAuthenticated: true, isLoading: false });
             return;
           }
-        } catch { /* ignore cache read errors */ }
-        set({ isLoading: false, isAuthenticated: false });
+        } catch { /* ignore */ }
+        // As a last resort build fallback from session so admin users aren't locked out
+        const su = session.user;
+        const fallback: User = {
+          id: su.id,
+          email: su.email ?? '',
+          full_name: (su.user_metadata?.full_name as string) ?? su.email?.split('@')[0] ?? 'User',
+          role: 'admin' as unknown as UserRole,
+          phone: null,
+          avatar_url: null,
+          is_active: true,
+          created_at: su.created_at ?? new Date().toISOString(),
+        };
+        set({ user: fallback, session, isAuthenticated: true, isLoading: false });
         return;
       }
       // Keep the cache fresh for future offline starts

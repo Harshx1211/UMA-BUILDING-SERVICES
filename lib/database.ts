@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 10;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -119,6 +119,7 @@ export function initializeSchema(): void {
       notes          TEXT,
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      report_url     TEXT,
       FOREIGN KEY (property_id) REFERENCES properties(id),
       FOREIGN KEY (assigned_to) REFERENCES users(id)
     );
@@ -147,6 +148,8 @@ export function initializeSchema(): void {
       status      TEXT NOT NULL DEFAULT 'open',
       photos      TEXT NOT NULL DEFAULT '[]',
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      defect_code TEXT,
+      quote_price REAL,
       FOREIGN KEY (job_id)      REFERENCES jobs(id),
       FOREIGN KEY (asset_id)    REFERENCES assets(id),
       FOREIGN KEY (property_id) REFERENCES properties(id)
@@ -160,8 +163,10 @@ export function initializeSchema(): void {
       caption     TEXT,
       uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
       uploaded_by TEXT NOT NULL,
+      defect_id   TEXT,
       FOREIGN KEY (job_id)      REFERENCES jobs(id),
-      FOREIGN KEY (uploaded_by) REFERENCES users(id)
+      FOREIGN KEY (uploaded_by) REFERENCES users(id),
+      FOREIGN KEY (defect_id)   REFERENCES defects(id)
     );
 
     CREATE TABLE IF NOT EXISTS signatures (
@@ -198,6 +203,14 @@ export function initializeSchema(): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Tombstone table: permanently records photo IDs that the technician has deleted.
+    -- Used by the sync pull to prevent Supabase from re-inserting deleted photos
+    -- even when the remote delete is still pending, failed, or retrying.
+    CREATE TABLE IF NOT EXISTS deleted_photo_ids (
+      id         TEXT PRIMARY KEY NOT NULL,
+      deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS inventory_items (
       id          TEXT PRIMARY KEY NOT NULL,
       name        TEXT NOT NULL,
@@ -222,6 +235,7 @@ export function initializeSchema(): void {
       defect_id         TEXT,
       quantity          INTEGER NOT NULL DEFAULT 1,
       unit_price        REAL NOT NULL DEFAULT 0.0,
+      item_name         TEXT,
       FOREIGN KEY (quote_id)          REFERENCES quotes(id),
       FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id)
     );
@@ -245,6 +259,31 @@ export function initializeSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_defects_job_id         ON defects(job_id);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_synced       ON sync_queue(synced);
     CREATE INDEX IF NOT EXISTS idx_job_assets_asset_id    ON job_assets(asset_id);
+
+    CREATE TABLE IF NOT EXISTS asset_type_definitions (
+      id                 TEXT    PRIMARY KEY NOT NULL,
+      value              TEXT    NOT NULL UNIQUE,
+      label              TEXT    NOT NULL,
+      full_label         TEXT    NOT NULL,
+      icon               TEXT    NOT NULL DEFAULT 'shield-check-outline',
+      color              TEXT    NOT NULL DEFAULT '#6B7280',
+      inspection_routine TEXT    NOT NULL DEFAULT '',
+      variants           TEXT    NOT NULL DEFAULT '[]',
+      is_active          INTEGER NOT NULL DEFAULT 1,
+      sort_order         INTEGER NOT NULL DEFAULT 0,
+      created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS defect_codes (
+      id          TEXT    PRIMARY KEY NOT NULL,
+      code        TEXT    NOT NULL UNIQUE,
+      description TEXT    NOT NULL,
+      quote_price REAL,
+      category    TEXT    NOT NULL DEFAULT 'General',
+      is_active   INTEGER NOT NULL DEFAULT 1,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // ── Versioned migrations ───────────────────────────────────
@@ -431,6 +470,90 @@ export function initializeSchema(): void {
     db.runSync(
       `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '6')`,
     );
+  }
+
+  // Migration 7: Normalise defect photos into inspection_photos
+  if (currentVersion < 7) {
+    try {
+      db.runSync("ALTER TABLE inspection_photos ADD COLUMN defect_id TEXT;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 7: added inspection_photos.defect_id");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 7 failed:", msg);
+      }
+    }
+    currentVersion = 7;
+    db.runSync(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '7')`,
+    );
+  }
+
+  // Migration 8: asset_type_definitions + defect_codes local cache tables
+  if (currentVersion < 8) {
+    // Tables created idempotently above in the core block — just bump the version.
+    currentVersion = 8;
+    db.runSync(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '8')`,
+    );
+    if (__DEV__) console.log('[SiteTrack DB] Migration 8: catalogue cache tables ready');
+  }
+
+  // Migration 9: report_url column on jobs table
+  if (currentVersion < 9) {
+    try {
+      db.runSync("ALTER TABLE jobs ADD COLUMN report_url TEXT;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 9: added jobs.report_url");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 9 failed:", msg);
+      }
+    }
+    currentVersion = 9;
+    db.runSync(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '9')`,
+    );
+  }
+
+  // Migration 10: deleted_photo_ids tombstone table + retry reset for previously-blocked deletes
+  if (currentVersion < 10) {
+    // 10a — Create the permanent tombstone table
+    try {
+      db.runSync(`
+        CREATE TABLE IF NOT EXISTS deleted_photo_ids (
+          id         TEXT PRIMARY KEY NOT NULL,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      if (__DEV__)
+        console.log('[SiteTrack DB] Migration 10a: created deleted_photo_ids tombstone table');
+    } catch (err: unknown) {
+      console.error('[SiteTrack DB] Migration 10a failed:', err instanceof Error ? err.message : String(err));
+    }
+
+    // 10b — Reset permanently-failed photo delete operations so they are retried.
+    // These items previously exhausted their retry limit because Supabase was blocking
+    // them with a missing RLS DELETE policy.  Now that the policy exists, resetting
+    // synced=0 and retry_count=0 lets the next sync push the deletes successfully.
+    try {
+      const result = db.runSync(
+        `UPDATE sync_queue
+         SET synced = 0, retry_count = 0, last_error = NULL
+         WHERE table_name = 'inspection_photos'
+           AND operation  = 'delete'
+           AND synced     = -1`,
+      );
+      if (__DEV__ && result.changes > 0)
+        console.log(`[SiteTrack DB] Migration 10b: reset ${result.changes} permanently-failed photo delete(s) for retry`);
+    } catch (err: unknown) {
+      console.error('[SiteTrack DB] Migration 10b failed:', err instanceof Error ? err.message : String(err));
+    }
+
+    currentVersion = 10;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '10')`);
   }
 
   if (__DEV__)
@@ -699,6 +822,66 @@ export function addToSyncQueue(
   }
 }
 
+/**
+ * Cancels any pending photo_upload tasks for the given photo record ID.
+ * Called immediately when a photo is deleted so the binary is never uploaded
+ * to Supabase Storage — preventing a ghost row from being inserted afterwards.
+ */
+export function cancelPendingPhotoUpload(recordId: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(
+      `UPDATE sync_queue SET synced = 1
+       WHERE table_name = 'inspection_photos'
+         AND record_id = ?
+         AND operation = 'photo_upload'
+         AND synced = 0`,
+      [recordId],
+    );
+    if (__DEV__)
+      console.log(`[SiteTrack DB] Cancelled pending photo_upload for record ${recordId}`);
+  } catch (err) {
+    console.error(`[SiteTrack DB] cancelPendingPhotoUpload(${recordId}) error:`, err);
+  }
+}
+
+/**
+ * Records a photo ID in the permanent tombstone so it is never re-pulled
+ * from Supabase — even if the remote delete is slow, retrying, or fails.
+ * Call this every time a photo is deleted locally, regardless of URL scheme.
+ */
+export function recordDeletedPhoto(photoId: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(
+      `INSERT OR IGNORE INTO deleted_photo_ids (id) VALUES (?)`,
+      [photoId],
+    );
+    if (__DEV__)
+      console.log(`[SiteTrack DB] Tombstoned deleted photo ${photoId}`);
+  } catch (err) {
+    console.error(`[SiteTrack DB] recordDeletedPhoto(${photoId}) error:`, err);
+  }
+}
+
+/**
+ * Returns the set of photo IDs that have been locally deleted.
+ * Used by the sync pull to skip tombstoned rows, preventing
+ * deleted photos from reappearing after reinstall.
+ */
+export function getDeletedPhotoIds(): Set<string> {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ id: string }>(
+      `SELECT id FROM deleted_photo_ids`,
+    );
+    return new Set(rows.map(r => r.id));
+  } catch (err) {
+    console.error(`[SiteTrack DB] getDeletedPhotoIds error:`, err);
+    return new Set();
+  }
+}
+
 /** Returns all sync queue items not yet pushed to Supabase and below the retry limit */
 export function getPendingSyncItems(): SyncQueueItem[] {
   try {
@@ -844,7 +1027,12 @@ export function getAssetsWithJobResults<T = RecordData>(
   try {
     const db = openDatabase();
     return db.getAllSync<T>(
+      // The subquery picks the single most-recent job_assets row per asset for this job.
+      // Without it, rapid taps that create duplicate job_assets rows cause the LEFT JOIN
+      // to return multiple rows per asset — the first PDF shows all of them, but the
+      // second (after sync collapses duplicates) shows only one.
       `SELECT a.*,
+              ja.id         AS job_asset_id,
               ja.result,
               ja.defect_reason,
               ja.technician_notes,
@@ -853,10 +1041,22 @@ export function getAssetsWithJobResults<T = RecordData>(
               ja.is_compliant,
               ja.actioned_at
        FROM assets a
-       LEFT JOIN job_assets ja ON a.id = ja.asset_id AND ja.job_id = ?
+       LEFT JOIN (
+         SELECT *
+         FROM job_assets
+         WHERE job_id = ?
+           AND id IN (
+             -- For each asset, pick only the most-recently actioned row
+             SELECT id FROM job_assets ji2
+             WHERE ji2.job_id = job_assets.job_id
+               AND ji2.asset_id = job_assets.asset_id
+             ORDER BY ji2.actioned_at DESC
+             LIMIT 1
+           )
+       ) ja ON a.id = ja.asset_id
        WHERE a.property_id = ?
          AND a.status = 'active'
-       ORDER BY a.asset_type ASC`,
+       ORDER BY a.asset_type ASC, COALESCE(a.asset_ref, '') ASC`,
       [jobId, propertyId],
     );
   } catch (err) {
@@ -864,6 +1064,7 @@ export function getAssetsWithJobResults<T = RecordData>(
     return [];
   }
 }
+
 
 /**
  * Returns recent jobs for a property (for property detail history section).

@@ -1,224 +1,220 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+/**
+ * Quote Screen — app/(app)/jobs/[id]/quote.tsx
+ *
+ * Read-only summary for the technician.
+ * Defects are grouped by severity (Critical / Major / Minor).
+ * Prices shown if admin has set them — otherwise "Unquoted".
+ * Total is summed from quote_price values.
+ * No editing on this screen — all quote management is admin-only.
+ */
+import React, { useEffect, useMemo } from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
-import { cardShadow } from '@/components/ui/Card';
-import { ScreenHeader } from '@/components/ui';
-import { useQuotesStore } from '@/store/quotesStore';
-import { useInventoryStore } from '@/store/inventoryStore';
-import { getDefectsForJob } from '@/lib/database';
-import { Defect } from '@/types';
-import { QuoteStatus } from '@/constants/Enums';
+import { ScreenHeader, EmptyState } from '@/components/ui';
+import { useDefectsStore } from '@/store/defectsStore';
+import { DefectSeverity } from '@/constants/Enums';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SkeletonCard } from '@/components/ui/SkeletonCard';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import type { Defect } from '@/types';
 
+// ─── Severity colour palette ──────────────────────────────────
+const SEV: Record<DefectSeverity, { color: string; label: string; icon: string }> = {
+  [DefectSeverity.Critical]: { color: '#ef4444', label: 'Critical / Immediate',  icon: 'alert-octagon' },
+  [DefectSeverity.Major]:    { color: '#f97316', label: 'Major Defects',          icon: 'alert' },
+  [DefectSeverity.Minor]:    { color: '#eab308', label: 'Minor Defects',          icon: 'alert-circle-outline' },
+};
+
+// ─── Single defect row (read-only) ───────────────────────────
+function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: any }) {
+  const hasPrice = defect.quote_price != null && Number(defect.quote_price) > 0;
+  return (
+    <View style={[dr.row, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: color }]}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={[dr.desc, { color: C.text }]} numberOfLines={2}>{defect.description}</Text>
+        <Text style={[dr.sub, { color: C.textTertiary }]}>
+          {defect.status.charAt(0).toUpperCase() + defect.status.slice(1)}
+        </Text>
+      </View>
+      {hasPrice ? (
+        <View style={[dr.pricePill, { backgroundColor: '#10B981' + '15' }]}>
+          <Text style={dr.priceTxt}>${Number(defect.quote_price).toFixed(2)}</Text>
+        </View>
+      ) : (
+        <View style={[dr.pricePill, { backgroundColor: C.backgroundTertiary }]}>
+          <Text style={[dr.priceTxt, { color: C.textTertiary }]}>—</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const dr = StyleSheet.create({
+  row: {
+    borderRadius: 12, borderWidth: 1, borderLeftWidth: 4,
+    paddingVertical: 12, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginBottom: 8,
+  },
+  desc:     { fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  sub:      { fontSize: 11 },
+  pricePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  priceTxt:  { fontSize: 12, fontWeight: '800', color: '#10B981' },
+});
+
+// ─── Main Screen ─────────────────────────────────────────────
 export default function QuoteScreen() {
   const C = useColors();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
-  const quoteStore = useQuotesStore();
-  const inventoryStore = useInventoryStore();
-  const [defects, setDefects] = useState<Defect[]>([]);
-  const [showInventory, setShowInventory] = useState(false);
-  const [pendingQty, setPendingQty] = useState(1); // FLOW-5: quantity before adding to quote
-
+  const store = useDefectsStore();
 
   useEffect(() => {
-    if (jobId) {
-      quoteStore.loadQuoteForJob(jobId);
-      inventoryStore.loadInventory();
-      setDefects(getDefectsForJob(jobId));
-    }
+    if (jobId) store.loadDefects(jobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  const handleCreateDraft = () => {
-    if (jobId) quoteStore.createDraftQuote(jobId);
+  // Group defects by severity
+  const grouped = useMemo(() => ({
+    critical: store.defects.filter(d => d.severity === DefectSeverity.Critical),
+    major:    store.defects.filter(d => d.severity === DefectSeverity.Major),
+    minor:    store.defects.filter(d => d.severity === DefectSeverity.Minor),
+  }), [store.defects]);
+
+  // Running total from admin-set prices
+  const total = useMemo(
+    () => store.defects.reduce((sum, d) => sum + (Number(d.quote_price) || 0), 0),
+    [store.defects],
+  );
+
+  const hasDefects = store.defects.length > 0;
+
+  const renderGroup = (key: 'critical' | 'major' | 'minor', delay: number) => {
+    const defects = grouped[key];
+    if (defects.length === 0) return null;
+    const cfg = SEV[key === 'critical' ? DefectSeverity.Critical : key === 'major' ? DefectSeverity.Major : DefectSeverity.Minor];
+    return (
+      <Animated.View key={key} entering={FadeInDown.delay(delay).duration(340)}>
+        <View style={s.groupHeader}>
+          <View style={[s.groupDot, { backgroundColor: cfg.color }]} />
+          <MaterialCommunityIcons name={cfg.icon as any} size={14} color={cfg.color} />
+          <Text style={[s.groupTitle, { color: C.textTertiary }]}>
+            {cfg.label} ({defects.length})
+          </Text>
+        </View>
+        {defects.map(d => (
+          <DefectRow key={d.id} defect={d} color={cfg.color} C={C} />
+        ))}
+      </Animated.View>
+    );
   };
 
-  const currentQuote = quoteStore.currentQuote;
-  const isApproved = currentQuote?.status === QuoteStatus.Approved;
-
-  const getInventoryItemName = (invId: string) => {
-    const item = inventoryStore.items.find(i => i.id === invId);
-    return item ? item.name : 'Unknown Item';
-  };
-
-  const getDefectDescription = (defectId: string | null) => {
-    if (!defectId) return 'General/Manual Add';
-    const def = defects.find(d => d.id === defectId);
-    return def ? def.description : 'Unknown Defect';
-  };
+  if (store.isLoading) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack curved />
+        <View style={{ paddingTop: 24, gap: 12 }}>
+          <SkeletonCard /><SkeletonCard />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
-        eyebrow="QUOTE & BILLING"
-        title="Quote Summary"
-        subtitle="Add materials, repairs, and labor"
-        showBack={true}
-        curved={true}
-      />
-      <ScrollView contentContainerStyle={s.content}>
-        <View style={{ paddingTop: 16 }}>
-        {!currentQuote ? (
-          <View style={[s.emptyState, { backgroundColor: C.surface }, cardShadow]}>
-            <Text style={{ fontSize: 40 }}>💰</Text>
-            <Text style={[s.emptyTitle, { color: C.text }]}>No Quote Generated</Text>
-            <Text style={[s.emptySub, { color: C.textSecondary }]}>Create a draft quote to start adding materials and defect repairs.</Text>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor: C.primary }]} onPress={handleCreateDraft}>
-              <Text style={s.actionBtnTxt}>Create Draft Quote</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: 16 }}>
-            <View style={s.quoteHeader}>
-              <Text style={[s.quoteTitle, { color: C.textSecondary }]}>Current Quote</Text>
-              <View style={[s.statusBadge, { backgroundColor: isApproved ? C.success : C.border }]}>
-                <Text style={s.statusTxt}>{currentQuote.status.toUpperCase()}</Text>
-              </View>
+        eyebrow="QUOTE SUMMARY"
+        title="Quote"
+        subtitle={`${store.defects.length} defect${store.defects.length !== 1 ? 's' : ''} logged`}
+        showBack
+        curved
+        rightComponent={
+          hasDefects && total > 0 ? (
+            <View style={[s.totalBadge, { backgroundColor: '#10B981' + '18', borderColor: '#10B981' + '40' }]}>
+              <Text style={s.totalBadgeTxt}>${total.toFixed(2)}</Text>
             </View>
-            <Text style={[s.totalAmount, { color: C.text }]}>${currentQuote.total_amount.toFixed(2)}</Text>
+          ) : undefined
+        }
+      />
 
-            <View style={[s.section, { backgroundColor: C.surface }, cardShadow]}>
-              <Text style={[s.sectionTitle, { color: C.text }]}>Line Items</Text>
-              {quoteStore.items.length === 0 ? (
-                <Text style={[s.emptyItems, { color: C.textTertiary }]}>No items added to this quote yet.</Text>
-              ) : (
-                quoteStore.items.map((item, idx) => (
-                  <View key={item.id} style={[s.itemCard, { borderBottomColor: C.border }]}>
-                    <View style={s.itemInfo}>
-                      <Text style={[s.itemName, { color: C.text }]}>{getInventoryItemName(item.inventory_item_id)}</Text>
-                      <Text style={[s.itemDefect, { color: C.textSecondary }]}>For: {getDefectDescription(item.defect_id)}</Text>
-                      <Text style={[s.itemPrice, { color: C.primary }]}>{item.quantity} x ${item.unit_price.toFixed(2)} = ${(item.quantity * item.unit_price).toFixed(2)}</Text>
-                    </View>
-                    {!isApproved && (
-                      <TouchableOpacity onPress={() => quoteStore.removeItem(item.id)} style={s.deleteBtn}>
-                        <MaterialCommunityIcons name="delete-outline" size={20} color={C.error} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
+      {!hasDefects ? (
+        <EmptyState
+          emoji="🎉"
+          title="No defects logged"
+          subtitle="All clear! Any defects you log during the inspection will appear here, grouped by severity."
+        />
+      ) : (
+        <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+
+          {/* Admin-managed info banner */}
+          <Animated.View entering={FadeInDown.delay(20).duration(300)}>
+            <View style={[s.infoBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+              <MaterialCommunityIcons name="shield-account-outline" size={16} color={C.textSecondary} />
+              <Text style={[s.infoBannerTxt, { color: C.textSecondary }]}>
+                Prices and quote approval are managed by the admin portal
+              </Text>
+            </View>
+          </Animated.View>
+
+          {/* Defect groups */}
+          {renderGroup('critical', 60)}
+          {renderGroup('major',    90)}
+          {renderGroup('minor',    120)}
+
+          {/* Total footer */}
+          <Animated.View entering={FadeInDown.delay(150).duration(340)}>
+            <View style={[s.totalCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <View style={s.totalRow}>
+                <Text style={[s.totalLabel, { color: C.textSecondary }]}>Subtotal (ex-GST)</Text>
+                <Text style={[s.totalValue, { color: total > 0 ? '#10B981' : C.textTertiary }]}>
+                  {total > 0 ? `$${total.toFixed(2)}` : 'Pending pricing'}
+                </Text>
+              </View>
+              {total === 0 && (
+                <Text style={[s.totalNote, { color: C.textTertiary }]}>
+                  Prices will be filled by the admin once the quote is reviewed
+                </Text>
               )}
             </View>
+          </Animated.View>
 
-            {!isApproved && (
-              <View style={s.addTools}>
-                {showInventory ? (
-                  <View style={[s.inventoryList, { backgroundColor: C.surface }, cardShadow]}>
-                    <Text style={[s.sectionTitle, { color: C.text }]}>Select from Inventory</Text>
-
-                    {/* FLOW-5 FIX: Quantity stepper — was always hardcoded to 1 */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, padding: 12, borderRadius: 12, backgroundColor: C.backgroundTertiary }}>
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: C.textSecondary }}>Quantity</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                        <TouchableOpacity
-                          onPress={() => setPendingQty(q => Math.max(1, q - 1))}
-                          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <Text style={{ fontSize: 18, fontWeight: '700', color: C.text }}>−</Text>
-                        </TouchableOpacity>
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: C.text, minWidth: 24, textAlign: 'center' }}>{pendingQty}</Text>
-                        <TouchableOpacity
-                          onPress={() => setPendingQty(q => q + 1)}
-                          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFF' }}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {inventoryStore.items.map(inv => (
-                      <TouchableOpacity 
-                        key={inv.id} 
-                        style={[s.invOption, { borderBottomColor: C.border }]}
-                        onPress={() => {
-                          quoteStore.addItem(inv.id, null, pendingQty);
-                          setPendingQty(1); // reset for next item
-                          setShowInventory(false);
-                        }}
-                      >
-                        <Text style={[s.invOptionName, { color: C.text }]}>{inv.name}</Text>
-                        <Text style={[s.invOptionPrice, { color: C.primary }]}>
-                          {pendingQty > 1 ? `${pendingQty} × ` : ''}${inv.price.toFixed(2)}
-                          {pendingQty > 1 ? ` = $${(inv.price * pendingQty).toFixed(2)}` : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity
-                      style={[s.actionBtn, s.actionBtnSecondary, { borderColor: C.border, backgroundColor: C.background }]}
-                      onPress={() => { setShowInventory(false); setPendingQty(1); }}
-                    >
-                      <Text style={[s.actionBtnTxt, { color: C.primary }]}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={s.actionsRow}>
-                    <TouchableOpacity style={[s.actionBtn, { flex: 1, backgroundColor: C.primary }]} onPress={() => setShowInventory(true)}>
-                      <MaterialCommunityIcons name="plus" size={18} color="#FFF" />
-                      <Text style={s.actionBtnTxt}>Add Item</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                
-                {quoteStore.items.length > 0 && !showInventory && (
-                  <TouchableOpacity 
-                    style={[s.actionBtn, s.approveBtn, { backgroundColor: C.success }, cardShadow]} 
-                    onPress={() => {
-                      Alert.alert(
-                        "Approve Quote?",
-                        "Once approved, this quote cannot be edited. It will be attached to the final completion report.",
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          { text: "Approve", style: "destructive", onPress: quoteStore.approveQuote }
-                        ]
-                      );
-                    }}
-                  >
-                    <Text style={[s.actionBtnTxt, {color: '#FFF'}]}>Approve Quote</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1 },
-  content: { paddingBottom: 60 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 40, padding: 32, borderRadius: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', marginVertical: 8 },
-  emptySub: { fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  actionBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  actionBtnTxt: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-  actionBtnSecondary: { borderWidth: 1, marginTop: 8 },
-  
-  quoteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
-  quoteTitle: { fontSize: 14, fontWeight: '600', textTransform: 'uppercase' },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusTxt: { fontSize: 12, fontWeight: '700', color: '#FFF' },
-  totalAmount: { fontSize: 32, fontWeight: '800', marginVertical: 8 },
-  
-  section: { borderRadius: 16, padding: 16, marginTop: 16 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
-  emptyItems: { fontSize: 14, fontStyle: 'italic' },
-  itemCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600' },
-  itemDefect: { fontSize: 12, marginTop: 2, fontStyle: 'italic' },
-  itemPrice: { fontSize: 14, fontWeight: '700', marginTop: 4 },
-  deleteBtn: { padding: 8 },
-  
-  addTools: { marginTop: 24 },
-  actionsRow: { flexDirection: 'row', gap: 12 },
-  approveBtn: { marginTop: 16 },
-  
-  inventoryList: { borderRadius: 16, padding: 16 },
-  invOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1 },
-  invOptionName: { fontSize: 15, fontWeight: '500' },
-  invOptionPrice: { fontSize: 15, fontWeight: '700' },
+  screen:  { flex: 1 },
+  content: { padding: 16, paddingBottom: 60, gap: 4 },
+
+  totalBadge: {
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 10, borderWidth: 1,
+  },
+  totalBadgeTxt: { fontSize: 12, fontWeight: '800', color: '#10B981' },
+
+  infoBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1, marginBottom: 16,
+  },
+  infoBannerTxt: { fontSize: 12, flex: 1, lineHeight: 17 },
+
+  groupHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginBottom: 10, marginTop: 8, paddingHorizontal: 2,
+  },
+  groupDot:   { width: 7, height: 7, borderRadius: 4 },
+  groupTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+
+  totalCard: {
+    borderRadius: 14, borderWidth: 1,
+    padding: 16, marginTop: 12,
+  },
+  totalRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { fontSize: 13, fontWeight: '600' },
+  totalValue: { fontSize: 18, fontWeight: '800' },
+  totalNote:  { fontSize: 11, marginTop: 6, lineHeight: 16 },
 });

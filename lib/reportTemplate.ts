@@ -1,31 +1,37 @@
 /**
- * lib/reportTemplate.ts — v4
+ * lib/reportTemplate.ts
  *
- * SiteTrack branded PDF report template.
+ * Generates the HTML that expo-print converts to a professional A4 PDF.
  *
- *   Page 1  — Gradient header + info cards + scope + severity legend + asset summary
- *   Page 2+ — Logo fixed top-right, asset maintenance log
- *   Footer  — Fixed footer with orange accent: company | Page X of Y | contact
- *   Assets  — "057 - Type   [location]   PASS/FAIL" on one line
- *   Defects — Full-border defect card with severity colours and timestamps
+ * Design: Clean corporate inspection report
+ *   - Navy/slate header with orange accent brand bar
+ *   - Structured info grid with clear hierarchy
+ *   - Colour-coded defect severity legend
+ *   - Asset rows: PASS (green) / FAIL (red) / N/T (grey) pills
+ *   - Defect boxes with full photo grids
+ *   - Signature block with typed name fallback
+ *   - Fixed footer on every page
+ *
+ * Photo handling:
+ *   - Only data: URIs are embedded (safe for expo-print sandbox)
+ *   - All images use explicit px dimensions (WKWebView collapses % sizes)
+ *   - Broken images hidden via onerror handler
  */
 
+import { CompanyConfig } from '@/constants/Company';
 import {
-  Job,
   Defect,
-  Signature,
   InspectionPhoto,
-  TimeLog,
+  InventoryItem,
+  Job,
   Quote,
   QuoteItem,
-  InventoryItem,
+  Signature,
+  TimeLog,
 } from '@/types';
 import { formatAssetType } from '@/utils/assetHelpers';
-import { CompanyConfig } from '@/constants/Company';
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AssetWithResult {
   id: string;
@@ -40,7 +46,6 @@ export interface AssetWithResult {
   next_service_date: string | null;
   status: string;
   created_at: string;
-  // Joined from job_assets:
   result: 'pass' | 'fail' | 'not_tested' | null;
   defect_reason: string | null;
   technician_notes: string | null;
@@ -62,9 +67,7 @@ export interface ReportData {
   inventory?: InventoryItem[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// Formatting helpers
-// ─────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDateShort(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -75,44 +78,48 @@ function fmtDateShort(iso: string | null | undefined): string {
   } catch { return iso; }
 }
 
-/** Formats as "29th May 2024 1:09PM" — matching reference exactly */
 function fmtDateTimeFull(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
     const d = new Date(iso);
     const day = d.getDate();
-    const suffix =
-      [11, 12, 13].includes(day % 100) ? 'th'
-      : day % 10 === 1 ? 'st'
-      : day % 10 === 2 ? 'nd'
-      : day % 10 === 3 ? 'rd'
-      : 'th';
+    const sfx = [11, 12, 13].includes(day % 100) ? 'th'
+      : day % 10 === 1 ? 'st' : day % 10 === 2 ? 'nd'
+      : day % 10 === 3 ? 'rd' : 'th';
     const month = d.toLocaleDateString('en-AU', { month: 'long' });
     const year  = d.getFullYear();
-    let   hours = d.getHours();
-    const mins  = String(d.getMinutes()).padStart(2, '0');
-    const ampm  = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    return `${day}${suffix} ${month} ${year} ${hours}:${mins}${ampm}`;
+    let h = d.getHours();
+    const m  = String(d.getMinutes()).padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${day}${sfx} ${month} ${year} ${h}:${m}${ap}`;
   } catch { return iso; }
 }
 
-function shortId(id: string, len = 4): string {
+function shortId(id: string, len = 5): string {
   return id.replace(/-/g, '').substring(0, len).toUpperCase();
 }
 
-function fmtCurrency(value: number | string): string {
-  const n = parseFloat(String(value));
+function fmtCurrency(v: number | string): string {
+  const n = parseFloat(String(v));
   return isNaN(n) ? '$0.00' : `$${n.toFixed(2)}`;
 }
 
-/** Strips underscores and title-cases a job type string */
 function fmtJobType(raw: string | null | undefined): string {
   if (!raw) return 'Service';
   return raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/** Returns a padded 3-digit sequence or serial prefix as the asset reference code */
+/**
+ * Only data: URIs are guaranteed to render inside expo-print's sandboxed WKWebView.
+ * http/https URIs fail silently in offline/sandboxed contexts.
+ * We accept data: only — pdfGenerator.ts encodes all images before calling us.
+ */
+function isSafe(src: string | null | undefined): src is string {
+  if (!src) return false;
+  return src.startsWith('data:');
+}
+
 function assetRefCode(asset: AssetWithResult, index: number): string {
   if (asset.serial_number) {
     const clean = asset.serial_number.replace(/\D/g, '');
@@ -121,860 +128,896 @@ function assetRefCode(asset: AssetWithResult, index: number): string {
   return String(index + 1).padStart(3, '0');
 }
 
-// ─────────────────────────────────────────────────────────────
-// Fixed elements (logo + footer — rendered on EVERY page)
-// ─────────────────────────────────────────────────────────────
+// ─── CSS ───────────────────────────────────────────────────────────────────────
 
-/** Top-right logo rendered as a fixed element — appears on all pages */
-function fixedLogoHtml(): string {
-  return `
-  <div class="fixed-logo">
-    <div class="logo-diamond">
-      <div class="logo-inner"><span class="logo-initials">ST</span></div>
-    </div>
-    <div class="logo-text">
-      <div class="logo-brand"><span class="logo-red">S</span>ITE<span class="logo-red">T</span>RACK</div>
-      <div class="logo-sub">SERVICES</div>
-    </div>
-  </div>`;
+const CSS = `
+@page { margin: 0; size: A4 }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+  color: #1E293B;
+  line-height: 1.5;
+  font-size: 11px;
+  background: #fff;
+}
+.nb { page-break-inside: avoid; break-inside: avoid; }
+
+/* ── Per-page footer (embedded inside each .page div) ── */
+/* Using an embedded footer per page is the only reliable way to get correct
+   page numbers in expo-print / WKWebView. CSS counter(page) and JS scrollHeight
+   hacks both fail because they run in a screen rendering context, not print. */
+.page-footer {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 44px;
+  background: #1C3048;
+  padding: 0 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 8.5px; color: rgba(255,255,255,0.65);
+}
+.pf-left  { line-height: 1.6; }
+.pf-mid   { font-size: 9px; font-weight: 700; color: #E97316; text-align: center; white-space: nowrap; }
+.pf-right { text-align: right; line-height: 1.6; }
+
+/* ── Page wrapper ── */
+/* min-height = A4 height; footer sits at absolute bottom inside the page */
+.page {
+  padding: 28px 32px 60px 32px;
+  position: relative;
+  min-height: 1122px; /* A4 at 96dpi = 1122.5px — ensures footer reaches the bottom */
+  page-break-after: always;
+  box-sizing: border-box;
+}
+.page:last-of-type { page-break-after: auto; }
+
+/* ── Brand header ── */
+.brand-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.brand-logo {
+  display: flex; align-items: center; gap: 10px;
+}
+.brand-diamond {
+  width: 36px; height: 36px;
+  background: #E97316;
+  transform: rotate(45deg);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.brand-diamond-inner { transform: rotate(-45deg); }
+.brand-init { font-size: 12px; font-weight: 900; color: #fff; letter-spacing: -1px; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.brand-name { font-size: 13px; font-weight: 900; color: #1C3048; letter-spacing: 0.6px; text-transform: uppercase; }
+.brand-name span { color: #E97316; }
+.brand-sub  { font-size: 8px; font-weight: 700; color: #94A3B8; letter-spacing: 1.8px; text-transform: uppercase; }
+.brand-meta { text-align: right; }
+.brand-reportnum { font-size: 17px; font-weight: 800; color: #E97316; letter-spacing: 1px; }
+.brand-reportlbl { font-size: 8.5px; color: #94A3B8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+/* ── Section title bar ── */
+.sec-bar {
+  background: #1C3048;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-radius: 4px 4px 0 0;
+  border-left: 4px solid #E97316;
+  margin-top: 18px;
+}
+.sec-bar.first { margin-top: 0; }
+.sec-bar-light {
+  background: #F1F5F9;
+  color: #1C3048;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-radius: 4px 4px 0 0;
+  border-left: 4px solid #E97316;
+  margin-top: 18px;
 }
 
-/** Fixed footer — company | Page X of Y | contact */
-function fixedFooterHtml(): string {
-  return `
-  <div class="fixed-footer">
-    <div class="footer-left">
-      <div>${CompanyConfig.name}</div>
-      <div>${CompanyConfig.addressLine1}, ${CompanyConfig.addressLine2}</div>
-      <div>ABN: ${CompanyConfig.abn}</div>
-    </div>
-    <div class="footer-center">
-      Page <span class="page-num"></span> of <span class="page-total"></span>
-    </div>
-    <div class="footer-right">
-      <div>&#127758; ${CompanyConfig.website}</div>
-      <div>&#64; ${CompanyConfig.contactEmail}</div>
-      <div>&#9742; ${CompanyConfig.contactPhone}</div>
-    </div>
-  </div>`;
+/* ── Property info grid ── */
+.info-grid {
+  display: flex;
+  border: 1px solid #E2E8F0;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.info-cell {
+  flex: 1;
+  padding: 12px 14px;
+  border-right: 1px solid #E2E8F0;
+  background: #FAFBFD;
+}
+.info-cell:last-child { border-right: none; }
+.info-cell.accent { border-top: 3px solid #E97316; background: #FFFBF7; }
+.info-label { font-size: 8.5px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+.info-val   { font-size: 11px; color: #1E293B; font-weight: 600; line-height: 1.5; }
+.info-val.muted { color: #64748B; font-weight: 400; }
+
+/* ── Horizontal divider ── */
+.hdiv {
+  height: 1px; background: #E2E8F0; margin: 16px 0;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Page 1 — Cover / Summary
-// ─────────────────────────────────────────────────────────────
+/* ── Scope of works ── */
+.scope-wrap {
+  border: 1px solid #E2E8F0; border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 10px 14px 14px;
+  background: #FAFBFD;
+}
+.scope-list { list-style: none; }
+.scope-list li {
+  font-size: 11px; color: #334155;
+  padding: 5px 0;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex; align-items: center; gap: 8px;
+}
+.scope-list li:last-child { border-bottom: none; }
+.scope-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #E97316; color: #fff;
+  font-size: 9px; font-weight: 800;
+  flex-shrink: 0;
+}
 
-function buildPage1Html(data: ReportData): string {
-  const { job, assets, defects, techName, reportId } = data;
+/* ── Defect legend ── */
+.legend {
+  border: 1px solid #E2E8F0; border-top: none;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+.legend-row { display: flex; align-items: stretch; }
+.legend-row + .legend-row { border-top: 1px solid #E2E8F0; }
+.lg-cnt {
+  width: 40px; padding: 9px 4px;
+  text-align: center; font-weight: 900; font-size: 14px; color: #fff; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.lg-ttl {
+  width: 176px; padding: 9px 12px;
+  font-weight: 700; font-size: 10.5px; color: #fff; flex-shrink: 0;
+  display: flex; align-items: center;
+}
+.lg-desc {
+  flex: 1; padding: 9px 14px;
+  font-size: 10.5px; background: #FAFBFD; color: #475569;
+  display: flex; align-items: center;
+  border-left: 1px solid #E2E8F0;
+}
+.lc-crit { background: #DC2626; }
+.lc-maj  { background: #D97706; }
+.lc-min  { background: #CA8A04; }
+.lc-rec  { background: #0EA5E9; }
+.lc-inf  { background: #6366F1; }
 
-  // BUG 1 FIX: getJobById returns flat columns — no nested job.property object exists
-  const j = job as any;
-  const address = [j.property_address, j.property_suburb, j.property_state, j.property_postcode]
-    .filter(Boolean).join('\n');
-  const siteContact  = j.site_contact_name ?? 'Not provided';
-  const propertyName = j.property_name ?? '—';
+/* ── Summary table ── */
+.tbl-wrap {
+  border: 1px solid #E2E8F0; border-top: none;
+  border-radius: 0 0 6px 6px; overflow: hidden;
+}
+.t-hdr {
+  display: flex; padding: 8px 14px;
+  background: #F1F5F9;
+  border-bottom: 2px solid #D1D9E6;
+  font-size: 9.5px; font-weight: 800; color: #475569;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.t-row {
+  display: flex; padding: 9px 14px;
+  border-bottom: 1px solid #F1F5F9;
+  align-items: center; font-size: 11px;
+}
+.t-row:nth-child(even) { background: #FAFBFD; }
+.t-row:last-child { border-bottom: none; }
+.c-num  { width: 28px; color: #94A3B8; font-weight: 700; font-size: 10px; }
+.c-svc  { flex: 2.2; padding-right: 8px; color: #334155; }
+.c-ast  { flex: 1.6; padding-right: 8px; color: #64748B; }
+.c-qty  { width: 52px; text-align: center; font-weight: 800; color: #E97316; font-size: 13px; }
+.c-no   { width: 28px; color: #64748B; }
+.c-desc { flex: 2; padding-right: 8px; color: #334155; }
+.c-qsm  { width: 44px; text-align: center; color: #64748B; }
+.c-unit { width: 80px; text-align: right; color: #64748B; }
+.c-tot  { width: 80px; text-align: right; font-weight: 700; color: #1E293B; }
 
-  // BUG 24 FIX: use updated_at (closest proxy to actual completion) not scheduled_date
-  const performedDate = fmtDateShort(j.updated_at ?? job.scheduled_date);
-  const jobTypeLabel  = fmtJobType(job.job_type);
+.grand-row {
+  display: flex; justify-content: flex-end; align-items: center; gap: 16px;
+  padding: 10px 14px;
+  border-top: 2px solid #E2E8F0;
+  background: #F7F9FC;
+}
+.grand-lbl { font-weight: 700; font-size: 11px; color: #1E293B; }
+.grand-val { font-weight: 900; font-size: 14px; color: #059669; min-width: 80px; text-align: right; }
 
-  // Defect severity counts
-  const cntCritical = defects.filter(d => d.severity === 'critical').length;
-  const cntMajor    = defects.filter(d => d.severity === 'major').length;
-  const cntMinor    = defects.filter(d => d.severity === 'minor').length;
+/* ── Prepared by strip ── */
+.prepby {
+  margin-top: 14px; padding: 9px 14px;
+  background: #FFF7ED;
+  border-left: 3px solid #E97316;
+  border-radius: 0 4px 4px 0;
+  font-size: 10.5px;
+  display: flex; align-items: center; gap: 6px;
+}
+.prepby-lbl  { color: #94A3B8; font-weight: 600; }
+.prepby-name { color: #1C3048; font-weight: 800; }
 
-  // BUG 23 FIX: Asset type grouping — Service label describes the WORK, Asset label the EQUIPMENT
-  type GroupEntry = { serviceLabel: string; assetLabel: string; count: number };
-  const grouped = assets.reduce<Record<string, GroupEntry>>((acc, a) => {
-    const key = a.asset_type ?? 'General Asset';
-    if (!acc[key]) {
-      const assetLabel   = formatAssetType(key);
-      const serviceLabel = `Annual Inspection – ${assetLabel}`;
-      acc[key] = { serviceLabel, assetLabel, count: 0 };
-    }
-    acc[key].count++;
-    return acc;
-  }, {});
-  const groupEntries = Object.values(grouped);
+/* ─── Maintenance / asset log page ─── */
+.maint-group-hdr {
+  display: flex; align-items: center;
+  background: #F8FAFC;
+  border-left: 4px solid #E97316;
+  border: 1px solid #E2E8F0;
+  border-left-width: 4px;
+  padding: 8px 14px;
+  font-weight: 800; font-size: 11.5px; color: #1C3048;
+  margin-top: 16px;
+  border-radius: 4px 4px 0 0;
+}
+.maint-col-hdr {
+  display: flex; padding: 6px 14px;
+  background: #F1F5F9;
+  border-bottom: 1px solid #D1D9E6;
+  border-left: 1px solid #E2E8F0;
+  border-right: 1px solid #E2E8F0;
+  font-size: 9px; font-weight: 700; color: #94A3B8;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.maint-col-l { flex: 1; }
+.maint-col-r { width: 100px; text-align: right; }
 
-  // Scope of Works — numbered codes based on index
-  const scopeItems = groupEntries.length === 0
-    ? '<li>No assets recorded for this job.</li>'
-    : groupEntries
-        .map((g, i) =>
-          `<li>${String(i + 1).padStart(2, '0')} - ${g.serviceLabel} (${g.count})</li>`)
-        .join('');
+/* ── Asset row ── */
+.a-wrap {
+  border-left: 1px solid #E2E8F0;
+  border-right: 1px solid #E2E8F0;
+  border-bottom: 1px solid #F1F5F9;
+}
+.a-wrap:last-of-type {
+  border-bottom: 1px solid #E2E8F0;
+  border-radius: 0 0 4px 4px;
+}
+.a-row {
+  display: flex; padding: 10px 14px;
+  align-items: flex-start;
+}
+.a-row.fail-row { background: #FFF8F8; }
+.a-left { flex: 1; padding-right: 12px; }
+.a-right { width: 110px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.a-ref  { font-weight: 700; font-size: 11.5px; color: #1C3048; }
+.a-loc  { display: inline; font-size: 10px; color: #94A3B8; margin-left: 8px; font-weight: 400; }
+.a-notes { font-size: 10px; color: #64748B; margin-top: 3px; }
 
-  // Servicing Summary rows
-  const summaryRows = groupEntries.length === 0
-    ? '<div class="empty-row">No assets recorded</div>'
-    : groupEntries
-        .map((g, i) => `
-        <div class="table-row">
-          <div class="col-service">${String(i + 1).padStart(2, '0')} - ${g.serviceLabel}</div>
-          <div class="col-asset">${g.assetLabel}</div>
-          <div class="col-qty">${g.count}</div>
-        </div>`)
-        .join('');
+/* ── Status pills ── */
+.pill {
+  display: inline-block; padding: 3px 12px;
+  border-radius: 20px; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  text-align: center; min-width: 52px;
+}
+.pass { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
+.fail { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
+.nt   { background: #F1F5F9; color: #64748B; border: 1px solid #CBD5E1; }
 
+/* ── Thumb photos (pass rows) ── */
+.thumb-grid { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+.photo-thumb {
+  width: 72px; height: 72px;
+  object-fit: cover;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 5px;
+  background: #F8FAFC;
+  display: block;
+}
+.photo-thumb[src=""] { display: none; }
+
+/* ── Defect box ── */
+.db {
+  margin: 0 14px 12px 14px;
+  border: 1.5px solid #D97706;
+  border-top: 3px solid #D97706;
+  background: #FFFCF5;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+.db.crit { border-color: #DC2626; background: #FFFAFA; }
+.db.min  { border-color: #CA8A04; background: #FEFCE8; }
+
+.db-hdr {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid #F3EAD6;
+  background: rgba(0,0,0,0.02);
+}
+.db.crit .db-hdr { border-bottom-color: #FEE2E2; }
+.db.min  .db-hdr { border-bottom-color: #FEF9C3; }
+
+.db-type {
+  font-weight: 800; font-size: 10px; color: #D97706;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.db.crit .db-type { color: #DC2626; }
+.db.min  .db-type { color: #B45309; }
+
+.db-id    { font-size: 9.5px; color: #94A3B8; margin-top: 3px; font-family: monospace; }
+.db-dates { font-size: 9px; color: #94A3B8; text-align: right; line-height: 1.7; flex-shrink: 0; margin-left: 12px; }
+
+.db-body  { padding: 10px 12px; }
+.db-field { margin-bottom: 8px; font-size: 11px; line-height: 1.6; }
+.db-field:last-child { margin-bottom: 0; }
+.db-field-lbl { font-weight: 700; color: #1C3048; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+.db-field-val { color: #475569; }
+
+.actioned {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #059669; color: #fff;
+  font-weight: 800; font-size: 9px; padding: 2px 8px;
+  border-radius: 20px; letter-spacing: 0.5px; text-transform: uppercase;
+}
+
+/* ── Defect photos grid ── */
+.defect-photo-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #F3EAD6;
+  background: rgba(0,0,0,0.015);
+}
+.db.crit .defect-photo-grid { border-top-color: #FEE2E2; }
+.db.min  .defect-photo-grid { border-top-color: #FEF9C3; }
+.photo-wrap { display: flex; flex-direction: column; align-items: center; }
+.photo-defect {
+  width: 220px; height: 165px;
+  object-fit: cover;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 6px;
+  background: #F8FAFC;
+  display: block;
+}
+.photo-defect[src=""] { display: none; }
+.photo-cap { font-size: 8px; color: #94A3B8; margin-top: 3px; text-align: center; }
+
+/* ── Signature block ── */
+.sig-section {
+  margin-top: 22px;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px; overflow: hidden;
+}
+.sig-section-hdr {
+  background: #F1F5F9; padding: 8px 14px;
+  font-size: 9.5px; font-weight: 800; color: #475569;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  border-bottom: 1px solid #E2E8F0;
+}
+.sig-grid { display: flex; }
+.sig-block {
+  flex: 1; padding: 14px 16px;
+  border-right: 1px solid #E2E8F0;
+}
+.sig-block:last-child { border-right: none; }
+.sig-pad {
+  border-bottom: 2px solid #CBD5E1;
+  min-height: 64px;
+  display: flex; align-items: flex-end;
+  padding-bottom: 6px; margin-bottom: 8px;
+  background: #ffffff;
+}
+.sig-typed { font-family: Times New Roman, serif; font-size: 22px; font-style: italic; color: #1C3048; }
+.sig-img   { max-width: 100%; max-height: 64px; object-fit: contain; background: #ffffff; }
+.sig-empty { font-size: 10.5px; color: #CBD5E1; }
+.sig-lbl   { font-size: 8.5px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+
+/* ── Quote page ── */
+.quote-subtotal {
+  display: flex; justify-content: flex-end; padding: 8px 14px;
+  border-top: 1px solid #E2E8F0; background: #F7F9FC;
+  font-size: 10.5px; color: #475569; gap: 16px;
+}
+.quote-gst  { font-weight: 600; }
+.quote-gst-val { width: 80px; text-align: right; }
+`;
+
+// ─── Logo wordmark ─────────────────────────────────────────────────────────────
+
+function logoHtml(reportNum: string, reportLabel = 'Service Report'): string {
   return `
-  <!-- ═══ PAGE 1: Cover Summary ═══ -->
-  <div class="page page-1">
-
-    <!-- Full-width navy header bar -->
-    <div class="header-bar">
-      <div class="header-title">Service Report</div>
-      <div class="header-id">R-${shortId(reportId, 5)}</div>
-    </div>
-
-    <!-- Info grid: individual cards -->
-    <div class="info-grid">
-      <div class="info-card">
-        <div class="info-label">Site / Property</div>
-        <div class="info-val bold">${propertyName}</div>
-        <div class="info-val muted" style="white-space:pre-line">${address || '—'}</div>
+  <div class="brand-bar">
+    <div class="brand-logo">
+      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">ST</span></div></div>
+      <div class="brand-text">
+        <div class="brand-name"><span>S</span>ITE<span>T</span>RACK</div>
+        <div class="brand-sub">Services</div>
       </div>
-      <div class="info-card">
+    </div>
+    <div class="brand-meta">
+      <div class="brand-reportnum">${reportLabel} ${reportNum}</div>
+      <div class="brand-reportlbl">Official Service Document</div>
+    </div>
+  </div>`;
+}
+
+// ─── Per-page footer (embedded inside each .page div) ───────────────────────────
+// We pass pageNum (1-based) and totalPages (known at build time) so the numbers
+// are always correct — no JS hacks, no CSS counter() tricks needed.
+
+function pageFooterHtml(pageNum: number, totalPages: number): string {
+  return `
+  <div class="page-footer">
+    <div class="pf-left">
+      <div>${CompanyConfig.name}</div>
+      <div>${CompanyConfig.addressLine1}, ${CompanyConfig.addressLine2} | ABN: ${CompanyConfig.abn}</div>
+    </div>
+    <div class="pf-mid">Page ${pageNum} of ${totalPages}</div>
+    <div class="pf-right">
+      <div>www.${CompanyConfig.website}</div>
+      <div>Ph: ${CompanyConfig.contactPhone} | ${CompanyConfig.contactEmail}</div>
+    </div>
+  </div>`;
+}
+
+// ─── Page 1 — Cover / Summary ──────────────────────────────────────────────────
+
+function buildPage1(data: ReportData, pageNum: number, totalPages: number): string {
+  const { job, assets, defects, techName, reportId } = data;
+  const j = job as any;
+
+  const propName    = j.property_name ?? '—';
+  const address     = [j.property_address, j.property_suburb, j.property_state, j.property_postcode].filter(Boolean).join(', ');
+  const siteContact = j.site_contact_name ?? 'Not provided';
+  const perfDate    = fmtDateShort(j.updated_at ?? job.scheduled_date);
+  const jobType     = fmtJobType(job.job_type);
+  const refNum      = shortId(job.id, 6);
+
+  const cntCrit = defects.filter(d => d.severity === 'critical').length;
+  const cntMaj  = defects.filter(d => d.severity === 'major').length;
+  const cntMin  = defects.filter(d => d.severity === 'minor').length;
+
+  // Group assets by type
+  type G = { svc: string; ast: string; cnt: number };
+  const map = assets.reduce((acc: Record<string, G>, a) => {
+    const k = a.asset_type ?? 'General Asset';
+    if (!acc[k]) acc[k] = { svc: `Annual Inspection – ${formatAssetType(k)}`, ast: formatAssetType(k), cnt: 0 };
+    acc[k].cnt++;
+    return acc;
+  }, {} as Record<string, G>);
+  const groups = Object.values(map);
+
+  const scopeItems = groups.length === 0
+    ? '<li><span class="scope-num">—</span>No assets recorded for this job.</li>'
+    : groups.map((g, i) => `<li><span class="scope-num">${String(i + 1).padStart(2, '0')}</span>${g.svc} (${g.cnt})</li>`).join('');
+
+  const summaryRows = groups.length === 0
+    ? '<div style="padding:14px;color:#94A3B8;font-size:11px">No assets recorded</div>'
+    : groups.map((g, i) => `
+        <div class="t-row">
+          <div class="c-num">${String(i + 1).padStart(2, '0')}</div>
+          <div class="c-svc">${g.svc}</div>
+          <div class="c-ast">${g.ast}</div>
+          <div class="c-qty">${g.cnt}</div>
+        </div>`).join('');
+
+  return `
+  <div class="page">
+    ${logoHtml(`R-${shortId(reportId, 5)}`)}
+
+    <div class="sec-bar first">Site / Property Information</div>
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="info-label">Site / Property</div>
+        <div class="info-val">${propName}</div>
+        <div class="info-val muted" style="margin-top:4px;white-space:pre-line">${address || '—'}</div>
+      </div>
+      <div class="info-cell">
         <div class="info-label">Site Contact</div>
         <div class="info-val">${siteContact}</div>
       </div>
-      <div class="info-card">
+      <div class="info-cell">
         <div class="info-label">Job Type</div>
-        <div class="info-val">${jobTypeLabel}</div>
-        <div class="info-label" style="margin-top:10px">Reference No.</div>
-        <div class="info-val">${shortId(job.id, 6)}</div>
+        <div class="info-val">${jobType}</div>
+        <div class="info-label" style="margin-top:9px">Reference No.</div>
+        <div class="info-val">${refNum}</div>
       </div>
-      <div class="info-card ic-accent">
+      <div class="info-cell accent">
         <div class="info-label">Date Completed</div>
-        <div class="info-val bold">${performedDate}</div>
+        <div class="info-val">${perfDate}</div>
       </div>
     </div>
 
-    <!-- Scope of Works -->
-    <div class="section-bar">Scope of Works</div>
-    <div class="scope-body">
+    <div class="sec-bar">Scope of Works</div>
+    <div class="scope-wrap">
       <ul class="scope-list">${scopeItems}</ul>
     </div>
 
-    <!-- Defect legend -->
+    <div class="sec-bar">Defect Summary</div>
     <div class="legend">
       <div class="legend-row">
-        <div class="legend-count lgd-crit">${cntCritical}</div>
-        <div class="legend-title lgd-crit">Critical Defects</div>
-        <div class="legend-desc">A defect that renders a system inoperative.</div>
+        <div class="lg-cnt lc-crit">${cntCrit}</div>
+        <div class="lg-ttl lc-crit">Critical Defects</div>
+        <div class="lg-desc">A defect that renders a system inoperative.</div>
       </div>
       <div class="legend-row">
-        <div class="legend-count lgd-maj">${cntMajor}</div>
-        <div class="legend-title lgd-maj">Non-critical Defects</div>
-        <div class="legend-desc">A system impairment not likely to critically affect the operation of the system.</div>
+        <div class="lg-cnt lc-maj">${cntMaj}</div>
+        <div class="lg-ttl lc-maj">Non-critical Defects</div>
+        <div class="lg-desc">A system impairment not likely to critically affect the operation.</div>
       </div>
       <div class="legend-row">
-        <div class="legend-count lgd-min">${cntMinor}</div>
-        <div class="legend-title lgd-min">Non-conformances</div>
-        <div class="legend-desc">Missing information or incorrect feature that does not affect the system operation.</div>
+        <div class="lg-cnt lc-min">${cntMin}</div>
+        <div class="lg-ttl lc-min">Non-conformances</div>
+        <div class="lg-desc">Missing information or incorrect feature — does not affect system operation.</div>
       </div>
       <div class="legend-row">
-        <div class="legend-count lgd-rec">0</div>
-        <div class="legend-title lgd-rec">Recommendations</div>
-        <div class="legend-desc">A modification suggested to improve the system performance.</div>
+        <div class="lg-cnt lc-rec">0</div>
+        <div class="lg-ttl lc-rec">Recommendations</div>
+        <div class="lg-desc">A modification suggested to improve system performance.</div>
       </div>
       <div class="legend-row">
-        <div class="legend-count lgd-inf">0</div>
-        <div class="legend-title lgd-inf">Informational Notes</div>
-        <div class="legend-desc">Detailed advice or general comment.</div>
+        <div class="lg-cnt lc-inf">0</div>
+        <div class="lg-ttl lc-inf">Informational Notes</div>
+        <div class="lg-desc">Detailed advice or general comment.</div>
       </div>
     </div>
 
-    <!-- Asset Summary -->
-    <div class="section-bar">Asset Summary</div>
-    <div class="table-header">
-      <div class="col-service">Service Description</div>
-      <div class="col-asset">Asset Type</div>
-      <div class="col-qty">Qty</div>
+    <div class="sec-bar">Servicing Summary</div>
+    <div class="tbl-wrap">
+      <div class="t-hdr">
+        <div class="c-num">#</div>
+        <div class="c-svc">Service</div>
+        <div class="c-ast">Asset Type</div>
+        <div class="c-qty">Qty</div>
+      </div>
+      ${summaryRows}
     </div>
-    ${summaryRows}
 
-    <!-- Technician sign-off row -->
-    <div class="tech-row">
-      <span class="tech-label">Report prepared by:</span>
-      <span class="tech-name">${techName}</span>
+    <div class="prepby">
+      <span class="prepby-lbl">Report prepared by:</span>
+      <span class="prepby-name">${techName}</span>
     </div>
+    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Page 2+ — Maintenance section
-// ─────────────────────────────────────────────────────────────
+// ─── Photo helpers ─────────────────────────────────────────────────────────────
 
-function buildAssetPhoto(photo: InspectionPhoto, small = true): string {
-  const cls = small ? 'photo-thumb' : 'photo-inline';
+function thumbHtml(photo: InspectionPhoto): string {
+  if (!isSafe(photo.photo_url)) return '';
+  // onerror hides broken images rather than showing a broken icon
+  return `<img src="${photo.photo_url}" class="photo-thumb" alt="" onerror="this.style.display='none'"/>`;
+}
+
+function defectPhotoHtml(url: string, cap = 'Photo'): string {
+  if (!isSafe(url)) return '';
   return `
-  <div class="photo-wrap">
-    <img src="${photo.photo_url}" class="${cls}" alt="Inspection photo" />
-    <div class="photo-caption">${photo.caption || 'Inspection photo'}</div>
+  <div class="photo-wrap nb">
+    <img src="${url}" class="photo-defect" alt="${cap}" onerror="this.style.display='none'"/>
+    <div class="photo-cap">${cap}</div>
   </div>`;
 }
 
-/** Builds a photo block from a raw URL string (used for defect.photos[] entries) */
-function buildRawPhoto(url: string, caption = 'Defect photo', small = false): string {
-  const cls = small ? 'photo-thumb' : 'photo-defect';
-  return `
-  <div class="photo-wrap avoid-break">
-    <img src="${url}" class="${cls}" alt="${caption}" />
-    <div class="photo-caption">${caption}</div>
-  </div>`;
-}
+// ─── Defect box ────────────────────────────────────────────────────────────────
 
-function buildDefectBoxHtml(
+function buildDefectBox(
   asset: AssetWithResult,
   defect: Defect | undefined,
-  photo: InspectionPhoto | undefined
+  defectPhotos: InspectionPhoto[],
+  assetPhoto: InspectionPhoto | undefined,
 ): string {
-  // Primary photo source: inspection_photos table record (already base64-encoded)
-  const inspectionPhotoHtml = photo ? buildAssetPhoto(photo, false) : '';
+  const inspHtml = assetPhoto && isSafe(assetPhoto.photo_url)
+    ? defectPhotoHtml(assetPhoto.photo_url, assetPhoto.caption || 'Inspection photo')
+    : '';
 
   if (defect) {
-    const isCritical = defect.severity === 'critical';
-    const isMinor    = defect.severity === 'minor';
-    const boxCls     = isCritical ? 'db-crit' : isMinor ? 'db-min' : 'db-maj';
-    const typeLabel  = isCritical ? 'Critical defect' : isMinor ? 'Non-conformance' : 'Non-critical defect';
-    const addedDate  = fmtDateTimeFull(defect.created_at);
-    const verifDate  = addedDate; // Defect type has no updated_at — reuse created_at
+    const isCrit = defect.severity === 'critical';
+    const isMin  = defect.severity === 'minor';
+    const cls    = isCrit ? 'crit' : isMin ? 'min' : '';
+    const label  = isCrit ? 'Critical Defect' : isMin ? 'Non-conformance' : 'Non-critical Defect';
+    const date   = fmtDateTimeFull(defect.created_at);
 
-    // Secondary photo source: defect.photos[] JSON array (base64-encoded by processPhotos)
-    let defectPhotoUrls: string[] = [];
-    try {
-      defectPhotoUrls = typeof defect.photos === 'string'
-        ? JSON.parse(defect.photos as unknown as string)
-        : (Array.isArray(defect.photos) ? defect.photos : []);
-    } catch { defectPhotoUrls = []; }
+    let rawUrls: string[] = [];
+    if (Array.isArray(defect.photos)) rawUrls = defect.photos as string[];
+    else if (typeof defect.photos === 'string' && (defect.photos as string).length > 0) {
+      try { rawUrls = JSON.parse(defect.photos as unknown as string); } catch {}
+    }
 
-    // Build photo grid — prefer inspection_photos; supplement with defect.photos[]
-    const defectPhotosHtml = defectPhotoUrls
-      .filter(u => u) // include original URLs even if not base64, so it doesn't just silently drop them
-      .map((url, i) => buildRawPhoto(url, `Defect photo ${i + 1}`, false))
-      .join('');
+    // Collect all defect photos — deduplicate by url
+    const seen = new Set<string>();
+    const allPhotoHtmlParts: string[] = [];
 
-    // Combine: inspection photo first, then defect-specific photos
-    const combinedPhotos = [inspectionPhotoHtml, defectPhotosHtml].filter(Boolean).join('');
-    const allPhotosHtml = combinedPhotos ? `<div class="photo-grid">${combinedPhotos}</div>` : '';
+    if (inspHtml && assetPhoto?.photo_url) {
+      seen.add(assetPhoto.photo_url);
+      allPhotoHtmlParts.push(inspHtml);
+    }
+    for (const p of defectPhotos) {
+      if (isSafe(p.photo_url) && !seen.has(p.photo_url)) {
+        seen.add(p.photo_url);
+        allPhotoHtmlParts.push(defectPhotoHtml(p.photo_url, p.caption || 'Photo'));
+      }
+    }
+    for (let i = 0; i < rawUrls.length; i++) {
+      const u = rawUrls[i];
+      if (isSafe(u) && !seen.has(u)) {
+        seen.add(u);
+        allPhotoHtmlParts.push(defectPhotoHtml(u, `Defect photo ${i + 1}`));
+      }
+    }
+
+    const photosHtml = allPhotoHtmlParts.length
+      ? `<div class="defect-photo-grid">${allPhotoHtmlParts.join('')}</div>`
+      : '';
+
+    const resolution = asset.defect_reason || asset.technician_notes || 'Requires further action.';
 
     return `
-    <div class="defect-box ${boxCls}">
-      <div class="defect-header avoid-break">
+    <div class="db ${cls} nb">
+      <div class="db-hdr nb">
         <div>
-          <div class="defect-type">${typeLabel}</div>
-          <div class="defect-id">ID: ${shortId(defect.id, 4)} &#x1F517;</div>
+          <div class="db-type">${label}</div>
+          <div class="db-id">ID: ${shortId(defect.id, 4)} &#x1F517;</div>
         </div>
-        <div class="defect-dates">
-          Added: ${addedDate}<br/>
-          Last Verified: ${verifDate}
+        <div class="db-dates">Added: ${date}<br/>Last Verified: ${date}</div>
+      </div>
+      <div class="db-body">
+        <div class="db-field">
+          <div class="db-field-lbl">Description</div>
+          <div class="db-field-val">${defect.description || 'Defect observed during inspection.'}</div>
+        </div>
+        <div class="db-field">
+          <div class="db-field-lbl">Resolution</div>
+          <div class="db-field-val">${resolution}</div>
+        </div>
+        <div class="db-field">
+          <div class="db-field-lbl">Quote</div>
+          <span class="actioned">&#10003; Actioned</span>
         </div>
       </div>
-      <div class="defect-field"><strong>Description:</strong><br/>${defect.description || 'Defect observed.'}</div>
-      <div class="defect-field"><strong>Resolution:</strong><br/>${asset.defect_reason || asset.technician_notes || 'Requires further action.'}</div>
-      <div class="defect-field"><strong>Quote:</strong> <span class="actioned-badge">ACTIONED</span></div>
-      ${allPhotosHtml}
+      ${photosHtml}
     </div>`;
   }
 
-  // No Defect record — generic box for failed assets
-  const fallbackDate = fmtDateTimeFull(asset.actioned_at ?? new Date().toISOString());
+  // Fallback — no linked Defect record
+  const fb = fmtDateTimeFull(asset.actioned_at ?? new Date().toISOString());
+  const fallbackPhotos = inspHtml
+    ? `<div class="defect-photo-grid">${inspHtml}</div>` : '';
+
   return `
-  <div class="defect-box db-maj">
-    <div class="defect-header avoid-break">
+  <div class="db nb">
+    <div class="db-hdr nb">
       <div>
-        <div class="defect-type">Non-critical defect</div>
-        <div class="defect-id">ID: ${shortId(asset.id, 4)}</div>
+        <div class="db-type">Non-critical Defect</div>
+        <div class="db-id">ID: ${shortId(asset.id, 4)}</div>
       </div>
-      <div class="defect-dates">Added: ${fallbackDate}</div>
+      <div class="db-dates">Added: ${fb}</div>
     </div>
-    <div class="defect-field"><strong>Description:</strong><br/>${asset.defect_reason || 'Failed testing parameters.'}</div>
-    <div class="defect-field"><strong>Resolution:</strong><br/>Pending formal quote.</div>
-    ${inspectionPhotoHtml ? `<div class="photo-grid">${inspectionPhotoHtml}</div>` : ''}
+    <div class="db-body">
+      <div class="db-field">
+        <div class="db-field-lbl">Description</div>
+        <div class="db-field-val">${asset.defect_reason || 'Failed testing parameters.'}</div>
+      </div>
+      <div class="db-field">
+        <div class="db-field-lbl">Resolution</div>
+        <div class="db-field-val">Pending formal quote.</div>
+      </div>
+    </div>
+    ${fallbackPhotos}
   </div>`;
 }
 
-function buildAssetRowHtml(
+// ─── Asset row ─────────────────────────────────────────────────────────────────
+
+function buildAssetRow(
   asset: AssetWithResult,
   index: number,
   defects: Defect[],
-  photos: InspectionPhoto[]
+  photos: InspectionPhoto[],
 ): string {
   const isPass = asset.result === 'pass';
   const isFail = asset.result === 'fail';
+  const pillCls = isPass ? 'pass' : isFail ? 'fail' : 'nt';
+  const pillLbl = isPass ? 'PASS' : isFail ? 'FAIL' : 'N/T';
 
-  const pillCls   = isPass ? 'pill-pass' : isFail ? 'pill-fail' : 'pill-nt';
-  const pillLabel = isPass ? 'PASS' : isFail ? 'FAIL' : 'N/T';
-
-  const refCode  = assetRefCode(asset, index);
-  const typeLabel = formatAssetType(asset.asset_type);
-  const location  = asset.location_on_site ?? '';
+  const ref     = assetRefCode(asset, index);
+  const typeLbl = formatAssetType(asset.asset_type);
+  const loc     = asset.location_on_site ?? '';
+  const notes   = asset.inspection_notes || asset.technician_notes;
 
   const linkedDefect = defects.find(d => d.asset_id === asset.id);
-  const assetPhoto   = photos.find(
-    p => p.asset_id === asset.id || (linkedDefect && p.asset_id === linkedDefect.asset_id)
-  );
+  const assetPhotos  = photos.filter(p => p.asset_id === asset.id && !p.defect_id);
+  const defectPhotos = linkedDefect ? photos.filter(p => p.defect_id === linkedDefect.id) : [];
 
-  // PASS: thumbnail below pill; FAIL: photo inside defect box
-  const passPhotoHtml = isPass && assetPhoto ? buildAssetPhoto(assetPhoto, true) : '';
-  const defectHtml    = isFail ? buildDefectBoxHtml(asset, linkedDefect, assetPhoto) : '';
+  // Pass rows: show up to 3 small thumbnails
+  const thumbsHtml = isPass && assetPhotos.length > 0
+    ? `<div class="thumb-grid">${assetPhotos.slice(0, 3).map(p => thumbHtml(p)).join('')}</div>`
+    : '';
+
+  const defectHtml = isFail
+    ? buildDefectBox(asset, linkedDefect, defectPhotos, assetPhotos[0])
+    : '';
 
   return `
-  <div class="asset-block">
-    <div class="asset-row avoid-break">
-      <div class="asset-left">
-        <span class="asset-ref">${refCode} - ${typeLabel}</span>
-        ${location ? `<span class="asset-loc">${location}</span>` : ''}
+  <div class="a-wrap">
+    <div class="a-row ${isFail ? 'fail-row' : ''} nb">
+      <div class="a-left">
+        <span class="a-ref">${ref} - ${typeLbl}</span>${loc ? `<span class="a-loc">${loc}</span>` : ''}
+        ${notes ? `<div class="a-notes">${notes}</div>` : ''}
       </div>
-      <div class="asset-right">
-        <span class="pill ${pillCls}">${pillLabel}</span>
-        ${passPhotoHtml}
+      <div class="a-right">
+        <span class="pill ${pillCls}">${pillLbl}</span>
+        ${thumbsHtml}
       </div>
     </div>
     ${defectHtml}
   </div>`;
 }
 
-function buildMaintenancePage(data: ReportData): string {
-  const { assets, defects, photos, signature, techName } = data;
+// ─── Maintenance page ──────────────────────────────────────────────────────────
+
+function buildMaintPage(data: ReportData, pageNum: number, totalPages: number): string {
+  const { assets, defects, photos, signature, techName, reportId } = data;
+
+  const sigHtml = buildSig(signature, techName);
 
   if (assets.length === 0) {
     return `
-    <div class="page maint-page">
-      <div class="maint-section-bar">Asset Maintenance Log</div>
-      <div class="empty-row">No maintenance records for this job.</div>
-      ${buildSignaturesHtml(signature, techName)}
+    <div class="page">
+      ${logoHtml(`R-${shortId(reportId, 5)}`)}
+      <div class="sec-bar first">Asset Maintenance Log</div>
+      <div style="padding:18px 14px;color:#94A3B8;font-size:11px;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px">
+        No maintenance records for this job.
+      </div>
+      ${sigHtml}
+      ${pageFooterHtml(pageNum, totalPages)}
     </div>`;
   }
 
-  // Group by asset_type — preserving insertion order
+  // Group assets by type
   const groupMap = new Map<string, AssetWithResult[]>();
-  for (const asset of assets) {
-    const label = formatAssetType(asset.asset_type ?? 'General Asset');
-    if (!groupMap.has(label)) groupMap.set(label, []);
-    groupMap.get(label)!.push(asset);
+  for (const a of assets) {
+    const lbl = formatAssetType(a.asset_type ?? 'General Asset');
+    if (!groupMap.has(lbl)) groupMap.set(lbl, []);
+    groupMap.get(lbl)!.push(a);
   }
 
-  let globalIndex = 0;
-  let groupsHtml  = '';
-
-  for (const [groupName, groupAssets] of groupMap) {
-    const rows = groupAssets
-      .map(asset => buildAssetRowHtml(asset, globalIndex++, defects, photos))
-      .join('');
-
-    groupsHtml += `
-    <div class="group-header avoid-break">${groupName}</div>
-    <div class="col-row">
-      <div class="col-asset-hd">Asset</div>
-      <div class="col-status-hd">Status</div>
+  let gi = 0;
+  let body = '';
+  for (const [name, ga] of groupMap) {
+    const rows = ga.map(a => buildAssetRow(a, gi++, defects, photos)).join('');
+    body += `
+    <div class="maint-group-hdr nb">${name}</div>
+    <div class="maint-col-hdr">
+      <div class="maint-col-l">Asset</div>
+      <div class="maint-col-r">Status</div>
     </div>
     ${rows}`;
   }
 
   return `
-  <!-- ═══ PAGE 2+: Asset Maintenance Log ═══ -->
-  <div class="page maint-page">
-    <div class="maint-section-bar">Asset Maintenance Log</div>
-    ${groupsHtml}
-    ${buildSignaturesHtml(signature, techName)}
+  <div class="page">
+    ${logoHtml(`R-${shortId(reportId, 5)}`)}
+    <div class="sec-bar first">Asset Maintenance Log</div>
+    ${body}
+    ${sigHtml}
+    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
-function buildSignaturesHtml(signature: Signature | null, techName: string): string {
-  const clientSig = signature?.signature_url
-    ? `<img src="${signature.signature_url}" alt="Authorised Signatory" class="sig-img" />`
-    : `<span class="sig-empty">Not captured</span>`;
+function buildSig(signature: Signature | null, techName: string): string {
+  const clientSigHtml = signature?.signature_url && isSafe(signature.signature_url)
+    ? `<img src="${signature.signature_url}" class="sig-img" alt="Client Signature" onerror="this.style.display='none'"/>`
+    : `<span class="sig-empty">${signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
+
+  const signerName = signature?.signed_by_name ?? '';
 
   return `
-  <div class="sig-area avoid-break">
-    <div class="sig-block">
-      <div class="sig-pad">
-        <span class="sig-typed">${techName}</span>
+  <div class="sig-section nb">
+    <div class="sig-section-hdr">Signatures</div>
+    <div class="sig-grid">
+      <div class="sig-block">
+        <div class="sig-pad"><span class="sig-typed">${techName}</span></div>
+        <div class="sig-lbl">Inspector Signature</div>
       </div>
-      <div class="sig-label">Inspector Signature</div>
-    </div>
-    <div class="sig-block">
-      <div class="sig-pad">${clientSig}</div>
-      <div class="sig-label">Authorised Signatory</div>
+      <div class="sig-block">
+        <div class="sig-pad">${clientSigHtml}</div>
+        <div class="sig-lbl">Authorised Signatory${signerName ? ` — ${signerName}` : ''}</div>
+      </div>
     </div>
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Quote page
-// ─────────────────────────────────────────────────────────────
+// ─── Quote page ────────────────────────────────────────────────────────────────
 
-function buildQuotePageHtml(
+function buildQuotePage(
   quote: Quote,
   items: QuoteItem[],
-  inventory: InventoryItem[]
+  inventory: InventoryItem[],
+  reportId: string,
+  pageNum: number,
+  totalPages: number,
 ): string {
-  if (items.length === 0) return '';
+  if (!items.length) return '';
 
   const rows = items.map((qi, i) => {
-    const name = inventory.find(inv => inv.id === qi.inventory_item_id)?.name ?? 'Item';
-    const total = fmtCurrency(qi.quantity * parseFloat(String(qi.unit_price)));
+    const name  = inventory.find(inv => inv.id === qi.inventory_item_id)?.name ?? 'Service Item';
+    const unit  = parseFloat(String(qi.unit_price));
+    const total = qi.quantity * unit;
     return `
-    <div class="table-row">
-      <div class="col-no">${i + 1}</div>
-      <div class="col-desc">${name}</div>
-      <div class="col-qty-sm">${qi.quantity}</div>
-      <div class="col-unit">${fmtCurrency(qi.unit_price)}</div>
-      <div class="col-total">${total}</div>
+    <div class="t-row">
+      <div class="c-num">${i + 1}</div>
+      <div class="c-desc">${name}</div>
+      <div class="c-qsm">${qi.quantity}</div>
+      <div class="c-unit">${fmtCurrency(unit)}</div>
+      <div class="c-tot">${fmtCurrency(total)}</div>
     </div>`;
   }).join('');
 
+  const total    = parseFloat(String(quote.total_amount)) || 0;
+  const gst      = total / 11;
+  const exGst    = total - gst;
+
   return `
-  <!-- ═══ Quote Page ═══ -->
-  <div class="page quote-page">
-    <div class="header-bar">
-      <div class="header-title">Estimate &amp; Quote</div>
-      <div class="header-id">Q-${shortId(quote.id, 5)}</div>
+  <div class="page">
+    ${logoHtml(`Q-${shortId(quote.id, 5)}`, 'Estimate & Quote')}
+    <div class="sec-bar first">Approved Estimate</div>
+    <div class="tbl-wrap">
+      <div class="t-hdr">
+        <div class="c-num">#</div>
+        <div class="c-desc">Service / Item Details</div>
+        <div class="c-qsm">Qty</div>
+        <div class="c-unit">Unit Price</div>
+        <div class="c-tot">Total</div>
+      </div>
+      ${rows}
+      <div class="quote-subtotal">
+        <span class="quote-gst">Subtotal (ex. GST)</span>
+        <span class="quote-gst-val">${fmtCurrency(exGst)}</span>
+      </div>
+      <div class="quote-subtotal">
+        <span class="quote-gst">GST (10%)</span>
+        <span class="quote-gst-val">${fmtCurrency(gst)}</span>
+      </div>
+      <div class="grand-row">
+        <div class="grand-lbl">Total Approved Estimate (inc. GST):</div>
+        <div class="grand-val">${fmtCurrency(total)}</div>
+      </div>
     </div>
-    <div class="table-header">
-      <div class="col-no">#</div>
-      <div class="col-desc">Service / Item Details</div>
-      <div class="col-qty-sm">Qty</div>
-      <div class="col-unit">Unit Price</div>
-      <div class="col-total">Total</div>
-    </div>
-    ${rows}
-    <div class="grand-total-row">
-      <div class="grand-total-label">Total Approved Estimate:</div>
-      <div class="grand-total-val">${fmtCurrency(quote.total_amount)}</div>
-    </div>
+    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// CSS
-// ─────────────────────────────────────────────────────────────
-
-const REPORT_CSS = `
-  @page {
-    margin: 0;
-    size: A4;
-  }
-
-  /* ── Reset ── */
-  *, *::before, *::after {
-    box-sizing: border-box; margin: 0; padding: 0;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  }
-  body { color: #1a1a1a; line-height: 1.45; font-size: 12.5px; background: #fff; }
-
-  /* ── Utilities ── */
-  .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-  .bold   { font-weight: 700; }
-  .muted  { color: #94A3B8; }
-  .empty-row { padding: 20px 16px; color: #94A3B8; font-size: 12px; }
-
-  /* ══════════════════════════════════════════════════════════
-     FIXED ELEMENTS — appear on every printed page
-  ══════════════════════════════════════════════════════════ */
-
-  /* Company logo — fixed top-right */
-  .fixed-logo {
-    position: fixed;
-    top: 24px; right: 36px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 100;
-  }
-  .logo-diamond {
-    width: 44px; height: 44px;
-    background: #F97316;
-    transform: rotate(45deg);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    border-radius: 4px;
-  }
-  .logo-inner { transform: rotate(-45deg); }
-  .logo-initials { font-size: 14px; font-weight: 900; color: #fff; letter-spacing: -1px; }
-  .logo-text { display: flex; flex-direction: column; }
-  .logo-brand { font-size: 13.5px; font-weight: 900; color: #1C3048; letter-spacing: 0.5px; text-transform: uppercase; }
-  .logo-sub   { font-size: 9.5px; font-weight: 700; color: #94A3B8; letter-spacing: 1.5px; text-transform: uppercase; }
-  .logo-red   { color: #F97316; }
-
-  /* Footer — fixed bottom with orange accent */
-  .fixed-footer {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 54px;
-    border-top: 3px solid #F97316;
-    padding: 0 36px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 10px;
-    color: #94A3B8;
-    background: #fff;
-    z-index: 100;
-  }
-  .footer-left  { line-height: 1.6; }
-  .footer-center { text-align: center; font-size: 10.5px; color: #475569; font-weight: 600; white-space: nowrap; }
-  .footer-right { text-align: right; line-height: 1.6; }
-
-  /* CSS counter-based page numbers */
-  .page-num::after   { content: counter(page); }
-  .page-total::after { content: counter(pages); }
-
-  /* ══════════════════════════════════════════════════════════
-     PAGE CONTAINERS
-  ══════════════════════════════════════════════════════════ */
-
-  .page {
-    padding: 32px 36px 80px 36px;
-    max-width: 100%;
-    /* NO min-height — let content dictate page height to avoid blank pages */
-    position: relative;
-  }
-
-  /* Page 2+ flows naturally to avoid blank pages if previous page spills over */
-  .maint-page  { padding-top: 28px; }
-  .quote-page  { padding-top: 28px; }
-
-  /* ══════════════════════════════════════════════════════════
-     PAGE 1 — HEADER BAR
-  ══════════════════════════════════════════════════════════ */
-
-  /* Gradient header bar — leaves space for fixed logo on right */
-  .header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: linear-gradient(135deg, #1C3048 0%, #2B4870 100%);
-    padding: 16px 24px;
-    margin-right: 160px;
-    border-radius: 6px 0 48px 6px;
-    margin-bottom: 22px;
-  }
-  .header-title { color: #fff; font-size: 21px; font-weight: 800; letter-spacing: 0.3px; }
-  .header-id    { color: #F97316; font-size: 16px; font-weight: 700; letter-spacing: 1.5px; }
-
-  /* ══════════════════════════════════════════════════════════
-     INFO GRID — 4 columns
-  ══════════════════════════════════════════════════════════ */
-
-  .info-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 24px;
-  }
-  .info-card {
-    flex: 1;
-    min-width: 130px;
-    background: #F7F9FC;
-    border: 1px solid #E2E8F0;
-    border-top: 3px solid #E2E8F0;
-    border-radius: 6px;
-    padding: 12px 14px;
-  }
-  .info-card.ic-accent { border-top-color: #F97316; }
-  .info-label { font-size: 10.5px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
-  .info-val   { font-size: 12.5px; color: #1e293b; line-height: 1.55; }
-
-  /* ══════════════════════════════════════════════════════════
-     SECTION BARS
-  ══════════════════════════════════════════════════════════ */
-
-  .section-bar {
-    border-left: 4px solid #F97316;
-    background: #F7F9FC;
-    padding: 9px 14px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #1C3048;
-    margin-bottom: 0;
-    border-radius: 0 4px 4px 0;
-  }
-
-  /* Gradient bar for maintenance page title */
-  .maint-section-bar {
-    background: linear-gradient(135deg, #1C3048 0%, #2B4870 100%);
-    border-left: 4px solid #F97316;
-    color: #fff;
-    padding: 10px 16px;
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    border-radius: 0 4px 4px 0;
-  }
-
-  /* ══════════════════════════════════════════════════════════
-     SCOPE OF WORKS
-  ══════════════════════════════════════════════════════════ */
-
-  .scope-body { background: #FAFBFC; border: 1px solid #E2E8F0; border-top: none; padding: 12px 16px 16px; margin-bottom: 20px; border-radius: 0 0 4px 4px; }
-  .scope-list { list-style: none; padding: 0; margin: 0; }
-  .scope-list li { font-size: 12.5px; color: #475569; padding: 4px 0; line-height: 1.6; border-bottom: 1px solid #F0F4F8; }
-  .scope-list li:last-child { border-bottom: none; }
-
-  /* ══════════════════════════════════════════════════════════
-     DEFECT LEGEND
-  ══════════════════════════════════════════════════════════ */
-
-  .legend { margin-bottom: 22px; border-radius: 6px; overflow: hidden; border: 1px solid #E2E8F0; }
-  .legend-row { display: flex; align-items: stretch; }
-  .legend-row + .legend-row { border-top: 1px solid #E2E8F0; }
-  .legend-count { width: 48px; padding: 10px 4px; text-align: center; font-weight: 900; font-size: 16px; color: #fff; flex-shrink: 0; }
-  .legend-title { width: 200px; padding: 10px 14px; font-weight: 700; font-size: 11.5px; color: #fff; flex-shrink: 0; display: flex; align-items: center; }
-  .legend-desc  { flex: 1; padding: 10px 14px; font-size: 11.5px; background: #FAFBFC; color: #475569; display: flex; align-items: center; }
-  .lgd-crit { background: #DC2626; }
-  .lgd-maj  { background: #D97706; }
-  .lgd-min  { background: #CA8A04; }
-  .lgd-rec  { background: #0EA5E9; }
-  .lgd-inf  { background: #6366F1; }
-
-  /* ══════════════════════════════════════════════════════════
-     SERVICING SUMMARY TABLE
-  ══════════════════════════════════════════════════════════ */
-
-  .table-header {
-    display: flex;
-    padding: 8px 14px;
-    background: #F0F4F8;
-    border-bottom: 2px solid #D1D9E6;
-    font-size: 11px;
-    font-weight: 700;
-    color: #1C3048;
-    margin-top: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .table-row {
-    display: flex;
-    padding: 9px 14px;
-    border-bottom: 1px solid #F0F4F8;
-    align-items: flex-start;
-    font-size: 12.5px;
-  }
-  .table-row:nth-child(even) { background: #FAFBFD; }
-  .table-row:last-child { border-bottom: none; }
-
-  /* Column widths for summary table */
-  .col-service { flex: 2.2; padding-right: 8px; color: #334155; }
-  .col-asset   { flex: 1.8; padding-right: 8px; color: #334155; }
-  .col-qty     { width: 70px; text-align: right; font-weight: 700; color: #F97316; }
-
-  /* Column widths for quote table */
-  .col-no      { width: 34px; color: #64748B; }
-  .col-desc    { flex: 2; padding-right: 8px; }
-  .col-qty-sm  { width: 50px; text-align: center; }
-  .col-unit    { width: 80px; text-align: right; }
-  .col-total   { width: 80px; text-align: right; font-weight: 600; }
-
-  /* Grand total row */
-  .grand-total-row {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 16px;
-    padding: 10px 14px;
-    border-top: 2px solid #E2E8F0;
-    margin-top: 4px;
-    background: #F7F9FC;
-  }
-  .grand-total-label { font-weight: 700; font-size: 12.5px; color: #1a1a1a; }
-  .grand-total-val   { font-weight: 800; font-size: 14px; color: #059669; min-width: 80px; text-align: right; }
-
-  /* Technician row */
-  .tech-row   { margin-top: 16px; padding: 10px 14px; background: #FFF5EB; border-left: 3px solid #F97316; border-radius: 0 4px 4px 0; font-size: 12px; }
-  .tech-label { color: #94A3B8; font-weight: 600; margin-right: 8px; }
-  .tech-name  { color: #1C3048; font-weight: 700; }
-
-  /* ══════════════════════════════════════════════════════════
-     MAINTENANCE — Asset groups & rows
-  ══════════════════════════════════════════════════════════ */
-
-  .group-header {
-    display: flex;
-    align-items: center;
-    background: #F0F4F8;
-    border-left: 4px solid #F97316;
-    padding: 8px 14px;
-    font-weight: 700;
-    font-size: 12.5px;
-    color: #1C3048;
-    margin-top: 16px;
-    border-radius: 0 4px 4px 0;
-  }
-
-  /* Column header row for Asset | Status */
-  .col-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 14px;
-    border-bottom: 1.5px solid #D1D9E6;
-    font-size: 11px;
-    font-weight: 700;
-    color: #94A3B8;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .col-asset-hd  { flex: 1; }
-  .col-status-hd { width: 140px; text-align: right; }
-
-  /* Individual asset block */
-  .asset-block { border-bottom: 1px solid #F0F4F8; padding: 11px 14px; }
-  .asset-block:last-of-type { border-bottom: none; }
-
-  /* Asset row: ref + type on left | pill + photo on right */
-  .asset-row  { display: flex; justify-content: space-between; align-items: flex-start; }
-  .asset-left { flex: 1; padding-right: 16px; }
-  .asset-ref  { font-weight: 700; font-size: 12.5px; color: #1C3048; }
-  .asset-loc  {
-    display: inline-block;
-    font-size: 11.5px;
-    color: #94A3B8;
-    margin-left: 12px;
-  }
-  .asset-right {
-    width: 140px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
-  }
-
-  /* ── PASS / FAIL / N/T pills — soft badge style ── */
-  .pill {
-    display: inline-block;
-    padding: 3px 12px;
-    border-radius: 20px;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    min-width: 54px;
-    text-align: center;
-  }
-  .pill-pass { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
-  .pill-fail { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
-  .pill-nt   { background: #F1F5F9; color: #64748B; border: 1px solid #CBD5E1; }
-
-  /* ── Photos ── */
-  .photo-grid    { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .photo-wrap    { display: flex; flex-direction: column; align-items: center; }
-  .photo-thumb   { width: 110px; height: 110px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
-  .photo-inline  { width: 140px; height: 140px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
-  .photo-defect  { width: 100%; max-width: 460px; aspect-ratio: 4/3; max-height: 320px; object-fit: cover; border: 2px solid #E2E8F0; display: block; border-radius: 6px; background-color: #f8fafc; }
-  .photo-caption { font-size: 9px; color: #94A3B8; margin-top: 4px; text-align: center; }
-
-  /* ── Defect box — full border card ── */
-  .defect-box {
-    margin-top: 10px;
-    padding: 12px 14px;
-    border: 1.5px solid #D97706;
-    border-top-width: 3px;
-    background: #FFFBF5;
-    border-radius: 6px;
-    font-size: 12.5px;
-  }
-  .db-crit { border-color: #DC2626; background: #FFF5F5; }
-  .db-min  { border-color: #CA8A04; background: #FEFCE8; }
-  .db-maj  { border-color: #D97706; background: #FFFBF5; }
-
-  .defect-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #F0E8D8;
-  }
-  .db-crit .defect-header { border-bottom-color: #FEC2C2; }
-  .db-min  .defect-header { border-bottom-color: #FDE68A; }
-
-  .defect-type  { font-weight: 700; font-size: 12px; color: #D97706; text-transform: uppercase; letter-spacing: 0.3px; }
-  .db-crit .defect-type { color: #DC2626; }
-  .db-min  .defect-type { color: #CA8A04; }
-
-  .defect-id    { font-size: 11px; color: #94A3B8; margin-top: 3px; font-family: monospace; }
-
-  .defect-dates { font-size: 11px; color: #94A3B8; text-align: right; line-height: 1.7; flex-shrink: 0; margin-left: 14px; }
-
-  .defect-field { margin-bottom: 7px; font-size: 12.5px; line-height: 1.55; }
-  .defect-field strong { color: #1C3048; }
-
-  .actioned-badge {
-    display: inline-block;
-    background: #059669;
-    color: #fff;
-    font-weight: 700;
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 20px;
-    letter-spacing: 0.5px;
-    margin-left: 6px;
-  }
-
-  /* ══════════════════════════════════════════════════════════
-     SIGNATURES
-  ══════════════════════════════════════════════════════════ */
-
-  .sig-area  { display: flex; gap: 20px; margin-top: 36px; }
-  .sig-block {
-    flex: 1;
-    background: #F7F9FC;
-    border: 1px solid #E2E8F0;
-    border-radius: 6px;
-    padding: 14px;
-  }
-  .sig-pad   {
-    border-bottom: 2px solid #D1D9E6;
-    height: 80px;
-    display: flex;
-    align-items: flex-end;
-    padding-bottom: 6px;
-    margin-bottom: 8px;
-  }
-  .sig-typed { font-family: 'Times New Roman', serif; font-size: 22px; font-style: italic; color: #1C3048; }
-  .sig-img   { max-width: 100%; max-height: 80px; object-fit: contain; }
-  .sig-empty { font-size: 12px; color: #D1D9E6; }
-  .sig-label { font-size: 10px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
-`;
-
-// ─────────────────────────────────────────────────────────────
-// Main builder
-// ─────────────────────────────────────────────────────────────
+// ─── Main export ───────────────────────────────────────────────────────────────
 
 export function buildReportHtml(data: ReportData): string {
   const { approvedQuote, quoteItems, inventory, reportId, job } = data;
-
-  const page1Html   = buildPage1Html(data);
-  const maintHtml   = buildMaintenancePage(data);
-
-  const quoteHtml   =
-    approvedQuote && quoteItems?.length && inventory
-      ? buildQuotePageHtml(approvedQuote, quoteItems, inventory)
-      : '';
-
-  // BUG FIX: job is a flat SQL JOIN row — job.property does NOT exist.
-  // Use the same flat-column aliases that getJobById always returns.
-  const j = job as any;
+  const j            = job as any;
   const propertyName = j.property_name ?? reportId;
+
+  const hasQuote = Boolean(approvedQuote && quoteItems?.length && inventory);
+  const totalPages = hasQuote ? 3 : 2;
+
+  const page1   = buildPage1(data, 1, totalPages);
+  const maintPg = buildMaintPage(data, 2, totalPages);
+  const quotePg = hasQuote
+    ? buildQuotePage(approvedQuote!, quoteItems!, inventory!, reportId, 3, totalPages)
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Service Report — ${propertyName}</title>
-  <style>${REPORT_CSS}</style>
+  <style>${CSS}</style>
 </head>
 <body>
-
-  ${fixedLogoHtml()}
-  ${fixedFooterHtml()}
-
-  ${page1Html}
-  ${maintHtml}
-  ${quoteHtml}
-
+  ${page1}
+  ${maintPg}
+  ${quotePg}
 </body>
 </html>`;
 }
