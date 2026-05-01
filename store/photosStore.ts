@@ -67,7 +67,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       //    BUG 8 FIX: do NOT also queue a SyncOperation.Insert here with the local file:// URI
       //    because sync.ts would push the broken local path to Supabase BEFORE the upload completes.
       //    processPhotoQueue will insert the Supabase row AFTER upload succeeds with the public URL.
-      queuePhotoUpload(newPhoto.photo_url, newPhoto.job_id, newPhoto.asset_id ?? undefined, id);
+      queuePhotoUpload(newPhoto.photo_url, newPhoto.job_id, newPhoto.asset_id ?? undefined, id, newPhoto.defect_id ?? undefined);
 
       set((state) => ({ photos: [newPhoto, ...state.photos] }));
     } catch (err: unknown) {

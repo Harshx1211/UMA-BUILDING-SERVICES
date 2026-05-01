@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 10;
+const CURRENT_SCHEMA_VERSION = 11;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -85,6 +85,7 @@ export function initializeSchema(): void {
       access_notes       TEXT,
       hazard_notes       TEXT,
       compliance_status  TEXT NOT NULL DEFAULT 'pending',
+      next_inspection_date TEXT,
       created_at         TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -554,6 +555,24 @@ export function initializeSchema(): void {
 
     currentVersion = 10;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '10')`);
+  }
+
+  // Migration 11: next_inspection_date on properties table
+  if (currentVersion < 11) {
+    try {
+      db.runSync("ALTER TABLE properties ADD COLUMN next_inspection_date TEXT;");
+      if (__DEV__)
+        console.log("[SiteTrack DB] Migration 11: added properties.next_inspection_date");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("duplicate column")) {
+        console.error("[SiteTrack DB] Migration 11 failed:", msg);
+      }
+    }
+    currentVersion = 11;
+    db.runSync(
+      `INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '11')`,
+    );
   }
 
   if (__DEV__)

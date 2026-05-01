@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 
 export default function ReportsPage() {
   const [stats, setStats] = useState({ properties: 0, compliant: 0, nonCompliant: 0, overdue: 0 });
-  const [overdueAssets, setOverdueAssets] = useState<any[]>([]);
+  const [overdueProperties, setOverdueProperties] = useState<any[]>([]);
   const [openDefects, setOpenDefects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,11 +24,11 @@ export default function ReportsPage() {
         supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'compliant'),
         supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'non_compliant'),
         supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'overdue'),
-        supabase.from('assets').select('*, property:properties(name)').lt('next_service_date', today).eq('status', 'active').order('next_service_date').limit(10),
+        supabase.from('properties').select('*').lt('next_inspection_date', today).order('next_inspection_date').limit(10),
         supabase.from('defects').select('*, property:properties(name), asset:assets(asset_type)').eq('status', 'open').eq('severity', 'critical').order('created_at', { ascending: false }).limit(10),
       ]);
       setStats({ properties: total ?? 0, compliant: compliant ?? 0, nonCompliant: nonCompliant ?? 0, overdue: overdue ?? 0 });
-      setOverdueAssets(assets ?? []);
+      setOverdueProperties(assets ?? []);
       setOpenDefects(defects ?? []);
       setLoading(false);
     }
@@ -110,18 +110,18 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Overdue Assets */}
+        {/* Overdue Properties */}
         <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
-          <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>⚠️ Overdue for Service</p>
+          <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>⚠️ Overdue for Inspection</p>
           {loading ? <div className="h-32 flex items-center justify-center"><div className="w-5 h-5 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
-          : overdueAssets.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No overdue assets 🎉</p>
-          : overdueAssets.map((a: any) => (
-            <div key={a.id} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+          : overdueProperties.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No overdue properties 🎉</p>
+          : overdueProperties.map((p: any) => (
+            <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
               <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{a.asset_type}</p>
-                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{a.property?.name} · {a.location_on_site ?? 'Location unknown'}</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{p.name}</p>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{[p.suburb, p.state].filter(Boolean).join(', ') || 'Location unknown'}</p>
               </div>
-              <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>{formatDate(a.next_service_date)}</span>
+              <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>{formatDate(p.next_inspection_date)}</span>
             </div>
           ))}
         </div>

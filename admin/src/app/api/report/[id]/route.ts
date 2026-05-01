@@ -14,7 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!p) return NextResponse.json({ error: 'Property not found' }, { status: 404 });
 
   const today = new Date().toISOString().split('T')[0];
-  const overdueAssets = (assets ?? []).filter((a: any) => a.next_service_date && a.next_service_date < today && a.status === 'active');
+  const isOverdue = p.next_inspection_date && p.next_inspection_date < today;
   const openDefects   = (defects ?? []).filter((d: any) => d.status === 'open' || d.status === 'quoted');
 
   const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -138,9 +138,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       <div class="stat-value">${(assets ?? []).length}</div>
       <div class="stat-label">Total Assets</div>
     </div>
-    <div class="stat-card ${overdueAssets.length > 0 ? 'danger' : ''}">
-      <div class="stat-value">${overdueAssets.length}</div>
-      <div class="stat-label">Overdue Assets</div>
+    <div class="stat-card ${isOverdue ? 'danger' : ''}">
+      <div class="stat-value" style="font-size:16px; margin-top: 6px;">${p.next_inspection_date ? fmt(p.next_inspection_date) : 'Not Set'}</div>
+      <div class="stat-label">Next Inspection</div>
     </div>
     <div class="stat-card ${openDefects.length > 0 ? 'warning' : ''}">
       <div class="stat-value">${openDefects.length}</div>
@@ -188,14 +188,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           <th>Serial #</th>
           <th>Install</th>
           <th>Last Service</th>
-          <th>Next Service</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
         ${(assets ?? []).map((a: any) => {
-          const isOverdue = a.next_service_date && a.next_service_date < today && a.status === 'active';
-          return `<tr class="${isOverdue ? 'overdue' : ''}">
+          return `<tr>
             <td class="mono">${a.asset_ref ?? '—'}</td>
             <td><strong>${a.asset_type}</strong></td>
             <td style="color:#64748b">${a.variant ?? '—'}</td>
@@ -203,7 +201,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             <td class="mono">${a.serial_number ?? '—'}</td>
             <td>${fmt(a.install_date)}</td>
             <td>${fmt(a.last_service_date)}</td>
-            <td class="${isOverdue ? 'text-danger' : ''}">${fmt(a.next_service_date)}${isOverdue ? ' ⚠' : ''}</td>
             <td>${badge(a.status)}</td>
           </tr>`;
         }).join('')}

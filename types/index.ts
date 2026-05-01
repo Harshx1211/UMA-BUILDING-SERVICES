@@ -43,6 +43,7 @@ export interface Property {
   access_notes: string | null;
   hazard_notes: string | null;
   compliance_status: ComplianceStatus;
+  next_inspection_date: string | null;
   created_at: string;
   updated_at: string;
 }

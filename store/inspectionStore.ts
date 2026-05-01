@@ -114,7 +114,8 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       if (!job) throw new Error('Job not found');
 
       const dbAssets         = getAssetsForProperty<Asset>(job.property_id);
-      const jobAssets        = queryRecords<JobAsset>('job_assets', { job_id: jobId });
+      const jobAssets        = queryRecords<JobAsset>('job_assets', { job_id: jobId })
+        .sort((a, b) => (b.actioned_at ?? '').localeCompare(a.actioned_at ?? ''));
       const inspectionPhotos = queryRecords<{ asset_id: string; photo_url: string }>(
         'inspection_photos', { job_id: jobId }
       );

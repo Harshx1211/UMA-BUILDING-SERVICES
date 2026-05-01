@@ -191,9 +191,17 @@ export default function PropertiesPage() {
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                  <div className="flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
-                    <ShieldCheck size={11} />
-                    <span className="text-xs">{p.compliance_status?.replace(/_/g, ' ') ?? 'Unknown'}</span>
+                  <div className="flex items-center gap-3" style={{ color: 'var(--text-tertiary)' }}>
+                    <div className="flex items-center gap-1">
+                      <ShieldCheck size={11} />
+                      <span className="text-xs">{p.compliance_status?.replace(/_/g, ' ') ?? 'Unknown'}</span>
+                    </div>
+                    {p.next_inspection_date && (
+                      <div className="flex items-center gap-1" title="Next Inspection Date">
+                        <Calendar size={11} />
+                        <span className="text-xs">{new Date(p.next_inspection_date).toLocaleDateString()}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button onClick={e => { e.preventDefault(); setDeleteTarget(p); }}

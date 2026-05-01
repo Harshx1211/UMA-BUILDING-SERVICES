@@ -49,7 +49,7 @@ export default function PropertyDetailPage() {
       state: form.state, postcode: form.postcode,
       site_contact_name: form.site_contact_name, site_contact_phone: form.site_contact_phone,
       access_notes: form.access_notes, hazard_notes: form.hazard_notes,
-      compliance_status: form.compliance_status,
+      compliance_status: form.compliance_status, next_inspection_date: form.next_inspection_date || null,
     }, id);
     setSaving(false);
     if (error) toast.error(error);
@@ -63,7 +63,7 @@ export default function PropertyDetailPage() {
   );
   if (!property) return <p className="text-center py-16" style={{ color: 'var(--text-secondary)' }}>Property not found.</p>;
 
-  const overdueAssets = assets.filter(a => a.next_service_date && a.next_service_date < today && a.status === 'active');
+  const isOverdue = property.next_inspection_date && property.next_inspection_date < today;
   const openDefects   = defects.filter(d => d.status === 'open' || d.status === 'quoted');
   const completedJobs = jobs.filter(j => j.status === 'completed').length;
 
@@ -145,7 +145,7 @@ export default function PropertyDetailPage() {
         <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
           {[
             { label: 'Total Assets', value: assets.length, color: 'rgba(255,255,255,0.9)' },
-            { label: 'Overdue Assets', value: overdueAssets.length, color: overdueAssets.length > 0 ? '#fca5a5' : 'rgba(255,255,255,0.9)' },
+            { label: 'Next Inspection', value: property.next_inspection_date ? formatDate(property.next_inspection_date) : 'Not Set', color: isOverdue ? '#fca5a5' : 'rgba(255,255,255,0.9)' },
             { label: 'Open Defects', value: openDefects.length, color: openDefects.length > 0 ? '#fcd34d' : 'rgba(255,255,255,0.9)' },
             { label: 'Jobs Completed', value: completedJobs, color: '#86efac' },
           ].map(s => (
@@ -196,14 +196,17 @@ export default function PropertyDetailPage() {
               <F label="State" field="state" />
               <F label="Postcode" field="postcode" />
             </div>
-            <div>
-              <p className="text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>Compliance Status</p>
-              {editing
-                ? <select value={form.compliance_status ?? 'pending'} onChange={e => setForm((f: any) => ({ ...f, compliance_status: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
-                    {COMPLIANCE_OPTS.map(v => <option key={v} value={v}>{v.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
-                  </select>
-                : <Badge value={property.compliance_status} />}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <p className="text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>Compliance Status</p>
+                {editing
+                  ? <select value={form.compliance_status ?? 'pending'} onChange={e => setForm((f: any) => ({ ...f, compliance_status: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
+                      {COMPLIANCE_OPTS.map(v => <option key={v} value={v}>{v.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
+                    </select>
+                  : <Badge value={property.compliance_status} />}
+              </div>
+              <F label="Next Inspection Date" field="next_inspection_date" type="date" />
             </div>
           </div>
           <div className="space-y-4">
@@ -230,17 +233,16 @@ export default function PropertyDetailPage() {
                 <table className="w-full">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
-                      {['Ref','Type','Variant','Location','Serial #','Install','Last Service','Next Service','Status'].map(h => (
+                      {['Ref','Type','Variant','Location','Serial #','Install','Last Service','Status'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {assets.map((a, i) => {
-                      const isOverdue = a.next_service_date && a.next_service_date < today && a.status === 'active';
                       return (
                         <tr key={a.id} className="border-b last:border-0 transition-colors"
-                          style={{ borderColor: 'var(--border)', background: isOverdue ? '#fff7ed' : undefined }}>
+                          style={{ borderColor: 'var(--border)' }}>
                           <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{a.asset_ref ?? '—'}</td>
                           <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--text)' }}>{a.asset_type}</td>
                           <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{a.variant ?? '—'}</td>
@@ -248,13 +250,6 @@ export default function PropertyDetailPage() {
                           <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-tertiary)' }}>{a.serial_number ?? '—'}</td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{formatDate(a.install_date)}</td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{formatDate(a.last_service_date)}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              {isOverdue && <AlertTriangle size={12} style={{ color: '#f97316' }} />}
-                              <span className="text-sm font-semibold" style={{ color: isOverdue ? '#c2410c' : 'var(--text)' }}>{formatDate(a.next_service_date)}</span>
-                            </div>
-                            {isOverdue && <p className="text-xs font-bold" style={{ color: '#f97316' }}>OVERDUE</p>}
-                          </td>
                           <td className="px-4 py-3"><Badge value={a.status} /></td>
                         </tr>
                       );

@@ -180,7 +180,7 @@ export default function PropertyDetailScreen() {
 
   const today         = new Date().toISOString().slice(0, 10);
   const activeAssets  = assets.filter(a => a.status === AssetStatus.Active).length;
-  const overdueAssets = assets.filter(a => a.next_service_date && a.next_service_date < today).length;
+  const isOverdue     = property.next_inspection_date && property.next_inspection_date < today;
   const passedJobs    = jobHistory.filter(j => j.status === JobStatus.Completed).length;
 
   const fullAddress = [property.address, property.suburb, property.state, property.postcode]
@@ -222,7 +222,7 @@ export default function PropertyDetailScreen() {
                 {property.compliance_status === ComplianceStatus.Compliant
                   ? 'All assets are within service schedule.'
                   : property.compliance_status === ComplianceStatus.Overdue
-                  ? `${overdueAssets} asset${overdueAssets !== 1 ? 's' : ''} require immediate attention.`
+                  ? `Inspection is overdue. Next inspection was due ${property.next_inspection_date}.`
                   : property.compliance_status === ComplianceStatus.NonCompliant
                   ? 'Outstanding defects or failed inspections on file.'
                   : 'Awaiting initial inspection or compliance review.'}
@@ -241,11 +241,11 @@ export default function PropertyDetailScreen() {
             bg={C.primary + '12'}
           />
           <StatPill
-            icon="alert-circle"
-            value={overdueAssets}
+            icon="calendar-clock"
+            value={isOverdue ? 'YES' : 'NO'}
             label="OVERDUE"
-            color={overdueAssets > 0 ? C.error : C.textTertiary}
-            bg={overdueAssets > 0 ? C.errorLight : C.backgroundTertiary}
+            color={isOverdue ? C.error : C.textTertiary}
+            bg={isOverdue ? C.errorLight : C.backgroundTertiary}
           />
           <StatPill
             icon="check-circle"
@@ -382,24 +382,23 @@ export default function PropertyDetailScreen() {
               value={assets.length.toString()}
               onPress={() => router.push(`/properties/assets/${id}` as never)}
             />
-            {overdueAssets > 0 && (
+            {property.next_inspection_date && (
               <>
                 <View style={[s.divider, { backgroundColor: C.border }]} />
                 <InfoRow
-                  icon="alert-circle-outline"
-                  label="Overdue Assets"
-                  value={overdueAssets.toString()}
-                  valueColor={C.error}
-                  onPress={() => router.push(`/properties/assets/${id}` as never)}
+                  icon="calendar-clock-outline"
+                  label="Next Inspection"
+                  value={property.next_inspection_date}
+                  valueColor={isOverdue ? C.error : C.text}
                 />
               </>
             )}
-            {activeAssets > 0 && overdueAssets === 0 && (
+            {activeAssets > 0 && !isOverdue && (
               <>
                 <View style={[s.divider, { backgroundColor: C.border }]} />
                 <View style={[s.assetRow, { justifyContent: 'center' }]}>
                   <MaterialCommunityIcons name="check-decagram" size={16} color={C.success} />
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.success, marginLeft: 6 }}>All assets up to date</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.success, marginLeft: 6 }}>Site is up to date</Text>
                 </View>
               </>
             )}
