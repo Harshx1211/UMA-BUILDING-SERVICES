@@ -1,29 +1,12 @@
 'use client';
 import Link from 'next/link';
-import { ArrowRight, Shield, FileText, ClipboardCheck, Award } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
-const FEATURES = [
-  {
-    icon: Shield,
-    color: '#F97316',
-    bg: 'rgba(249,115,22,0.14)',
-    title: 'Fire Safety Inspections',
-    desc: 'Monthly to 5-yearly routine service schedules',
-  },
-  {
-    icon: ClipboardCheck,
-    color: '#60a5fa',
-    bg: 'rgba(96,165,250,0.14)',
-    title: 'Per-Asset Logging',
-    desc: 'Pass/Fail recorded on every individual asset',
-  },
-  {
-    icon: FileText,
-    color: '#4ade80',
-    bg: 'rgba(74,222,128,0.14)',
-    title: 'Digital PDF Reports',
-    desc: 'Structured report generated on job completion',
-  },
+const TRUST = [
+  'AS1851:2012 Compliant Services',
+  'Digital PDF Report on Every Job',
+  'Australia-Wide Coverage',
+  '1 Business Day Response',
 ];
 
 export default function HeroSection() {
@@ -31,126 +14,64 @@ export default function HeroSection() {
     <section
       id="hero"
       className="hero-gradient"
-      style={{ position: 'relative', paddingTop: 72, overflow: 'hidden' }}
+      style={{ position: 'relative', paddingTop: 72, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
     >
-      {/* Glow orbs */}
-      <div className="glow-orb" style={{ width: 560, height: 560, background: 'rgba(249,115,22,0.10)', top: '-180px', right: '-100px' }} />
-      <div className="glow-orb" style={{ width: 420, height: 420, background: 'rgba(36,58,101,0.55)', bottom: '-140px', left: '-100px' }} />
+      {/* Subtle glow */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        <div style={{ position: 'absolute', top: -160, right: -80, width: 520, height: 520, borderRadius: '50%', background: 'rgba(249,115,22,0.07)', filter: 'blur(90px)' }} />
+        <div style={{ position: 'absolute', bottom: -120, left: -80, width: 400, height: 400, borderRadius: '50%', background: 'rgba(36,58,101,0.4)', filter: 'blur(80px)' }} />
+      </div>
 
-      {/* Grid overlay */}
-      <div style={{
-        position: 'absolute', inset: 0, opacity: 0.025, pointerEvents: 'none',
-        backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)',
-        backgroundSize: '60px 60px',
-      }} />
+      {/* Content */}
+      <div className="container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 88, paddingBottom: 72, position: 'relative', zIndex: 1 }}>
 
-      {/* ── Main content ── */}
-      <div
-        className="container"
-        style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '52px 24px 0' }}
-      >
-        {/* Eyebrow pill */}
-        <div className="animate-fade-in-up" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 26,
-          padding: '6px 16px', borderRadius: 999,
-          background: 'rgba(249,115,22,0.14)', border: '1px solid rgba(249,115,22,0.28)',
+        {/* Eyebrow */}
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#F97316', marginBottom: 28 }}>
+          Fire Safety · Building Compliance · Australia
+        </p>
+
+        {/* H1 */}
+        <h1 style={{
+          fontSize: 'clamp(42px, 5.5vw, 70px)',
+          fontWeight: 900,
+          letterSpacing: '-0.04em',
+          lineHeight: 1.04,
+          color: 'white',
+          marginBottom: 28,
+          maxWidth: 680,
         }}>
-          <Award size={12} color="#F97316" />
-          <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#fdba74' }}>
-            Fire Safety &amp; Building Compliance — Australia
-          </span>
-        </div>
-
-        {/* H1 — clean line breaks */}
-        <h1
-          className="animate-fade-in-up delay-100"
-          style={{
-            fontWeight: 900, letterSpacing: '-0.035em', lineHeight: 1.08,
-            color: 'white', marginBottom: 20, maxWidth: 760, margin: '0 auto 20px',
-            fontSize: 'clamp(34px, 5.5vw, 62px)',
-          }}
-        >
-          Professional{' '}
-          <span style={{
-            background: 'linear-gradient(135deg,#F97316 0%,#fb923c 60%,#fde68a 100%)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-          }}>
-            Building&nbsp;Services
-          </span>{' '}
-          Done&nbsp;Right.
+          Professional<br />Building Services,<br />
+          <span style={{ color: '#F97316' }}>Done Properly.</span>
         </h1>
 
         {/* Subtitle */}
-        <p
-          className="animate-fade-in-up delay-200"
-          style={{ color: 'rgba(255,255,255,0.55)', fontSize: 17, lineHeight: 1.7, maxWidth: 580, margin: '0 auto 36px' }}
-        >
+        <p style={{ fontSize: 17, color: 'rgba(255,255,255,0.50)', lineHeight: 1.8, maxWidth: 460, marginBottom: 44 }}>
           Routine fire safety inspections and defect repairs — fully managed through our own purpose-built digital platform.
         </p>
 
         {/* CTAs */}
-        <div className="animate-fade-in-up delay-300" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 14, marginBottom: 52 }}>
-          <Link href="/contact" id="hero-cta-primary" className="btn btn-primary" style={{ fontSize: 15, padding: '13px 30px' }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <Link href="/contact" id="hero-cta-primary" className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
             Get a Free Quote <ArrowRight size={16} />
           </Link>
-          <Link href="/services" id="hero-cta-secondary" className="btn btn-outline" style={{ fontSize: 15, padding: '13px 26px' }}>
+          <Link href="/services" id="hero-cta-secondary" className="btn btn-outline" style={{ fontSize: 15, padding: '13px 24px' }}>
             Our Services
           </Link>
         </div>
-
-        {/* Feature cards — lighter so they read better on dark bg */}
-        <div className="animate-fade-in-up delay-400 hero-feature-strip">
-          {FEATURES.map(f => {
-            const Icon = f.icon;
-            return (
-              <div
-                key={f.title}
-                style={{
-                  background: 'rgba(255,255,255,0.09)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 16,
-                  padding: '20px 18px',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 14,
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                }}
-              >
-                <div style={{
-                  width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                  background: f.bg,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Icon size={19} color={f.color} strokeWidth={1.9} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.95)', marginBottom: 4, letterSpacing: '-0.015em' }}>{f.title}</div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.50)', lineHeight: 1.5 }}>{f.desc}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
-      {/* ── Highlights strip ── */}
-      <div style={{ position: 'relative', zIndex: 2, marginTop: 48, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+      {/* Trust bar */}
+      <div style={{ position: 'relative', zIndex: 1, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="container">
-          <div className="hero-highlights-grid">
-            {[
-              { value: 'Digital',        label: 'No paper processes' },
-              { value: 'PDF Report',     label: 'Every completed job' },
-              { value: '1 Business Day', label: 'Enquiry response' },
-              { value: 'Aus-Wide',       label: 'Commercial & industrial' },
-            ].map((s, i, arr) => (
-              <div key={s.label} style={{
-                padding: '18px 0', textAlign: 'center',
+          <div className="hero-trust-grid">
+            {TRUST.map((pt, i, arr) => (
+              <div key={pt} style={{
+                padding: '20px 0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                 borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none',
               }}>
-                <div style={{ fontSize: 16, fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>{s.value}</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 4, fontWeight: 500 }}>{s.label}</div>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#F97316', flexShrink: 0 }} />
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.50)', whiteSpace: 'nowrap' }}>{pt}</span>
               </div>
             ))}
           </div>
@@ -158,21 +79,9 @@ export default function HeroSection() {
       </div>
 
       <style>{`
-        .hero-feature-strip {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
-          max-width: 820px;
-          margin: 0 auto;
-        }
-        .hero-highlights-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-        }
-        @media (max-width: 720px) {
-          .hero-feature-strip { grid-template-columns: 1fr; max-width: 420px; }
-          .hero-highlights-grid { grid-template-columns: repeat(2, 1fr); }
-        }
+        .hero-trust-grid { display: grid; grid-template-columns: repeat(4,1fr); }
+        @media (max-width: 768px) { .hero-trust-grid { grid-template-columns: repeat(2,1fr); } }
+        @media (max-width: 480px) { .hero-trust-grid { grid-template-columns: 1fr; } }
       `}</style>
     </section>
   );

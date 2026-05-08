@@ -6,45 +6,38 @@
 
 /* ─── Design Tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --navy:          #1B2D4F;
-  --navy-mid:      #243a65;
-  --navy-dark:     #0F1E3C;
-  --navy-deeper:   #0a1628;
-  --navy-deepest:  #060e1a;
+  --navy:          #0F1E3C;
+  --navy-mid:      #1B2D4F;
+  --navy-dark:     #0A1628;
   --orange:        #F97316;
   --orange-dark:   #ea6900;
   --orange-light:  #fff4ed;
 
   --white:         #ffffff;
-  --off-white:     #F8FAFC;
-  --slate-50:      #f8fafc;
-  --slate-100:     #f1f5f9;
-  --slate-200:     #e2e8f0;
-  --slate-300:     #cbd5e1;
-  --slate-400:     #94a3b8;
-  --slate-500:     #64748b;
-  --slate-600:     #475569;
-  --slate-700:     #334155;
-  --slate-800:     #1e293b;
-  --slate-900:     #0f172a;
+  --off-white:     #F9FAFB;
+  --surface:       #F9FAFB;
+  --border:        #E5E7EB;
+
+  --text:          #111827;
+  --text-body:     #374151;
+  --text-muted:    #6B7280;
+  --text-faint:    #9CA3AF;
 
   --radius-sm:     6px;
   --radius-md:     10px;
-  --radius-lg:     14px;
-  --radius-xl:     18px;
-  --radius-2xl:    24px;
+  --radius-lg:     12px;
+  --radius-xl:     16px;
+  --radius-2xl:    20px;
   --radius-full:   9999px;
 
-  --shadow-sm:     0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
-  --shadow-md:     0 4px 16px rgba(0,0,0,0.10), 0 12px 32px rgba(0,0,0,0.06);
-  --shadow-lg:     0 8px 32px rgba(0,0,0,0.14), 0 24px 56px rgba(0,0,0,0.09);
-  --shadow-xl:     0 16px 64px rgba(0,0,0,0.18), 0 32px 80px rgba(0,0,0,0.12);
-  --shadow-orange: 0 6px 28px rgba(249,115,22,0.38);
-  --shadow-navy:   0 6px 28px rgba(27,45,79,0.35);
+  --shadow-sm:     0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:     0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg:     0 10px 28px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+  --shadow-orange: 0 4px 20px rgba(249,115,22,0.35);
+  --shadow-navy:   0 4px 20px rgba(15,30,60,0.30);
 
   --transition:    250ms cubic-bezier(0.4,0,0.2,1);
   --transition-fast: 150ms cubic-bezier(0.4,0,0.2,1);
-  --transition-slow: 400ms cubic-bezier(0.4,0,0.2,1);
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────────────── */
@@ -59,7 +52,7 @@ html {
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--white);
-  color: var(--slate-900);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
@@ -357,25 +350,39 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   font-weight: 500;
 }
 
-/* ─── Section label ──────────────────────────────────────────────────────────── */
-.section-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  background: rgba(249,115,22,0.10);
-  color: var(--orange-dark);
-  border-radius: var(--radius-full);
-  font-size: 11.5px;
+/* ─── Section eyebrow (plain text, not a pill) ───────────────────────────────── */
+.section-eyebrow {
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 20px;
-  border: 1px solid rgba(249,115,22,0.18);
-  /* Supports centering when wrapped in a text-align:center container */
-  margin-left: auto;
-  margin-right: auto;
-  width: fit-content;
+  color: var(--orange);
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* ─── Section label (legacy – kept for compat) ───────────────────────────────── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* ─── Navy icon box ──────────────────────────────────────────────────────────── */
+.icon-box-navy {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(15,30,60,0.07);
+  border: 1px solid rgba(15,30,60,0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* ─── Nav links ──────────────────────────────────────────────────────────────── */
@@ -407,9 +414,8 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 /* ─── Hero mesh gradient ─────────────────────────────────────────────────────── */
 .hero-gradient {
   background:
-    radial-gradient(ellipse at 16% 60%, rgba(249,115,22,0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 85% 10%, rgba(36,58,101,0.80) 0%, transparent 55%),
-    linear-gradient(135deg, #060e1a 0%, var(--navy-deeper) 30%, var(--navy-dark) 65%, var(--navy) 100%);
+    radial-gradient(ellipse at 80% 20%, rgba(249,115,22,0.06) 0%, transparent 55%),
+    linear-gradient(145deg, #060f1e 0%, #0A1628 40%, #0F1E3C 100%);
 }
 
 /* ─── Glow orb ───────────────────────────────────────────────────────────────── */

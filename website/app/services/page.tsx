@@ -1,229 +1,126 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CalendarClock, Wrench, CheckCircle, FileText, CheckSquare, Clock, ArrowRight } from 'lucide-react';
+import { CheckSquare, CalendarClock, Wrench, FileText, ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Our Services',
-  description:
-    'UMA Building Services offers routine maintenance inspections at monthly, 3-monthly, 6-monthly, annual and 5-yearly frequencies, plus quote and defect repair services.',
+  title: 'Our Services | UMA Building Services',
+  description: 'Routine fire safety inspections from monthly to 5-yearly, plus defect repair services across commercial and industrial properties.',
 };
 
-const SERVICE_DETAIL = [
-  {
-    id: 'svc-routine-service',
-    icon: CalendarClock,
-    color: '#F97316',
-    bg: 'rgba(249,115,22,0.08)',
-    border: 'rgba(249,115,22,0.18)',
-    tag: 'Routine Service',
-    title: 'Routine Maintenance Inspections',
-    body: 'We carry out scheduled maintenance inspections of fire safety assets and building systems at a frequency agreed with you. All available schedules are listed below.',
-    frequencies: [
-      { label: 'Monthly',   detail: 'Suitable for high-traffic sites requiring frequent compliance checks.' },
-      { label: '3-Monthly', detail: 'Quarterly inspections covering periodic checks at 3-month intervals.' },
-      { label: '6-Monthly', detail: 'Bi-annual visits for sites that require half-yearly service.' },
-      { label: 'Annual',    detail: 'Comprehensive yearly inspections with full digital service report.' },
-      { label: '5-Yearly',  detail: 'Major periodic inspections at 5-year intervals as required.' },
-    ],
-    what: [
-      'On-site attendance by an assigned technician',
-      'Per-asset inspection — Pass / Fail logged for each item',
-      'Photo evidence captured where required',
-      'Defects identified, classified by severity, and recorded',
-      'Digital PDF service report generated at job completion',
-      'Client signature collected at end of service',
-    ],
-  },
-  {
-    id: 'svc-defect-repair',
-    icon: Wrench,
-    color: '#ef4444',
-    bg: 'rgba(239,68,68,0.08)',
-    border: 'rgba(239,68,68,0.18)',
-    tag: 'Defect Repair',
-    title: 'Quote & Defect Repair',
-    body: 'When defects are identified — either during a routine inspection or reported by you — we arrange a site visit to assess and quote the rectification work. Upon approval, our technician carries out the repair.',
-    frequencies: null,
-    what: [
-      'Site visit to assess the reported defect',
-      'Formal written quote provided for repair work',
-      'Repair carried out upon your written approval',
-      'Defect status updated in our management system',
-      'Digital service report updated to reflect repair',
-    ],
-  },
+const SERVICES = [
+  { icon: CalendarClock, schedule: 'Monthly',   title: 'Monthly Routine Service',   description: 'Regular monthly inspections for high-traffic commercial properties requiring frequent compliance visits.' },
+  { icon: CalendarClock, schedule: '3-Monthly',  title: '3-Monthly Routine Service',  description: 'Quarterly inspections covering all required periodic checks across every installed fire safety asset on site.' },
+  { icon: CalendarClock, schedule: '6-Monthly',  title: '6-Monthly Routine Service',  description: 'Bi-annual inspections — a common schedule for many commercial and industrial properties across Australia.' },
+  { icon: CheckSquare,   schedule: 'Annual',     title: 'Annual Routine Service',     description: 'Comprehensive yearly inspections with a full digital PDF service report generated at job completion.' },
+  { icon: FileText,      schedule: '5-Yearly',   title: '5-Yearly Routine Service',   description: 'Major periodic inspections covering extended compliance checks beyond standard annual requirements.' },
+  { icon: Wrench,        schedule: 'On Request', title: 'Quote / Defect Repair',      description: 'We assess and repair defects found during inspections. Quoted and carried out upon your written approval.' },
+];
+
+const WHAT_INCLUDED = [
+  'Digital job managed through our own platform',
+  'Per-asset Pass/Fail inspection logging',
+  'Photo evidence captured during the job',
+  'Defect classification by severity',
+  'Client signature collected on-site',
+  'Structured PDF service report at completion',
 ];
 
 export default function ServicesPage() {
   return (
     <>
-      <style>{`
-        .svc-detail-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 64px;
-          align-items: start;
-        }
-        @media (max-width: 900px) {
-          .svc-detail-grid { grid-template-columns: 1fr; gap: 40px; }
-        }
-      `}</style>
-
-      {/* Page hero */}
-      <section style={{
-        background: 'linear-gradient(135deg, #0a1628 0%, #0F1E3C 55%, #1B2D4F 100%)',
-        padding: '130px 0 88px',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', width: 500, height: 500, borderRadius: '50%',
-          background: 'rgba(249,115,22,0.10)', filter: 'blur(90px)',
-          top: '-100px', right: '-80px', pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', inset: 0, opacity: 0.025,
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px),' +
-            'linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)',
-          backgroundSize: '52px 52px', pointerEvents: 'none',
-        }} />
-        <div className="container" style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '6px 16px', marginBottom: 22,
-            background: 'rgba(249,115,22,0.14)', border: '1px solid rgba(249,115,22,0.25)',
-            borderRadius: 999,
-          }}>
-            <CheckSquare size={13} color="#F97316" />
-            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#fdba74' }}>
-              What We Do
-            </span>
-          </div>
-          <h1 className="heading-xl" style={{ color: 'white', marginBottom: 18, maxWidth: 560 }}>
-            Our Services
-          </h1>
-          <p className="body-lg" style={{ color: 'rgba(255,255,255,0.60)', maxWidth: 520, marginBottom: 36 }}>
-            Routine maintenance inspections across every service frequency, plus defect assessment and repair — all fully tracked and digitally reported.
+      {/* Hero */}
+      <section style={{ background: 'linear-gradient(145deg,#060f1e 0%,#0A1628 40%,#0F1E3C 100%)', paddingTop: 72 }}>
+        <div className="container" style={{ paddingTop: 80, paddingBottom: 80 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#F97316', marginBottom: 20 }}>
+            Services
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <a href="#svc-routine-service" className="btn btn-primary" style={{ fontSize: 14 }}>
-              Routine Inspections <ArrowRight size={15} />
-            </a>
-            <a href="#svc-defect-repair" className="btn btn-outline" style={{ fontSize: 14 }}>
-              Defect Repair
-            </a>
+          <h1 style={{ fontSize: 'clamp(36px,5vw,58px)', fontWeight: 900, color: 'white', letterSpacing: '-0.04em', lineHeight: 1.06, marginBottom: 22, maxWidth: 620 }}>
+            Routine Inspections &amp; Defect Repair Services
+          </h1>
+          <p style={{ fontSize: 17, color: 'rgba(255,255,255,0.50)', lineHeight: 1.8, maxWidth: 500, marginBottom: 36 }}>
+            Every service we carry out is fully tracked through our own platform — with a digital PDF report generated at job completion.
+          </p>
+          <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15, padding: '13px 28px' }}>
+            Get a Free Quote <ArrowRight size={16} />
+          </Link>
+        </div>
+      </section>
+
+      {/* Services Grid */}
+      <section className="section" style={{ background: 'white' }}>
+        <div className="container">
+          <div style={{ maxWidth: 560, marginBottom: 52 }}>
+            <p className="section-eyebrow">What We Offer</p>
+            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 16 }}>All Service Frequencies</h2>
+            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.75 }}>
+              We offer every routine service frequency required under AS1851 — from monthly through to 5-yearly — as well as on-request defect repair services.
+            </p>
+          </div>
+          <div className="services-grid">
+            {SERVICES.map(svc => {
+              const Icon = svc.icon;
+              return (
+                <div key={svc.title} style={{ background: 'white', border: '1px solid #E5E7EB', borderRadius: 12, padding: '28px 26px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(15,30,60,0.07)', border: '1px solid rgba(15,30,60,0.09)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={20} color="#0F1E3C" strokeWidth={1.8} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 7, letterSpacing: '-0.01em' }}>{svc.title}</h3>
+                    <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.75 }}>{svc.description}</p>
+                  </div>
+                  <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid #F3F4F6' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9CA3AF' }}>{svc.schedule}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* Service Detail Sections */}
-      {SERVICE_DETAIL.map((svc, idx) => {
-        const Icon = svc.icon;
-        return (
-          <section
-            key={svc.id}
-            id={svc.id}
-            className="section"
-            style={{ background: idx % 2 === 0 ? 'white' : '#F8FAFC' }}
-          >
-            <div className="container">
-              <div className="svc-detail-grid">
-
-                {/* Left — description */}
-                <div>
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    padding: '5px 14px', background: svc.bg,
-                    border: `1px solid ${svc.border}`,
-                    borderRadius: 999, marginBottom: 22,
-                  }}>
-                    <Icon size={13} color={svc.color} />
-                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: svc.color }}>
-                      {svc.tag}
-                    </span>
-                  </div>
-
-                  <h2 className="heading-md" style={{ color: '#0F1E3C', marginBottom: 18 }}>{svc.title}</h2>
-                  <p className="body-md" style={{ color: '#64748b', marginBottom: 28, lineHeight: 1.85 }}>{svc.body}</p>
-
-                  {svc.frequencies && (
-                    <div style={{
-                      background: '#F8FAFC', borderRadius: 16,
-                      border: '1px solid #e2e8f0', padding: '20px 24px',
-                      marginBottom: 32,
-                    }}>
-                      <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 14 }}>
-                        Available Schedules
-                      </p>
-                      {svc.frequencies.map((f, fi) => (
-                        <div key={f.label} style={{
-                          display: 'flex', gap: 14, padding: '12px 0',
-                          borderBottom: fi < svc.frequencies!.length - 1 ? '1px solid #e2e8f0' : 'none',
-                          alignItems: 'flex-start',
-                        }}>
-                          <div style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '4px 12px', borderRadius: 999, flexShrink: 0,
-                            background: 'rgba(249,115,22,0.09)',
-                            border: '1px solid rgba(249,115,22,0.18)',
-                          }}>
-                            <Clock size={11} color="#F97316" />
-                            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#ea6900' }}>{f.label}</span>
-                          </div>
-                          <p style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.65, paddingTop: 3 }}>{f.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <Link href="/contact" className="btn btn-primary" style={{ fontSize: 14 }}>
-                    Enquire About This Service <ArrowRight size={15} />
-                  </Link>
-                </div>
-
-                {/* Right — what's included */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #0F1E3C 0%, #1B2D4F 100%)',
-                  borderRadius: 22, padding: '36px 32px',
-                  position: 'relative', overflow: 'hidden',
-                  boxShadow: '0 16px 48px rgba(15,30,60,0.20)',
-                }}>
-                  <div style={{
-                    position: 'absolute', top: -40, right: -40, width: 200, height: 200,
-                    borderRadius: '50%', background: 'rgba(249,115,22,0.10)', filter: 'blur(40px)',
-                    pointerEvents: 'none',
-                  }} />
-                  <div style={{ position: 'relative', zIndex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-                      <div style={{
-                        width: 44, height: 44, borderRadius: 12,
-                        background: svc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: `1px solid ${svc.border}`,
-                      }}>
-                        <Icon size={20} color={svc.color} />
-                      </div>
-                      <div>
-                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.40)', marginBottom: 2 }}>Included</p>
-                        <p style={{ fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '-0.02em' }}>What You Get</p>
-                      </div>
-                    </div>
-                    {svc.what.map(item => (
-                      <div key={item} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 12,
-                        padding: '11px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
-                      }}>
-                        <CheckCircle size={16} color="#4ade80" strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} />
-                        <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', lineHeight: 1.65 }}>{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
+      {/* What's included */}
+      <section className="section" style={{ background: '#F9FAFB' }}>
+        <div className="container">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 72, alignItems: 'center' }}>
+            <div>
+              <p className="section-eyebrow">Every Job Includes</p>
+              <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 20 }}>
+                What Happens on Every Service Visit
+              </h2>
+              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8 }}>
+                Whether it&apos;s a monthly routine service or a once-a-year inspection, every job we carry out follows the same digital process — ensuring consistent, accurate records for every property we service.
+              </p>
             </div>
-          </section>
-        );
-      })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {WHAT_INCLUDED.map(item => (
+                <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: 'white', border: '1px solid #E5E7EB', borderRadius: 10 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(249,115,22,0.10)', border: '1px solid rgba(249,115,22,0.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316' }} />
+                  </div>
+                  <span style={{ fontSize: 14.5, color: '#374151', fontWeight: 500 }}>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <style>{`@media(max-width:900px){.svc-incl-grid{grid-template-columns:1fr!important}}`}</style>
+      </section>
+
+      {/* CTA */}
+      <section style={{ background: 'linear-gradient(135deg,#0A1628 0%,#0F1E3C 50%,#1B2D4F 100%)', padding: '96px 0' }}>
+        <div className="container" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(249,115,22,0.8)', marginBottom: 20 }}>Get Started</p>
+          <h2 style={{ fontSize: 'clamp(28px,4vw,44px)', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', lineHeight: 1.1, maxWidth: 520, margin: '0 auto 20px' }}>
+            Ready to Book a Service?
+          </h2>
+          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 400, margin: '0 auto 40px', lineHeight: 1.75 }}>
+            Contact us with your property details and preferred service frequency.
+          </p>
+          <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15.5, padding: '14px 32px' }}>
+            Get a Free Quote <ArrowRight size={17} />
+          </Link>
+        </div>
+      </section>
     </>
   );
 }
