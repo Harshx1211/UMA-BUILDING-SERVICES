@@ -78,7 +78,7 @@ export default function WhyUsSection() {
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 7, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
                     {f.title}
                   </h3>
-                  <p style={{ fontSize: 13.5, color: '#6B7280', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>
                     {f.description}
                   </p>
                 </div>
