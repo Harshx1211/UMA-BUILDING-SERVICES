@@ -14,7 +14,7 @@ export default function HeroSection() {
     <section
       id="hero"
       className="hero-gradient"
-      style={{ position: 'relative', paddingTop: 72, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
+      style={{ position: 'relative', paddingTop: 72, display: 'flex', flexDirection: 'column' }}
     >
       {/* Subtle glow */}
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
