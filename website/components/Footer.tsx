@@ -1,51 +1,23 @@
-import Link from 'next/link';
-
-const NAV_LINKS = [
-  { href: '/',         label: 'Home' },
-  { href: '/services', label: 'Services' },
-  { href: '/about',    label: 'About' },
-  { href: '/contact',  label: 'Contact' },
-];
-
 export default function Footer() {
   return (
     <footer style={{ background: '#06101f', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
       <div style={{ height: 3, background: 'linear-gradient(90deg, #F97316 0%, #fb923c 50%, transparent 100%)' }} />
 
-      <div className="container" style={{ padding: '32px 24px', textAlign: 'center' }}>
+      <div className="container" style={{ padding: '36px 24px', textAlign: 'center' }}>
 
-        {/* Company name */}
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.04em', marginBottom: 16 }}>
+        <p style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.60)', letterSpacing: '0.03em', marginBottom: 8 }}>
           UMA Building Services
         </p>
 
-        {/* Nav links */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 24 }}>
-          {NAV_LINKS.map((l, i, arr) => (
-            <span key={l.href} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Link href={l.href} className="footer-link">{l.label}</Link>
-              {i < arr.length - 1 && (
-                <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'inline-block' }} />
-              )}
-            </span>
-          ))}
-        </div>
+        <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.28)', marginBottom: 16 }}>
+          info@umabuildingservices.com.au &nbsp;·&nbsp; Servicing commercial and industrial properties across Australia
+        </p>
 
-        {/* Copyright */}
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.02em' }}>
-          © {new Date().getFullYear()} UMA Building Services Pty Ltd. All rights reserved. · AS1851:2012 Compliant · Australia-Wide
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', letterSpacing: '0.02em' }}>
+          AS1851:2012 Compliant &nbsp;·&nbsp; © {new Date().getFullYear()} UMA Building Services Pty Ltd. All rights reserved.
         </p>
 
       </div>
-
-      <style>{`
-        .footer-link {
-          font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.38);
-          text-decoration: none; padding: 4px 8px; border-radius: 5px;
-          transition: color 160ms;
-        }
-        .footer-link:hover { color: rgba(255,255,255,0.75); }
-      `}</style>
     </footer>
   );
 }
