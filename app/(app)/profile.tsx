@@ -17,7 +17,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
-import { getPendingSyncItems } from '@/lib/database';
+import { getPendingSyncItems, getFailedSyncItems } from '@/lib/database';
 import { runSync } from '@/lib/sync';
 import { supabase } from '@/lib/supabase';
 import Toast from 'react-native-toast-message';
@@ -44,6 +44,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
 
   const [pendingCount, setPendingCount] = useState(0);
+  const [failedCount, setFailedCount]   = useState(0);
   const [lastSync, setLastSync]         = useState<Date | null>(null);
   const [isSyncing, setIsSyncing]       = useState(false);
   const [showSignOut, setShowSignOut]   = useState(false);
@@ -54,10 +55,13 @@ export default function ProfileScreen() {
   const [isSavingName, setIsSavingName] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
 
-  // Poll pending sync count every 5 s so the card stays accurate
+  // Poll pending and failed sync counts every 5s so the card stays accurate
   useEffect(() => {
     const update = () => {
-      try { setPendingCount(getPendingSyncItems().length); } catch { /* ignore */ }
+      try {
+        setPendingCount(getPendingSyncItems().length);
+        setFailedCount(getFailedSyncItems().length);
+      } catch { /* ignore */ }
     };
     update();
     const interval = setInterval(update, 5000);
@@ -65,18 +69,38 @@ export default function ProfileScreen() {
   }, []);
 
   const handleForcSync = useCallback(async () => {
+    if (isSyncing) return; // guard: don't double-fire
     setIsSyncing(true);
     try {
-      await runSync();
+      // Pass user.id so runSync() doesn't need a Supabase round-trip for auth.
+      // runSync returns true if it actually ran, false if it was skipped.
+      const ran = await runSync(user?.id ?? undefined);
+
+      if (!ran) {
+        Toast.show({
+          type: 'info',
+          text1: 'Sync in progress',
+          text2: 'A background sync is already running — try again in a moment.',
+        });
+        return;
+      }
+
       setLastSync(new Date());
-      setPendingCount(0);
-      Toast.show({ type: 'success', text1: '✅ Sync complete', text2: 'All changes pushed to cloud' });
+      // Re-read counts from DB — don't hardcode 0, some items may have failed
+      setPendingCount(getPendingSyncItems().length);
+      setFailedCount(getFailedSyncItems().length);
+
+      Toast.show({
+        type: 'success',
+        text1: '✅ Sync complete',
+        text2: 'All changes pushed to cloud',
+      });
     } catch {
       Toast.show({ type: 'error', text1: 'Sync failed', text2: 'Check your connection and retry' });
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [isSyncing, user?.id]);
 
   const openEditName = useCallback(() => {
     setEditName(user?.full_name ?? '');
@@ -285,6 +309,21 @@ export default function ProfileScreen() {
               </Text>
             </View>
 
+            {/* Failed items warning — only shown when data failed to sync permanently */}
+            {failedCount > 0 && (
+              <View style={[s.syncCardRow, s.failedRow]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={18} color={C.error} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.syncCardValue, { color: C.error }]}>
+                    {failedCount} item{failedCount > 1 ? 's' : ''} failed to sync
+                  </Text>
+                  <Text style={[s.syncLastText, { color: C.errorDark ?? C.error }]}>
+                    These changes may not have reached the server.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {lastSync && (
               <View style={s.syncCardRow}>
                 <MaterialCommunityIcons name="clock-check-outline" size={15} color={C.textTertiary} />
@@ -379,7 +418,7 @@ export default function ProfileScreen() {
             <View style={[s.bsHandle, { backgroundColor: C.borderStrong }]} />
             <Text style={[s.bsTitle, { color: C.text }]}>Sign out of UMA BUILDING SERVICES?</Text>
             <Text style={[s.bsSub, { color: C.textSecondary }]}>
-              Unsynced offline data will be lost forever. Make sure to Force Sync before signing out.
+              Your session will end and you'll need to log in again. Make sure to Force Sync first to push any pending changes to the server.
             </Text>
             <View style={{ height: 24 }} />
             <Button variant="danger" title="Sign Out" onPress={handleSignOut} />
@@ -656,6 +695,7 @@ const s = StyleSheet.create({
   onlineDot: { width: 7, height: 7, borderRadius: 4 },
   onlineBadgeText: { fontSize: 12, fontWeight: '700' },
   syncCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  failedRow:    { padding: 10, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.08)', alignItems: 'flex-start' },
   syncCardValue: { fontSize: 14, fontWeight: '600' },
   syncLastText:  { fontSize: 12 },
 

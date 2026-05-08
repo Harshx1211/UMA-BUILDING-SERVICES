@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
+import { Shield } from 'lucide-react';
+
 
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -29,10 +31,8 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white" />
-            </svg>
+            style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
+            <Shield size={22} color="white" strokeWidth={2} />
           </div>
           <div className="flex gap-1.5">
             {[0, 1, 2].map(i => (

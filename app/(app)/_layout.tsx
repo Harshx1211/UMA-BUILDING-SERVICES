@@ -69,7 +69,7 @@ export default function AppLayout() {
   //     The loop is started AFTER subscribing so the first sync-complete fires correctly
   const { loadJobs } = useJobsStore();
   const { loadDashboard } = useDashboardStore();
-  const { load: loadCatalogue } = useCatalogueStore();
+  const { load: loadCatalogue, subscribeToSync: catSubscribe, unsubscribeFromSync: catUnsub } = useCatalogueStore();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -77,22 +77,20 @@ export default function AppLayout() {
     // Subscribe to future sync completions first
     jobsSubscribe(user.id);
     dashSubscribe(user.id);
+    catSubscribe(); // A8: refresh catalogue after every sync
 
     // Load whatever is already in the local SQLite cache immediately
     loadJobs(user.id);
     loadDashboard(user.id);
     loadCatalogue();
 
-    // Now start the background sync loop — fires runSync() immediately,
-    // then repeats every 60s. The store listeners above are already
-    // registered, so the first sync-complete event will reload the UI.
-    // Pass user.id directly so sync never has to call getCurrentUser()
-    // (which can fail if Supabase auth hasn't hydrated from AsyncStorage yet).
+    // Now start the background sync loop
     startSync(user.id);
 
     return () => {
       jobsUnsub();
       dashUnsub();
+      catUnsub();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);

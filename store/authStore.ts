@@ -127,7 +127,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       stopSync();
       await supabaseSignOut();
-      await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY]);
+      // Security: clear ALL session data including cached profile.
+      // Without USER_PROFILE_KEY removal, signing in as a different user
+      // via biometrics would restore the previous user's profile.
+      await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY]);
     } catch (err) {
       console.error('[AuthStore] signOut error:', err);
     } finally {
@@ -147,9 +150,15 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   restoreSession: async () => {
     set({ isLoading: true });
     try {
-      // Step 1: get locally-cached session (with safety timeout)
-      const sessionResult = await withTimeout(supabase.auth.getSession(), 5000);
+      // C1 FIX: Check AsyncStorage cache first — instant auth for returning users / offline
+      // This is especially important for biometric login where we call restoreSession
+      // directly and can't afford a 5-second network timeout blocking the UX.
+      const [cachedProfileStr, sessionResult] = await Promise.all([
+        AsyncStorage.getItem(USER_PROFILE_KEY).catch(() => null),
+        withTimeout(supabase.auth.getSession(), 5000),
+      ]);
 
+      // No valid session at all — send to login
       if (!sessionResult || sessionResult.error || !sessionResult.data.session) {
         set({ isLoading: false, isAuthenticated: false });
         return;
@@ -157,7 +166,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       const { session } = sessionResult.data;
 
-      // Step 2: fetch user profile from Supabase (with safety timeout)
+      // If we have a cached profile, authenticate immediately — don't block on network
+      if (cachedProfileStr) {
+        try {
+          const cached = JSON.parse(cachedProfileStr) as User;
+          set({ user: cached, session, isAuthenticated: true, isLoading: false, error: null });
+          // Refresh cache in the background (non-blocking) so it stays fresh
+          void Promise.resolve(
+            supabase.from('users').select('*').eq('id', session.user.id).single()
+          ).then(({ data }) => {
+            if (data) void AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(data)).catch(() => null);
+          }).catch(() => null);
+          return;
+        } catch { /* corrupt cache — fall through to network fetch */ }
+      }
+
+      // No cache: fetch profile from Supabase (with safety timeout)
       type ProfileResult = { data: User | null; error: { message: string } | null };
       const profileResult = await withTimeout<ProfileResult>(
         (supabase
@@ -169,15 +193,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       );
 
       if (!profileResult || profileResult.error || !profileResult.data) {
-        // Profile fetch failed / timed out — try local cache first
-        try {
-          const cached = await AsyncStorage.getItem(USER_PROFILE_KEY);
-          if (cached) {
-            set({ user: JSON.parse(cached) as User, session, isAuthenticated: true, isLoading: false });
-            return;
-          }
-        } catch { /* ignore */ }
-        // As a last resort build fallback from session so admin users aren't locked out
+        // Profile fetch failed — build minimal fallback from session
         const su = session.user;
         const fallback: User = {
           id: su.id,
@@ -192,9 +208,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         set({ user: fallback, session, isAuthenticated: true, isLoading: false });
         return;
       }
-      // Keep the cache fresh for future offline starts
-      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileResult.data));
 
+      // Save fresh profile to cache for future fast restores
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileResult.data));
       set({
         user: profileResult.data as User,
         session,

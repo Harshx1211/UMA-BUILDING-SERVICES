@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;800;900&amp;display=swap');
+      .uma-text { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 96px; fill: #070F1E; letter-spacing: 0.02em; }
+      .bs-text { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 16px; fill: #475569; letter-spacing: 0.5em; }
+      .tagline-text { font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 10px; fill: #94A3B8; letter-spacing: 0.32em; }
+      .divider { stroke: #CBD5E1; stroke-width: 3; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <!-- Architectural "U" Monogram & Flame Icon -->
+  <g transform="translate(60, 34) scale(1.2)">
+    <!-- Left Building Block (Navy) -->
+    <path d="M 0 20 L 0 80 A 30 30 0 0 0 29 109.98 L 29 89.98 A 10 10 0 0 1 20 80 L 20 20 Z" fill="#070F1E"/>
+    
+    <!-- Right Building Block (Lighter Navy, Angled Roof) -->
+    <path d="M 31 109.98 A 30 30 0 0 0 60 80 L 60 0 L 40 20 L 40 80 A 10 10 0 0 1 31 89.98 Z" fill="#132545"/>
+    
+    <!-- Internal Safety Flame (Corporate Orange) -->
+    <path d="M 30 38 C 36 53 36 61 36 67 A 6 6 0 0 1 24 67 C 24 61 24 53 30 38 Z" fill="#C05215"/>
+  </g>
+
+  <!-- Vertical Layout Divider -->
+  <line x1="180" y1="35" x2="180" y2="165" class="divider"/>
+
+  <!-- Corporate Typography -->
+  <text x="220" y="112" class="uma-text">UMA</text>
+  <text x="226" y="150" class="bs-text">BUILDING SERVICES</text>
+  <text x="228" y="172" class="tagline-text">FIRE SAFETY &amp; BUILDING COMPLIANCE</text>
+
+</svg>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
-import { runSync } from '@/lib/sync';
+import { runSync, getCachedUserId } from '@/lib/sync';
 
 interface NetworkStatus {
   isOnline: boolean;
@@ -13,7 +13,7 @@ interface NetworkStatus {
 
 export function useNetworkStatus(): NetworkStatus {
   const [status, setStatus] = useState<NetworkStatus>({
-    isOnline: true,
+    isOnline: false,          // fail-safe: assume offline until NetInfo confirms
     connectionType: null,
     isInternetReachable: null,
   });
@@ -52,8 +52,8 @@ export function useNetworkStatus(): NetworkStatus {
           text2: 'Syncing your offline changes...',
           visibilityTime: 3000,
         });
-        // Fire-and-forget background sync
-        runSync().catch((err) => console.warn('[useNetworkStatus] sync on reconnect failed:', err));
+        // Pass cached userId — avoids a Supabase auth round-trip on reconnect
+        void runSync(getCachedUserId() ?? undefined);
       }
 
       prevOnlineRef.current = online;

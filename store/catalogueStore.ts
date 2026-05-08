@@ -7,16 +7,23 @@ import { ASSET_TYPES } from '@/constants/AssetData';
 import { DEFECT_CODES } from '@/constants/DefectCodes';
 import type { AssetTypeDefinition } from '@/constants/AssetData';
 import type { DefectCode, DefectCategory } from '@/constants/DefectCodes';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 interface CatalogueState {
   assetTypes: AssetTypeDefinition[];
   defectCodes: DefectCode[];
+  /** Stable listener ref so we can cleanly deregister on unmount */
+  _syncListenerRef: (() => void) | null;
   load: () => void;
+  /** Wire up automatic reload after every sync cycle (mirrors dashboardStore pattern) */
+  subscribeToSync: () => void;
+  unsubscribeFromSync: () => void;
 }
 
-export const useCatalogueStore = create<CatalogueState>((set) => ({
+export const useCatalogueStore = create<CatalogueState>((set, get) => ({
   assetTypes: ASSET_TYPES,   // start with constants so UI is never blank
   defectCodes: DEFECT_CODES,
+  _syncListenerRef: null,
 
   load: () => {
     try {
@@ -58,6 +65,27 @@ export const useCatalogueStore = create<CatalogueState>((set) => ({
       }
     } catch (e) {
       console.warn('[CatalogueStore] load error:', e);
+    }
+  },
+
+  subscribeToSync: () => {
+    // Deregister any stale listener before creating a new one
+    const prev = get()._syncListenerRef;
+    if (prev) offSyncComplete(prev);
+
+    const listener = () => {
+      if (__DEV__) console.log('[CatalogueStore] sync complete — refreshing catalogue');
+      useCatalogueStore.getState().load();
+    };
+    onSyncComplete(listener);
+    set({ _syncListenerRef: listener });
+  },
+
+  unsubscribeFromSync: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) {
+      offSyncComplete(listener);
+      set({ _syncListenerRef: null });
     }
   },
 }));

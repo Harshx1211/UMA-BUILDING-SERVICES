@@ -112,17 +112,22 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       );
       const openDefectsCount = defectRow?.count ?? 0;
 
-      // ── All-time stats (all jobs assigned, any date) ───────────────
-      const allJobRows = db.getAllSync<{ status: string }>(
-        `SELECT status FROM jobs
-         WHERE assigned_to = ?
-           AND status != ?`,
-        [userId, JobStatus.Cancelled]
+      // ── All-time stats — single aggregate query (no row materialisation) ───────
+      const allStatsRow = db.getFirstSync<{
+        total: number; completed: number; in_progress_count: number; pending: number;
+      }>(
+        `SELECT
+           COUNT(*) AS total,
+           SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS in_progress_count,
+           SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS pending
+         FROM jobs WHERE assigned_to = ? AND status != ?`,
+        [JobStatus.Completed, JobStatus.InProgress, JobStatus.Scheduled, userId, JobStatus.Cancelled]
       );
-      const allTotal      = allJobRows.length;
-      const allCompleted  = allJobRows.filter((j) => j.status === JobStatus.Completed).length;
-      const allInProgress = allJobRows.filter((j) => j.status === JobStatus.InProgress).length;
-      const allPending    = allJobRows.filter((j) => j.status === JobStatus.Scheduled).length;
+      const allTotal      = allStatsRow?.total ?? 0;
+      const allCompleted  = allStatsRow?.completed ?? 0;
+      const allInProgress = allStatsRow?.in_progress_count ?? 0;
+      const allPending    = allStatsRow?.pending ?? 0;
 
       set({
         todayJobs: todayJobRows,

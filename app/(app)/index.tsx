@@ -13,6 +13,7 @@ import {
   Linking,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Text } from 'react-native-paper';
@@ -70,7 +71,8 @@ function StatCard({ label, value, icon, iconBg, iconColor, accentColor, bgColor,
   return (
     <View style={[stat.card, {
       backgroundColor: bgColor,
-      borderColor: (C as any).cardBorder || 'rgba(27,45,79,0.09)',
+      // C3: cardBorder is a proper typed token — no `as any` needed
+      borderColor: C.cardBorder,
     }]}>
       {/* Left accent bar */}
       <View style={[stat.leftBar, { backgroundColor: accentColor }]} />
@@ -201,6 +203,11 @@ function NextUpCard({ job, bgColor, textColor, subColor }: { job: JobWithMeta; b
   const handleNavigate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const q = address || job.property_name || '';
+    // H3: Guard against opening Maps with an empty query
+    if (!q.trim()) {
+      Toast.show({ type: 'info', text1: 'No address on file for this job' });
+      return;
+    }
     Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(q)}`);
   };
 
@@ -369,17 +376,32 @@ export default function HomeScreen() {
   const C = useColors();
   const { user, firstName } = useAuth();
   const { todayJobs, todayStats, weekStats, openDefectsCount, isLoading, error, loadDashboard, clearError } = useDashboardStore();
-  const { unreadCount, loadNotifications } = useNotificationsStore();
+  const { unreadCount, loadNotifications, notifications } = useNotificationsStore();
   const insets = useSafeAreaInsets();
 
-
-  const load = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // H4: Data load separated from haptics — haptics should only fire on manual pull-to-refresh
+  const loadData = useCallback(() => {
     if (user?.id) loadDashboard(user.id);
   }, [user?.id, loadDashboard]);
 
-  useEffect(() => { loadNotifications(); }, [loadNotifications]);
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    loadData();
+  }, [loadData]);
+
+  // A17: Only load notifications once on initial mount (when store is empty),
+  // not on every tab switch. Guard on user?.id so this never fires unauthenticated.
+  useEffect(() => {
+    // H5: Guard added — never call loadNotifications without a valid user session
+    if (notifications.length === 0 && user?.id) loadNotifications();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // H4: Initial mount uses loadData (no haptics), manual pull-to-refresh uses load (haptics)
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // M6: Memoize time-of-day values to avoid creating Date objects on every re-render
+  const greetingText  = useMemo(() => greeting(), []);
+  const todayText     = useMemo(() => todayDisplay(), []);
 
   // openDefectsCount comes from dashboardStore — real SQL count
 
@@ -448,8 +470,9 @@ export default function HomeScreen() {
           <View style={s.headerContent}>
             <View style={s.headerLeft}>
               <Text style={s.headerEyebrow}>UMA BUILDING SERVICES</Text>
-              <Text style={s.headerTitle}>{greeting()}, {firstName}</Text>
-              <Text style={s.headerSub}>{todayDisplay()}</Text>
+              {/* M6: memoized — not recalculated on every re-render */}
+              <Text style={s.headerTitle}>{greetingText}, {firstName}</Text>
+              <Text style={s.headerSub}>{todayText}</Text>
             </View>
             <TouchableOpacity
               style={s.headerIconBtn}
@@ -536,11 +559,12 @@ export default function HomeScreen() {
                   const pct = weekStats.total > 0
                     ? Math.round((weekStats.completed / weekStats.total) * 100)
                     : 0;
-                  import('react-native-toast-message').then(m => m.default.show({
+                  // M4: Toast imported statically — no dynamic import() needed
+                  Toast.show({
                     type: pct === 100 ? 'success' : 'info',
                     text1: `This Week: ${weekStats.completed}/${weekStats.total} jobs`,
                     text2: `${pct}% complete`,
-                  }));
+                  });
                 }}
               />
               <QuickAction

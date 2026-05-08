@@ -9,7 +9,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,7 +20,6 @@ import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
   getSignatureForJob, updateRecord, addToSyncQueue,
 } from '@/lib/database';
-import { supabase } from '@/lib/supabase';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button } from '@/components/ui';
@@ -113,6 +112,7 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { updateJobStatus } = useJobsStore();
+  const navigation = useNavigation();
 
 
   const PRIORITY_COLOR: Record<Priority, string> = {
@@ -160,9 +160,44 @@ export default function JobDetailScreen() {
     }
   }, [id]);
 
+  // H3 dep: must be declared before the beforeRemove useEffect that lists it as a dependency
+  const handleSaveNotes = useCallback(() => {
+    if (!job) return;
+    const now = new Date().toISOString();
+    updateRecord('jobs', job.id, { notes, updated_at: now });
+    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes, updated_at: now });
+    setIsEditingNotes(false);
+    Toast.show({ type: 'success', text1: 'Notes saved ✓' });
+  }, [job, notes]);
+
   useEffect(() => { loadJob(); }, [loadJob]);
   // Refresh data whenever we navigate back to this screen
   useFocusEffect(useCallback(() => { loadJob(); }, [loadJob]));
+
+  // H3: Warn before leaving if there are unsaved notes
+  useEffect(() => {
+    const unsub = navigation.addListener('beforeRemove', (e: any) => {
+      if (!isEditingNotes) return; // no unsaved changes
+      e.preventDefault();
+      Alert.alert(
+        'Unsaved Notes',
+        'You have unsaved field notes. Save them before leaving?',
+        [
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Save & Leave',
+            onPress: () => { handleSaveNotes(); navigation.dispatch(e.data.action); },
+          },
+        ]
+      );
+    });
+    return unsub;
+  }, [navigation, isEditingNotes, handleSaveNotes]);
 
   // ── Job actions ────────────────────────────────────────────────────────────
   const handleStartJob = async () => {
@@ -177,8 +212,28 @@ export default function JobDetailScreen() {
   };
 
   const handleCompleteRequest = () => setShowBottomSheet(true);
-  const handleFinalizeConfirm = () => { setShowBottomSheet(false); finalizeCompletion(); };
 
+  // F1: Last-line-of-defence signature guard.
+  // CompletionBottomSheet should already block this, but if somehow the user
+  // bypasses the sheet (e.g. a deep-link or future refactor), we catch it here.
+  const handleFinalizeConfirm = () => {
+    setShowBottomSheet(false);
+    if (!hasSig) {
+      Alert.alert(
+        'Signature Required',
+        'A client signature is required before completing this job. Please capture a signature first.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Go to Signature',
+            onPress: () => { if (job) router.push(`/jobs/${job.id}/signature` as never); },
+          },
+        ]
+      );
+      return;
+    }
+    finalizeCompletion();
+  };
 
   const finalizeCompletion = () => {
     if (!job) return;
@@ -199,44 +254,38 @@ export default function JobDetailScreen() {
     }, 1000);
   };
 
-  const handleSaveNotes = () => {
-    if (!job) return;
-    const now = new Date().toISOString();
-    updateRecord('jobs', job.id, { notes, updated_at: now });
-    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes, updated_at: now });
-    setIsEditingNotes(false);
-    Toast.show({ type: 'success', text1: 'Notes saved ✓' });
-  };
 
   // ── Continue Working ────────────────────────────────────────────────────────
+  // NOTE: No direct Supabase call here — always write SQLite + sync queue.
+  // The sync engine handles pushing to the server with proper conflict resolution.
   const handleContinueWorking = () => {
     if (!job) return;
     Alert.alert(
       'Continue Working?',
-      'This will re-open the job and unlock the inspection form. The existing data is preserved — you can add more and re-generate the report when done.',
+      'This will re-open the job and unlock the inspection form. All existing data is preserved.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Continue Working',
-          onPress: async () => {
+          onPress: () => {
             const now = new Date().toISOString();
-            // Update local DB first for instant UI response
+            // Write local SQLite first for instant UI response
             updateRecord('jobs', job.id, { status: JobStatus.InProgress, report_url: null, updated_at: now });
-            // Update jobsStore so list reflects change
+            // Queue the change so the sync engine pushes it to Supabase
+            addToSyncQueue('jobs', job.id, SyncOperation.Update, {
+              status: JobStatus.InProgress,
+              report_url: null,
+              updated_at: now,
+            });
+            // Update jobsStore in-memory list
             updateJobStatus(job.id, JobStatus.InProgress);
-            // Update local state
+            // Update local screen state
             setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
-            Toast.show({ type: 'success', text1: '🔓 Job re-opened', text2: 'Inspection form unlocked' });
-            // Directly update Supabase (we need connectivity for this)
-            try {
-              await supabase.from('jobs')
-                .update({ status: 'in_progress', report_url: null, updated_at: now })
-                .eq('id', job.id);
-            } catch (e) {
-              console.warn('[UMA BUILDING SERVICES] Could not sync continue-working to Supabase:', e);
-              // Add to sync queue as fallback
-              addToSyncQueue('jobs', job.id, SyncOperation.Update, { status: JobStatus.InProgress, report_url: null, updated_at: now });
-            }
+            Toast.show({
+              type: 'success',
+              text1: '🔓 Job re-opened',
+              text2: 'Changes will sync to the server automatically',
+            });
           },
         },
       ]
@@ -246,6 +295,11 @@ export default function JobDetailScreen() {
   const handleNavigate = () => {
     if (!job) return;
     const addr = [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ');
+    // H4: Guard against empty address — Maps with empty query is unhelpful
+    if (!addr.trim()) {
+      Toast.show({ type: 'info', text1: 'No address on file', text2: 'Contact your manager to update this property.' });
+      return;
+    }
     Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(addr)}`);
   };
 
@@ -382,7 +436,7 @@ export default function JobDetailScreen() {
           )}
 
           {/* ── SAFETY ALERTS ─────────────────────────────────────── */}
-          {(job.hazard_notes || job.access_notes || (job as any).site_note) && (
+          {(job.hazard_notes || job.access_notes || job.site_note) && (
             <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
               {job.hazard_notes && (
                 <View style={[s.alertBox, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
@@ -402,12 +456,12 @@ export default function JobDetailScreen() {
                   </View>
                 </View>
               )}
-              {(job as any).site_note && (
-                <View style={[s.alertBox, { backgroundColor: '#F0FDF4', borderColor: '#16A34A40' }]}>
-                  <MaterialCommunityIcons name="note-text-outline" size={18} color="#166534" />
+              {job.site_note && (
+                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderColor: C.info + '40' }]}>
+                  <MaterialCommunityIcons name="note-text-outline" size={18} color={C.infoDark} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[s.alertTitle, { color: '#14532D' }]}>📝 Site Note</Text>
-                    <Text style={[s.alertBody, { color: '#166534' }]}>{(job as any).site_note}</Text>
+                    <Text style={[s.alertTitle, { color: C.infoDark }]}>📝 Site Note</Text>
+                    <Text style={[s.alertBody, { color: C.infoDark }]}>{job.site_note}</Text>
                   </View>
                 </View>
               )}
@@ -681,13 +735,14 @@ export default function JobDetailScreen() {
           }
           variant={isCompleted ? 'secondary' : 'primary'}
           disabled={isScheduled || isCancelled}
+          // F3: Completed with no report → go straight to /preview to generate + upload.
+          // In-progress → /preview for draft view.
+          // Completed with existing report → /report for the on-screen summary.
           onPress={() => {
-            if (isScheduled || isCancelled) return;
             if (isCompleted && job?.report_url) {
-              // Already have a report — go to report screen which shows Open + Re-generate
               router.push(`/jobs/${id}/report` as never);
-            } else {
-              router.push(`/jobs/${id}/report` as never);
+            } else if (isCompleted || isInProgress) {
+              router.push(`/jobs/${id}/preview` as never);
             }
           }}
           icon={
@@ -739,7 +794,7 @@ export default function JobDetailScreen() {
             <View style={cm.statsRow}>
               <View style={cm.statItem}>
                 <Text style={cm.statEmoji}>✅</Text>
-                <Text style={cm.statValue}>{assets.filter(a => a.result).length}/{assets.length}</Text>
+                <Text style={cm.statValue}>{assets.filter(a => a.result !== null).length}/{assets.length}</Text>
                 <Text style={cm.statLabel}>Inspected</Text>
               </View>
               <View style={cm.statDivider} />

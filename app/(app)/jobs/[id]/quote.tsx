@@ -18,6 +18,7 @@ import { DefectSeverity } from '@/constants/Enums';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { Defect } from '@/types';
 
 // ─── Severity colour palette ──────────────────────────────────
@@ -71,8 +72,15 @@ export default function QuoteScreen() {
   const store = useDefectsStore();
 
   useEffect(() => {
-    if (jobId) store.loadDefects(jobId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!jobId) return;
+    store.loadDefects(jobId);
+
+    // A18: Re-load defects whenever a sync cycle completes so admin-updated
+    // prices appear immediately without requiring a screen remount.
+    const listener = () => store.loadDefects(jobId);
+    onSyncComplete(listener);
+    return () => offSyncComplete(listener);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   // Group defects by severity
@@ -138,12 +146,21 @@ export default function QuoteScreen() {
         }
       />
 
+      {/* F5: Contextual empty state — explains the expected flow so techs aren't confused */}
       {!hasDefects ? (
-        <EmptyState
-          emoji="🎉"
-          title="No defects logged"
-          subtitle="All clear! Any defects you log during the inspection will appear here, grouped by severity."
-        />
+        <View style={{ flex: 1, padding: 24, gap: 16 }}>
+          <EmptyState
+            emoji="📋"
+            title="No defects logged yet"
+            subtitle="Defects you log during the on-site inspection will appear here, grouped by severity. Admin will then set pricing for each item."
+          />
+          <View style={[s.infoBanner, { backgroundColor: C.infoLight, borderColor: C.info + '30' }]}>
+            <MaterialCommunityIcons name="information-outline" size={16} color={C.info} />
+            <Text style={[s.infoBannerTxt, { color: C.infoDark }]}>
+              Prices and quote approval are managed by your admin — you only need to log the defects found on site.
+            </Text>
+          </View>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 

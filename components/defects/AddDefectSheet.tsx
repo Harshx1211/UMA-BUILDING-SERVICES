@@ -18,6 +18,9 @@ import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
 import type { Asset } from '@/types';
 
+/** Maximum photos allowed per defect — prevents memory pressure on older devices */
+const MAX_PHOTOS = 5;
+
 // ─── Types ────────────────────────────────────────────────────
 interface Props { jobId: string; propertyId: string; onSaved: () => void; }
 export interface AddDefectSheetRef { open: () => void; close: () => void; }
@@ -64,14 +67,34 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
   };
 
   const handlePhoto = async () => {
+    // A12: enforce per-defect photo limit
+    if (photos.length >= MAX_PHOTOS) {
+      Toast.show({
+        type: 'error',
+        text1: `Max ${MAX_PHOTOS} photos per defect`,
+        text2: 'Remove an existing photo before adding another.',
+      });
+      return;
+    }
     const { granted } = await ImagePicker.requestCameraPermissionsAsync();
     if (!granted) return;
     const res = await ImagePicker.launchCameraAsync({ quality: 0.75 });
     if (!res.canceled && res.assets[0]) {
       const src = res.assets[0].uri;
       const dest = `${FileSystem.documentDirectory}defect_${Date.now()}.jpg`;
-      try { await FileSystem.copyAsync({ from: src, to: dest }); setPhotos(p => [...p, dest]); }
-      catch { setPhotos(p => [...p, src]); }
+      try {
+        await FileSystem.copyAsync({ from: src, to: dest });
+        setPhotos(p => [...p, dest]);
+      } catch {
+        // A13: On Android the camera rolls temp URI (content://) may be invalidated
+        // after the camera activity closes. Warn the user so they know it may not display.
+        Toast.show({
+          type: 'info',
+          text1: 'Photo saved (may not preview)',
+          text2: 'Could not copy to permanent storage. The photo will still be uploaded.',
+        });
+        setPhotos(p => [...p, src]);
+      }
     }
   };
 
@@ -265,11 +288,31 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
       <View style={s.photoSection}>
         <View style={s.photoHeader}>
           <Text style={[s.photoLabel, { color: C.text }]}>
-            Photos {severity === DefectSeverity.Critical ? '(required for Critical)' : '(optional)'}
+            Photos{' '}
+            {severity === DefectSeverity.Critical ? '(required for Critical)' : '(optional)'}
+            {photos.length > 0 ? `  ·  ${photos.length}/${MAX_PHOTOS}` : ''}
           </Text>
-          <TouchableOpacity style={[s.addPhotoBtn, { borderColor: C.accent, backgroundColor: C.accent + '10' }]} onPress={handlePhoto} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="camera-plus-outline" size={16} color={C.accent} />
-            <Text style={[s.addPhotoTxt, { color: C.accent }]}>Add Photo</Text>
+          <TouchableOpacity
+            style={[
+              s.addPhotoBtn,
+              photos.length >= MAX_PHOTOS
+                ? { borderColor: C.border, backgroundColor: C.backgroundTertiary }
+                : { borderColor: C.accent, backgroundColor: C.accent + '10' },
+            ]}
+            onPress={handlePhoto}
+            disabled={photos.length >= MAX_PHOTOS}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="camera-plus-outline"
+              size={16}
+              color={photos.length >= MAX_PHOTOS ? C.textTertiary : C.accent}
+            />
+            <Text style={[s.addPhotoTxt, {
+              color: photos.length >= MAX_PHOTOS ? C.textTertiary : C.accent,
+            }]}>
+              {photos.length >= MAX_PHOTOS ? 'Limit reached' : 'Add Photo'}
+            </Text>
           </TouchableOpacity>
         </View>
 

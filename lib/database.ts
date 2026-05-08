@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 13;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -594,10 +594,50 @@ export function initializeSchema(): void {
     );
   }
 
-  if (__DEV__)
-    console.log(
-      `[UMA BUILDING SERVICES DB] Schema initialised at version ${currentVersion}`,
-    );
+  // Migration 13: make inspection_photos.uploaded_by nullable.
+  // SQLite cannot ALTER COLUMN, so we use the table-rename pattern inside a transaction.
+  // This is needed because PhotoCaptureSheet now correctly sends null instead of 'unknown'
+  // when no user session is available (edge case — the UI also guards against this).
+  if (currentVersion < 13) {
+    try {
+      db.execSync(`
+        PRAGMA foreign_keys = OFF;
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS inspection_photos_v13 (
+          id          TEXT PRIMARY KEY NOT NULL,
+          job_id      TEXT NOT NULL,
+          asset_id    TEXT,
+          photo_url   TEXT NOT NULL,
+          caption     TEXT,
+          uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+          uploaded_by TEXT,
+          defect_id   TEXT,
+          FOREIGN KEY (job_id)    REFERENCES jobs(id),
+          FOREIGN KEY (defect_id) REFERENCES defects(id)
+        );
+
+        INSERT INTO inspection_photos_v13
+          SELECT id, job_id, asset_id, photo_url, caption, uploaded_at, uploaded_by, defect_id
+          FROM inspection_photos;
+
+        DROP TABLE inspection_photos;
+
+        ALTER TABLE inspection_photos_v13 RENAME TO inspection_photos;
+
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+      `);
+      if (__DEV__)
+        console.log('[UMA BUILDING SERVICES DB] Migration 13: inspection_photos.uploaded_by is now nullable');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[UMA BUILDING SERVICES DB] Migration 13 failed:', msg);
+    }
+    currentVersion = 13;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '13')`);
+  }
+
 
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
@@ -850,6 +890,32 @@ export function addToSyncQueue(
 ): void {
   try {
     const db = openDatabase();
+
+    // M6 fix: For Update operations, merge into an existing pending row for the same
+    // record rather than appending a duplicate. This prevents N network calls when a
+    // field is changed N times before the next sync cycle runs.
+    // Insert / Delete / photo_upload are always appended as separate entries.
+    if (operation === SyncOperation.Update) {
+      const existing = db.getFirstSync<{ id: number; payload: string }>(
+        `SELECT id, payload FROM sync_queue
+         WHERE table_name = ? AND record_id = ? AND operation = ? AND synced = 0
+         LIMIT 1`,
+        [tableName, recordId, operation],
+      );
+
+      if (existing) {
+        // Merge: extend the existing payload with the new fields (new fields take precedence)
+        let merged: RecordData = {};
+        try { merged = JSON.parse(existing.payload) as RecordData; } catch { /* start fresh */ }
+        Object.assign(merged, payload);
+        db.runSync(
+          `UPDATE sync_queue SET payload = ? WHERE id = ?`,
+          [JSON.stringify(merged), existing.id],
+        );
+        return;
+      }
+    }
+
     db.runSync(
       `INSERT INTO sync_queue (table_name, record_id, operation, payload, synced, retry_count)
        VALUES (?, ?, ?, ?, 0, 0)`,
@@ -929,6 +995,23 @@ export function getPendingSyncItems(): SyncQueueItem[] {
     );
   } catch (err) {
     console.error("[UMA BUILDING SERVICES DB] getPendingSyncItems error:", err);
+    return [];
+  }
+}
+
+/**
+ * Returns sync queue items that have permanently failed (synced = -1).
+ * These will never be retried. Callers can expose them to the user
+ * so they know data may not have reached the server.
+ */
+export function getFailedSyncItems(): SyncQueueItem[] {
+  try {
+    const db = openDatabase();
+    return db.getAllSync<SyncQueueItem>(
+      `SELECT * FROM sync_queue WHERE synced = -1 ORDER BY created_at DESC`,
+    );
+  } catch (err) {
+    console.error("[UMA BUILDING SERVICES DB] getFailedSyncItems error:", err);
     return [];
   }
 }
@@ -1162,12 +1245,17 @@ export function getSignatureForJob<T = RecordData>(jobId: string): T | null {
   }
 }
 
-/** Returns all inspection photos for a job, newest first */
+/** Returns all inspection photos for a job, ordered oldest-first.
+ * Oldest-first is critical for PDF deduplication:
+ * when an asset has photos from multiple inspection visits,
+ * the newest photos (re-inspection) appear last and are given
+ * priority in dedup logic (seen Set fills with old URLs first,
+ * new ones are always appended and rendered). */
 export function getPhotosForJob<T = RecordData>(jobId: string): T[] {
   try {
     const db = openDatabase();
     return db.getAllSync<T>(
-      `SELECT * FROM inspection_photos WHERE job_id = ? ORDER BY uploaded_at DESC`,
+      `SELECT * FROM inspection_photos WHERE job_id = ? ORDER BY uploaded_at ASC`,
       [jobId],
     );
   } catch (err) {

@@ -37,6 +37,9 @@ export interface AssetWithResult {
   id: string;
   property_id: string;
   asset_type: string;
+  /** Short technician reference number for this asset at the site (e.g. '001', '040') */
+  asset_ref: string | null;
+  variant: string | null;
   description: string | null;
   location_on_site: string | null;
   serial_number: string | null;
@@ -121,10 +124,14 @@ function isSafe(src: string | null | undefined): src is string {
 }
 
 function assetRefCode(asset: AssetWithResult, index: number): string {
+  // 1. Use the dedicated asset_ref field first (e.g. '001', '040')
+  if (asset.asset_ref) return asset.asset_ref.trim();
+  // 2. Derive from serial number digits as a fallback
   if (asset.serial_number) {
     const clean = asset.serial_number.replace(/\D/g, '');
     if (clean.length >= 3) return clean.slice(0, 3);
   }
+  // 3. Sequential index as last resort
   return String(index + 1).padStart(3, '0');
 }
 
@@ -132,14 +139,18 @@ function assetRefCode(asset: AssetWithResult, index: number): string {
 
 const CSS = `
 @page { margin: 0; size: A4 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Explicit reset for html AND body prevents WKWebView injecting a blank page
+   before the first .page div due to default user-agent margins. */
+html { margin: 0; padding: 0; }
 body {
+  margin: 0; padding: 0;
   font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
   color: #1E293B;
   line-height: 1.5;
   font-size: 11px;
   background: #fff;
 }
+*, *::before, *::after { box-sizing: border-box; }
 .nb { page-break-inside: avoid; break-inside: avoid; }
 
 /* ── Per-page footer (embedded inside each .page div) ── */
@@ -159,16 +170,18 @@ body {
 .pf-mid   { font-size: 9px; font-weight: 700; color: #E97316; text-align: center; white-space: nowrap; }
 .pf-right { text-align: right; line-height: 1.6; }
 
-/* ── Page wrapper ── */
-/* min-height = A4 height; footer sits at absolute bottom inside the page */
+/* A4 at 96dpi = 1122.52px — exact value prevents sub-pixel rounding that
+   causes expo-print to insert a spurious blank page between sections. */
 .page {
   padding: 28px 32px 60px 32px;
   position: relative;
-  min-height: 1122px; /* A4 at 96dpi = 1122.5px — ensures footer reaches the bottom */
+  min-height: 1122.52px;
   page-break-after: always;
+  break-after: page;
   box-sizing: border-box;
 }
-.page:last-of-type { page-break-after: auto; }
+/* Last page must NOT force a trailing blank page */
+.page:last-child { page-break-after: auto; break-after: auto; }
 
 /* ── Brand header ── */
 .brand-bar {
@@ -531,10 +544,10 @@ function logoHtml(reportNum: string, reportLabel = 'Service Report'): string {
   return `
   <div class="brand-bar">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">ST</span></div></div>
+      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
       <div class="brand-text">
-        <div class="brand-name"><span>S</span>ITE<span>T</span>RACK</div>
-        <div class="brand-sub">Services</div>
+        <div class="brand-name"><span>U</span>MA</div>
+        <div class="brand-sub">Building Services</div>
       </div>
     </div>
     <div class="brand-meta">
@@ -714,11 +727,20 @@ function buildDefectBox(
   asset: AssetWithResult,
   defect: Defect | undefined,
   defectPhotos: InspectionPhoto[],
-  assetPhoto: InspectionPhoto | undefined,
+  /**
+   * All inspection_photos rows linked to this asset (not to a specific defect).
+   * Previously this was only the first photo — now ALL are passed so every
+   * photo the technician took for this failing asset appears in the PDF.
+   */
+  assetPhotos: InspectionPhoto[],
 ): string {
-  const inspHtml = assetPhoto && isSafe(assetPhoto.photo_url)
-    ? defectPhotoHtml(assetPhoto.photo_url, assetPhoto.caption || 'Inspection photo')
-    : '';
+  // Build the inspection-photo HTML for ALL asset-linked photos
+  const inspHtmlParts: string[] = [];
+  for (const ap of assetPhotos) {
+    if (ap.photo_url && isSafe(ap.photo_url)) {
+      inspHtmlParts.push(defectPhotoHtml(ap.photo_url, ap.caption || 'Inspection photo'));
+    }
+  }
 
   if (defect) {
     const isCrit = defect.severity === 'critical';
@@ -733,20 +755,30 @@ function buildDefectBox(
       try { rawUrls = JSON.parse(defect.photos as unknown as string); } catch {}
     }
 
-    // Collect all defect photos — deduplicate by url
+    // Collect all photos — deduplicate by URL across inspection photos + defect.photos[]
     const seen = new Set<string>();
     const allPhotoHtmlParts: string[] = [];
 
-    if (inspHtml && assetPhoto?.photo_url) {
-      seen.add(assetPhoto.photo_url);
-      allPhotoHtmlParts.push(inspHtml);
+    // 1. All asset-linked inspection photos (from the new assetPhotos[] array)
+    for (const part of inspHtmlParts) {
+      // inspHtmlParts already filtered for isSafe — just track the URL via the src attr
+      // We use the URL from the assetPhotos array to populate seen set
+      allPhotoHtmlParts.push(part);
     }
+    // Populate seen set from assetPhotos so we don't double-render them below
+    for (const ap of assetPhotos) {
+      if (ap.photo_url) seen.add(ap.photo_url);
+    }
+
+    // 2. Defect-linked inspection_photos rows
     for (const p of defectPhotos) {
       if (isSafe(p.photo_url) && !seen.has(p.photo_url)) {
         seen.add(p.photo_url);
         allPhotoHtmlParts.push(defectPhotoHtml(p.photo_url, p.caption || 'Photo'));
       }
     }
+
+    // 3. Raw URLs stored in defect.photos[] JSON (legacy / in-app uploads)
     for (let i = 0; i < rawUrls.length; i++) {
       const u = rawUrls[i];
       if (isSafe(u) && !seen.has(u)) {
@@ -790,8 +822,9 @@ function buildDefectBox(
 
   // Fallback — no linked Defect record
   const fb = fmtDateTimeFull(asset.actioned_at ?? new Date().toISOString());
-  const fallbackPhotos = inspHtml
-    ? `<div class="defect-photo-grid">${inspHtml}</div>` : '';
+  // Use all asset photos for the fallback box too
+  const fallbackPhotos = inspHtmlParts.length
+    ? `<div class="defect-photo-grid">${inspHtmlParts.join('')}</div>` : '';
 
   return `
   <div class="db nb">
@@ -835,7 +868,9 @@ function buildAssetRow(
   const notes   = asset.inspection_notes || asset.technician_notes;
 
   const linkedDefect = defects.find(d => d.asset_id === asset.id);
+  // ALL photos linked to this asset (no defect link) — pass thumbnails AND fail asset shots
   const assetPhotos  = photos.filter(p => p.asset_id === asset.id && !p.defect_id);
+  // Photos linked to the specific defect record
   const defectPhotos = linkedDefect ? photos.filter(p => p.defect_id === linkedDefect.id) : [];
 
   // Pass rows: show up to 3 small thumbnails
@@ -843,8 +878,9 @@ function buildAssetRow(
     ? `<div class="thumb-grid">${assetPhotos.slice(0, 3).map(p => thumbHtml(p)).join('')}</div>`
     : '';
 
+  // Fail rows: pass ALL asset photos to buildDefectBox — not just the first one
   const defectHtml = isFail
-    ? buildDefectBox(asset, linkedDefect, defectPhotos, assetPhotos[0])
+    ? buildDefectBox(asset, linkedDefect, defectPhotos, assetPhotos)
     : '';
 
   return `
@@ -1004,27 +1040,23 @@ export function buildReportHtml(data: ReportData): string {
   const j            = job as any;
   const propertyName = j.property_name ?? reportId;
 
-  const hasQuote = Boolean(approvedQuote && quoteItems?.length && inventory);
+  // Only count quote page if it will genuinely render (has line items)
+  const hasQuote   = Boolean(approvedQuote && quoteItems?.length && inventory);
+  const quotePg    = hasQuote
+    ? buildQuotePage(approvedQuote!, quoteItems!, inventory!, reportId, 3, 3)
+    : '';
   const totalPages = hasQuote ? 3 : 2;
 
   const page1   = buildPage1(data, 1, totalPages);
   const maintPg = buildMaintPage(data, 2, totalPages);
-  const quotePg = hasQuote
-    ? buildQuotePage(approvedQuote!, quoteItems!, inventory!, reportId, 3, totalPages)
-    : '';
 
+  // IMPORTANT: No whitespace/newlines between <body> and the first .page div —
+  // WKWebView (expo-print) renders any leading whitespace as blank page content.
   return `<!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en"><head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Service Report — ${propertyName}</title>
   <style>${CSS}</style>
-</head>
-<body>
-  ${page1}
-  ${maintPg}
-  ${quotePg}
-</body>
-</html>`;
+</head><body>${page1}${maintPg}${quotePg}</body></html>`;
 }

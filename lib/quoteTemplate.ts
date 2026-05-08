@@ -130,10 +130,10 @@ function logoHtml(reportNum: string): string {
   return `
   <div class="brand-bar">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">ST</span></div></div>
+      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
       <div class="brand-text">
-        <div class="brand-name"><span>S</span>ITE<span>T</span>RACK</div>
-        <div class="brand-sub">Services</div>
+        <div class="brand-name"><span>U</span>MA</div>
+        <div class="brand-sub">Building Services</div>
       </div>
     </div>
     <div class="brand-meta">

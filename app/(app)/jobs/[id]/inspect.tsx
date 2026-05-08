@@ -349,6 +349,10 @@ export default function AssetInspectionScreen() {
 
   const allDone = store.progress.total > 0
     && store.progress.inspected === store.progress.total;
+  // A10 FIX: distinguish 'all marked' (could be all N/T) from 'all inspected' (has Pass/Fail)
+  const hasActualResults = store.assets.some(
+    a => a.result === InspectionResult.Pass || a.result === InspectionResult.Fail
+  );
 
   // Counts per category
   const counts = useMemo(() => ({
@@ -391,17 +395,16 @@ export default function AssetInspectionScreen() {
           {
             text: 'Complete Anyway',
             style: 'destructive',
-            // BUG 10 FIX: navigate to report screen, not just router.back()
+            // F2: Don't call store.reset() here — the useEffect cleanup fires it on
+            // unmount automatically. Calling it before navigate causes a double-reset.
             onPress: () => {
-              store.reset();
               router.replace(`/jobs/${jobId}/report` as never);
             },
           },
         ]
       );
     } else {
-      // BUG 10 FIX: route to report screen after successful completion
-      store.reset();
+      // F2: Don't reset store before navigate — let the useEffect cleanup handle it on unmount
       router.replace(`/jobs/${jobId}/report` as never);
     }
   };
@@ -623,7 +626,9 @@ export default function AssetInspectionScreen() {
         <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
           <View style={{ flex: 1 }}>
             <Text style={[s.bottomBarTitle, { color: C.text }]}>
-              {allDone ? '✅ All assets inspected' : `${counts.remaining} remaining`}
+              {allDone
+                ? (hasActualResults ? '✅ All assets inspected' : '🟡 All assets marked (N/T)')
+                : `${counts.remaining} remaining`}
             </Text>
             <Text style={[s.bottomBarSub, { color: C.textSecondary }]}>
               {store.progress.inspected} of {store.progress.total} inspected

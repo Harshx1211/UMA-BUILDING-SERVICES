@@ -5,9 +5,10 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
-  Briefcase, Building2, ShieldAlert, Users,
+  Briefcase, Building2, ShieldAlert, Users, Shield,
   TrendingUp, Clock, CheckCircle2, AlertTriangle, ArrowUpRight,
 } from 'lucide-react';
+
 import { adminRead } from '@/lib/admin-api';
 import StatCard from '@/components/ui/StatCard';
 import Badge from '@/components/ui/Badge';
@@ -107,8 +108,8 @@ export default function DashboardPage() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white" /></svg>
+          style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
+          <Shield size={22} color="white" strokeWidth={2} />
         </div>
         <div className="flex gap-1.5">
           {[0, 1, 2].map(i => (
@@ -120,6 +121,7 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+
 
   const completionRate = stats.totalJobs > 0 ? Math.round((stats.completedJobs / stats.totalJobs) * 100) : 0;
 
@@ -137,7 +139,9 @@ export default function DashboardPage() {
           <h2 className="text-white text-2xl font-extrabold leading-tight" style={{ letterSpacing: '-0.03em' }}>
             Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'} 👋
           </h2>
-          <p className="text-white/50 text-sm mt-1">Here's what's happening across your operations today.</p>
+          <p className="text-white/50 text-sm mt-1">
+            {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} · Here&apos;s what&apos;s happening today.
+          </p>
         </div>
         <div className="relative z-10 hidden md:flex gap-5 text-center">
           {[

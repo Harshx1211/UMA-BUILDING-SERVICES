@@ -13,7 +13,7 @@ import {
 import * as FileSystem from 'expo-file-system/legacy';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import Toast from 'react-native-toast-message';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -50,7 +50,8 @@ export default function SignatureScreen() {
     signature_url: string;
   } | null>(null);
 
-  React.useEffect(() => {
+  // H6: useFocusEffect so re-visiting the screen always shows the latest signature state
+  useFocusEffect(React.useCallback(() => {
     if (!jobId) return;
     try {
       const job = getRecord<{ site_contact_name: string | null }>('jobs', jobId);
@@ -64,8 +65,9 @@ export default function SignatureScreen() {
         'signatures', { job_id: jobId }
       );
       if (sigs.length > 0) setExistingSig(sigs[0]);
+      else setExistingSig(null); // Reset if signature was cleared
     } catch { /* ignore */ }
-  }, [jobId]);
+  }, [jobId]));
 
   const handleClear = () => {
     sigRef.current?.clearSignature();

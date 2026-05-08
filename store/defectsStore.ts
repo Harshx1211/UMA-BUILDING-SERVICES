@@ -8,6 +8,9 @@ import {
   updateRecord,
   deleteRecord,
   addToSyncQueue,
+  queryRecords,
+  cancelPendingPhotoUpload,
+  recordDeletedPhoto,
 } from '@/lib/database';
 import { DefectStatus, SyncOperation } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
@@ -181,6 +184,24 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
   deleteDefect: (defectId) => {
     try {
       set({ isSaving: true, error: null });
+
+      // A4 FIX: Cancel / delete all inspection_photos associated with this defect
+      // BEFORE deleting the defect row, so we don't leave orphaned upload tasks.
+      const defectPhotos = queryRecords<{ id: string; photo_url: string }>(
+        'inspection_photos', { defect_id: defectId }
+      );
+      for (const p of defectPhotos) {
+        deleteRecord('inspection_photos', p.id);
+        recordDeletedPhoto(p.id);
+        if (p.photo_url.startsWith('https://')) {
+          addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+            id: p.id,
+            photo_url: p.photo_url,
+          });
+        } else {
+          cancelPendingPhotoUpload(p.id);
+        }
+      }
 
       deleteRecord('defects', defectId);
       addToSyncQueue('defects', defectId, SyncOperation.Delete, { id: defectId });

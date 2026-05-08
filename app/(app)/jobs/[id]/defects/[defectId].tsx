@@ -251,9 +251,9 @@ export default function DefectDetailScreen() {
             <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
               <Text style={[s.cardLabel, { color: C.textTertiary }]}>PHOTOS ({photosArr.length})</Text>
               <View style={s.photoGrid}>
-                {photosArr.map((uri, i) => (
+                {photosArr.map((uri) => (
                   <TouchableOpacity
-                    key={i}
+                    key={uri}
                     onPress={() => setLightboxUri(uri)}
                     activeOpacity={0.85}
                     style={s.photoThumbWrap}

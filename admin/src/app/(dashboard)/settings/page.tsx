@@ -5,7 +5,7 @@ import { Building2, Users, Boxes, Bell, Shield, Palette, Database, Check } from 
 import toast from 'react-hot-toast';
 
 const COMPANY = {
-  name: 'UMA BUILDING SERVICES Services Pty Ltd',
+  name: 'UMA Building Services Pty Ltd',
   abn: '51 602 019 081',
   email: 'info@uma-building-services.com.au',
   phone: '1300 748 387',

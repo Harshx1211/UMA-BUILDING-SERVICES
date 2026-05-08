@@ -5,8 +5,9 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Briefcase, Building2,
   Users, FileText, Settings, Bell, ChevronLeft, ChevronRight,
-  ClipboardList, LogOut, Zap, X, BookOpen, MessageSquare,
+  ClipboardList, LogOut, Shield, X, BookOpen, MessageSquare,
 } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 
@@ -59,8 +60,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       <div className="flex items-center gap-3 px-4 h-16 flex-shrink-0"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)', boxShadow: '0 4px 14px rgba(249,115,22,0.45)' }}>
-          <Zap size={17} color="#fff" strokeWidth={2.5} />
+          style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 4px 14px rgba(249,115,22,0.45)' }}>
+          <Shield size={17} color="#fff" strokeWidth={2.5} />
         </div>
         {(!collapsed || mobileOpen) && (
           <div className="animate-fade-in overflow-hidden flex-1">

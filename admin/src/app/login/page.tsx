@@ -113,7 +113,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="relative z-10 p-10 pt-6">
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            © 2026 UMA BUILDING SERVICES Services Pty Ltd · ABN 51 602 019 081
+            © 2026 UMA Building Services Pty Ltd · ABN 51 602 019 081
           </p>
         </div>
       </div>

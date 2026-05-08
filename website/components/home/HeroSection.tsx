@@ -1,17 +1,29 @@
 'use client';
 import Link from 'next/link';
-import { ArrowRight, CheckCircle, ClipboardList, Shield, Wrench } from 'lucide-react';
+import { ArrowRight, Shield, FileText, ClipboardCheck, Award } from 'lucide-react';
 
-const TRUST_POINTS = [
-  'Digital inspection reports for every job',
-  'Routine & defect-based services available',
-  'Managed via our own purpose-built platform',
-];
-
-const FLOAT_CARDS = [
-  { icon: ClipboardList, label: 'Routine Service', sub: 'Monthly to 5-Yearly', color: '#F97316', bg: 'rgba(249,115,22,0.15)', anim: 'animate-float-a', delay: '0ms' },
-  { icon: Wrench,        label: 'Defect Repair',   sub: 'Quote & Fix',          color: '#60a5fa', bg: 'rgba(96,165,250,0.15)',  anim: 'animate-float-b', delay: '800ms' },
-  { icon: Shield,        label: 'Digital Reports', sub: 'PDF on Completion',     color: '#4ade80', bg: 'rgba(74,222,128,0.15)', anim: 'animate-float-c', delay: '400ms' },
+const FEATURES = [
+  {
+    icon: Shield,
+    color: '#F97316',
+    bg: 'rgba(249,115,22,0.14)',
+    title: 'Fire Safety Inspections',
+    desc: 'Monthly to 5-yearly routine service schedules',
+  },
+  {
+    icon: ClipboardCheck,
+    color: '#60a5fa',
+    bg: 'rgba(96,165,250,0.14)',
+    title: 'Per-Asset Logging',
+    desc: 'Pass/Fail recorded on every individual asset',
+  },
+  {
+    icon: FileText,
+    color: '#4ade80',
+    bg: 'rgba(74,222,128,0.14)',
+    title: 'Digital PDF Reports',
+    desc: 'Structured report generated on job completion',
+  },
 ];
 
 export default function HeroSection() {
@@ -19,140 +31,148 @@ export default function HeroSection() {
     <section
       id="hero"
       className="hero-gradient"
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        position: 'relative',
-        overflow: 'hidden',
-        paddingTop: 72,
-      }}
+      style={{ position: 'relative', paddingTop: 72, overflow: 'hidden' }}
     >
-      {/* Decorative glow orbs */}
-      <div className="glow-orb" style={{ width: 560, height: 560, background: 'rgba(249,115,22,0.10)', top: '-140px', right: '-100px' }} />
-      <div className="glow-orb" style={{ width: 400, height: 400, background: 'rgba(36,58,101,0.55)', bottom: '-80px', left: '-100px' }} />
-      <div className="glow-orb" style={{ width: 200, height: 200, background: 'rgba(249,115,22,0.08)', top: '40%', left: '40%' }} />
+      {/* Glow orbs */}
+      <div className="glow-orb" style={{ width: 560, height: 560, background: 'rgba(249,115,22,0.10)', top: '-180px', right: '-100px' }} />
+      <div className="glow-orb" style={{ width: 420, height: 420, background: 'rgba(36,58,101,0.55)', bottom: '-140px', left: '-100px' }} />
 
-      {/* Subtle grid overlay */}
+      {/* Grid overlay */}
       <div style={{
-        position: 'absolute', inset: 0, opacity: 0.035,
-        backgroundImage:
-          'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px),' +
-          'linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)',
-        backgroundSize: '64px 64px',
-        pointerEvents: 'none',
+        position: 'absolute', inset: 0, opacity: 0.025, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)',
+        backgroundSize: '60px 60px',
       }} />
 
-      <div className="container" style={{ position: 'relative', zIndex: 2, paddingTop: 64, paddingBottom: 100 }}>
-        <div style={{ maxWidth: 640 }}>
-
-          {/* Eyebrow label */}
-          <div
-            className="animate-fade-in-up"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 28,
-              padding: '7px 16px',
-              background: 'rgba(249,115,22,0.14)',
-              borderRadius: 999,
-              border: '1px solid rgba(249,115,22,0.28)',
-            }}
-          >
-            <Shield size={13} color="#F97316" />
-            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#fdba74' }}>
-              Building Maintenance &amp; Fire Safety
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h1 className="heading-xl animate-fade-in-up delay-100" style={{ color: 'white', marginBottom: 22 }}>
-            Keeping Your
-            <span style={{
-              display: 'block',
-              background: 'linear-gradient(135deg, #F97316 0%, #fb923c 60%, #fde68a 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-              Building Safe
-            </span>
-            &amp; Compliant
-          </h1>
-
-          {/* Subtext */}
-          <p
-            className="body-lg animate-fade-in-up delay-200"
-            style={{ color: 'rgba(255,255,255,0.68)', maxWidth: 540, marginBottom: 36, lineHeight: 1.75 }}
-          >
-            UMA Building Services provides routine maintenance inspections and defect repair services for commercial and industrial properties — managed through our own digital reporting platform.
-          </p>
-
-          {/* Trust checklist */}
-          <ul className="animate-fade-in-up delay-300" style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 48, listStyle: 'none' }}>
-            {TRUST_POINTS.map(pt => (
-              <li key={pt} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <CheckCircle size={17} color="#F97316" strokeWidth={2.5} style={{ flexShrink: 0 }} />
-                <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 15 }}>{pt}</span>
-              </li>
-            ))}
-          </ul>
-
-          {/* CTAs */}
-          <div className="animate-fade-in-up delay-400" style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-            <Link href="/contact" id="hero-cta-primary" className="btn btn-primary" style={{ fontSize: 15 }}>
-              Get a Free Quote <ArrowRight size={17} />
-            </Link>
-            <Link href="/services" id="hero-cta-secondary" className="btn btn-outline" style={{ fontSize: 15 }}>
-              View Our Services
-            </Link>
-          </div>
+      {/* ── Main content ── */}
+      <div
+        className="container"
+        style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '52px 24px 0' }}
+      >
+        {/* Eyebrow pill */}
+        <div className="animate-fade-in-up" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 26,
+          padding: '6px 16px', borderRadius: 999,
+          background: 'rgba(249,115,22,0.14)', border: '1px solid rgba(249,115,22,0.28)',
+        }}>
+          <Award size={12} color="#F97316" />
+          <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#fdba74' }}>
+            Fire Safety &amp; Building Compliance — Australia
+          </span>
         </div>
 
-        {/* Floating service cards — desktop only */}
-        <div
-          className="animate-fade-in delay-600 hero-cards"
+        {/* H1 — clean line breaks */}
+        <h1
+          className="animate-fade-in-up delay-100"
           style={{
-            position: 'absolute',
-            right: 0, top: '50%',
-            transform: 'translateY(-50%)',
-            display: 'flex', flexDirection: 'column', gap: 14,
+            fontWeight: 900, letterSpacing: '-0.035em', lineHeight: 1.08,
+            color: 'white', marginBottom: 20, maxWidth: 760, margin: '0 auto 20px',
+            fontSize: 'clamp(34px, 5.5vw, 62px)',
           }}
         >
-          {FLOAT_CARDS.map(({ icon: Icon, label, sub, color, bg, anim, delay }) => (
-            <div
-              key={label}
-              className={`card-glass ${anim}`}
-              style={{
-                padding: '16px 22px',
-                display: 'flex', alignItems: 'center', gap: 14,
-                minWidth: 230,
-                animationDelay: delay,
-              }}
-            >
-              <div style={{
-                width: 42, height: 42, borderRadius: 11,
-                background: bg,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <Icon size={19} color={color} strokeWidth={2} />
+          Professional{' '}
+          <span style={{
+            background: 'linear-gradient(135deg,#F97316 0%,#fb923c 60%,#fde68a 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          }}>
+            Building&nbsp;Services
+          </span>{' '}
+          Done&nbsp;Right.
+        </h1>
+
+        {/* Subtitle */}
+        <p
+          className="animate-fade-in-up delay-200"
+          style={{ color: 'rgba(255,255,255,0.55)', fontSize: 17, lineHeight: 1.7, maxWidth: 580, margin: '0 auto 36px' }}
+        >
+          Routine fire safety inspections and defect repairs — fully managed through our own purpose-built digital platform.
+        </p>
+
+        {/* CTAs */}
+        <div className="animate-fade-in-up delay-300" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 14, marginBottom: 52 }}>
+          <Link href="/contact" id="hero-cta-primary" className="btn btn-primary" style={{ fontSize: 15, padding: '13px 30px' }}>
+            Get a Free Quote <ArrowRight size={16} />
+          </Link>
+          <Link href="/services" id="hero-cta-secondary" className="btn btn-outline" style={{ fontSize: 15, padding: '13px 26px' }}>
+            Our Services
+          </Link>
+        </div>
+
+        {/* Feature cards — lighter so they read better on dark bg */}
+        <div className="animate-fade-in-up delay-400 hero-feature-strip">
+          {FEATURES.map(f => {
+            const Icon = f.icon;
+            return (
+              <div
+                key={f.title}
+                style={{
+                  background: 'rgba(255,255,255,0.09)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 16,
+                  padding: '20px 18px',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 14,
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              >
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                  background: f.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon size={19} color={f.color} strokeWidth={1.9} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.95)', marginBottom: 4, letterSpacing: '-0.015em' }}>{f.title}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.50)', lineHeight: 1.5 }}>{f.desc}</div>
+                </div>
               </div>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 700, color: 'white', lineHeight: 1.2, letterSpacing: '-0.01em' }}>{label}</p>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.52)', marginTop: 3 }}>{sub}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Bottom fade-to-white */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 100,
-        background: 'linear-gradient(to bottom, transparent, white)',
-        pointerEvents: 'none',
-      }} />
+      {/* ── Highlights strip ── */}
+      <div style={{ position: 'relative', zIndex: 2, marginTop: 48, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="container">
+          <div className="hero-highlights-grid">
+            {[
+              { value: 'Digital',        label: 'No paper processes' },
+              { value: 'PDF Report',     label: 'Every completed job' },
+              { value: '1 Business Day', label: 'Enquiry response' },
+              { value: 'Aus-Wide',       label: 'Commercial & industrial' },
+            ].map((s, i, arr) => (
+              <div key={s.label} style={{
+                padding: '18px 0', textAlign: 'center',
+                borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none',
+              }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', marginTop: 4, fontWeight: 500 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <style>{`
-        @media (max-width: 1000px) { .hero-cards { display: none !important; } }
+        .hero-feature-strip {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+          max-width: 820px;
+          margin: 0 auto;
+        }
+        .hero-highlights-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+        }
+        @media (max-width: 720px) {
+          .hero-feature-strip { grid-template-columns: 1fr; max-width: 420px; }
+          .hero-highlights-grid { grid-template-columns: repeat(2, 1fr); }
+        }
       `}</style>
     </section>
   );

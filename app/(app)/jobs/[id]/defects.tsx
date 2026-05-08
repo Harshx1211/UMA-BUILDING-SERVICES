@@ -26,12 +26,17 @@ export default function DefectsScreen() {
 
 
   const [propertyId, setPropertyId] = useState<string>('');
+  // F4: Track job status to lock FAB on completed/cancelled jobs
+  const [jobStatus, setJobStatus] = useState<string>('');
 
   useEffect(() => {
     if (jobId) {
       store.loadDefects(jobId);
-      const job = getJobById<{ property_id: string }>(jobId);
-      if (job) setPropertyId(job.property_id);
+      const job = getJobById<{ property_id: string; status: string }>(jobId);
+      if (job) {
+        setPropertyId(job.property_id);
+        setJobStatus(job.status);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -117,9 +122,13 @@ export default function DefectsScreen() {
         />
       )}
 
-      <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
-        <MaterialCommunityIcons name="plus" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
+      {/* F4: Only show Add Defect FAB when job is actively in progress.
+          Adding defects to a Completed/Cancelled job corrupts the already-generated report. */}
+      {jobStatus === 'in_progress' && (
+        <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
+          <MaterialCommunityIcons name="plus" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
 
       <AddDefectSheet ref={sheetRef} jobId={jobId as string} propertyId={propertyId} onSaved={() => store.loadDefects(jobId as string)} />
     </View>

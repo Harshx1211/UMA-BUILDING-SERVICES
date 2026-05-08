@@ -7,7 +7,7 @@ import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import PreviewModal from './PreviewModal';
 import CreateJobModal from '../jobs/CreateJobModal';
-import { FileText, Search, X, ChevronDown, ChevronUp, Check, Play } from 'lucide-react';
+import { FileText, Search, X, ChevronDown, ChevronUp, Check, Play, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const STATUSES = ['', 'draft', 'approved', 'rejected'];
@@ -80,7 +80,6 @@ export default function QuotesPage() {
 
   const approveQuote = async (mq: any) => {
     try {
-      // If no quote row exists yet, create it and mark it approved
       if (!mq.quoteRow) {
         const { error } = await adminApi.insert('quotes', {
           job_id: mq.job.id,
@@ -93,11 +92,42 @@ export default function QuotesPage() {
         const { error } = await adminApi.update('quotes', { status: 'approved', total_amount: mq.total_amount }, mq.quoteRow.id);
         if (error) throw new Error(error);
       }
-      
       toast.success('Quote approved!');
       load();
     } catch (err: any) {
       toast.error(err.message || 'Failed to approve quote');
+    }
+  };
+
+  const rejectQuote = async (mq: any) => {
+    try {
+      if (!mq.quoteRow) {
+        const { error } = await adminApi.insert('quotes', {
+          job_id: mq.job.id,
+          status: 'rejected',
+          total_amount: mq.total_amount,
+          created_at: new Date().toISOString()
+        });
+        if (error) throw new Error(error);
+      } else {
+        const { error } = await adminApi.update('quotes', { status: 'rejected' }, mq.quoteRow.id);
+        if (error) throw new Error(error);
+      }
+      toast('Quote rejected.', { icon: '✕' });
+      load();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject quote');
+    }
+  };
+
+  const redraftQuote = async (mq: any) => {
+    try {
+      const { error } = await adminApi.update('quotes', { status: 'draft' }, mq.quoteRow.id);
+      if (error) throw new Error(error);
+      toast.success('Quote moved back to draft.');
+      load();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to re-draft quote');
     }
   };
 
@@ -222,17 +252,31 @@ export default function QuotesPage() {
 
                 <div className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                   {q.status === 'draft' && (
-                    <button onClick={() => approveQuote(q)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-white flex-1 justify-center transition-opacity hover:opacity-90"
-                      style={{ background: '#22c55e' }}>
-                      <Check size={14} /> Approve Quote
-                    </button>
+                    <>
+                      <button onClick={() => approveQuote(q)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-white flex-1 justify-center transition-opacity hover:opacity-90"
+                        style={{ background: '#22c55e' }}>
+                        <Check size={14} /> Approve
+                      </button>
+                      <button onClick={() => rejectQuote(q)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium flex-1 justify-center border hover:bg-red-50 transition-colors"
+                        style={{ borderColor: '#fca5a5', color: '#ef4444' }}>
+                        <X size={14} /> Reject
+                      </button>
+                    </>
                   )}
                   {q.status === 'approved' && (
                     <button onClick={() => setRepairJobData(q)}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-white flex-1 justify-center transition-opacity hover:opacity-90"
                       style={{ background: 'linear-gradient(135deg,#1B2D4F,#243a65)' }}>
                       <Play size={14} /> Create Repair Job
+                    </button>
+                  )}
+                  {q.status === 'rejected' && (
+                    <button onClick={() => redraftQuote(q)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium flex-1 justify-center border hover:bg-amber-50 transition-colors"
+                      style={{ borderColor: '#fcd34d', color: '#d97706' }}>
+                      <RotateCcw size={14} /> Re-draft
                     </button>
                   )}
                   <button onClick={() => setPreviewQuote(q)}

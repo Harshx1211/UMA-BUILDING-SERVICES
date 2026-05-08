@@ -17,6 +17,7 @@ import { generateJobReport, ReportStage } from '@/lib/pdfGenerator';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useJobsStore } from '@/store/jobsStore';
+import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
 
 // ─── Stage display config ──────────────────────────────────────────────────────
@@ -28,12 +29,12 @@ type StageConfig = {
 };
 
 const STAGE_CONFIG: Record<ReportStage, StageConfig> = {
-  fetching_data:     { label: 'Loading job data',        icon: 'database-outline',       step: 1 },
-  processing_photos: { label: 'Encoding photos',          icon: 'image-multiple-outline', step: 2 },
-  building_html:     { label: 'Building report layout',   icon: 'file-document-outline',  step: 3 },
-  generating_pdf:    { label: 'Generating PDF document',  icon: 'file-pdf-box',           step: 4 },
-  uploading:         { label: 'Saving to cloud',          icon: 'cloud-upload-outline',   step: 5 },
-  sharing:           { label: 'Ready',                    icon: 'check-circle-outline',   step: 5 },
+  fetching_data:     { label: 'Loading job data',               icon: 'database-outline',       step: 1 },
+  processing_photos: { label: 'Encoding photos',                 icon: 'image-multiple-outline', step: 2 },
+  building_html:     { label: 'Building report layout',          icon: 'file-document-outline',  step: 3 },
+  generating_pdf:    { label: 'Rendering PDF — please wait',    icon: 'file-pdf-box',           step: 4 },
+  uploading:         { label: 'Saving to cloud',                 icon: 'cloud-upload-outline',   step: 5 },
+  sharing:           { label: 'Ready',                           icon: 'check-circle-outline',   step: 5 },
 };
 const TOTAL_STEPS = 5;
 
@@ -79,7 +80,11 @@ function GeneratingView({ stage, detail, primaryColor, textColor, textSecondary,
       ) : null}
 
       <Text style={[styles.genHint, { color: textSecondary }]}>
-        Large jobs with many photos may take a moment. Please keep this screen open.
+        {stage === 'generating_pdf'
+          ? 'Rendering PDF with all photos. This takes 15–40s on first run — screen is not frozen.'
+          : stage === 'processing_photos'
+          ? 'Photos are encoded in parallel. Large jobs may take 10–20s.'
+          : 'Please keep this screen open until complete.'}
       </Text>
     </Animated.View>
   );
@@ -100,57 +105,74 @@ export default function PreviewScreen() {
   const [pdfTitle, setPdfTitle]         = useState('Service Report');
   const [webViewReady, setWebViewReady] = useState(false);
   const [isSharing, setIsSharing]       = useState(false);
-  const [jobCompleted, setJobCompleted] = useState(false); // tracks if this generation auto-completed the job
+  const [jobCompleted, setJobCompleted] = useState(false);
   const isMountedRef                    = useRef(true);
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
+  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
 
-  useEffect(() => {
+  // M6: `generate` as useCallback so the retry Alert always calls the current closure
+  const generate = useCallback(async () => {
     if (!jobId) return;
+    setIsGenerating(true);
+    setStage('fetching_data');
+    try {
+      const result = await generateJobReport(jobId, (s, detail) => {
+        if (!isMountedRef.current) return;
+        setStage(s);
+        setStageDetail(detail);
+      });
 
-    const generate = async () => {
-      try {
-        const result = await generateJobReport(jobId, (s, detail) => {
-          if (!isMountedRef.current) return;
-          setStage(s);
-          setStageDetail(detail);
+      if (!isMountedRef.current) return;
+      setHtmlContent(result.html);
+      setPdfUri(result.pdfUri);
+      setPdfTitle(result.title);
+
+      // Only mark the job complete if pdfGenerator confirmed it was ALREADY completed
+      // before generation. Draft previews (in_progress → /preview) set result.completed=false
+      // even when a reportUrl exists, preserving the CompletionBottomSheet signature gate.
+      if (result.completed) {
+        setJobCompleted(true);
+        updateJobStatus(jobId, JobStatus.Completed);
+        Toast.show({
+          type: 'success',
+          text1: '✅ Report Uploaded',
+          text2: 'Job marked complete. Admin can now access this report.',
         });
-
-        if (!isMountedRef.current) return;
-        setHtmlContent(result.html);
-        setPdfUri(result.pdfUri);
-        setPdfTitle(result.title);
-
-        // If the PDF was successfully uploaded, the job is now completed in Supabase.
-        // Reflect this in the local jobs store so the job list and detail show the right status.
-        if (result.reportUrl) {
-          setJobCompleted(true);
-          updateJobStatus(jobId, 'completed' as any);
-          Toast.show({
-            type: 'success',
-            text1: '✅ Report Uploaded',
-            text2: 'Job marked complete. Admin can now access this report.',
-          });
-        }
-
-        setIsGenerating(false);
-      } catch (e: unknown) {
-        if (!isMountedRef.current) return;
-        const msg = e instanceof Error ? e.message : 'Unknown error occurred';
-        console.error('[UMA BUILDING SERVICES] Preview generation failed:', e);
-        Alert.alert(
-          'Generation Failed',
-          'The PDF report could not be generated.\n\n' + msg,
-          [{ text: 'Go Back', onPress: () => router.back() }]
-        );
-        setIsGenerating(false);
+      } else if (result.reportUrl) {
+        // Draft preview — PDF saved to cloud but job remains in-progress
+        Toast.show({
+          type: 'info',
+          text1: '📄 Draft Saved',
+          text2: 'Complete the job first to finalise this report.',
+        });
       }
-    };
 
+      setIsGenerating(false);
+    } catch (e: unknown) {
+      if (!isMountedRef.current) return;
+      const msg = e instanceof Error ? e.message : 'Unknown error occurred';
+      console.error('[UMA BUILDING SERVICES] Preview generation failed:', e);
+      Alert.alert(
+        'Generation Failed',
+        'The PDF report could not be generated.\n\n' + msg,
+        [
+          {
+            text: 'Retry',
+            // M6: Calling the stable useCallback ref — never a stale closure
+            onPress: () => generate(),
+          },
+          { text: 'Go Back', style: 'cancel', onPress: () => router.back() },
+        ]
+      );
+      setIsGenerating(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  // Kick off generation on mount
+  useEffect(() => {
     generate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   const handleShare = useCallback(async () => {

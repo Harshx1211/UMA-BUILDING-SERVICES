@@ -140,7 +140,8 @@ export default function PropertyDetailScreen() {
       setProperty(p);
       if (p) {
         setAssets(getAssetsForProperty<Asset>(id));
-        setJobHistory(getJobsForProperty<JobHistory>(id, 5));
+        // M2: Fetch all jobs (no limit) so the count badge reflects reality
+        setJobHistory(getJobsForProperty<JobHistory>(id));
       }
     } catch (err) {
       console.error('[PropertyDetail] load error:', err);
@@ -256,25 +257,9 @@ export default function PropertyDetailScreen() {
           />
         </Animated.View>
 
-        {/* ── BEGIN INSPECTION CTA ────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(110).duration(400)} style={{ marginHorizontal: 16, marginTop: 16 }}>
-          <TouchableOpacity
-            style={[s.inspectCta, { backgroundColor: C.primary, shadowColor: C.primary }]}
-            onPress={() => router.push(`/properties/site-inspect/${id}` as never)}
-            activeOpacity={0.88}
-          >
-            <View style={[s.inspectCtaLeft, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
-              <MaterialCommunityIcons name="clipboard-check-outline" size={26} color="#FFF" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.inspectCtaTitle}>Begin Inspection Form</Text>
-              <Text style={s.inspectCtaSub}>
-                {activeAssets} asset{activeAssets !== 1 ? 's' : ''} · Tap to start on-site inspection
-              </Text>
-            </View>
-            <MaterialCommunityIcons name="arrow-right-circle" size={26} color="rgba(255,255,255,0.85)" />
-          </TouchableOpacity>
-        </Animated.View>
+        {/* ── BEGIN INSPECTION CTA removed — inspection is always job-scoped.
+             Technicians start inspections from /jobs/[id]/inspect. */}
+
 
         {/* ── QUICK ACTIONS ──────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(130).duration(400)} style={s.actionRowWrap}>
@@ -330,13 +315,13 @@ export default function PropertyDetailScreen() {
               </View>
             )}
             {property.site_note && (
-              <View style={[s.alertCard, { backgroundColor: '#F0FDF4', borderColor: '#16A34A' }]}>
-                <View style={[s.alertIconWrap, { backgroundColor: '#16A34A' }]}>
+              <View style={[s.alertCard, { backgroundColor: C.successLight, borderColor: C.success }]}>
+                <View style={[s.alertIconWrap, { backgroundColor: C.success }]}>
                   <MaterialCommunityIcons name="note-text-outline" size={16} color="#FFF" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: '#14532D' }]}>📝 Site Note</Text>
-                  <Text style={[s.alertBody, { color: '#166534' }]}>{property.site_note}</Text>
+                  <Text style={[s.alertTitle, { color: C.successDark }]}>📝 Site Note</Text>
+                  <Text style={[s.alertBody, { color: C.successDark }]}>{property.site_note}</Text>
                 </View>
               </View>
             )}
@@ -431,29 +416,39 @@ export default function PropertyDetailScreen() {
                 <Text style={[s.emptySub, { color: C.textTertiary }]}>This property has no job history yet.</Text>
               </View>
             ) : (
-              jobHistory.map((job, i) => (
-                <TouchableOpacity
-                  key={job.id}
-                  style={[
-                    s.historyRow,
-                    i < jobHistory.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
-                  ]}
-                  onPress={() => router.push(`/jobs/${job.id}` as never)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[s.historyIconWrap, { backgroundColor: C.backgroundTertiary }]}>
-                    <MaterialCommunityIcons name="clipboard-check-outline" size={18} color={C.textSecondary} />
+              // M2: Show first 5, then a "View all" footer
+              <>
+                {jobHistory.slice(0, 5).map((job, i) => (
+                  <TouchableOpacity
+                    key={job.id}
+                    style={[
+                      s.historyRow,
+                      i < Math.min(jobHistory.length, 5) - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
+                    ]}
+                    onPress={() => router.push(`/jobs/${job.id}` as never)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[s.historyIconWrap, { backgroundColor: C.backgroundTertiary }]}>
+                      <MaterialCommunityIcons name="clipboard-check-outline" size={18} color={C.textSecondary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.historyDate, { color: C.text }]}>{job.scheduled_date}</Text>
+                      <JobTypeBadge jobType={job.job_type as JobType} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <StatusBadge status={job.status as JobStatus} small />
+                      <MaterialCommunityIcons name="chevron-right" size={16} color={C.border} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {jobHistory.length > 5 && (
+                  <View style={[s.historyRow, { justifyContent: 'center', borderTopWidth: 1, borderTopColor: C.border }]}>
+                    <Text style={[s.historyDate, { color: C.textTertiary, fontSize: 12, fontWeight: '600' }]}>
+                      + {jobHistory.length - 5} more job{jobHistory.length - 5 !== 1 ? 's' : ''} on record
+                    </Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.historyDate, { color: C.text }]}>{job.scheduled_date}</Text>
-                    <JobTypeBadge jobType={job.job_type as JobType} />
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <StatusBadge status={job.status as JobStatus} small />
-                    <MaterialCommunityIcons name="chevron-right" size={16} color={C.border} />
-                  </View>
-                </TouchableOpacity>
-              ))
+                )}
+              </>
             )}
           </View>
         </Animated.View>

@@ -1,5 +1,5 @@
 export const CompanyConfig = {
-  name: 'UMA BUILDING SERVICES Services Pty Ltd',
+  name: 'UMA Building Services Pty Ltd',
   addressLine1: 'P.O. Box 357',
   addressLine2: 'Lidcombe NSW 1825',
   abn: '51602019081',

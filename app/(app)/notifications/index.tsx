@@ -1,7 +1,7 @@
 // app/(app)/notifications/index.tsx
 import React, { useEffect, useCallback } from 'react';
 import {
-  FlatList, StyleSheet, TouchableOpacity, View,
+  Alert, FlatList, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -93,9 +93,10 @@ function NotifCard({ item }: { item: AppNotification }) {
 export default function NotificationsScreen() {
   const C = useColors();
   const {
-    notifications, unreadCount, isLoading,
+    notifications, unreadCount, totalCount, isLoading,
     loadNotifications, markAllAsRead, clearAll,
   } = useNotificationsStore();
+  const isCapped = totalCount > notifications.length;
 
 
 
@@ -150,10 +151,32 @@ export default function NotificationsScreen() {
           }
           ListFooterComponent={
             notifications.length > 0 ? (
-              <TouchableOpacity style={s.clearBtn} onPress={clearAll}>
-                <MaterialCommunityIcons name="delete-sweep-outline" size={16} color={C.textSecondary} />
-                <Text style={[s.clearBtnText, { color: C.textSecondary }]}>Clear all notifications</Text>
-              </TouchableOpacity>
+              <View style={{ paddingBottom: 8 }}>
+                {isCapped && (
+                  <View style={[s.cappedBanner, { backgroundColor: '#FFF9C4' }]}>
+                    <MaterialCommunityIcons name="information-outline" size={14} color="#92400E" />
+                    <Text style={s.cappedText}>
+                      Showing the {notifications.length} most recent notifications ({totalCount} total). Clear old ones to see more.
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={s.clearBtn}
+                  onPress={() =>
+                    Alert.alert(
+                      'Clear all notifications?',
+                      'This will permanently remove all notifications. This action cannot be undone.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Clear All', style: 'destructive', onPress: clearAll },
+                      ]
+                    )
+                  }
+                >
+                  <MaterialCommunityIcons name="delete-sweep-outline" size={16} color="#94A3B8" />
+                  <Text style={[s.clearBtnText, { color: '#94A3B8' }]}>Clear all notifications</Text>
+                </TouchableOpacity>
+              </View>
             ) : null
           }
         />
@@ -201,7 +224,14 @@ const s = StyleSheet.create({
 
   clearBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginTop: 20, paddingVertical: 12,
+    marginTop: 8, paddingVertical: 12,
   },
   clearBtnText: { fontSize: 13, fontWeight: '500' },
+
+  cappedBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 10, marginHorizontal: 0, marginBottom: 8,
+  },
+  cappedText: { fontSize: 12, color: '#78350F', flex: 1, lineHeight: 17 },
 });

@@ -84,7 +84,6 @@ interface InspectionState {
   addPhotoToAsset: (assetId: string, photoUri: string) => void;
   isInspectionComplete: () => boolean;
   reset: () => void;
-  hardReset: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -173,15 +172,16 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // Resolve the job_asset id — prefer the in-memory one (fastest path), then fall
       // back to a DB lookup.  This prevents duplicate rows when the modal is saved
       // before the in-memory state has been refreshed with the newly-assigned id.
+      // A9 FIX: Merged two separate queryRecords calls into one.
       let jobAssetId = asset.job_asset_id;
+      let isExistingRecord = Boolean(asset.job_asset_id);
       if (!jobAssetId) {
         const existing = queryRecords<{ id: string }>(
           'job_assets', { job_id: currentJobId, asset_id: assetId }
         )[0];
         jobAssetId = existing?.id ?? generateUUID();
+        isExistingRecord = Boolean(existing);
       }
-      const isExistingRecord = Boolean(asset.job_asset_id) ||
-        queryRecords('job_assets', { job_id: currentJobId, asset_id: assetId }).length > 0;
 
       const jobAssetPayload: Record<string, string | number | null> = {
         id: jobAssetId,
@@ -282,12 +282,29 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // ── Auto-delete defect when asset passes / not-tested ─
       // If the previous result was Fail and the new result is Pass or NotTested,
       // the defect is no longer valid — remove it automatically.
+      // A3 FIX: Also cancel/delete the defect's associated inspection_photos so
+      // they don't get uploaded as orphaned rows in Supabase.
       if (result !== InspectionResult.Fail) {
         const staleDefects = queryRecords<{ id: string }>('defects', {
           job_id: currentJobId,
           asset_id: assetId,
         });
         for (const stale of staleDefects) {
+          // Cancel associated photos first
+          const stalePhotos = queryRecords<{ id: string; photo_url: string }>(
+            'inspection_photos', { defect_id: stale.id }
+          );
+          for (const p of stalePhotos) {
+            deleteRecord('inspection_photos', p.id);
+            recordDeletedPhoto(p.id);
+            if (p.photo_url.startsWith('https://')) {
+              addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+                id: p.id, photo_url: p.photo_url,
+              });
+            } else {
+              cancelPendingPhotoUpload(p.id);
+            }
+          }
           deleteRecord('defects', stale.id);
           addToSyncQueue('defects', stale.id, SyncOperation.Delete, { id: stale.id });
         }
@@ -445,14 +462,5 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
   reset: () => {
     set({ isSaving: false, error: null });
-  },
-
-  hardReset: () => {
-    set({
-      assets: [],
-      currentJobId: null,
-      error: null,
-      progress: { inspected: 0, total: 0 },
-    });
   },
 }));

@@ -113,11 +113,15 @@ export default function JobsScreen() {
   const handleRefresh = useCallback(async () => {
     setIsSyncing(true);
     try {
-      await runSync(user?.id ?? undefined);
+      const synced = await runSync(user?.id ?? undefined);
       load();
       const ts = await AsyncStorage.getItem(LAST_SYNCED_KEY);
       setLastSynced(ts);
-      Toast.show({ type: 'success', text1: '✓ Sync complete', text2: 'Jobs updated from server' });
+      if (synced) {
+        Toast.show({ type: 'success', text1: '✓ Sync complete', text2: 'Jobs updated from server' });
+      } else {
+        Toast.show({ type: 'info', text1: 'Already up to date', text2: 'Sync was already in progress' });
+      }
     } catch {
       Toast.show({ type: 'error', text1: 'Sync failed', text2: 'Check your internet connection' });
     } finally {

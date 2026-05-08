@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Card, Input } from '@/components/ui';
@@ -26,6 +27,7 @@ const REMEMBER_ME_KEY = '@uma-building-services/remember_me';
 
 export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
+  const { restoreSession } = useAuthStore();
   const C = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const { isOnline } = useNetworkStatus();
@@ -96,7 +98,13 @@ export default function LoginScreen() {
         cancelLabel: 'Use Password',
         disableDeviceFallback: false,
       });
-      if (result.success) router.replace('/(app)/');
+      if (result.success) {
+        // Restore the cached Supabase session — this sets user + isAuthenticated
+        // properly so the app layout doesn't redirect back to login.
+        await restoreSession();
+        // router.replace is handled automatically by _layout.tsx once
+        // isAuthenticated becomes true.
+      }
     } catch (err) { console.warn('[Login] Biometric error:', err); }
   };
 
@@ -160,11 +168,14 @@ export default function LoginScreen() {
             <Text style={[styles.formTitle, { color: C.text }]}>Welcome back 👋</Text>
             <Text style={[styles.formSub, { color: C.textSecondary }]}>Sign in to your account to continue</Text>
 
-            {/* Offline banner */}
+            {/* F7: Offline banner — biometric login still works offline (reads cached session).
+                Text clarifies this rather than falsely implying sign-in is impossible. */}
             {!isOnline && (
               <View style={[styles.errorBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40', borderWidth: 1 }]}>
                 <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />
-                <Text style={[styles.errorBannerText, { color: C.warningDark }]}>You are offline. Please connect to the internet to sign in.</Text>
+                <Text style={[styles.errorBannerText, { color: C.warningDark }]}>
+                  You are offline. Biometric sign-in still works. Signing in with a password requires internet.
+                </Text>
               </View>
             )}
 

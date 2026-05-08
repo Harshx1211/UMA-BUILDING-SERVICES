@@ -47,10 +47,17 @@ type ReportAsset = {
   technician_notes: string | null; is_compliant: number | boolean;
 };
 
-const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string; icon: MCIcon }> = {
-  [DefectSeverity.Critical]: { color: '#DC2626', bg: '#FEF2F2', label: 'Critical',      icon: 'alert-circle' },
-  [DefectSeverity.Major]:    { color: '#D97706', bg: '#FFFBEB', label: 'Major',          icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: '#2563EB', bg: '#EFF6FF', label: 'Non-conformance', icon: 'information' },
+// C2: Typed joined fields from getAllDefects SQL so we don't need `as any`
+type ExtendedDefect = Defect & {
+  asset_type?: string;
+  defect_code?: string | null;
+  quote_price?: number | null;
+};
+
+const SEVERITY_CONFIG: Record<string, { color: string; label: string; icon: MCIcon }> = {
+  [DefectSeverity.Critical]: { color: '#DC2626', label: 'Critical',       icon: 'alert-circle' },
+  [DefectSeverity.Major]:    { color: '#D97706', label: 'Major',           icon: 'alert' },
+  [DefectSeverity.Minor]:    { color: '#2563EB', label: 'Non-conformance', icon: 'information' },
 };
 
 // ─── Stat card ─────────────────────────────────────────────────────────────────
@@ -97,7 +104,8 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
     <View style={[
       s.assetRow,
       !isLast && { borderBottomWidth: 1, borderBottomColor: C.border },
-      isFail && { backgroundColor: '#FFF8F8' },
+      // M1: Use theme-aware errorLight instead of hardcoded '#FFF8F8'
+      isFail && { backgroundColor: C.errorLight },
     ]}>
       <View style={[s.assetIndexBadge, { backgroundColor: isPass ? '#D1FAE5' : isFail ? '#FEE2E2' : '#F1F5F9' }]}>
         <Text style={[s.assetIndexText, { color: isPass ? '#065F46' : isFail ? '#991B1B' : '#64748B' }]}>
@@ -130,15 +138,14 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
 
 // ─── Defect card ───────────────────────────────────────────────────────────────
 
-type DefectCardProps = {
-  defect: Defect;
-  index: number;
-  colors: ReturnType<typeof useColors>;
-};
-
-function DefectCard({ defect, index, colors: C }: DefectCardProps) {
+// C2: Uses ExtendedDefect type — no `as any` needed for joined fields
+function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; index: number; colors: ReturnType<typeof useColors> }) {
   const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
   const isOpen = !defect.status || defect.status === 'open';
+  // M7: severity badge bg derived from color token to be dark-mode safe
+  const sevBg  = defect.severity === DefectSeverity.Critical ? C.errorLight
+               : defect.severity === DefectSeverity.Major    ? C.warningLight
+               : C.infoLight;
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(300)}>
@@ -149,16 +156,18 @@ function DefectCard({ defect, index, colors: C }: DefectCardProps) {
         <View style={s.defectContent}>
           {/* Header row */}
           <View style={s.defectHeaderRow}>
-            <View style={[s.sevBadge, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
+            <View style={[s.sevBadge, { backgroundColor: sevBg, borderColor: sev.color + '40' }]}>
               <MaterialCommunityIcons name={sev.icon} size={11} color={sev.color} />
               <Text style={[s.sevBadgeTxt, { color: sev.color }]}>{sev.label.toUpperCase()}</Text>
             </View>
+            {/* M2: Status badge uses theme tokens */}
             <View style={[
               s.statusBadge,
-              { backgroundColor: isOpen ? '#FFFBEB' : '#F0FDF4', borderColor: isOpen ? '#FDE68A' : '#BBF7D0' },
+              { backgroundColor: isOpen ? C.warningLight : C.successLight,
+                borderColor: isOpen ? C.warning + '60' : C.success + '60' },
             ]}>
-              <View style={[s.statusDot, { backgroundColor: isOpen ? '#D97706' : '#16A34A' }]} />
-              <Text style={[s.statusBadgeTxt, { color: isOpen ? '#D97706' : '#16A34A' }]}>
+              <View style={[s.statusDot, { backgroundColor: isOpen ? C.warning : C.success }]} />
+              <Text style={[s.statusBadgeTxt, { color: isOpen ? C.warningDark : C.successDark }]}>
                 {defect.status?.replace('_', ' ').toUpperCase() ?? 'OPEN'}
               </Text>
             </View>
@@ -167,23 +176,23 @@ function DefectCard({ defect, index, colors: C }: DefectCardProps) {
           {/* Description */}
           <Text style={[s.defectDesc, { color: C.text }]}>{defect.description}</Text>
 
-          {/* Meta row */}
+          {/* Meta row — C2: uses typed ExtendedDefect fields, no `as any` */}
           <View style={s.defectMetaRow}>
-            {(defect as any).asset_type ? (
+            {defect.asset_type ? (
               <Text style={[s.defectMeta, { color: C.textSecondary }]}>
-                {getAssetEmoji((defect as any).asset_type)} {formatAssetType((defect as any).asset_type)}
+                {getAssetEmoji(defect.asset_type)} {formatAssetType(defect.asset_type)}
               </Text>
             ) : null}
-            {(defect as any).defect_code ? (
+            {defect.defect_code ? (
               <View style={[s.codeChip, { backgroundColor: C.primary + '15', borderColor: C.primary + '30' }]}>
                 <Text style={[s.codeChipTxt, { color: C.primary }]}>
-                  {(defect as any).defect_code.toUpperCase()}
+                  {defect.defect_code.toUpperCase()}
                 </Text>
               </View>
             ) : null}
-            {(defect as any).quote_price != null ? (
+            {defect.quote_price != null ? (
               <Text style={[s.defectPrice, { color: '#10B981' }]}>
-                Ref: ${(defect as any).quote_price}
+                Ref: ${defect.quote_price}
               </Text>
             ) : null}
           </View>
@@ -214,10 +223,11 @@ export default function ReportScreen() {
       const j = getJobById<JobWithProperty>(jobId);
       if (j) {
         setJob(j);
-        setAssets(getAssetsWithJobResults(jobId, (j as any).property_id as string));
+        // C1: property_id and assigned_to are properly typed in JobWithProperty
+        setAssets(getAssetsWithJobResults(jobId, j.property_id));
         setDefects(getDefectsForJob(jobId));
         setSignature(getSignatureForJob(jobId));
-        const tech = getRecord<{ full_name: string }>('users', (j as any).assigned_to as string);
+        const tech = getRecord<{ full_name: string }>('users', j.assigned_to);
         if (tech?.full_name) setTechName(tech.full_name);
         setLoadError(null);
       } else {
@@ -249,8 +259,12 @@ export default function ReportScreen() {
   // ── Derived stats ──────────────────────────────────────────────────────────
   const passCount  = assets.filter(a => a.result === 'pass').length;
   const failCount  = assets.filter(a => a.result === 'fail').length;
-  const ntCount    = assets.filter(a => a.result === 'not_tested').length;
-  const isCompliant = assets.length > 0 && passCount > 0 && failCount === 0;
+  const ntCount    = assets.filter(a => !a.result || a.result === 'not_tested').length;
+  // isCompliant: has assets, at least one pass, no fails
+  // isIncomplete: no assets at all, or none have been inspected yet
+  const hasInspections = assets.some(a => a.result !== null);
+  const isCompliant    = hasInspections && passCount > 0 && failCount === 0;
+  const isIncomplete   = !hasInspections || assets.length === 0;
   const inspectedCount = assets.filter(a => a.result !== null && a.result !== 'not_tested').length;
 
   // ── Loading ────────────────────────────────────────────────────────────────
@@ -294,16 +308,26 @@ export default function ReportScreen() {
   // ── Compliance badge ───────────────────────────────────────────────────────
   const complianceBadge = (
     <View style={[s.complianceBadge, {
-      backgroundColor: isCompliant ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)',
-      borderColor: isCompliant ? 'rgba(74,222,128,0.35)' : 'rgba(239,68,68,0.35)',
+      backgroundColor: isCompliant
+        ? 'rgba(74,222,128,0.15)'
+        : isIncomplete
+        ? 'rgba(148,163,184,0.15)'
+        : 'rgba(239,68,68,0.15)',
+      borderColor: isCompliant
+        ? 'rgba(74,222,128,0.35)'
+        : isIncomplete
+        ? 'rgba(148,163,184,0.35)'
+        : 'rgba(239,68,68,0.35)',
     }]}>
       <MaterialCommunityIcons
-        name={isCompliant ? 'shield-check' : 'shield-alert'}
+        name={isCompliant ? 'shield-check' : isIncomplete ? 'shield-outline' : 'shield-alert'}
         size={13}
-        color={isCompliant ? '#4ADE80' : '#F87171'}
+        color={isCompliant ? '#4ADE80' : isIncomplete ? '#94A3B8' : '#F87171'}
       />
-      <Text style={[s.complianceTxt, { color: isCompliant ? '#4ADE80' : '#F87171' }]}>
-        {isCompliant ? 'COMPLIANT' : 'NON-COMPLIANT'}
+      <Text style={[s.complianceTxt, {
+        color: isCompliant ? '#4ADE80' : isIncomplete ? '#94A3B8' : '#F87171',
+      }]}>
+        {isCompliant ? 'COMPLIANT' : isIncomplete ? 'INCOMPLETE' : 'NON-COMPLIANT'}
       </Text>
     </View>
   );
@@ -461,7 +485,8 @@ export default function ReportScreen() {
           ) : (
             <View style={s.defectList}>
               {defects.map((d, i) => (
-                <DefectCard key={d.id} defect={d} index={i} colors={C} />
+                // C2: cast to ExtendedDefect since getAllDefects returns joined fields
+                <DefectCard key={d.id} defect={d as ExtendedDefect} index={i} colors={C} />
               ))}
             </View>
           )}

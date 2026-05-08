@@ -130,7 +130,7 @@ export interface InspectionPhoto {
   photo_url: string;
   caption: string | null;
   uploaded_at: string;
-  uploaded_by: string;            // user id
+  uploaded_by: string | null;     // user id — null when captured offline without session
 }
 
 /** Client signature captured at job completion */
@@ -253,6 +253,8 @@ export interface DefectForm {
 export interface SyncStatus {
   lastSynced: string | null;      // ISO 8601 or null if never synced
   pendingCount: number;
+  /** Items that permanently failed after MAX_SYNC_RETRIES — will never be retried */
+  failedCount: number;
   isOnline: boolean;
 }
 

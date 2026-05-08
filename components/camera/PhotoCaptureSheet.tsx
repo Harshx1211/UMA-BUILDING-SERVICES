@@ -92,13 +92,29 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           console.warn('Failed to copy to document directory', e);
         }
 
+        const currentUserId = useAuthStore.getState().user?.id ?? null;
+
+        // Defensive guard — the app layout enforces authentication, so user?.id
+        // should never be null here. But if it somehow is, abort gracefully.
+        if (!currentUserId) {
+          Toast.show({
+            type: 'error',
+            text1: 'Session Error',
+            text2: 'Please re-sign in before taking photos.',
+          });
+          return;
+        }
+
         addPhoto({
           job_id: jobId,
           asset_id: assetId === '' ? null : assetId,
           defect_id: null,
           photo_url: destUri,
           caption: caption.trim() || null,
-          uploaded_by: useAuthStore.getState().user?.id || 'unknown',
+          // Use null rather than 'unknown' — 'unknown' is not a valid UUID and
+          // would silently fail Supabase FK constraints. The photoUpload H1 guard
+          // prevents queue processing without a valid user.id anyway.
+          uploaded_by: currentUserId,
         });
 
         setPhotosTaken(prev => prev + 1);

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { adminApi, adminRead } from '@/lib/admin-api';
 import { formatDate } from '@/lib/utils';
 import { exportToCsv, JOB_CSV_COLUMNS } from '@/lib/csv';
@@ -20,6 +21,7 @@ const PRIORITIES = ['', 'urgent', 'high', 'normal', 'low'];
 const PAGE_SIZE  = 12;
 
 export default function JobsPage() {
+  const router = useRouter();
   const [jobs,         setJobs]         = useState<any[]>([]);
   const [total,        setTotal]        = useState(0);
   const [loading,      setLoading]      = useState(true);
@@ -247,7 +249,7 @@ export default function JobsPage() {
                     <tr key={job.id}
                       className="border-b last:border-0 hover:bg-gray-50 transition-colors cursor-pointer group animate-fade-in"
                       style={{ borderColor: 'var(--border)', animationDelay: `${i * 20}ms` }}
-                      onClick={() => window.location.href = `/jobs/${job.id}`}>
+                      onClick={() => router.push(`/jobs/${job.id}`)}>
 
                       {/* Property */}
                       <td className="px-4 py-3.5">

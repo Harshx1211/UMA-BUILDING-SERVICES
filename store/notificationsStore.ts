@@ -3,6 +3,9 @@ import { create } from 'zustand';
 import { openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 
+/** Maximum notifications loaded into memory. Older ones are not discarded — just not shown. */
+const MAX_NOTIFICATIONS = 100;
+
 // ─── Types ────────────────────────────────────────────────
 export type NotificationType =
   | 'new_job'
@@ -24,6 +27,7 @@ export interface AppNotification {
 interface NotificationsState {
   notifications: AppNotification[];
   unreadCount: number;
+  totalCount: number;    // total rows in DB (may exceed MAX_NOTIFICATIONS)
   isLoading: boolean;
   error: string | null;
 
@@ -57,6 +61,7 @@ function mapRow(row: Record<string, unknown>): AppNotification {
 export const useNotificationsStore = create<NotificationsState>((set) => ({
   notifications: [],
   unreadCount: 0,
+  totalCount: 0,
   isLoading: false,
   error: null,
 
@@ -64,13 +69,18 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
     try {
       set({ isLoading: true, error: null });
       const db = openDatabase();
+      // Get total count first so we can tell the user if they're seeing a capped view
+      const countRow = db.getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM notifications`);
+      const totalCount = countRow?.count ?? 0;
+
       const rows = db.getAllSync<Record<string, unknown>>(
-        `SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50`
+        `SELECT * FROM notifications ORDER BY created_at DESC LIMIT ${MAX_NOTIFICATIONS}`
       );
       const notifications = rows.map(mapRow);
       set({
         notifications,
         unreadCount: notifications.filter((n) => !n.is_read).length,
+        totalCount,
         isLoading: false,
       });
     } catch (err: unknown) {
@@ -142,7 +152,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
     try {
       const db = openDatabase();
       db.runSync(`DELETE FROM notifications`);
-      set({ notifications: [], unreadCount: 0, error: null });
+      set({ notifications: [], unreadCount: 0, totalCount: 0, error: null });
     } catch (err: unknown) {
       console.error('[NotificationsStore] clearAll error:', err);
       set({ error: errorMessage(err) });

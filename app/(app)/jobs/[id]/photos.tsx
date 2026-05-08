@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';
@@ -11,6 +11,7 @@ import PhotoGrid from '@/components/camera/PhotoGrid';
 import PhotoCaptureSheet, { PhotoCaptureSheetRef } from '@/components/camera/PhotoCaptureSheet';
 import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { Button } from '@/components/ui';
 
 export default function PhotosScreen() {
   const C = useColors();
@@ -19,14 +20,18 @@ export default function PhotosScreen() {
   const sheetRef = useRef<PhotoCaptureSheetRef>(null);
 
   const [propertyId, setPropertyId] = useState<string>('');
-
+  // F8: Track job status to lock the add-photo FAB on completed jobs
+  const [jobStatus, setJobStatus] = useState<string>('');
 
   useEffect(() => {
     if (jobId) {
       // BUG 26 FIX: reset store state before loading so previous job's photos don't flash
       store.loadPhotos(jobId);
-      const job = getJobById<{ property_id: string }>(jobId);
-      if (job) setPropertyId(job.property_id);
+      const job = getJobById<{ property_id: string; status: string }>(jobId);
+      if (job) {
+        setPropertyId(job.property_id);
+        setJobStatus(job.status);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -61,6 +66,21 @@ export default function PhotosScreen() {
     );
   }
 
+  if (store.error) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader curved={true} title="Job Photos" showBack={true} />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
+          <Text style={{ fontSize: 40 }}>⚠️</Text>
+          <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
+            {store.error}
+          </Text>
+          <Button title="Retry" onPress={() => store.loadPhotos(jobId as string)} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader 
@@ -78,9 +98,13 @@ export default function PhotosScreen() {
 
       <PhotoGrid photos={store.photos} onPhotoLongPress={handlePhotoLongPress} />
 
-      <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
-        <MaterialCommunityIcons name="camera" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
+      {/* F8: Hide FAB on completed jobs — the PDF is already generated/uploaded.
+          Adding photos afterwards creates a silent data gap in the submitted report. */}
+      {jobStatus !== 'completed' && (
+        <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
+          <MaterialCommunityIcons name="camera" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
 
       <PhotoCaptureSheet ref={sheetRef} jobId={jobId as string} propertyId={propertyId} />
     </View>

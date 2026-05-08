@@ -6,13 +6,13 @@ export interface QuoteReportData {
 }
 
 const CompanyConfig = {
-  name: 'UMA BUILDING SERVICES Services',
-  addressLine1: '123 Safety Way',
-  addressLine2: 'Sydney NSW 2000',
-  abn: '12 345 678 901',
+  name: 'UMA Building Services Pty Ltd',
+  addressLine1: 'P.O. Box 357',
+  addressLine2: 'Lidcombe NSW 1825',
+  abn: '51602019081',
   website: 'www.uma-building-services.com.au',
-  contactPhone: '(02) 9876 5432',
-  contactEmail: 'admin@uma-building-services.com.au',
+  contactPhone: '1300 748 387',
+  contactEmail: 'info@uma-building-services.com.au',
 };
 
 function fmtDateShort(iso: string | null | undefined): string {
@@ -137,10 +137,10 @@ function logoHtml(reportNum: string): string {
   return `
   <div class="brand-bar">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">ST</span></div></div>
+      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
       <div class="brand-text">
-        <div class="brand-name"><span>S</span>ITE<span>T</span>RACK</div>
-        <div class="brand-sub">Services</div>
+        <div class="brand-name"><span>U</span>MA</div>
+        <div class="brand-sub">Building Services</div>
       </div>
     </div>
     <div class="brand-meta">

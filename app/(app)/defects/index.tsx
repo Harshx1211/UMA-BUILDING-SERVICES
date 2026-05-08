@@ -2,13 +2,13 @@
  * Global Defects Screen — app/(app)/defects/index.tsx
  * Cross-job view of all defects with filtering, status badges, and navigation to detail.
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader } from '@/components/ui';
@@ -18,6 +18,7 @@ import { formatAssetType } from '@/utils/assetHelpers';
 import type { Defect } from '@/types';
 import { findDefectCode } from '@/constants/DefectCodes';
 import * as Haptics from 'expo-haptics';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type ExtendedDefect = Defect & {
   asset_type?: string;
@@ -133,7 +134,12 @@ export default function GlobalDefectsScreen() {
     loadAllDefects();
   }, [loadAllDefects]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // H1: Load once on mount + subscribe to sync events— no wasteful full-scan on every tab visit
+  useEffect(() => {
+    load();
+    onSyncComplete(load);
+    return () => offSyncComplete(load);
+  }, [load]);
 
   // Apply filters
   const filtered = (defects as ExtendedDefect[]).filter(d => {
@@ -223,11 +229,21 @@ export default function GlobalDefectsScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} />}
           renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(index * 30).duration(350)}>
+            // M1: Key includes filter state so animation only fires on genuine new items,
+            // not on every filter change re-render.
+            <Animated.View
+              key={item.id + severityFilter + statusFilter}
+              entering={FadeInDown.delay(index * 30).duration(350)}
+            >
               <DefectRow
                 defect={item as ExtendedDefect}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // M4: Guard against null job_id to prevent /jobs/undefined/... navigation
+                  if (!item.job_id) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    return;
+                  }
                   router.push(`/jobs/${item.job_id}/defects/${item.id}` as never);
                 }}
                 C={C}

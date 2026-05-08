@@ -42,7 +42,8 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   loadPhotos: (jobId) => {
     try {
-      set({ isLoading: true, error: null });
+      // Clear previous job's photos immediately to prevent stale flash
+      set({ photos: [], isLoading: true, error: null });
       const dbPhotos = getPhotosForJob<InspectionPhoto>(jobId);
       set({ photos: dbPhotos, isLoading: false });
     } catch (err: unknown) {
@@ -126,8 +127,11 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   getPendingCount: () => {
     const { photos } = get();
-    // Local file:// URIs indicate the photo binary hasn't been uploaded yet
-    return photos.filter((p) => p.photo_url.startsWith('file://')).length;
+    // Both file:// (iOS/Android temp files) and content:// (Android media store)
+    // indicate the photo binary hasn't been uploaded to Supabase Storage yet.
+    return photos.filter(
+      (p) => p.photo_url.startsWith('file://') || p.photo_url.startsWith('content://')
+    ).length;
   },
 
   clearError: () => set({ error: null }),

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UMA Building Services — Premium Business Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Reset & Base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Montserrat', sans-serif;
+  background-color: #0d1117;
+  background-image: radial-gradient(circle at 50% 0%, #1a2235 0%, #0d1117 70%);
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px 100px;
+}
+
+/* Typography Variables */
+:root {
+  --navy: #050a14;
+  --navy-light: #0f172a;
+  --copper-1: #f9a876;
+  --copper-2: #e06c2b;
+  --copper-3: #9b3d12;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --font-serif: 'Cormorant Garamond', serif;
+  --font-sans: 'Montserrat', sans-serif;
+}
+
+/* Page Header */
+.header { text-align: center; margin-bottom: 60px; }
+.header h1 { font-family: var(--font-serif); font-size: 42px; font-weight: 600; color: #fff; letter-spacing: 0.05em; margin-bottom: 10px; }
+.header p { font-size: 12px; letter-spacing: 0.3em; color: var(--copper-2); text-transform: uppercase; font-weight: 600; }
+
+/* Presentation Container */
+.presentation {
+  display: flex;
+  gap: 80px;
+  flex-wrap: wrap;
+  justify-content: center;
+  perspective: 2000px;
+}
+
+/* Card Base */
+.card {
+  width: 638px;
+  height: 405px;
+  background: var(--navy);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 30px 60px rgba(0,0,0,0.6),
+    0 10px 20px rgba(0,0,0,0.4),
+    inset 0 1px 1px rgba(255,255,255,0.05),
+    inset 0 -1px 1px rgba(0,0,0,0.5);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.6s ease;
+  transform-style: preserve-3d;
+}
+
+.card:hover {
+  transform: translateY(-15px) rotateX(4deg) rotateY(-2deg);
+  box-shadow: 
+    0 50px 80px rgba(0,0,0,0.8),
+    0 15px 30px rgba(0,0,0,0.5),
+    inset 0 1px 1px rgba(255,255,255,0.08),
+    inset 0 -1px 1px rgba(0,0,0,0.6);
+}
+
+/* Foil/Metallic Effects */
+.foil-text {
+  background: linear-gradient(135deg, var(--copper-1) 0%, var(--copper-2) 40%, var(--copper-3) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+.foil-bg {
+  background: linear-gradient(135deg, var(--copper-1) 0%, var(--copper-2) 40%, var(--copper-3) 100%);
+}
+.foil-stroke {
+  stroke: url(#copperGrad);
+}
+.foil-fill {
+  fill: url(#copperGrad);
+}
+
+/* Blueprint/Grid Texture */
+.texture-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Noise overlay for realism */
+.texture-noise {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: overlay;
+}
+
+/* Card Content Z-Index */
+.card-content {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  padding: 45px 50px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==================================
+   FRONT CARD
+================================== */
+.front .edge-bar {
+  position: absolute;
+  top: 0; left: 0; bottom: 0; width: 4px;
+  z-index: 20;
+}
+
+.front .top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* Logo Setup */
+.logo-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo-icon { width: 34px; height: auto; }
+.logo-text-group { display: flex; flex-direction: column; }
+.logo-uma { font-family: var(--font-sans); font-weight: 800; font-size: 18px; letter-spacing: 0.15em; line-height: 1.1; color: var(--text-main); }
+.logo-bs { font-family: var(--font-sans); font-weight: 500; font-size: 7px; letter-spacing: 0.35em; color: var(--text-muted); text-transform: uppercase; margin-top: 2px; }
+
+/* Front Big Watermark */
+.front-watermark {
+  position: absolute;
+  right: -60px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 450px;
+  opacity: 0.02;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Person Details */
+.person-block {
+  margin-top: auto;
+  margin-bottom: 50px;
+}
+.person-name {
+  font-family: var(--font-serif);
+  font-size: 46px;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.person-rule {
+  width: 60px;
+  height: 1.5px;
+  margin: 20px 0;
+}
+.person-role {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Contact Grid Minimal */
+.contact-block {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 16px 50px;
+  width: 100%;
+  justify-content: start;
+}
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.contact-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.contact-icon svg { width: 100%; height: 100%; stroke: url(#copperGrad); }
+.contact-text {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.contact-text strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ==================================
+   BACK CARD
+================================== */
+.back {
+  background: radial-gradient(circle at center, #0f172a 0%, #050a14 70%);
+}
+
+.back .card-content {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.back-logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+.back-logo-icon {
+  width: 65px;
+  height: auto;
+}
+.back-logo-text {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 36px;
+  letter-spacing: 0.2em;
+  line-height: 1;
+}
+.back-logo-bs {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.back-rule {
+  width: 90px;
+  height: 1.5px;
+  margin: 0 auto 35px;
+}
+
+/* Services Line */
+.services-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.service-item {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.service-item:not(:last-child)::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--copper-2);
+}
+
+.back-footer {
+  position: absolute;
+  bottom: 40px;
+  left: 0; right: 0;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  color: #475569;
+}
+
+/* ==================================
+   ACTION BUTTONS
+================================== */
+.actions { margin-top: 80px; display: flex; gap: 20px; }
+.btn {
+  padding: 16px 36px;
+  border-radius: 50px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--copper-1) 0%, var(--copper-2) 100%);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(224, 108, 43, 0.2);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 25px rgba(224, 108, 43, 0.3);
+}
+
+/* ==================================
+   PRINT STYLES
+================================== */
+@media print {
+  body { background: #fff; padding: 0; margin: 0; display: block; }
+  .header, .actions { display: none; }
+  .presentation { gap: 10mm; display: block; }
+  .card {
+    width: 85mm; height: 54mm;
+    margin: 0 auto 10mm;
+    box-shadow: none !important;
+    transform: none !important;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .card-content { padding: 6mm 7mm; }
+  .person-name { font-size: 6mm; }
+  .person-role { font-size: 1.5mm; }
+  .person-rule { width: 10mm; margin: 3mm 0; }
+  .logo-icon { width: 6mm; }
+  .logo-uma { font-size: 2.5mm; }
+  .logo-bs { font-size: 1mm; }
+  .contact-item { gap: 2mm; }
+  .contact-icon { width: 2mm; height: 2mm; }
+  .contact-text { font-size: 1.5mm; }
+  .contact-block { gap: 2mm 5mm; }
+  
+  .back-logo-icon { width: 10mm; }
+  .back-logo-text { font-size: 5mm; }
+  .back-logo-bs { font-size: 1.5mm; }
+  .back-rule { width: 15mm; margin: 0 auto 5mm; }
+  .service-item { font-size: 1.2mm; gap: 2mm; }
+  .service-item:not(:last-child)::after { width: 0.8mm; height: 0.8mm; }
+  .back-footer { bottom: 5mm; font-size: 1mm; }
+}
+</style>
+</head>
+<body>
+
+<svg style="width:0;height:0;position:absolute;" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f9a876"/>
+      <stop offset="50%" stop-color="#e06c2b"/>
+      <stop offset="100%" stop-color="#9b3d12"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="header">
+  <p>Brand Identity</p>
+  <h1>UMA Building Services</h1>
+</div>
+
+<div class="presentation">
+
+  <!-- FRONT CARD -->
+  <div class="card front">
+    <div class="texture-grid"></div>
+    <div class="texture-noise"></div>
+    <div class="edge-bar foil-bg"></div>
+    
+    <!-- Large Shield Watermark -->
+    <svg class="front-watermark" viewBox="0 0 60 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M 0 20 L 0 80 A 30 30 0 0 0 29 109.98 L 29 89.98 A 10 10 0 0 1 20 80 L 20 20 Z M 31 109.98 A 30 30 0 0 0 60 80 L 60 0 L 40 20 L 40 80 A 10 10 0 0 1 31 89.98 Z M 30 38 C 36 53 36 61 36 67 A 6 6 0 0 1 24 67 C 24 61 24 53 30 38 Z" fill="#ffffff"/>
+    </svg>
+
+    <div class="card-content">
+      <div class="top-row">
+        <div class="logo-group">
+          <svg class="logo-icon" viewBox="0 0 60 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 20 L 0 80 A 30 30 0 0 0 29 109.98 L 29 89.98 A 10 10 0 0 1 20 80 L 20 20 Z" fill="#ffffff" fill-opacity="0.9"/>
+            <path d="M 31 109.98 A 30 30 0 0 0 60 80 L 60 0 L 40 20 L 40 80 A 10 10 0 0 1 31 89.98 Z" fill="#ffffff"/>
+            <path d="M 30 38 C 36 53 36 61 36 67 A 6 6 0 0 1 24 67 C 24 61 24 53 30 38 Z" fill="url(#copperGrad)"/>
+          </svg>
+          <div class="logo-text-group">
+            <div class="logo-uma">UMA</div>
+            <div class="logo-bs">Building Services</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="person-block">
+        <div class="person-name">Utsav Patel</div>
+        <div class="person-rule foil-bg"></div>
+        <div class="person-role">Owner / Director</div>
+      </div>
+
+      <div class="contact-block">
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+          </div>
+          <div class="contact-text"><strong>+61 426 700 767</strong></div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          </div>
+          <div class="contact-text">uma-building-service.vercel.app</div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          </div>
+          <div class="contact-text">info@umabuildingservices.com.au</div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          </div>
+          <div class="contact-text">Sydney, Australia</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BACK CARD -->
+  <div class="card back">
+    <div class="texture-grid"></div>
+    <div class="texture-noise"></div>
+    
+    <div class="card-content">
+      <div class="back-logo-wrap">
+        <svg class="back-logo-icon" viewBox="0 0 60 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0 20 L 0 80 A 30 30 0 0 0 29 109.98 L 29 89.98 A 10 10 0 0 1 20 80 L 20 20 Z" fill="#ffffff" fill-opacity="0.9"/>
+          <path d="M 31 109.98 A 30 30 0 0 0 60 80 L 60 0 L 40 20 L 40 80 A 10 10 0 0 1 31 89.98 Z" fill="#ffffff"/>
+          <path d="M 30 38 C 36 53 36 61 36 67 A 6 6 0 0 1 24 67 C 24 61 24 53 30 38 Z" fill="url(#copperGrad)"/>
+        </svg>
+        <div>
+          <div class="back-logo-text foil-text">UMA</div>
+          <div class="back-logo-bs">Building Services</div>
+        </div>
+      </div>
+      
+      <div class="back-rule foil-bg"></div>
+
+      <div class="services-line">
+        <div class="service-item">Fire Safety</div>
+        <div class="service-item">Routine Maintenance</div>
+        <div class="service-item">Defect Repairs</div>
+        <div class="service-item">Compliance</div>
+      </div>
+
+      <div class="back-footer">
+        PROFESSIONAL BUILDING MAINTENANCE & FIRE SAFETY
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="actions">
+  <button class="btn btn-primary" onclick="window.print()">Print / Export to PDF</button>
+</div>
+
+</body>
+</html>

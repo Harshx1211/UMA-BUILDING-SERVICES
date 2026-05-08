@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Flame, Mail, MapPin, Shield, FileText, Wrench } from 'lucide-react';
+import { Shield, Mail, MapPin, FileText, Wrench, ClipboardCheck } from 'lucide-react';
+
 
 const NAV_LINKS = [
   { href: '/',         label: 'Home' },
@@ -18,10 +19,12 @@ const SERVICES = [
 ];
 
 const CAPABILITIES = [
-  { icon: Shield,   text: 'Fire safety inspections' },
-  { icon: FileText, text: 'Digital PDF service reports' },
-  { icon: Wrench,   text: 'Defect assessment & repair' },
+  { icon: Shield,         text: 'Fire safety inspections' },
+  { icon: FileText,       text: 'Digital PDF service reports' },
+  { icon: Wrench,         text: 'Defect assessment & repair' },
+  { icon: ClipboardCheck, text: 'Per-asset inspection logging' },
 ];
+
 
 const WHY_ITEMS = [
   { num: '01', title: 'Digital-first',           body: 'Every job managed through our own platform — no paper processes.' },
@@ -46,8 +49,9 @@ export default function Footer() {
             <div className="uf-brand">
               <Link href="/" className="uf-logo">
                 <div className="uf-logo-icon">
-                  <Flame size={20} color="white" strokeWidth={2.5} />
+                  <Shield size={18} color="white" strokeWidth={2.5} />
                 </div>
+
                 <div>
                   <div className="uf-logo-name">UMA Building</div>
                   <div className="uf-logo-sub">Services</div>

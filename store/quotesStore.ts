@@ -10,6 +10,7 @@ import {
   addToSyncQueue,
 } from '@/lib/database';
 import { SyncOperation, QuoteStatus } from '@/constants/Enums';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useInventoryStore } from './inventoryStore';
 import { generateUUID } from '@/utils/uuid';
 
@@ -24,12 +25,16 @@ interface QuotesState {
   items: QuoteItem[];
   isLoading: boolean;
   error: string | null;
+  /** Internal — ref to the current sync listener so we can cleanly unsubscribe */
+  _syncListenerRef: (() => void) | null;
 
   loadQuoteForJob: (jobId: string) => void;
   createDraftQuote: (jobId: string) => void;
   addItem: (inventoryItemId: string, defectId: string | null, quantity: number) => void;
   removeItem: (itemId: string) => void;
   approveQuote: () => void;
+  subscribeToSync: (jobId: string) => void;
+  unsubscribeFromSync: () => void;
   clearError: () => void;
 }
 
@@ -39,6 +44,7 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
   items: [],
   isLoading: false,
   error: null,
+  _syncListenerRef: null,
 
   loadQuoteForJob: (jobId) => {
     try {
@@ -88,7 +94,26 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
       const { currentQuote, items } = get();
       if (!currentQuote) return;
 
-      // Resolve price from inventory store
+      // C4 fix: if an item with the same inventory+defect combo already exists,
+      // increment its quantity instead of inserting a duplicate row.
+      const existing = items.find(
+        (i) => i.inventory_item_id === inventoryItemId && i.defect_id === defectId
+      );
+      if (existing) {
+        const newQty = existing.quantity + quantity;
+        updateRecord('quote_items', existing.id, { quantity: newQty });
+        addToSyncQueue('quote_items', existing.id, SyncOperation.Update, { quantity: newQty });
+
+        const newItems = items.map((i) => i.id === existing.id ? { ...i, quantity: newQty } : i);
+        const newTotal = newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+        const updatedQuote: Quote = { ...currentQuote, total_amount: newTotal };
+        updateRecord('quotes', currentQuote.id, { total_amount: newTotal });
+        addToSyncQueue('quotes', currentQuote.id, SyncOperation.Update, { total_amount: newTotal });
+        set({ items: newItems, currentQuote: updatedQuote });
+        return;
+      }
+
+      // New item — resolve price from inventory store
       const invItem = useInventoryStore.getState().items.find((i) => i.id === inventoryItemId);
       const unitPrice = invItem?.price ?? 0;
 
@@ -158,4 +183,25 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  subscribeToSync: (jobId: string) => {
+    // Clean up any previously registered listener before subscribing again
+    const prev = get()._syncListenerRef;
+    if (prev) offSyncComplete(prev);
+
+    const listener = () => {
+      if (__DEV__) console.log('[QuotesStore] sync complete — reloading quote');
+      useQuotesStore.getState().loadQuoteForJob(jobId);
+    };
+    onSyncComplete(listener);
+    set({ _syncListenerRef: listener });
+  },
+
+  unsubscribeFromSync: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) {
+      offSyncComplete(listener);
+      set({ _syncListenerRef: null });
+    }
+  },
 }));

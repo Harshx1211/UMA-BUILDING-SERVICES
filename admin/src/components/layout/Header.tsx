@@ -15,9 +15,11 @@ const PAGE_META: Record<string, { title: string; emoji: string; desc: string }> 
   '/defects':      { title: 'Defects',       emoji: '🔴', desc: 'Defect tracking & remediation' },
   '/technicians':  { title: 'Technicians',   emoji: '👷', desc: 'Staff & performance management' },
   '/quotes':       { title: 'Quotes',        emoji: '📝', desc: 'Quote approvals & line items' },
+  '/enquiries':    { title: 'Enquiries',     emoji: '💬', desc: 'Website enquiries & lead management' },
+  '/catalogue':    { title: 'Catalogue',     emoji: '📚', desc: 'Asset types, defect codes & service items' },
   '/reports':      { title: 'Reports',       emoji: '📈', desc: 'Compliance reports & exports' },
   '/notifications':{ title: 'Notifications', emoji: '🔔', desc: 'Alerts & broadcast messages' },
-  '/settings':     { title: 'Settings',      emoji: '⚙️', desc: 'System configuration' },
+  '/settings':     { title: 'Settings',      emoji: '⚙️',  desc: 'System configuration' },
 };
 
 interface HeaderProps { onMenuClick: () => void; }

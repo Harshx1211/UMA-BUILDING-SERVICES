@@ -309,7 +309,7 @@ export default function PropertyDetailPage() {
                     {jobs.map(j => (
                       <tr key={j.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors cursor-pointer group"
                         style={{ borderColor: 'var(--border)' }}
-                        onClick={() => window.location.href = `/jobs/${j.id}`}>
+                        onClick={() => router.push(`/jobs/${j.id}`)}>
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text)' }}>{formatDate(j.scheduled_date)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{j.scheduled_time ?? '—'}</td>
                         <td className="px-4 py-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{j.job_type.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase())}</td>

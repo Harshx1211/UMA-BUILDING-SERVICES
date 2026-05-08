@@ -9,6 +9,7 @@ import {
   upsertRecord,
   getJobStatus,
   getDeletedPhotoIds,
+  getFailedSyncItems,
 } from '@/lib/database';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
@@ -36,8 +37,9 @@ const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
 // ─────────────────────────────────────────────
 
 let _syncInterval: ReturnType<typeof setInterval> | null = null;
-let _isSyncing = false;
-let _cachedUserId: string | null = null; // Set by startSync() so runSync() never has to re-fetch auth
+let _isSyncing  = false;
+let _shouldStop = false;   // Set by stopSync() to abort an in-progress runSync()
+let _cachedUserId: string | null = null;
 
 // ─────────────────────────────────────────────
 // Sync-complete event bus
@@ -55,6 +57,11 @@ export function onSyncComplete(listener: SyncCompleteListener): void {
 /** Unsubscribe a previously registered listener */
 export function offSyncComplete(listener: SyncCompleteListener): void {
   _syncListeners.delete(listener);
+}
+
+/** H2: Clears ALL sync listeners — called on sign-out to prevent stale listener accumulation */
+export function clearSyncListeners(): void {
+  _syncListeners.clear();
 }
 
 /** Called internally after every successful sync to notify subscribers */
@@ -92,27 +99,38 @@ export function startSync(userId?: string): void {
 
 /** Stops the background sync loop — call on app unmount / sign-out */
 export function stopSync(): void {
+  _shouldStop = true;
   if (_syncInterval) {
     clearInterval(_syncInterval);
     _syncInterval = null;
     if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Sync stopped');
   }
-  _cachedUserId = null; // Clear cached userId on sign-out
+  _cachedUserId = null;
+  // H2: Purge all listeners on sign-out to prevent stale refs from previous session
+  clearSyncListeners();
+}
+
+/** Returns the currently cached user ID — useful for fire-and-forget callers */
+export function getCachedUserId(): string | null {
+  return _cachedUserId;
 }
 
 /**
  * Returns the current sync status snapshot:
  * - lastSynced: ISO timestamp from AsyncStorage, or null
  * - pendingCount: number of items waiting in the sync queue
+ * - failedCount: number of items permanently abandoned (synced = -1)
  * - isOnline: current network reachability
  */
 export async function getSyncStatus(): Promise<SyncStatus> {
   const netState = await NetInfo.fetch();
   const lastSynced = await AsyncStorage.getItem(LAST_SYNCED_KEY);
   const pending = getPendingSyncItems();
+  const failed  = getFailedSyncItems();
   return {
     lastSynced,
     pendingCount: pending.length,
+    failedCount:  failed.length,
     isOnline: netState.isConnected === true && netState.isInternetReachable !== false,
   };
 }
@@ -122,69 +140,80 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 // ─────────────────────────────────────────────
 
 /**
- * Main sync function. Accepts an optional userId to avoid re-fetching auth
- * (prevents race conditions on startup where Supabase auth isn't hydrated yet).
- * Steps: (1) network check, (2) PULL jobs/properties/assets from Supabase,
- * (3) PUSH pending offline queue items, (4) update last-synced timestamp.
+ * Main sync function. Returns `true` if a sync cycle fully ran,
+ * `false` if it was skipped (already in progress, offline, aborted, or no user).
+ * Accepts an optional userId to avoid re-fetching auth on every call.
  */
-export async function runSync(userId?: string): Promise<void> {
+export async function runSync(userId?: string): Promise<boolean> {
   if (_isSyncing) {
     if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Already in progress — skipping');
-    return;
+    return false;
   }
 
-  // ── 1. Network check ────────────────────────
+  // Reset abort flag at the start of each new run
+  _shouldStop = false;
+
+  // ── 1. Network check ─────────────────────────────────────────
   const netState = await NetInfo.fetch();
   const isOnline =
     netState.isConnected === true && netState.isInternetReachable !== false;
 
   if (!isOnline) {
     if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Offline — skipping sync');
-    return;
+    return false;
   }
 
   _isSyncing = true;
   if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Starting sync run...');
 
   try {
-    // Use the provided userId first, then fall back to cached, then re-fetch from auth.
-    // This prevents the race condition where getCurrentUser() returns null because
-    // the Supabase JS client hasn't hydrated its internal session from AsyncStorage yet.
     let resolvedUserId = userId ?? _cachedUserId;
     if (!resolvedUserId) {
       const user = await getCurrentUser();
+      if (_shouldStop) return false;
       if (!user) {
-        if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] No authenticated user — skipping sync');
-        return;
+        if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] No authenticated user — skipping');
+        return false;
       }
       resolvedUserId = user.id;
-      _cachedUserId = resolvedUserId; // cache for future interval runs
+      _cachedUserId  = resolvedUserId;
     }
 
+    if (_shouldStop) return false;
     if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Syncing for user: ${resolvedUserId}`);
 
-    // ── 2. PUSH — Offline queue (deletes first, so they reach Supabase BEFORE the PULL)
-    // Running push before pull ensures:
-    //   a) DELETE operations in the sync queue reach Supabase before we pull;
-    //      otherwise the PULL upserts deleted rows back into local SQLite.
-    //   b) Any photo_upload tasks whose photos were subsequently deleted are
-    //      skipped by processPhotoQueue (which checks for pending Delete entries).
-    await processPhotoQueue(); // upload photo binaries first so Insert rows get public URLs
+    // ── 2. PUSH — upload photo binaries then flush sync queue ────
+    await processPhotoQueue();
+    if (_shouldStop) return false;
     await _pushQueue();
+    if (_shouldStop) return false;
 
-    // ── 3. PULL — Jobs assigned to this technician (after push so deletes are applied) ──
+    // ── 3. PULL — server → local SQLite ──────────────────────────
     const lastSynced = await AsyncStorage.getItem(LAST_SYNCED_KEY);
+    if (_shouldStop) return false;
     await _pullJobs(resolvedUserId, lastSynced);
+    if (_shouldStop) return false;
 
-    // ── 4. Update last-synced timestamp ──────────
+    // ── 4. Timestamp ──────────────────────────────────────────────
     const now = new Date().toISOString();
     await AsyncStorage.setItem(LAST_SYNCED_KEY, now);
     if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Sync complete at ${now}`);
 
-    // ── 5. Notify all subscribers (stores reload UI) ──
+    // ── 5. Warn about permanently-failed items ────────────────────
+    const failedItems = getFailedSyncItems();
+    if (failedItems.length > 0) {
+      console.warn(
+        `[UMA BUILDING SERVICES Sync] ${failedItems.length} item(s) permanently failed. ` +
+        `Tables: ${[...new Set(failedItems.map(i => i.table_name))].join(', ')}`
+      );
+    }
+
+    // ── 6. Notify subscribers (stores reload from SQLite) ─────────
     _emitSyncComplete();
+    return true;
   } catch (err) {
     console.error('[UMA BUILDING SERVICES Sync] Unexpected error during sync:', err);
+    return false;
   } finally {
     _isSyncing = false;
   }
@@ -299,6 +328,8 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   if (jobIds.length > 0) {
     await _pullRelated('job_assets', 'job_id', jobIds);
     await _pullRelated('defects', 'job_id', jobIds);
+    // H6: _pullRelated already handles the deleted-photo tombstone internally
+    // (it calls getDeletedPhotoIds() itself when table === 'inspection_photos')
     await _pullRelated('inspection_photos', 'job_id', jobIds);
     await _pullRelated('signatures', 'job_id', jobIds);
     await _pullRelated('time_logs', 'job_id', jobIds);
