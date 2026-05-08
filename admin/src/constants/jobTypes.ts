@@ -65,7 +65,7 @@ export function getJobTypeLabel(value: string): string {
   if (!value) return '';
   // Check frequencies first
   const freq = ROUTINE_FREQUENCIES.find(f => f.value === value);
-  if (freq) return `Routine Service — ${freq.label}`;
+  if (freq) return `Routine Service: ${freq.label}`;
 
   // Check categories
   const cat = SERVICE_CATEGORIES.find(c => c.value === value);
@@ -97,11 +97,11 @@ export function getJobTypeCategory(value: string): ServiceCategory | undefined {
 // ── Legacy flat list for filters (all possible values) ────────────────────────
 export const JOB_TYPE_FILTER_OPTIONS = [
   { value: '', label: 'Type: All' },
-  { value: 'routine_service_monthly',   label: 'Routine — Monthly' },
-  { value: 'routine_service_3_monthly', label: 'Routine — 3 Monthly' },
-  { value: 'routine_service_6_monthly', label: 'Routine — 6 Monthly' },
-  { value: 'routine_service_annual',    label: 'Routine — Annual' },
-  { value: 'routine_service_5_yearly',  label: 'Routine — 5 Yearly' },
+  { value: 'routine_service_monthly',   label: 'Routine: Monthly' },
+  { value: 'routine_service_3_monthly', label: 'Routine: 3 Monthly' },
+  { value: 'routine_service_6_monthly', label: 'Routine: 6 Monthly' },
+  { value: 'routine_service_annual',    label: 'Routine: Annual' },
+  { value: 'routine_service_5_yearly',  label: 'Routine: 5 Yearly' },
   { value: 'defect_repair_quote',       label: 'Quote / Defect Repair' },
   { value: 'defect_repair',             label: 'Defect Repair (Legacy)' },
   { value: 'quote',                     label: 'Quote (Legacy)' },

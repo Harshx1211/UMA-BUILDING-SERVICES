@@ -3,10 +3,10 @@ import { useEffect, useRef } from 'react';
 import { Smartphone, FileBarChart2, MapPin, ClipboardCheck } from 'lucide-react';
 
 const FEATURES = [
-  { icon: Smartphone,    title: 'Purpose-Built Platform',     description: 'Our technicians use our own mobile app on every job — logging results, capturing photos, and collecting signatures in real time.' },
+  { icon: Smartphone,    title: 'Purpose-Built Platform',     description: 'Our technicians use our own mobile app on every job, logging results, capturing photos, and collecting signatures in real time.' },
   { icon: FileBarChart2, title: 'Digital PDF Service Reports', description: 'A structured PDF is generated at job completion, documenting every asset inspected, result recorded, and defect found on site.' },
   { icon: ClipboardCheck, title: 'Per-Asset Inspection Log',   description: 'Every fire safety asset is individually logged with a Pass or Fail result, severity classification, and photo evidence.' },
-  { icon: MapPin,        title: 'Multi-Site Management',       description: 'We manage multiple properties simultaneously — each with its own asset register, compliance history, and scheduled service dates.' },
+  { icon: MapPin,        title: 'Multi-Site Management',       description: 'We manage multiple properties simultaneously, each with its own asset register, compliance history, and scheduled service dates.' },
 ];
 
 export default function WhyUsSection() {
@@ -41,10 +41,10 @@ export default function WhyUsSection() {
               Technology-Backed<br />Building Services
             </h2>
             <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8, marginBottom: 18 }}>
-              Unlike traditional building services companies using paper-based processes, UMA Building Services operates with its own purpose-built digital platform — built specifically for our workflow.
+              Unlike traditional building services companies using paper-based processes, UMA Building Services operates with its own purpose-built digital platform, built specifically for our workflow.
             </p>
             <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8 }}>
-              Every service visit produces a clear, structured digital record — giving our clients accurate documentation of what was inspected, what was found, and what was done about it.
+              Every service visit produces a clear, structured digital record, giving our clients accurate documentation of what was inspected, what was found, and what was done about it.
             </p>
           </div>
 

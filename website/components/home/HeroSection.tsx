@@ -38,7 +38,7 @@ export default function HeroSection() {
 
         {/* Subtitle */}
         <p className="hero-sub">
-          Routine fire safety inspections and defect repairs — fully managed through our own purpose-built digital platform.
+          Routine fire safety inspections and defect repairs, fully managed through our own purpose-built digital platform.
         </p>
 
         {/* CTAs */}

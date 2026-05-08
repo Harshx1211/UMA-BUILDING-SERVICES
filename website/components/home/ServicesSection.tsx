@@ -6,7 +6,7 @@ import { CalendarClock, Wrench, FileText, CheckSquare, ArrowRight } from 'lucide
 const SERVICES = [
   { id: 'svc-monthly',  icon: CalendarClock, schedule: 'Monthly',    title: 'Monthly Routine Service',    description: 'Regular monthly inspections of fire safety assets. Suited to high-traffic commercial properties requiring frequent compliance visits.' },
   { id: 'svc-3monthly', icon: CalendarClock, schedule: '3-Monthly',   title: '3-Monthly Routine Service',  description: 'Quarterly inspections covering required periodic checks across all installed fire safety assets on site.' },
-  { id: 'svc-6monthly', icon: CalendarClock, schedule: '6-Monthly',   title: '6-Monthly Routine Service',  description: 'Bi-annual inspections for properties requiring half-yearly compliance visits — common for commercial and industrial sites.' },
+  { id: 'svc-6monthly', icon: CalendarClock, schedule: '6-Monthly',   title: '6-Monthly Routine Service',  description: 'Bi-annual inspections for properties requiring half-yearly compliance visits, common for commercial and industrial sites.' },
   { id: 'svc-annual',   icon: CheckSquare,   schedule: 'Annual',      title: 'Annual Routine Service',     description: 'Comprehensive yearly inspections covering all fire safety assets, with a full digital PDF service report at completion.' },
   { id: 'svc-5yearly',  icon: FileText,      schedule: '5-Yearly',    title: '5-Yearly Routine Service',   description: 'Major periodic inspections at 5-year intervals covering extended compliance checks beyond standard annual requirements.' },
   { id: 'svc-defect',   icon: Wrench,        schedule: 'On Request',  title: 'Quote / Defect Repair',      description: 'Site visits to assess and repair defects found during inspections. We quote and carry out repairs upon your written approval.' },
@@ -42,7 +42,7 @@ export default function ServicesSection() {
             Routine Inspections &amp;<br />Defect Repair Services
           </h2>
           <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.75 }}>
-            Scheduled compliance inspections across every service frequency, plus defect assessment and repair — fully tracked and digitally reported.
+            Scheduled compliance inspections across every service frequency, plus defect assessment and repair, fully tracked and digitally reported.
           </p>
         </div>
 

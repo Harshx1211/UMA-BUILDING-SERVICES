@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { Mail, Send, CheckCircle, AlertCircle, Loader, Clock } from 'lucide-react';
 
 const SERVICE_OPTIONS = [
-  'Routine Service — Monthly',
-  'Routine Service — 3 Monthly',
-  'Routine Service — 6 Monthly',
-  'Routine Service — Annual',
-  'Routine Service — 5 Yearly',
+  'Routine Service: Monthly',
+  'Routine Service: 3 Monthly',
+  'Routine Service: 6 Monthly',
+  'Routine Service: Annual',
+  'Routine Service: 5 Yearly',
   'Quote / Defect Repair',
-  'Not Sure — Need Advice',
+  'Not Sure, Need Advice',
 ];
 
 type Status = 'idle' | 'sending' | 'success' | 'error';

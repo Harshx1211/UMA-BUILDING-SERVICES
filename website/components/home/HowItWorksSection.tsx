@@ -49,7 +49,7 @@ export default function HowItWorksSection() {
             Simple. Transparent. Digital.
           </h2>
           <p style={{ fontSize: 16, color: '#6B7280', maxWidth: 440, margin: '0 auto', lineHeight: 1.75 }}>
-            From your first enquiry to a completed digital report — here&apos;s exactly what to expect.
+            From your first enquiry to a completed digital report. Here is exactly what to expect.
           </p>
         </div>
 
