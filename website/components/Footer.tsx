@@ -45,15 +45,7 @@ export default function Footer() {
               Navigation
             </p>
             {NAV_LINKS.map(l => (
-              <Link key={l.href} href={l.href} style={{
-                display: 'block', fontSize: 13.5, color: 'rgba(255,255,255,0.45)',
-                textDecoration: 'none', marginBottom: 9, transition: 'color 180ms',
-              }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.85)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-              >
-                {l.label}
-              </Link>
+              <Link key={l.href} href={l.href} className="footer-nav-link">{l.label}</Link>
             ))}
           </nav>
 
@@ -80,7 +72,11 @@ export default function Footer() {
           justify-content: space-between;
         }
         .footer-brand { flex: 1; max-width: 340px; }
-        .footer-nav { flex-shrink: 0; }
+        .footer-nav-link {
+          display: block; font-size: 13.5px; color: rgba(255,255,255,0.45);
+          text-decoration: none; margin-bottom: 9px; transition: color 180ms;
+        }
+        .footer-nav-link:hover { color: rgba(255,255,255,0.85); }
         @media (max-width: 640px) {
           .footer-main { flex-direction: column; gap: 28px; }
           .footer-brand { max-width: 100%; }
