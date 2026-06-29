@@ -14,6 +14,10 @@ import { initializeSchema, cleanOldSyncQueueItems, clearFailedSyncItems } from '
 import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
 import Colors from '@/constants/Colors';
 import * as ScreenCapture from 'expo-screen-capture';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync();
+
 
 const paperLightTheme = {
   ...MD3LightTheme,
@@ -126,6 +130,9 @@ export default function RootLayout() {
       </GestureHandlerRootView>
     );
   }
+
+  // Once loading is complete, hide the splash screen
+  SplashScreen.hideAsync();
 
   return (
     <GestureHandlerRootView style={styles.container}>

@@ -25,7 +25,10 @@ interface TabIconProps {
 
 function TabIcon({ name, name_active, color, size, focused, label, activeColor }: TabIconProps) {
   return (
-    <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
+    <View style={[
+      styles.tabIconWrap,
+      focused && { backgroundColor: activeColor + '18' },
+    ]}>
       {focused && (
         <View style={[styles.activeBar, { backgroundColor: activeColor }]} />
       )}
@@ -119,7 +122,7 @@ export default function AppLayout() {
         tabBarActiveTintColor: C.accent,
         tabBarInactiveTintColor: C.tabIconDefault,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '600',
           letterSpacing: 0.2,
         },
@@ -195,20 +198,17 @@ const styles = StyleSheet.create({
   tabIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 48,
-    height: 32,
-    borderRadius: 10,
+    width: 52,
+    height: 34,
+    borderRadius: 12,
     position: 'relative',
     paddingTop: 4,
-  },
-  tabIconWrapActive: {
-    // top bar indicator handles the active state
   },
   activeBar: {
     position: 'absolute',
     top: 0,
-    left: '20%',
-    right: '20%',
+    left: '18%',
+    right: '18%',
     height: 2.5,
     borderRadius: 2,
   },

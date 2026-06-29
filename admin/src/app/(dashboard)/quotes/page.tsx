@@ -170,7 +170,7 @@ export default function QuotesPage() {
                     onBlur={(e) => updateQuotePrice(d.id, e.target.value)}
                     placeholder="0.00"
                     className="w-24 px-2 py-1.5 rounded-lg border text-sm outline-none font-semibold text-right"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: '#16a34a' }}
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: '#16a34a' }}
                   />
                 </td>
               </tr>
@@ -190,11 +190,11 @@ export default function QuotesPage() {
 
       <div className="grid grid-cols-3 gap-4 mb-5">
         {[
-          { label: 'Pending Approval', items: stats.draft,    color: '#f59e0b', bg: '#fffbeb' },
-          { label: 'Approved',         items: stats.approved, color: '#22c55e', bg: '#f0fdf4' },
-          { label: 'Rejected',         items: stats.rejected, color: '#ef4444', bg: '#fef2f2' },
+          { label: 'Pending Approval', items: stats.draft,    color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+          { label: 'Approved',         items: stats.approved, color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
+          { label: 'Rejected',         items: stats.rejected, color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
         ].map(c => (
-          <div key={c.label} className="bg-white rounded-2xl border p-4" style={{ borderColor: 'var(--border)', borderTop: `3px solid ${c.color}` }}>
+          <div key={c.label} className="bg-[var(--card)] rounded-2xl border p-4" style={{ borderColor: 'var(--border)', borderTop: `3px solid ${c.color}` }}>
             <p className="text-2xl font-bold" style={{ color: 'var(--text)' }}>{c.items.length}</p>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{c.label}</p>
             <p className="text-xs mt-1 font-medium" style={{ color: c.color }}>
@@ -204,7 +204,7 @@ export default function QuotesPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl border p-4 mb-4 flex flex-wrap gap-3 items-center" style={{ borderColor: 'var(--border)' }}>
+      <div className="bg-[var(--card)] rounded-2xl border p-4 mb-4 flex flex-wrap gap-3 items-center" style={{ borderColor: 'var(--border)' }}>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by property or technician…"
@@ -212,14 +212,14 @@ export default function QuotesPage() {
             style={{ borderColor: 'var(--border)', color: 'var(--text)' }} />
         </div>
         <select value={statusF} onChange={e => setStatusF(e.target.value)}
-          className="px-3 py-2 rounded-lg border text-sm outline-none"
+          className="px-3 py-2 rounded-lg border text-sm font-medium outline-none cursor-pointer"
           style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
           {STATUSES.map(s => <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Status: All'}</option>)}
         </select>
         {(statusF || search) && (
           <button onClick={() => { setStatusF(''); setSearch(''); }}
             className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm"
-            style={{ color: 'var(--error)', background: '#fef2f2' }}>
+            style={{ color: 'var(--error)', background: 'rgba(239,68,68,0.15)' }}>
             <X size={13} /> Clear
           </button>
         )}
@@ -234,7 +234,7 @@ export default function QuotesPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((q: any, i: number) => (
-            <div key={q.id} className="bg-white rounded-2xl border overflow-hidden animate-fade-in-up"
+            <div key={q.id} className="bg-[var(--card)] rounded-2xl border overflow-hidden animate-fade-in-up"
               style={{ borderColor: 'var(--border)', animationDelay: `${i * 20}ms` }}>
               <div className="p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -280,14 +280,14 @@ export default function QuotesPage() {
                     </button>
                   )}
                   <button onClick={() => setPreviewQuote(q)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium flex-1 justify-center border hover:bg-gray-50"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium flex-1 justify-center border hover:bg-white/5"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                     <FileText size={14} /> Preview PDF
                   </button>
                 </div>
 
                 <button onClick={() => setExpanded(expanded === q.id ? null : q.id)}
-                  className="flex items-center justify-center gap-1 text-xs mt-3 pt-3 border-t w-full hover:bg-gray-50 transition-colors rounded-b-2xl -mx-4 -mb-4 px-4 py-3"
+                  className="flex items-center justify-center gap-1 text-xs mt-3 pt-3 border-t w-full hover:bg-white/5 transition-colors rounded-b-2xl -mx-4 -mb-4 px-4 py-3"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                   {expanded === q.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   {expanded === q.id ? 'Hide defects' : `View ${q.defects.length} defect${q.defects.length !== 1 ? 's' : ''}`}
@@ -328,3 +328,6 @@ export default function QuotesPage() {
     </div>
   );
 }
+
+
+

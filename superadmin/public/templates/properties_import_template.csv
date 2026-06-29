@@ -1,0 +1,3 @@
+name,address,suburb,state,postcode,site_contact_name,site_contact_phone,access_notes,hazard_notes,site_note
+"2-8 River Rd West","2-8 River Rd West","Parramatta","NSW","2150","John Smith","0412 345 678","Gate code: 1234. Parking on Level B1.","Asbestos in roof space - PPE required.","Annual fire pump test due in June."
+"Example Building","100 George Street","Sydney","NSW","2000","Jane Doe","0498 765 432","Visitor sign-in required at reception.","No known hazards.","Contact building manager before commencing work."

@@ -85,18 +85,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return error.message;
 
-    // Role guard — only admins may access this portal
+    // Role guard and Subscription Lockout
     if (data.user) {
       const { data: profile } = await supabase
         .from('users')
-        .select('role')
+        .select(`
+          role,
+          companies (
+            subscription_status
+          )
+        `)
         .eq('id', data.user.id)
         .maybeSingle();
 
-      if (profile && profile.role !== 'admin') {
-        // Technician / subcontractor tried to log in — kick them out
-        await supabase.auth.signOut();
-        return 'Admin access only. Please use the UMA BUILDING SERVICES mobile app.';
+      if (profile) {
+        // 1. Role Guard
+        if (profile.role !== 'admin') {
+          await supabase.auth.signOut();
+          return 'Admin access only. Please use the UMA BUILDING SERVICES mobile app.';
+        }
+
+        // 2. SaaS Subscription Lockout
+        const company = Array.isArray(profile.companies) ? profile.companies[0] : profile.companies;
+        if (company && company.subscription_status !== 'active') {
+          await supabase.auth.signOut();
+          return 'Your company account has been suspended. Please contact SiteTrack support.';
+        }
       }
       // No profile row → allow (the fallbackUser in loadProfile handles it)
     }

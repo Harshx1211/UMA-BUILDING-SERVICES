@@ -25,7 +25,7 @@ function CatalogueTabs() {
       <PageHeader title="Catalogue" subtitle="Manage asset types, defect codes and inventory items" />
 
       {/* Tab bar */}
-      <div className="bg-white rounded-2xl border flex gap-1 p-1.5" style={{ borderColor: 'var(--border)' }}>
+      <div className="bg-[var(--card)] rounded-2xl border flex gap-1 p-1.5" style={{ borderColor: 'var(--border)' }}>
         {TABS.map(({ id, label, icon: Icon }) => {
           const on = active === id;
           return (
@@ -57,3 +57,5 @@ export default function CataloguePage() {
     </Suspense>
   );
 }
+
+

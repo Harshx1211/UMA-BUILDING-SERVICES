@@ -48,12 +48,25 @@ export default function DefectCodesTab() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.code || !form.description) { toast.error('Code and description are required'); return; }
+    const cleanCode = form.code.toLowerCase().trim();
+    const cleanDesc = form.description.trim();
+    
+    if (!cleanCode || !cleanDesc) { toast.error('Code and description are required'); return; }
+    
+    let parsedPrice: number | null = null;
+    if (form.quote_price !== '') {
+      parsedPrice = Number(form.quote_price);
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        toast.error('Quote Price must be a valid positive number');
+        return;
+      }
+    }
+
     setSaving(true);
     const payload = {
-      code: form.code.toLowerCase().trim(),
-      description: form.description,
-      quote_price: form.quote_price === '' ? null : Number(form.quote_price),
+      code: cleanCode,
+      description: cleanDesc,
+      quote_price: parsedPrice,
       category: form.category,
       updated_at: new Date().toISOString(),
     };
@@ -78,23 +91,23 @@ export default function DefectCodesTab() {
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="bg-white rounded-2xl border p-4 flex flex-wrap gap-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="bg-[var(--card)] rounded-2xl border p-4 flex flex-wrap gap-3" style={{ borderColor: 'var(--border)' }}>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search code or description…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
         </div>
         <select value={catF} onChange={e => setCatF(e.target.value)}
           className="px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-          style={{ borderColor: catF ? 'var(--primary)' : 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}>
+          style={{ borderColor: catF ? 'var(--primary)' : 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}>
           <option value="">Category: All</option>
           {CATEGORIES.map(c => <option key={c}>{c}</option>)}
         </select>
         {(search || catF) && (
           <button onClick={() => { setSearch(''); setCatF(''); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ color: 'var(--error)', background: '#fef2f2' }}>
+            style={{ color: 'var(--error)', background: 'rgba(239,68,68,0.15)' }}>
             <X size={13} /> Clear
           </button>
         )}
@@ -110,19 +123,19 @@ export default function DefectCodesTab() {
         <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
       ) : (
         Object.entries(grouped).map(([cat, items]) => (
-          <div key={cat} className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
+          <div key={cat} className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
               <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>{cat}</p>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--primary)', color: '#fff' }}>{items.length}</span>
             </div>
             <table className="w-full">
               <tbody>
                 {items.map((r, i) => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors"
+                  <tr key={r.id} className="border-b last:border-0 hover:bg-white/5 transition-colors"
                     style={{ borderColor: 'var(--border)', animationDelay: `${i * 10}ms` }}>
                     <td className="px-5 py-3 w-24">
                       <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg"
-                        style={{ background: '#f0f4ff', color: 'var(--primary)' }}>{r.code}</span>
+                        style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}>{r.code}</span>
                     </td>
                     <td className="px-3 py-3 text-sm" style={{ color: 'var(--text)' }}>{r.description}</td>
                     <td className="px-3 py-3 text-right">
@@ -153,7 +166,7 @@ export default function DefectCodesTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-md animate-scale-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+          <div className="bg-[var(--card)] rounded-3xl w-full max-w-md animate-scale-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
               <h3 className="font-extrabold text-lg" style={{ color: 'var(--text)' }}>{editing ? 'Edit Defect Code' : 'Add Defect Code'}</h3>
               <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-100"><X size={16} /></button>
@@ -164,32 +177,32 @@ export default function DefectCodesTab() {
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Code *</label>
                   <input value={form.code} onChange={e => f('code', e.target.value)} placeholder="e.g. bg"
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none font-mono"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Quote Price ($)</label>
                   <input type="number" value={form.quote_price} onChange={e => f('quote_price', e.target.value)} placeholder="Optional"
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Description *</label>
                 <textarea value={form.description} onChange={e => f('description', e.target.value)} rows={3}
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none resize-none"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Category</label>
                 <select value={form.category} onChange={e => f('category', e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}>
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}>
                   {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
                 <button type="submit" disabled={saving}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60"
@@ -213,3 +226,6 @@ export default function DefectCodesTab() {
     </div>
   );
 }
+
+
+

@@ -33,7 +33,7 @@ export default function PreviewModal({ quote, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl w-full max-w-4xl h-[90vh] flex flex-col animate-scale-in"
+      <div className="bg-[var(--card)] rounded-2xl w-full max-w-4xl h-[90vh] flex flex-col animate-scale-in"
         style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
         
         {/* Header */}
@@ -58,7 +58,7 @@ export default function PreviewModal({ quote, onClose }: Props) {
 
         {/* Iframe Body */}
         <div className="flex-1 bg-gray-100 p-4 overflow-hidden rounded-b-2xl">
-          <div className="w-full h-full bg-white shadow-sm border overflow-hidden rounded" style={{ borderColor: 'var(--border)' }}>
+          <div className="w-full h-full bg-[var(--card)] shadow-sm border overflow-hidden rounded" style={{ borderColor: 'var(--border)' }}>
             {html ? (
               <iframe
                 ref={iframeRef}
@@ -78,3 +78,4 @@ export default function PreviewModal({ quote, onClose }: Props) {
     </div>
   );
 }
+

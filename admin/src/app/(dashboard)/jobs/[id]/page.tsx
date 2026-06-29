@@ -61,7 +61,7 @@ export default function JobDetailPage() {
     if (job?.status !== 'completed') {
       return (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)', background: '#f8fafc' }}>
+          style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)', background: 'var(--bg)' }}>
           <Clock size={14} /> Report available after completion
         </div>
       );
@@ -81,7 +81,7 @@ export default function JobDetailPage() {
     }
     return (
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)', background: '#f8fafc' }}>
+        style={{ borderColor: 'var(--border)', color: 'var(--text-tertiary)', background: 'var(--bg)' }}>
         <Clock size={14} /> No report uploaded yet
       </div>
     );
@@ -120,13 +120,13 @@ export default function JobDetailPage() {
 
       <div className="flex gap-2 mb-5">
         {job.status!=='cancelled' && (
-          <button onClick={()=>updateStatus('cancelled')} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium" style={{ background:'#fef2f2', color:'#ef4444' }}>
+          <button onClick={()=>updateStatus('cancelled')} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium" style={{ background:'rgba(239,68,68,0.15)', color:'#ef4444' }}>
             <XCircle size={14}/> Cancel
           </button>
         )}
       </div>
 
-      <div className="flex gap-1 mb-5 p-1 rounded-xl border bg-white w-fit" style={{ borderColor:'var(--border)' }}>
+      <div className="flex gap-1 mb-5 p-1 rounded-xl border bg-[var(--card)] w-fit" style={{ borderColor:'var(--border)' }}>
         {TABS.map(t => (
           <button key={t} onClick={()=>setTab(t)}
             className="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize"
@@ -138,7 +138,7 @@ export default function JobDetailPage() {
 
       {tab==='overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
             <p className="font-semibold mb-3" style={{ color:'var(--text)' }}>Property</p>
             {[['Address',job.property?.address],['Suburb',job.property?.suburb],['State',job.property?.state],['Contact',job.property?.site_contact_name],['Phone',job.property?.site_contact_phone]].filter(([,v])=>v).map(([k,v])=>(
               <div key={String(k)} className="flex gap-3 py-2 border-b last:border-0 text-sm" style={{ borderColor:'var(--border)' }}>
@@ -148,7 +148,7 @@ export default function JobDetailPage() {
             ))}
           </div>
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
               <p className="font-semibold mb-3" style={{ color:'var(--text)' }}>Technician</p>
               {[['Name',job.assigned_user?.full_name],['Email',job.assigned_user?.email],['Phone',job.assigned_user?.phone]].map(([k,v])=>(
                 <div key={String(k)} className="flex gap-3 py-2 border-b last:border-0 text-sm" style={{ borderColor:'var(--border)' }}>
@@ -158,7 +158,7 @@ export default function JobDetailPage() {
               ))}
             </div>
             {timeLogs.length>0 && (
-              <div className="bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+              <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
                 <p className="font-semibold mb-3" style={{ color:'var(--text)' }}>Time Logs</p>
                 {timeLogs.map(tl=>(
                   <div key={tl.id} className="text-sm py-2 border-b last:border-0" style={{ borderColor:'var(--border)' }}>
@@ -169,7 +169,7 @@ export default function JobDetailPage() {
               </div>
             )}
           </div>
-          <div className="md:col-span-2 bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+          <div className="md:col-span-2 bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
             <div className="flex items-center justify-between mb-3">
               <p className="font-semibold" style={{ color:'var(--text)' }}>Notes</p>
               <button onClick={()=>editNotes?saveNotes():setEditNotes(true)}
@@ -187,7 +187,7 @@ export default function JobDetailPage() {
       )}
 
       {tab==='assets' && (
-        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor:'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor:'var(--border)' }}>
           {jobAssets.length===0?<p className="text-center py-12 text-sm" style={{ color:'var(--text-tertiary)' }}>No assets inspected</p>:(
             <table><thead><tr style={{ borderBottom:'1px solid var(--border)', background:'#fafafa' }}>
               {['Ref','Type','Location','Result','Compliant'].map(h=><th key={h} className="px-4 py-3 text-xs font-semibold text-left" style={{ color:'var(--text-secondary)' }}>{h}</th>)}
@@ -208,9 +208,9 @@ export default function JobDetailPage() {
 
       {tab==='defects' && (
         <div className="space-y-3">
-          {defects.length===0?<div className="bg-white rounded-2xl border p-12 text-center" style={{ borderColor:'var(--border)' }}><p className="text-sm" style={{ color:'var(--text-tertiary)' }}>No defects recorded</p></div>
+          {defects.length===0?<div className="bg-[var(--card)] rounded-2xl border p-12 text-center" style={{ borderColor:'var(--border)' }}><p className="text-sm" style={{ color:'var(--text-tertiary)' }}>No defects recorded</p></div>
           :defects.map((d:any)=>(
-            <div key={d.id} className="bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+            <div key={d.id} className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
               <div className="flex items-start justify-between gap-3 mb-2">
                 <p className="font-medium text-sm" style={{ color:'var(--text)' }}>{d.description}</p>
                 <div className="flex gap-2 flex-shrink-0"><Badge value={d.severity}/><Badge value={d.status}/></div>
@@ -225,7 +225,7 @@ export default function JobDetailPage() {
       )}
 
       {tab==='photos' && (
-        <div className="bg-white rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
           {photos.length===0?<p className="text-center py-12 text-sm" style={{ color:'var(--text-tertiary)' }}>No photos</p>
           :<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {photos.map((p:any)=><a key={p.id} href={p.photo_url} target="_blank" rel="noreferrer">
@@ -236,10 +236,10 @@ export default function JobDetailPage() {
       )}
 
       {tab==='signature' && (
-        <div className="bg-white rounded-2xl border p-5 max-w-md" style={{ borderColor:'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border p-5 max-w-md" style={{ borderColor:'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color:'var(--text)' }}>Client Signature</p>
           {signature?(<div className="space-y-3">
-            <img src={signature.signature_url} alt="Signature" className="w-full border rounded-xl p-4 bg-gray-50" style={{ borderColor:'var(--border)' }}/>
+            <img src={signature.signature_url} alt="Signature" className="w-full border rounded-xl p-4 bg-white/5" style={{ borderColor:'var(--border)' }}/>
             <p className="text-sm"><span style={{ color:'var(--text-tertiary)' }}>Signed by: </span><strong style={{ color:'var(--text)' }}>{signature.signed_by_name}</strong></p>
             <p className="text-sm" style={{ color:'var(--text-secondary)' }}>{formatDateTime(signature.signed_at)}</p>
           </div>):<p className="text-sm text-center py-8" style={{ color:'var(--text-tertiary)' }}>No signature captured</p>}
@@ -250,8 +250,8 @@ export default function JobDetailPage() {
         <div className="space-y-4">
           {job.status !== 'completed' ? (
             // Job not yet complete
-            <div className="bg-white rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'#f8fafc' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'var(--bg)' }}>
                 <FileText size={28} style={{ color:'var(--text-tertiary)' }}/>
               </div>
               <div className="text-center">
@@ -260,7 +260,7 @@ export default function JobDetailPage() {
                   The inspection report will appear here once the technician completes the job and generates the PDF on their device.
                 </p>
               </div>
-              <div className="px-4 py-2 rounded-xl text-sm font-medium border" style={{ borderColor:'var(--border)', color:'var(--text-tertiary)', background:'#f8fafc' }}>
+              <div className="px-4 py-2 rounded-xl text-sm font-medium border" style={{ borderColor:'var(--border)', color:'var(--text-tertiary)', background:'var(--bg)' }}>
                 Current status: <strong>{job.status.replace(/_/g,' ')}</strong>
               </div>
             </div>
@@ -295,8 +295,8 @@ export default function JobDetailPage() {
             </div>
           ) : (
             // Job complete but report not uploaded yet
-            <div className="bg-white rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'#fff7ed' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'rgba(249,115,22,0.15)' }}>
                 <FileText size={28} style={{ color:'#f97316' }}/>
               </div>
               <div className="text-center">
@@ -312,3 +312,5 @@ export default function JobDetailPage() {
     </div>
   );
 }
+
+

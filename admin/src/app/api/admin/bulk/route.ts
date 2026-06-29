@@ -2,6 +2,7 @@
 // Used exclusively for CSV imports. Batches rows in groups of 100 to avoid payload limits.
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAdminCompanyId } from '@/lib/supabase-server';
 
 const ALLOWED_TABLES = [
   'properties', 'assets', 'jobs', 'defects',
@@ -22,11 +23,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'rows must be a non-empty array' }, { status: 400 });
     }
 
+    // MULTI-TENANT ISOLATION: Fetch authenticated admin's company_id
+    const companyId = await getAdminCompanyId();
+    if (!companyId) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid admin session or missing company_id' }, { status: 401 });
+    }
+
     let inserted = 0;
     const errors: string[] = [];
 
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
+      const batch = rows.slice(i, i + BATCH_SIZE).map(row => ({
+        ...row,
+        company_id: companyId // Force-inject company_id into every row
+      }));
       const { error, count } = await supabaseAdmin
         .from(table)
         .insert(batch)

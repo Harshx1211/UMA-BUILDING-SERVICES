@@ -29,3 +29,24 @@ export const PAGE_SIZE = 50;
 
 /** Timeout (ms) before a Supabase request is considered failed */
 export const REQUEST_TIMEOUT_MS = 30_000;
+
+// ─── Colour palette ─────────────────────────────────────────
+// Used by Project Work ported screens that import { C } from '@/constants/Config'.
+// Mirrors the dark navy-orange field-app design system.
+export const C = {
+  primary:      '#0F1E3C',   // deep navy
+  primaryMid:   '#1A2E52',   // mid navy
+  primaryLight: '#243759',   // light navy (card backgrounds)
+  surface:      '#182745',   // card surface
+  border:       '#2D4068',   // subtle border
+  accent:       '#E8650A',   // orange
+  accentSoft:   '#FF7A20',   // lighter orange
+  success:      '#16A34A',
+  danger:       '#DC2626',
+  warning:      '#D97706',
+  info:         '#2563EB',
+  textLight:    '#FFFFFF',
+  textBody:     '#CBD5E1',
+  textMuted:    '#94A3B8',
+  overlay:      'rgba(0,0,0,0.55)',
+} as const;

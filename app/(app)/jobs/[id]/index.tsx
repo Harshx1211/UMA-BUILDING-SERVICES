@@ -1,954 +1,693 @@
-// app/(app)/jobs/[id]/index.tsx
-// Clean dashboard layout — no tabs, action card grid, inline notes, no overflow
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Linking, Modal, Platform, ScrollView, StyleSheet,
-  View, TouchableOpacity, TextInput, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, RefreshControl, ActivityIndicator,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import Toast from 'react-native-toast-message';
-import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
-import { useJobsStore } from '@/store/jobsStore';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
-  JobStatus, JobType, Priority, InspectionResult, SyncOperation,
-} from '@/constants/Enums';
-import {
-  getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
-  getSignatureForJob, updateRecord, addToSyncQueue,
+  getJobById, getAssetsWithJobResults, getDefectsForJob,
+  getSignatureForJob, updateRecord, upsertRecord, addToSyncQueue,
+  getActiveTimeLog, getJobAssetRecord,
 } from '@/lib/database';
-import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
-import { useColors } from '@/hooks/useColors';
-import { ScreenHeader, Button } from '@/components/ui';
-import { cardShadow } from '@/components/ui/Card';
-import type { Asset, Defect, InspectionPhoto } from '@/types';
+import { runSync } from '@/lib/sync';
+import { C } from '@/constants/Config';
+import { JobStatus, DefectSeverity, SyncOperation } from '@/constants/Enums';
+import type { Job, JobAsset, Defect, Signature } from '@/types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type AssetWithResult = Asset & {
-  result: InspectionResult | null;
-  inspection_notes: string | null;
-  actioned_at: string | null;
-};
-type JobDetail = {
-  id: string; property_id: string; assigned_to: string;
-  job_type: JobType; status: JobStatus; scheduled_date: string;
-  scheduled_time: string | null; priority: Priority; notes: string | null;
-  created_at: string; updated_at: string;
-  property_name: string | null; property_address: string | null;
-  property_suburb: string | null; property_state: string | null; property_postcode: string | null;
-  site_contact_name: string | null; site_contact_phone: string | null;
-  access_notes: string | null; hazard_notes: string | null; site_note: string | null;
-  report_url: string | null;
+type JobWithJoins = Job & {
+  property_name?: string; address?: string; suburb?: string; state?: string; postcode?: string;
+  site_contact_name?: string; site_contact_phone?: string;
+  access_notes?: string; hazard_notes?: string;
+  client_name?: string; building_class?: string;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function fmtDate(iso: string) {
-  try {
-    return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
-      weekday: 'short', day: 'numeric', month: 'short',
-    });
-  } catch { return iso; }
-}
-function fmtTime(hhmm: string) {
-  try {
-    const [h, m] = hhmm.split(':').map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
-  } catch { return hhmm; }
-}
-
-const PRIORITY_LABEL: Record<Priority, string> = {
-  [Priority.Urgent]: 'Urgent', [Priority.High]: 'High',
-  [Priority.Normal]: 'Normal', [Priority.Low]: 'Low',
-};
-const JOB_TYPE_LABEL: Record<JobType, string> = {
-  [JobType.RoutineService]: 'Routine Service',
-  [JobType.DefectRepair]:   'Defect Repair',
-  [JobType.Installation]:   'Installation',
-  [JobType.Emergency]:      'Emergency',
-  [JobType.Quote]:          'Quote',
+type AssetWithResult = JobAsset & {
+  asset_type?: string; asset_ref?: string; location_on_site?: string; variant?: string;
 };
 
-// ─── ActionCard mini-component ────────────────────────────────────────────────
-type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-function ActionCard({
-  icon, title, subtitle, badge, badgeColor, onPress, C,
-}: {
-  icon: MCIconName; title: string; subtitle?: string;
-  badge?: number; badgeColor?: string; onPress: () => void; C: any;
-}) {
-  return (
-    <TouchableOpacity
-      style={[ac.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <MaterialCommunityIcons name={icon} size={22} color={C.primary} />
-      <Text style={[ac.title, { color: C.text }]} numberOfLines={1}>{title}</Text>
-      {subtitle ? (
-        <Text style={[ac.sub, { color: C.textSecondary }]} numberOfLines={1}>{subtitle}</Text>
-      ) : null}
-      {(badge !== undefined && badge > 0) ? (
-        <View style={[ac.badge, { backgroundColor: badgeColor ?? C.accent }]}>
-          <Text style={ac.badgeTxt}>{badge}</Text>
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-}
-const ac = StyleSheet.create({
-  card:     { flex: 1, borderRadius: 16, padding: 18, gap: 10, borderWidth: 1, minHeight: 110, position: 'relative' },
-  title:    { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
-  sub:      { fontSize: 13, marginTop: -2 },
-  badge:    { position: 'absolute', top: 12, right: 12, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, borderWidth: 2, borderColor: '#FFFFFF' },
-  badgeTxt: { fontSize: 10, fontWeight: '800', color: '#FFF' },
-});
+const SEVERITY_COLOR: Record<string, string> = {
+  minor: C.warning, major: C.accent, critical: C.danger,
+};
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function JobDetailScreen() {
-  const C = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+
+  const [job, setJob]           = useState<JobWithJoins | null>(null);
+  const [assets, setAssets]     = useState<AssetWithResult[]>([]);
+  const [defects, setDefects]   = useState<Defect[]>([]);
+  const [signature, setSign]    = useState<Signature | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab]           = useState<'assets' | 'defects' | 'info'>('assets');
+  const [starting, setStarting] = useState(false);
+
+  // ── Inspection modal state ────────────────────────────────
+  const [modalAsset, setModalAsset]       = useState<AssetWithResult | null>(null);
+  const [inspectResult, setInspectResult] = useState<'pass' | 'fail' | 'not_tested' | null>(null);
+  const [inspectNotes, setInspectNotes]   = useState('');
+  const [defectSeverity, setDefectSeverity] = useState<'minor' | 'major' | 'critical'>('major');
+  const [defectDesc, setDefectDesc]       = useState('');
+  const [defectCode, setDefectCode]       = useState('');
+  const [defectPrice, setDefectPrice]     = useState('');
+  const [isSaving, setIsSaving]           = useState(false);
   const { user } = useAuth();
-  const { updateJobStatus } = useJobsStore();
-  const navigation = useNavigation();
 
-
-  const PRIORITY_COLOR: Record<Priority, string> = {
-    [Priority.Urgent]: C.error,
-    [Priority.High]:   C.warning,
-    [Priority.Normal]: C.primary,
-    [Priority.Low]:    C.textTertiary,
-  };
-
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [job,     setJob]     = useState<JobDetail | null>(null);
-  const [assets,  setAssets]  = useState<AssetWithResult[]>([]);
-  const [defects, setDefects] = useState<Defect[]>([]);
-  const [photos,  setPhotos]  = useState<InspectionPhoto[]>([]);
-  const [notes,   setNotes]   = useState('');
-  const [isEditingNotes,   setIsEditingNotes]   = useState(false);
-  const [isLoading,        setIsLoading]        = useState(true);
-  const [hasSig,           setHasSig]           = useState(false);
-  const [showBottomSheet,  setShowBottomSheet]  = useState(false);
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [completionCountdown, setCompletionCountdown] = useState(5);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, []);
-
-  // ── Data loading ───────────────────────────────────────────────────────────
-  const loadJob = useCallback(async () => {
+  function _load() {
     if (!id) return;
-    setIsLoading(true);
-    try {
-      const j = getJobById<JobDetail>(id);
-      if (!j) { setIsLoading(false); return; }
-      setJob(j);
-      setNotes(j.notes ?? '');
+    const j = getJobById<JobWithJoins>(id);
+    setJob(j);
+    if (j) {
       setAssets(getAssetsWithJobResults<AssetWithResult>(id, j.property_id));
       setDefects(getDefectsForJob<Defect>(id));
-      setPhotos(getPhotosForJob<InspectionPhoto>(id));
-      setHasSig(!!getSignatureForJob(id));
-    } catch (err) {
-      console.error('[JobDetail] load error:', err);
-    } finally {
-      setIsLoading(false);
+      setSign(getSignatureForJob<Signature>(id));
     }
+  }
+
+  useEffect(() => { _load(); }, [id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await runSync();
+    _load();
+    setRefreshing(false);
   }, [id]);
 
-  // H3 dep: must be declared before the beforeRemove useEffect that lists it as a dependency
-  const handleSaveNotes = useCallback(() => {
-    if (!job) return;
-    const now = new Date().toISOString();
-    updateRecord('jobs', job.id, { notes, updated_at: now });
-    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes, updated_at: now });
-    setIsEditingNotes(false);
-    Toast.show({ type: 'success', text1: 'Notes saved ✓' });
-  }, [job, notes]);
-
-  useEffect(() => { loadJob(); }, [loadJob]);
-  // Refresh data whenever we navigate back to this screen
-  useFocusEffect(useCallback(() => { loadJob(); }, [loadJob]));
-
-  // H3: Warn before leaving if there are unsaved notes
-  useEffect(() => {
-    const unsub = navigation.addListener('beforeRemove', (e: any) => {
-      if (!isEditingNotes) return; // no unsaved changes
-      e.preventDefault();
-      Alert.alert(
-        'Unsaved Notes',
-        'You have unsaved field notes. Save them before leaving?',
-        [
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => navigation.dispatch(e.data.action),
-          },
-          { text: 'Keep Editing', style: 'cancel' },
-          {
-            text: 'Save & Leave',
-            onPress: () => { handleSaveNotes(); navigation.dispatch(e.data.action); },
-          },
-        ]
-      );
-    });
-    return unsub;
-  }, [navigation, isEditingNotes, handleSaveNotes]);
-
-  // ── Job actions ────────────────────────────────────────────────────────────
-  const handleStartJob = async () => {
-    if (!job || !user) return;
-    try {
-      updateJobStatus(job.id, JobStatus.InProgress);
-      setJob(p => p ? { ...p, status: JobStatus.InProgress } : p);
-      Toast.show({ type: 'success', text1: 'Job Started ✓' });
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to start job' });
-    }
-  };
-
-  const handleCompleteRequest = () => setShowBottomSheet(true);
-
-  // F1: Last-line-of-defence signature guard.
-  // CompletionBottomSheet should already block this, but if somehow the user
-  // bypasses the sheet (e.g. a deep-link or future refactor), we catch it here.
-  const handleFinalizeConfirm = () => {
-    setShowBottomSheet(false);
-    if (!hasSig) {
-      Alert.alert(
-        'Signature Required',
-        'A client signature is required before completing this job. Please capture a signature first.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Go to Signature',
-            onPress: () => { if (job) router.push(`/jobs/${job.id}/signature` as never); },
-          },
-        ]
-      );
+  function _openAsset(asset: AssetWithResult) {
+    if (job?.status !== JobStatus.InProgress) {
+      Alert.alert('Job Not Started', 'Start the job first before inspecting assets.');
       return;
     }
-    finalizeCompletion();
-  };
-
-  const finalizeCompletion = () => {
-    if (!job) return;
-    updateJobStatus(job.id, JobStatus.Completed);
-    setJob(p => p ? { ...p, status: JobStatus.Completed } : p);
-    setShowCompletionModal(true);
-    setCompletionCountdown(5);
-    // Auto-DISMISS only (no forced redirect) — user controls navigation via buttons
-    countdownRef.current = setInterval(() => {
-      setCompletionCountdown(prev => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          setShowCompletionModal(false); // just close, stay on job detail
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-
-  // ── Continue Working ────────────────────────────────────────────────────────
-  // NOTE: No direct Supabase call here — always write SQLite + sync queue.
-  // The sync engine handles pushing to the server with proper conflict resolution.
-  const handleContinueWorking = () => {
-    if (!job) return;
-    Alert.alert(
-      'Continue Working?',
-      'This will re-open the job and unlock the inspection form. All existing data is preserved.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue Working',
-          onPress: () => {
-            const now = new Date().toISOString();
-            // Write local SQLite first for instant UI response
-            updateRecord('jobs', job.id, { status: JobStatus.InProgress, report_url: null, updated_at: now });
-            // Queue the change so the sync engine pushes it to Supabase
-            addToSyncQueue('jobs', job.id, SyncOperation.Update, {
-              status: JobStatus.InProgress,
-              report_url: null,
-              updated_at: now,
-            });
-            // Update jobsStore in-memory list
-            updateJobStatus(job.id, JobStatus.InProgress);
-            // Update local screen state
-            setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
-            Toast.show({
-              type: 'success',
-              text1: '🔓 Job re-opened',
-              text2: 'Changes will sync to the server automatically',
-            });
-          },
-        },
-      ]
-    );
-  };
-
-  const handleNavigate = () => {
-    if (!job) return;
-    const addr = [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ');
-    // H4: Guard against empty address — Maps with empty query is unhelpful
-    if (!addr.trim()) {
-      Toast.show({ type: 'info', text1: 'No address on file', text2: 'Contact your manager to update this property.' });
-      return;
-    }
-    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(addr)}`);
-  };
-
-  // ── Derived counts ─────────────────────────────────────────────────────────
-  // FLOW-8 FIX: NotTested is a deliberate result choice — count it as inspected.
-  // Previously this excluded NotTested, showing lower progress than the inspection form.
-  const inspected   = assets.filter(a => a.result !== null).length;
-  const totalAssets = assets.length;
-  const progressPct = totalAssets > 0 ? Math.round((inspected / totalAssets) * 100) : 0;
-
-  // ── Loading / error states ─────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
-        <ActivityIndicator color={C.primary} size="large" />
-      </View>
-    );
+    // Pre-fill with existing result if already inspected
+    const existing = getJobAssetRecord(job!.id, asset.id);
+    setModalAsset(asset);
+    setInspectResult((existing?.result as any) ?? null);
+    setInspectNotes(existing?.technician_notes ?? '');
+    setDefectDesc('');
+    setDefectCode('');
+    setDefectPrice('');
+    setDefectSeverity('major');
   }
+
+  function _closeModal() {
+    setModalAsset(null);
+    setInspectResult(null);
+    setInspectNotes('');
+  }
+
+  async function _saveInspection() {
+    if (!modalAsset || !inspectResult || !job) return;
+    if (inspectResult === 'fail' && !defectDesc.trim()) {
+      Alert.alert('Defect Required', 'Please describe the defect before saving a fail result.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const now    = new Date().toISOString();
+      const existing = getJobAssetRecord(job.id, modalAsset.id);
+      const jaId   = existing?.id ?? _uuid();
+
+      upsertRecord('job_assets', {
+        id: jaId, job_id: job.id, asset_id: modalAsset.id,
+        result: inspectResult,
+        is_compliant: inspectResult === 'pass' ? 1 : 0,
+        technician_notes: inspectNotes,
+        actioned_at: now,
+      });
+      addToSyncQueue('job_assets', jaId, existing ? SyncOperation.Update : SyncOperation.Insert, {
+        id: jaId, job_id: job.id, asset_id: modalAsset.id,
+        result: inspectResult, is_compliant: inspectResult === 'pass',
+        technician_notes: inspectNotes, actioned_at: now,
+      });
+
+      // Create defect record if failed
+      if (inspectResult === 'fail' && defectDesc.trim()) {
+        const defId = _uuid();
+        const price = defectPrice ? parseFloat(defectPrice) : null;
+        upsertRecord('defects', {
+          id: defId, job_id: job.id, asset_id: modalAsset.id,
+          property_id: job.property_id,
+          description: defectDesc.trim(), severity: defectSeverity,
+          status: 'open',
+          defect_code: defectCode.trim() || null,
+          quote_price: price,
+          photos: '{}', created_at: now, updated_at: now,
+        });
+        addToSyncQueue('defects', defId, SyncOperation.Insert, {
+          id: defId, job_id: job.id, asset_id: modalAsset.id,
+          property_id: job.property_id,
+          description: defectDesc.trim(), severity: defectSeverity,
+          status: 'open',
+          defect_code: defectCode.trim() || undefined,
+          quote_price: price,
+          photos: [],
+        });
+      }
+
+      _load();
+      _closeModal();
+      void runSync();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function _startJob() {
+    if (!job) return;
+    setStarting(true);
+    const now = new Date().toISOString();
+    updateRecord('jobs', job.id, { status: JobStatus.InProgress, updated_at: now });
+    addToSyncQueue('jobs', job.id, SyncOperation.Update, {
+      id: job.id, status: JobStatus.InProgress, updated_at: now,
+    });
+    _load();
+    setStarting(false);
+    void runSync();
+  }
+
+  function _completeJob() {
+    if (!job) return;
+    if (!signature) {
+      Alert.alert('Signature Required', 'The client must sign off before the job can be completed.', [
+        { text: 'Get Signature', onPress: () => router.push(`/(app)/jobs/${job.id}/signature`) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    Alert.alert('Complete Job', 'Mark this job as completed?', [
+      {
+        text: 'Complete & Generate Report',
+        onPress: async () => {
+          const now = new Date().toISOString();
+          updateRecord('jobs', job.id, { status: JobStatus.Completed, updated_at: now });
+          addToSyncQueue('jobs', job.id, SyncOperation.Update, {
+            id: job.id, status: JobStatus.Completed, updated_at: now,
+          });
+          _load();
+          void runSync();
+          router.push(`/(app)/jobs/${job.id}/preview`);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   if (!job) {
     return (
-      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
-        <Text style={{ fontSize: 40 }}>🔍</Text>
-        <Text style={[s.notFound, { color: C.textSecondary }]}>Job not found</Text>
-        <View style={{ marginTop: 16 }}>
-          <Button title="Go Back" onPress={() => router.back()} />
-        </View>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={C.accent} size="large" />
       </View>
     );
   }
 
-  const isInProgress = job.status === JobStatus.InProgress;
-  const isCompleted  = job.status === JobStatus.Completed;
-  const isCancelled  = job.status === JobStatus.Cancelled;
-  const isScheduled  = job.status === JobStatus.Scheduled; // FLOW-10
+  const passCount = assets.filter(a => a.result === 'pass').length;
+  const failCount = assets.filter(a => a.result === 'fail').length;
+  const doneCount = assets.filter(a => a.result !== null).length;
+  const totalAssets = assets.length;
+  const progress = totalAssets > 0 ? doneCount / totalAssets : 0;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const openDefects  = defects.filter(d => d.status === 'open').length;
+  const criticalCount = defects.filter(d => d.severity === DefectSeverity.Critical).length;
+
   return (
-    <View style={[s.screen, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
-
-        {/* ── HEADER ────────────────────────────────────────────── */}
-        <ScreenHeader
-          eyebrow={`JOB #${job.id.substring(0, 8).toUpperCase()}`}
-          title={job.property_name || 'Job Details'}
-          subtitle={[job.property_address, job.property_suburb].filter(Boolean).join(', ') || 'No address on record'}
-          showBack={true}
-          curved={true}
-          rightComponent={
-            <View style={[s.statusBadge, {
-              backgroundColor: isCompleted  ? 'rgba(74,222,128,0.25)'
-                : isCancelled  ? 'rgba(255,255,255,0.15)'
-                : isInProgress ? 'rgba(249,115,22,0.28)'
-                : 'rgba(255,255,255,0.15)',
-            }]}>
-              <Text style={[s.statusBadgeTxt, {
-                color: isCompleted  ? '#4ADE80'
-                  : isCancelled  ? 'rgba(255,255,255,0.7)'
-                  : isInProgress ? '#FCD34D'
-                  : '#FFFFFF',
-              }]}>
-                {isInProgress ? '⏱ In Progress'
-                  : isCompleted  ? '✓ Completed'
-                  : isCancelled  ? '✗ Cancelled'
-                  : job.status.replace('_', ' ')}
-              </Text>
-            </View>
-          }
-        />
-
-        <View style={s.body}>
-
-          {/* ── JOB ACTIONS WIDGET ──────────────────────────────── */}
-          {!isCompleted && !isCancelled && (
-            <Animated.View entering={FadeInDown.delay(40).duration(360)}>
-              {isInProgress ? (
-                <View style={[s.timerCard, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                  <View style={{ flex: 1, marginRight: 16 }}>
-                    <Text style={[s.timerLabel, { color: C.text }]}>Job In Progress</Text>
-                    <Text style={[s.timerSub, { color: C.textSecondary }]}>You can now perform inspections.</Text>
-                  </View>
-                  <Button
-                    title="Complete Job"
-                    onPress={handleCompleteRequest}
-                    style={{ borderRadius: 22, height: 44, backgroundColor: C.success }}
-                  />
-                </View>
-              ) : (
-                <View style={[s.timerCard, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                  <View style={{ flex: 1, marginRight: 16 }}>
-                    <Text style={[s.timerLabel, { color: C.text }]}>Job Scheduled</Text>
-                    <Text style={[s.timerSub, { color: C.textSecondary }]}>Start the job to begin work.</Text>
-                  </View>
-                  <Button
-                    title="Start Job"
-                    onPress={handleStartJob}
-                    style={{ borderRadius: 22, height: 44, minWidth: 110 }}
-                  />
-                </View>
-              )}
-            </Animated.View>
-          )}
-
-          {/* Completed banner */}
-          {isCompleted && (
-            <View style={[s.statusBanner, { backgroundColor: C.successLight, borderColor: C.success }]}>
-              <MaterialCommunityIcons name="check-decagram" size={22} color={C.successDark} />
-              <View style={{ flex: 1 }}>
-                <Text style={[s.statusBannerTitle, { color: C.successDark }]}>Job Completed</Text>
-                {hasSig && (
-                  <Text style={[s.statusBannerSub, { color: C.successDark }]}>Client signature captured</Text>
-                )}
-              </View>
-              <TouchableOpacity
-                onPress={handleContinueWorking}
-                style={[s.continueBtn, { backgroundColor: C.successDark + '18', borderColor: C.success }]}
-              >
-                <MaterialCommunityIcons name="pencil-outline" size={14} color={C.successDark} />
-                <Text style={[s.continueBtnTxt, { color: C.successDark }]}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Cancelled banner */}
-          {isCancelled && (
-            <View style={[s.statusBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
-              <MaterialCommunityIcons name="cancel" size={22} color={C.textSecondary} />
-              <View style={{ flex: 1 }}>
-                <Text style={[s.statusBannerTitle, { color: C.textSecondary }]}>Job Cancelled</Text>
-                <Text style={[s.statusBannerSub, { color: C.textTertiary }]}>
-                  Contact your manager for details.
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── SAFETY ALERTS ─────────────────────────────────────── */}
-          {(job.hazard_notes || job.access_notes || job.site_note) && (
-            <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
-              {job.hazard_notes && (
-                <View style={[s.alertBox, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
-                  <MaterialCommunityIcons name="alert" size={18} color={C.errorDark} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.alertTitle, { color: C.errorDark }]}>⚠️ Site Hazard</Text>
-                    <Text style={[s.alertBody, { color: C.error }]}>{job.hazard_notes}</Text>
-                  </View>
-                </View>
-              )}
-              {job.access_notes && (
-                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderColor: C.info + '40' }]}>
-                  <MaterialCommunityIcons name="key" size={18} color={C.infoDark} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.alertTitle, { color: C.infoDark }]}>🔑 Access Notes</Text>
-                    <Text style={[s.alertBody, { color: C.infoDark }]}>{job.access_notes}</Text>
-                  </View>
-                </View>
-              )}
-              {job.site_note && (
-                <View style={[s.alertBox, { backgroundColor: C.infoLight, borderColor: C.info + '40' }]}>
-                  <MaterialCommunityIcons name="note-text-outline" size={18} color={C.infoDark} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.alertTitle, { color: C.infoDark }]}>📝 Site Note</Text>
-                    <Text style={[s.alertBody, { color: C.infoDark }]}>{job.site_note}</Text>
-                  </View>
-                </View>
-              )}
-            </Animated.View>
-          )}
-
-          {/* ── INFO CHIPS ────────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(80).duration(360)}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                <Text style={s.chipIcon}>📅</Text>
-                <Text style={[s.chipTxt, { color: C.text }]}>{fmtDate(job.scheduled_date)}</Text>
-              </View>
-              {job.scheduled_time && (
-                <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                  <Text style={s.chipIcon}>🕐</Text>
-                  <Text style={[s.chipTxt, { color: C.text }]}>{fmtTime(job.scheduled_time)}</Text>
-                </View>
-              )}
-              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                <Text style={s.chipIcon}>🔧</Text>
-                <Text style={[s.chipTxt, { color: C.text }]}>
-                  {JOB_TYPE_LABEL[job.job_type] ?? job.job_type}
-                </Text>
-              </View>
-              <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.primary) + '18' }]}>
-                <Text style={s.chipIcon}>⚡</Text>
-                <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.primary, fontWeight: '700' }]}>
-                  {PRIORITY_LABEL[job.priority] ?? job.priority}
-                </Text>
-              </View>
-            </ScrollView>
-          </Animated.View>
-
-          {/* ── INSPECTION PROGRESS ───────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(100).duration(360)}>
-            <View style={[s.progressCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={s.progressHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.progressTitle, { color: C.text }]}>Inspection Progress</Text>
-                  <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
-                    {totalAssets === 0
-                      ? 'No assets registered for this property'
-                      : `${inspected} of ${totalAssets} assets inspected`}
-                  </Text>
-                </View>
-                <Text style={[s.progressPct, { color: progressPct === 100 ? C.success : C.primary }]}>
-                  {progressPct}%
-                </Text>
-              </View>
-              <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary }]}>
-                <View style={[s.progressFill, {
-                  width: totalAssets > 0 ? (`${progressPct}%` as `${number}%`) : '0%',
-                  backgroundColor: progressPct === 100 ? C.success : C.accent,
-                }]} />
-              </View>
-              {totalAssets > 0 && (
-                <View style={s.progressStatRow}>
-                  {[
-                    { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success },
-                    { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error },
-                    { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textTertiary },
-                  ].map(stat => (
-                    <View key={stat.label} style={s.progressStat}>
-                      <View style={[s.progressStatDot, { backgroundColor: stat.color }]} />
-                      <Text style={[s.progressStatTxt, { color: C.textSecondary }]}>
-                        {stat.count} {stat.label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          </Animated.View>
-
-          {/* ── OPEN INSPECTION FORM CTA ──────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(120).duration(360)}>
-            <TouchableOpacity
-              style={{ borderRadius: 16, overflow: 'hidden' }}
-              onPress={isInProgress ? () => router.push(`/jobs/${id}/inspect` as never) : undefined}
-              activeOpacity={0.88}
-              disabled={!isInProgress}
-            >
-              {isInProgress ? (
-                <LinearGradient
-                  colors={['#10B981', '#059669']} // Energetic green gradient when active
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={[s.inspectCta, { borderWidth: 0 }]}
-                >
-                  <View style={s.inspectCtaIcon}>
-                    <MaterialCommunityIcons name="clipboard-check" size={26} color="#FFF" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.inspectCtaTitle, { color: '#FFF' }]}>
-                      Open Inspection Form
-                    </Text>
-                    <Text style={[s.inspectCtaSub, { color: 'rgba(255,255,255,0.85)' }]}>
-                      {totalAssets === 0
-                        ? 'Add assets and begin the on-site inspection'
-                        : progressPct === 100
-                        ? '✓ All assets inspected'
-                        : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons name="arrow-right" size={24} color="#FFF" />
-                </LinearGradient>
-              ) : (
-                <View style={[s.inspectCta, { backgroundColor: C.backgroundTertiary, opacity: 0.7 }]}>
-                  <View style={s.inspectCtaIcon}>
-                    <MaterialCommunityIcons name="clipboard-check-outline" size={26} color={C.textTertiary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.inspectCtaTitle, { color: C.text }]}>
-                      Open Inspection Form
-                    </Text>
-                    <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
-                      {isScheduled
-                        ? '🔒 Start job first to begin the inspection'
-                        : isCancelled
-                        ? 'This job has been cancelled'
-                        : '✓ Inspection locked after job completion'}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* ── QUICK ACTIONS GRID ────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(140).duration(360)}>
-            <Text style={[s.sectionLabel, { color: C.textTertiary }]}>QUICK ACTIONS</Text>
-            <View style={s.actionsRow}>
-              <ActionCard
-                icon="alert-circle-outline"
-                title="Defects"
-                subtitle={defects.length === 0 ? 'None logged' : `${defects.length} defect${defects.length !== 1 ? 's' : ''}`}
-                badge={defects.length}
-                badgeColor={C.error}
-                onPress={() => router.push(`/jobs/${id}/defects` as never)}
-                C={C}
-              />
-              <ActionCard
-                icon="camera-outline"
-                title="Photos"
-                subtitle={photos.length === 0 ? 'None captured' : `${photos.length} photo${photos.length !== 1 ? 's' : ''}`}
-                badge={photos.length}
-                badgeColor={C.accent}
-                onPress={() => router.push(`/jobs/${id}/photos` as never)}
-                C={C}
-              />
-            </View>
-            <View style={[s.actionsRow, { marginTop: 10 }]}>
-              <ActionCard
-                icon="file-document-outline"
-                title="Quote"
-                subtitle="Parts & labour"
-                onPress={() => router.push(`/jobs/${id}/quote` as never)}
-                C={C}
-              />
-              <ActionCard
-                icon="draw"
-                title="Signature"
-                subtitle={hasSig ? '✓ Captured' : 'Required for report'}
-                onPress={() => router.push(`/jobs/${id}/signature` as never)}
-                C={C}
-              />
-            </View>
-          </Animated.View>
-
-          {/* ── NAVIGATE & CONTACT ────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(160).duration(360)} style={{ gap: 12 }}>
-            <TouchableOpacity
-              style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={handleNavigate}
-              activeOpacity={0.8}
-            >
-              <View style={[s.quickBtnIcon, { backgroundColor: C.info + '18' }]}>
-                <MaterialCommunityIcons name="map-marker-path" size={22} color={C.infoDark} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.quickBtnTitle, { color: C.text }]}>Navigate to Site</Text>
-                {[job.property_address, job.property_suburb].filter(Boolean).length > 0 && (
-                  <Text style={[s.quickBtnSub, { color: C.textSecondary }]} numberOfLines={1}>
-                    {[job.property_address, job.property_suburb].filter(Boolean).join(', ')}
-                  </Text>
-                )}
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={C.borderStrong} />
-            </TouchableOpacity>
-
-            {job.site_contact_phone && (
-              <TouchableOpacity
-                style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
-                onPress={() => Linking.openURL(`tel:${job.site_contact_phone}`)}
-                activeOpacity={0.8}
-              >
-                <View style={[s.quickBtnIcon, { backgroundColor: C.success + '18' }]}>
-                  <MaterialCommunityIcons name="phone-in-talk" size={22} color={C.successDark} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.quickBtnTitle, { color: C.text }]}>
-                    {job.site_contact_name || 'Call Site Contact'}
-                  </Text>
-                  <Text style={[s.quickBtnSub, { color: C.textSecondary }]}>{job.site_contact_phone}</Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={C.borderStrong} />
-              </TouchableOpacity>
-            )}
-          </Animated.View>
-
-          {/* ── FIELD NOTES ───────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(180).duration(360)}>
-            <Text style={[s.sectionLabel, { color: C.textTertiary }]}>FIELD NOTES</Text>
-            <View style={[s.notesCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              {isEditingNotes ? (
-                <>
-                  <TextInput
-                    style={[s.notesInput, { color: C.text, borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
-                    value={notes}
-                    onChangeText={setNotes}
-                    multiline
-                    placeholder="Document site conditions, access details, or follow-up actions…"
-                    placeholderTextColor={C.textTertiary}
-                    textAlignVertical="top"
-                  />
-                  <View style={s.notesActionRow}>
-                    <TouchableOpacity
-                      style={[s.notesCancelBtn, { borderColor: C.border }]}
-                      onPress={() => { setNotes(job.notes ?? ''); setIsEditingNotes(false); }}
-                    >
-                      <Text style={[s.notesCancelTxt, { color: C.textSecondary }]}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.notesSaveBtn, { backgroundColor: C.primary }]}
-                      onPress={handleSaveNotes}
-                    >
-                      <Text style={s.notesSaveTxt}>Save Notes</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={[notes ? s.notesText : s.notesEmpty, { color: notes ? C.text : C.textTertiary }]}>
-                    {notes || 'No notes yet. Tap edit to document site conditions or follow-up actions.'}
-                  </Text>
-                  <TouchableOpacity
-                    style={[s.notesEditBtn, { borderColor: C.border }]}
-                    onPress={() => setIsEditingNotes(true)}
-                  >
-                    <MaterialCommunityIcons name="pencil-outline" size={14} color={C.primary} />
-                    <Text style={[s.notesEditTxt, { color: C.primary }]}>
-                      {notes ? 'Edit Notes' : 'Add Notes'}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </Animated.View>
-
-        </View>
-      </ScrollView>
-
-      {/* ── BOTTOM ACTION BAR ─────────────────────────────────────── */}
-      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        <Button
-          title={
-            isCompleted && job?.report_url ? 'View Report' :
-            isCompleted                    ? 'Generate Report' :
-            isInProgress                   ? 'Draft Preview' :
-            'Report Not Available'
-          }
-          variant={isCompleted ? 'secondary' : 'primary'}
-          disabled={isScheduled || isCancelled}
-          // F3: Completed with no report → go straight to /preview to generate + upload.
-          // In-progress → /preview for draft view.
-          // Completed with existing report → /report for the on-screen summary.
-          onPress={() => {
-            if (isCompleted && job?.report_url) {
-              router.push(`/jobs/${id}/report` as never);
-            } else if (isCompleted || isInProgress) {
-              router.push(`/jobs/${id}/preview` as never);
-            }
-          }}
-          icon={
-            <MaterialCommunityIcons
-              name={isCompleted && job?.report_url ? 'file-check-outline' : isCompleted ? 'file-chart-outline' : 'file-eye-outline'}
-              size={20}
-              color={(isScheduled || isCancelled) ? C.textTertiary : '#FFFFFF'}
-            />
-          }
-          style={{ height: 52, borderRadius: 26 }}
-        />
-      </View>
-
-
-      <CompletionBottomSheet
-        visible={showBottomSheet}
-        onClose={() => setShowBottomSheet(false)}
-        onConfirm={handleFinalizeConfirm}
-        onNeedSignature={() => {
-          setShowBottomSheet(false);
-          if (job) router.push(`/jobs/${job.id}/signature` as never);
-        }}
-        assetsTotal={totalAssets}
-        assetsInspected={inspected}
-        hasSignature={hasSig}
-        hasDefects={defects.length > 0}
-      />
-
-      {/* Job completion celebration modal */}
-      <Modal
-        visible={showCompletionModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          setShowCompletionModal(false);
-        }}
-      >
-        <View style={cm.overlay}>
-          <View style={[cm.card, { backgroundColor: C.primary }]}>
-            <View style={[cm.checkCircle, { backgroundColor: C.success, shadowColor: C.success }]}>
-              <Animated.View entering={FadeInDown.delay(100).springify()}>
-                <MaterialCommunityIcons name="check-bold" size={48} color="#FFFFFF" />
-              </Animated.View>
-            </View>
-            <Text style={cm.title}>Job Complete!</Text>
-            <Text style={cm.property}>{job?.property_name ?? 'Property'}</Text>
-
-            <View style={cm.statsRow}>
-              <View style={cm.statItem}>
-                <Text style={cm.statEmoji}>✅</Text>
-                <Text style={cm.statValue}>{assets.filter(a => a.result !== null).length}/{assets.length}</Text>
-                <Text style={cm.statLabel}>Inspected</Text>
-              </View>
-              <View style={cm.statDivider} />
-              <View style={cm.statItem}>
-                <Text style={cm.statEmoji}>⚠️</Text>
-                <Text style={cm.statValue}>{defects.length}</Text>
-                <Text style={cm.statLabel}>Defects</Text>
-              </View>
-              <View style={cm.statDivider} />
-              <View style={cm.statItem}>
-                <Text style={cm.statEmoji}>📷</Text>
-                <Text style={cm.statValue}>{photos.length}</Text>
-                <Text style={cm.statLabel}>Photos</Text>
-              </View>
-            </View>
-
-            <View style={{ width: '100%', marginTop: 12 }}>
-              <Button
-                title="Generate Report"
-                icon={<MaterialCommunityIcons name="file-chart-outline" size={20} color="#FFF" />}
-                onPress={() => {
-                  if (countdownRef.current) clearInterval(countdownRef.current);
-                  setShowCompletionModal(false);
-                  router.push(`/jobs/${job?.id}/report` as never);
-                }}
-                style={{ borderRadius: 20 }}
-              />
-            </View>
-            <View style={{ width: '100%', marginTop: 8 }}>
-              <Button
-                variant="outline"
-                title="← Back to Schedule"
-                onPress={() => {
-                  if (countdownRef.current) clearInterval(countdownRef.current);
-                  setShowCompletionModal(false);
-                  router.replace('/jobs' as never);
-                }}
-                style={{ borderRadius: 20, borderColor: 'rgba(255,255,255,0.3)' }}
-                textStyle={{ color: '#FFF' }}
-              />
-            </View>
-            <Text style={cm.countdown}>This will close in {completionCountdown}s</Text>
+    <>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {job.property_name ?? 'Unknown Property'}
+          </Text>
+          <View style={[styles.statusChip, { backgroundColor: _statusBg(job.status) }]}>
+            <Text style={[styles.statusText, { color: _statusColor(job.status) }]}>
+              {_statusLabel(job.status)}
+            </Text>
           </View>
         </View>
-      </Modal>
+      </View>
+
+      {/* Progress bar (only when in progress or completed) */}
+      {(job.status === JobStatus.InProgress || job.status === JobStatus.Completed) && totalAssets > 0 && (
+        <View style={styles.progressWrap}>
+          <View style={styles.progressBg}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+          </View>
+          <Text style={styles.progressText}>
+            {doneCount}/{totalAssets} inspected  •  ✅ {passCount}  ❌ {failCount}
+          </Text>
+        </View>
+      )}
+
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        {(['assets', 'defects', 'info'] as const).map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.tab, tab === t && styles.tabActive]}
+            onPress={() => setTab(t)}
+          >
+            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+              {t === 'assets' ? `Assets (${totalAssets})` : t === 'defects' ? `Defects (${defects.length})` : 'Site Info'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
+        contentContainerStyle={styles.scroll}
+      >
+        {/* ── ASSETS TAB ───────────────────────────────────── */}
+        {tab === 'assets' && (
+          <>
+            {assets.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>🏢</Text>
+                <Text style={styles.emptyTitle}>No assets linked</Text>
+                <Text style={styles.emptyText}>Assets are linked to this property by the admin team.</Text>
+              </View>
+            ) : (
+              assets.map(asset => (
+                <TouchableOpacity
+                  key={asset.id}
+                  style={styles.assetCard}
+                  onPress={() => _openAsset(asset)}
+                  activeOpacity={job?.status === JobStatus.InProgress ? 0.7 : 1}
+                >
+                  <View style={styles.assetLeft}>
+                    <View style={[
+                      styles.resultDot,
+                      { backgroundColor: asset.result === 'pass' ? C.success : asset.result === 'fail' ? C.danger : C.textMuted }
+                    ]} />
+                  </View>
+                  <View style={styles.assetBody}>
+                    <Text style={styles.assetType}>{asset.asset_type ?? 'Asset'}</Text>
+                    {asset.variant ? <Text style={styles.assetVariant}>{asset.variant}</Text> : null}
+                    {asset.location_on_site ? <Text style={styles.assetLocation}>📍 {asset.location_on_site}</Text> : null}
+                    {asset.asset_ref ? <Text style={styles.assetRef}>Ref: {asset.asset_ref}</Text> : null}
+                  </View>
+                  <View style={styles.assetRight}>
+                    <Text style={[
+                      styles.resultLabel,
+                      { color: asset.result === 'pass' ? C.success : asset.result === 'fail' ? C.danger : C.textMuted }
+                    ]}>
+                      {asset.result === 'pass' ? 'PASS' : asset.result === 'fail' ? 'FAIL' : 'PENDING'}
+                    </Text>
+                    {job?.status === JobStatus.InProgress && (
+                      <Text style={styles.assetChevron}>›</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </>
+        )}
+
+        {/* ── DEFECTS TAB ──────────────────────────────────── */}
+        {tab === 'defects' && (
+          <>
+            {criticalCount > 0 && (
+              <View style={styles.criticalBanner}>
+                <Text style={styles.criticalText}>⚠️  {criticalCount} CRITICAL defect{criticalCount > 1 ? 's' : ''} — immediate action required</Text>
+              </View>
+            )}
+            {defects.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>✅</Text>
+                <Text style={styles.emptyTitle}>No defects recorded</Text>
+                <Text style={styles.emptyText}>All items are compliant for this job.</Text>
+              </View>
+            ) : (
+              defects.map(d => (
+                <View key={d.id} style={[styles.defectCard, { borderLeftColor: SEVERITY_COLOR[d.severity] }]}>
+                  <View style={styles.defectTop}>
+                    <Text style={[styles.defectSeverity, { color: SEVERITY_COLOR[d.severity] }]}>
+                      {d.severity.toUpperCase()}
+                    </Text>
+                    <View style={[styles.defectStatusChip, { backgroundColor: _defectStatusBg(d.status) }]}>
+                      <Text style={[styles.defectStatusText, { color: _defectStatusColor(d.status) }]}>
+                        {d.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.defectDesc}>{d.description}</Text>
+                  {d.defect_code ? <Text style={styles.defectCode}>Code: {d.defect_code}</Text> : null}
+                  {d.quote_price != null ? (
+                    <Text style={styles.defectPrice}>Est. ${d.quote_price.toFixed(2)}</Text>
+                  ) : null}
+                </View>
+              ))
+            )}
+          </>
+        )}
+
+        {/* ── SITE INFO TAB ─────────────────────────────────── */}
+        {tab === 'info' && (
+          <View style={styles.infoSection}>
+            <InfoBlock label="Property" value={job.property_name} />
+            <InfoBlock label="Address" value={[job.address, job.suburb, job.state, job.postcode].filter(Boolean).join(', ')} />
+            <InfoBlock label="Client" value={job.client_name} />
+            <InfoBlock label="Building Class" value={job.building_class} />
+            <InfoBlock label="Site Contact" value={job.site_contact_name} />
+            <InfoBlock label="Contact Phone" value={job.site_contact_phone} />
+            <InfoBlock label="Job Type" value={job.job_type?.replace(/_/g, ' ')} />
+            <InfoBlock label="Priority" value={job.priority?.toUpperCase()} />
+            <InfoBlock label="Scheduled" value={`${job.scheduled_date}${job.scheduled_time ? ' at ' + job.scheduled_time : ''}`} />
+            {job.access_notes ? (
+              <View style={styles.noteCard}>
+                <Text style={styles.noteLabel}>Access Notes</Text>
+                <Text style={styles.noteText}>{job.access_notes}</Text>
+              </View>
+            ) : null}
+            {job.hazard_notes ? (
+              <View style={[styles.noteCard, styles.hazardCard]}>
+                <Text style={[styles.noteLabel, { color: C.warning }]}>⚠️  Hazard Notes</Text>
+                <Text style={styles.noteText}>{job.hazard_notes}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom action bar */}
+      <View style={[styles.actionBar, { paddingBottom: insets.bottom + 8 }]}>
+        {job.status === JobStatus.Scheduled && (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnPrimary]}
+            onPress={_startJob}
+            disabled={starting}
+          >
+            {starting
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.actionBtnText}>Start Job</Text>
+            }
+          </TouchableOpacity>
+        )}
+        {job.status === JobStatus.InProgress && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => router.push(`/(app)/jobs/${job.id}/signature`)}
+            >
+              <Text style={[styles.actionBtnText, { color: C.textLight }]}>
+                {signature ? '✅ Signed' : 'Get Signature'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSuccess]}
+              onPress={_completeJob}
+            >
+              <Text style={styles.actionBtnText}>Complete Job</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {job.status === JobStatus.Completed && (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnPrimary]}
+            onPress={() => router.push(`/(app)/jobs/${job.id}/preview`)}
+          >
+            <Text style={styles.actionBtnText}>View Report PDF</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+
+    {/* ── Asset Inspection Modal ─────────────────────────── */}
+    <AssetInspectionModal
+      asset={modalAsset}
+      visible={!!modalAsset}
+      result={inspectResult}        onResult={setInspectResult}
+      notes={inspectNotes}          onNotes={setInspectNotes}
+      defectSeverity={defectSeverity} onSeverity={setDefectSeverity}
+      defectDesc={defectDesc}       onDefectDesc={setDefectDesc}
+      defectCode={defectCode}       onDefectCode={setDefectCode}
+      defectPrice={defectPrice}     onDefectPrice={setDefectPrice}
+      isSaving={isSaving}
+      onClose={_closeModal}
+      onSave={_saveInspection}
+    />
+  </>
+  );
+}
+
+function InfoBlock({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  screen:        { flex: 1 },
-  centered:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  scrollContent: { paddingBottom: Platform.OS === 'ios' ? 140 : 120 },
-  body:          { padding: 16, gap: 18 },
-  notFound:      { fontSize: 16, marginTop: 12 },
+function _statusLabel(s: string) {
+  return { scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled' }[s] ?? s;
+}
+function _statusBg(s: string) {
+  return { scheduled: 'rgba(37,99,235,0.15)', in_progress: 'rgba(232,101,10,0.15)', completed: 'rgba(22,163,74,0.15)', cancelled: 'rgba(100,116,139,0.1)' }[s] ?? 'transparent';
+}
+function _statusColor(s: string) {
+  return { scheduled: C.info, in_progress: C.accent, completed: C.success, cancelled: C.textMuted }[s] ?? C.textMuted;
+}
+function _defectStatusBg(s: string) {
+  return { open: 'rgba(220,38,38,0.1)', quoted: 'rgba(217,119,6,0.1)', repaired: 'rgba(22,163,74,0.1)', monitoring: 'rgba(37,99,235,0.1)' }[s] ?? 'transparent';
+}
+function _defectStatusColor(s: string) {
+  return { open: C.danger, quoted: C.warning, repaired: C.success, monitoring: C.info }[s] ?? C.textMuted;
+}
 
-  // Header status badge
-  statusBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-  statusBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-
-  // Timer card
-  timerCard:        { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                      shadowColor: '#0D1526', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 6 },
-  timerLabel:       { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  timerSub:         { fontSize: 13, marginTop: 2 },
-
-  // Status banners
-  statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1 },
-  statusBannerTitle: { fontSize: 14, fontWeight: '700' },
-  statusBannerSub:   { fontSize: 12, marginTop: 2 },
-  continueBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
-  continueBtnTxt:    { fontSize: 12, fontWeight: '700' },
-
-  // Safety alerts
-  alertBox:   { flexDirection: 'row', padding: 16, borderRadius: 16, gap: 12, borderWidth: 1 },
-  alertTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
-  alertBody:  { fontSize: 13, lineHeight: 20 },
-
-  // Info chips
-  chipsRow: { gap: 8, flexDirection: 'row', paddingBottom: 2, paddingRight: 4 },
-  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  chipIcon: { fontSize: 13 },
-  chipTxt:  { fontSize: 13, fontWeight: '500' },
-
-  // Inspection progress card
-  progressCard:     { borderRadius: 16, padding: 18, borderWidth: 1,
-                      shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  progressHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
-  progressTitle:    { fontSize: 15, fontWeight: '700', marginBottom: 3 },
-  progressSubtitle: { fontSize: 12 },
-  progressPct:      { fontSize: 22, fontWeight: '800', marginLeft: 8 },
-  progressTrack:    { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
-  progressFill:     { height: 8, borderRadius: 4 },
-  progressStatRow:  { flexDirection: 'row', gap: 16 },
-  progressStat:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  progressStatDot:  { width: 6, height: 6, borderRadius: 3 },
-  progressStatTxt:  { fontSize: 11, fontWeight: '600' },
-
-  // Inspection form CTA
-  inspectCta:     { borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
-  inspectCtaIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  inspectCtaTitle:{ fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 4 },
-  inspectCtaSub:  { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
-
-  // Section label
-  sectionLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, marginBottom: 10, marginTop: 6 },
-
-  // Action cards row
-  actionsRow: { flexDirection: 'row', gap: 12 },
-
-  // Quick navigate / contact buttons
-  quickBtn:      { flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 16, padding: 18, borderWidth: 1,
-                   shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  quickBtnIcon:  { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  quickBtnTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
-  quickBtnSub:   { fontSize: 13 },
-
-  // Notes card
-  notesCard:      { borderRadius: 16, padding: 18, borderWidth: 1,
-                    shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3 },
-  notesText:      { fontSize: 14, lineHeight: 22, marginBottom: 14 },
-  notesEmpty:     { fontSize: 14, lineHeight: 22, fontStyle: 'italic', marginBottom: 14 },
-  notesInput:     { borderRadius: 10, borderWidth: 1, padding: 14, fontSize: 14, lineHeight: 22, minHeight: 110, marginBottom: 14 },
-  notesActionRow: { flexDirection: 'row', gap: 10 },
-  notesCancelBtn: { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  notesCancelTxt: { fontSize: 14, fontWeight: '600' },
-  notesSaveBtn:   { flex: 2, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  notesSaveTxt:   { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  notesEditBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, borderWidth: 1, paddingVertical: 9, justifyContent: 'center' },
-  notesEditTxt:   { fontSize: 13, fontWeight: '700' },
-
-  // Bottom action bar
-  bottomBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 16, paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
-    borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
+const styles = StyleSheet.create({
+  container:       { flex: 1, backgroundColor: C.primary },
+  header:          {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12,
   },
+  backBtn:         { paddingVertical: 4, paddingRight: 4 },
+  backText:        { color: C.accent, fontSize: 14, fontWeight: '600' },
+  headerCenter:    { flex: 1 },
+  headerTitle:     { color: C.textLight, fontSize: 16, fontWeight: '700' },
+  statusChip:      { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 },
+  statusText:      { fontSize: 10, fontWeight: '700' },
+  progressWrap:    { backgroundColor: C.surface, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  progressBg:     { backgroundColor: C.border, borderRadius: 4, height: 6, overflow: 'hidden', marginBottom: 6 },
+  progressFill:    { backgroundColor: C.accent, height: 6, borderRadius: 4 },
+  progressText:    { color: C.textMuted, fontSize: 11 },
+  tabRow:          { flexDirection: 'row', backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border },
+  tab:             { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  tabActive:       { borderBottomWidth: 2, borderBottomColor: C.accent },
+  tabText:         { color: C.textMuted, fontSize: 12, fontWeight: '600' },
+  tabTextActive:   { color: C.accent },
+  scroll:          { padding: 16, paddingBottom: 32 },
+  emptyState:      { alignItems: 'center', paddingVertical: 48, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border },
+  emptyIcon:       { fontSize: 36, marginBottom: 10 },
+  emptyTitle:      { color: C.textLight, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  emptyText:       { color: C.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 24 },
+  assetCard:       { backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8 },
+  assetLeft:       { marginRight: 12 },
+  resultDot:       { width: 10, height: 10, borderRadius: 5 },
+  assetBody:       { flex: 1 },
+  assetType:       { color: C.textLight, fontSize: 14, fontWeight: '600' },
+  assetVariant:    { color: C.textMuted, fontSize: 12, marginTop: 2 },
+  assetLocation:   { color: C.textMuted, fontSize: 11, marginTop: 2 },
+  assetRef:        { color: C.textMuted, fontSize: 11 },
+  assetRight:      { marginLeft: 8 },
+  resultLabel:     { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  criticalBanner:  { backgroundColor: 'rgba(220,38,38,0.12)', borderRadius: 12, borderWidth: 1, borderColor: C.danger, padding: 12, marginBottom: 12 },
+  criticalText:    { color: '#FCA5A5', fontSize: 13, fontWeight: '600' },
+  defectCard:      { backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, borderLeftWidth: 3, padding: 14, marginBottom: 8 },
+  defectTop:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  defectSeverity:  { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  defectStatusChip:{ borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  defectStatusText:{ fontSize: 10, fontWeight: '700' },
+  defectDesc:      { color: C.textLight, fontSize: 14, lineHeight: 20 },
+  defectCode:      { color: C.textMuted, fontSize: 11, marginTop: 4 },
+  defectPrice:     { color: C.success, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  infoSection:     { gap: 0 },
+  infoRow:         { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border },
+  infoLabel:       { color: C.textMuted, fontSize: 13 },
+  infoValue:       { color: C.textLight, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
+  noteCard:        { backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 14, marginTop: 12 },
+  hazardCard:      { borderColor: C.warning, backgroundColor: 'rgba(217,119,6,0.08)' },
+  noteLabel:       { color: C.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 },
+  noteText:        { color: C.textBody, fontSize: 13, lineHeight: 20 },
+  actionBar:       { backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border, padding: 12, flexDirection: 'row', gap: 10 },
+  actionBtn:       { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  actionBtnPrimary:{ backgroundColor: C.accent },
+  actionBtnSecondary: { backgroundColor: C.primaryLight, borderWidth: 1, borderColor: C.border },
+  actionBtnSuccess:{ backgroundColor: C.success },
+  actionBtnText:   { color: '#fff', fontSize: 15, fontWeight: '700' },
+  assetChevron:    { color: C.textMuted, fontSize: 20, marginTop: 2 },
+  // Modal styles
+  overlay:         { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet:           { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 32 },
+  sheetHandle:     { width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  sheetTitle:      { color: C.textLight, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  sheetSub:        { color: C.textMuted, fontSize: 12, marginBottom: 20 },
+  resultRow:       { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  resultBtn:       { flex: 1, borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 2, borderColor: C.border },
+  resultBtnPass:   { backgroundColor: 'rgba(22,163,74,0.12)', borderColor: C.success },
+  resultBtnFail:   { backgroundColor: 'rgba(220,38,38,0.12)', borderColor: C.danger },
+  resultBtnNT:     { backgroundColor: 'rgba(148,163,184,0.1)', borderColor: C.textMuted },
+  resultBtnText:   { fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+  notesInput:      { backgroundColor: C.primaryLight, borderRadius: 12, borderWidth: 1, borderColor: C.border, color: C.textLight, padding: 12, fontSize: 13, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
+  sectionLabel:    { color: C.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 10 },
+  severityRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  sevBtn:          { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1.5, borderColor: C.border, backgroundColor: C.primaryLight },
+  sevBtnMinor:     { borderColor: C.info },
+  sevBtnMajor:     { borderColor: C.warning },
+  sevBtnCritical:  { borderColor: C.danger },
+  sevBtnText:      { fontSize: 11, fontWeight: '700' },
+  defectInput:     { backgroundColor: C.primaryLight, borderRadius: 12, borderWidth: 1, borderColor: C.border, color: C.textLight, padding: 12, fontSize: 13, minHeight: 60, textAlignVertical: 'top', marginBottom: 10 },
+  rowInputs:       { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  halfInput:       { flex: 1, backgroundColor: C.primaryLight, borderRadius: 12, borderWidth: 1, borderColor: C.border, color: C.textLight, padding: 12, fontSize: 13 },
+  saveBtn:         { backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  saveBtnText:     { color: '#fff', fontSize: 16, fontWeight: '800' },
+  defectBanner:    { backgroundColor: 'rgba(220,38,38,0.08)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(220,38,38,0.3)', padding: 14, marginBottom: 14 },
+  defectBannerLabel: { color: C.danger, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 },
 });
 
-// Completion modal styles
-const cm = StyleSheet.create({
-  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 },
-  card:        { borderRadius: 28, padding: 28, alignItems: 'center', gap: 10 },
-  checkCircle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 8, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
-  title:       { fontSize: 28, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
-  property:    { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
-  statsRow:    { flexDirection: 'row', width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14, marginVertical: 8 },
-  statItem:    { flex: 1, alignItems: 'center', gap: 4 },
-  statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  statEmoji:   { fontSize: 18 },
-  statValue:   { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
-  statLabel:   { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
-  countdown:   { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
-});
+// ─── UUID helper ─────────────────────────────────────────────
+function _uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ─── Inspection Modal ─────────────────────────────────────────
+function AssetInspectionModal({
+  asset, visible,
+  result, onResult,
+  notes, onNotes,
+  defectSeverity, onSeverity,
+  defectDesc, onDefectDesc,
+  defectCode, onDefectCode,
+  defectPrice, onDefectPrice,
+  isSaving, onClose, onSave,
+}: {
+  asset: any; visible: boolean;
+  result: 'pass' | 'fail' | 'not_tested' | null; onResult: (r: any) => void;
+  notes: string; onNotes: (s: string) => void;
+  defectSeverity: string; onSeverity: (s: any) => void;
+  defectDesc: string; onDefectDesc: (s: string) => void;
+  defectCode: string; onDefectCode: (s: string) => void;
+  defectPrice: string; onDefectPrice: (s: string) => void;
+  isSaving: boolean; onClose: () => void; onSave: () => void;
+}) {
+  if (!asset) return null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+              <ScrollView style={styles.sheet} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>{asset.asset_type ?? 'Asset'}</Text>
+                <Text style={styles.sheetSub}>
+                  {[asset.variant, asset.asset_ref && `Ref: ${asset.asset_ref}`, asset.location_on_site].filter(Boolean).join('  ·  ')}
+                </Text>
+
+                {/* Pass / Fail / Not Tested */}
+                <Text style={styles.sectionLabel}>INSPECTION RESULT</Text>
+                <View style={styles.resultRow}>
+                  <TouchableOpacity
+                    style={[styles.resultBtn, styles.resultBtnPass, result === 'pass' && { opacity: 1 }, result !== 'pass' && result !== null && { opacity: 0.4 }]}
+                    onPress={() => onResult(result === 'pass' ? null : 'pass')}
+                  >
+                    <Text style={[styles.resultBtnText, { color: C.success }]}>✓ PASS</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.resultBtn, styles.resultBtnFail, result === 'fail' && { opacity: 1 }, result !== 'fail' && result !== null && { opacity: 0.4 }]}
+                    onPress={() => onResult(result === 'fail' ? null : 'fail')}
+                  >
+                    <Text style={[styles.resultBtnText, { color: C.danger }]}>✗ FAIL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.resultBtn, styles.resultBtnNT, result === 'not_tested' && { opacity: 1 }, result !== 'not_tested' && result !== null && { opacity: 0.4 }]}
+                    onPress={() => onResult(result === 'not_tested' ? null : 'not_tested')}
+                  >
+                    <Text style={[styles.resultBtnText, { color: C.textMuted }]}>N/T</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Notes */}
+                <Text style={styles.sectionLabel}>TECHNICIAN NOTES (OPTIONAL)</Text>
+                <TextInput
+                  style={styles.notesInput}
+                  value={notes} onChangeText={onNotes}
+                  placeholder="Add notes about this asset..." placeholderTextColor={C.textMuted}
+                  multiline returnKeyType="done"
+                />
+
+                {/* Defect section — only if FAIL */}
+                {result === 'fail' && (
+                  <View style={styles.defectBanner}>
+                    <Text style={styles.defectBannerLabel}>⚠  DEFECT DETAILS (REQUIRED)</Text>
+
+                    <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>SEVERITY</Text>
+                    <View style={styles.severityRow}>
+                      {(['minor', 'major', 'critical'] as const).map(s => (
+                        <TouchableOpacity
+                          key={s}
+                          style={[styles.sevBtn, s === 'minor' && styles.sevBtnMinor, s === 'major' && styles.sevBtnMajor, s === 'critical' && styles.sevBtnCritical, defectSeverity === s && { opacity: 1 }, defectSeverity !== s && { opacity: 0.45 }]}
+                          onPress={() => onSeverity(s)}
+                        >
+                          <Text style={[styles.sevBtnText, { color: s === 'minor' ? C.info : s === 'major' ? C.warning : C.danger }]}>
+                            {s.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>DESCRIPTION *</Text>
+                    <TextInput
+                      style={styles.defectInput}
+                      value={defectDesc} onChangeText={onDefectDesc}
+                      placeholder="Describe the defect..." placeholderTextColor={C.textMuted}
+                      multiline returnKeyType="done"
+                    />
+
+                    <View style={styles.rowInputs}>
+                      <TextInput
+                        style={styles.halfInput}
+                        value={defectCode} onChangeText={onDefectCode}
+                        placeholder="Defect code (opt.)" placeholderTextColor={C.textMuted}
+                        autoCapitalize="characters"
+                      />
+                      <TextInput
+                        style={styles.halfInput}
+                        value={defectPrice} onChangeText={onDefectPrice}
+                        placeholder="Est. $ (opt.)" placeholderTextColor={C.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.saveBtn, (!result || isSaving) && { opacity: 0.5 }]}
+                  onPress={onSave}
+                  disabled={!result || isSaving}
+                >
+                  {isSaving
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={styles.saveBtnText}>Save Inspection</Text>
+                  }
+                </TouchableOpacity>
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+}

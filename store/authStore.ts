@@ -173,7 +173,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           set({ user: cached, session, isAuthenticated: true, isLoading: false, error: null });
           // Refresh cache in the background (non-blocking) so it stays fresh
           void Promise.resolve(
-            supabase.from('users').select('*').eq('id', session.user.id).single()
+            supabase.from('users').select('*').eq('id', session.user.id).maybeSingle()
           ).then(({ data }) => {
             if (data) void AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(data)).catch(() => null);
           }).catch(() => null);

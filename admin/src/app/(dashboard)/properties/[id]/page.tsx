@@ -172,7 +172,7 @@ export default function PropertyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-2xl border bg-white w-fit overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex gap-1 p-1 rounded-2xl border bg-[var(--card)] w-fit overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap"
@@ -185,7 +185,7 @@ export default function PropertyDetailPage() {
       {/* OVERVIEW */}
       {tab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between">
               <p className="font-bold" style={{ color: 'var(--text)' }}>Site Details</p>
               <div className="flex gap-2">
@@ -224,12 +224,12 @@ export default function PropertyDetailPage() {
             </div>
           </div>
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
               <p className="font-bold" style={{ color: 'var(--text)' }}>Contact</p>
               <F label="Site Contact Name" field="site_contact_name" />
               <F label="Site Contact Phone" field="site_contact_phone" />
             </div>
-            <div className="bg-white rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
               <p className="font-bold" style={{ color: 'var(--text)' }}>Site Notes</p>
               <F label="Access Notes" field="access_notes" multiline />
               <F label="Hazard Notes" field="hazard_notes" multiline />
@@ -241,19 +241,19 @@ export default function PropertyDetailPage() {
 
       {/* ASSETS */}
       {tab === 'assets' && (
-        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
           {/* Assets Tab Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{assets.length} asset{assets.length !== 1 ? 's' : ''} registered</p>
             <div className="flex items-center gap-2">
               <button onClick={handleExportAssets}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all hover:shadow-sm"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: '#fff' }}>
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
                 <Download size={13} /> Export CSV
               </button>
               <button onClick={() => setShowAssetImport(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all hover:shadow-sm"
-                style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: '#f0f4ff' }}>
+                style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--primary-light)' }}>
                 <Upload size={13} /> Import CSV
               </button>
             </div>
@@ -263,7 +263,7 @@ export default function PropertyDetailPage() {
             : <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
                       {['Ref','Type','Variant','Location','Serial #','Install','Last Service','Status'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>{h}</th>
                       ))}
@@ -293,13 +293,13 @@ export default function PropertyDetailPage() {
 
       {/* JOBS */}
       {tab === 'jobs' && (
-        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
           {jobs.length === 0
             ? <div className="flex flex-col items-center py-16"><Briefcase size={24} style={{ color: 'var(--text-tertiary)' }} /><p className="text-sm mt-3" style={{ color: 'var(--text-tertiary)' }}>No jobs yet</p></div>
             : <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
                       {['Date','Time','Type','Technician','Priority','Status','Report',''].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>{h}</th>
                       ))}
@@ -307,7 +307,7 @@ export default function PropertyDetailPage() {
                   </thead>
                   <tbody>
                     {jobs.map(j => (
-                      <tr key={j.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors cursor-pointer group"
+                      <tr key={j.id} className="border-b last:border-0 hover:bg-white/5 transition-colors cursor-pointer group"
                         style={{ borderColor: 'var(--border)' }}
                         onClick={() => router.push(`/jobs/${j.id}`)}>
                         <td className="px-4 py-3 text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text)' }}>{formatDate(j.scheduled_date)}</td>
@@ -344,7 +344,7 @@ export default function PropertyDetailPage() {
       {tab === 'defects' && (
         <div className="space-y-3">
           {defects.length === 0
-            ? <div className="bg-white rounded-2xl border p-16 text-center" style={{ borderColor: 'var(--border)' }}>
+            ? <div className="bg-[var(--card)] rounded-2xl border p-16 text-center" style={{ borderColor: 'var(--border)' }}>
                 <ShieldAlert size={24} className="mx-auto mb-3" style={{ color: 'var(--text-tertiary)' }} />
                 <p className="font-semibold" style={{ color: 'var(--text)' }}>No defects recorded</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>All clear 🎉</p>
@@ -354,7 +354,7 @@ export default function PropertyDetailPage() {
                 const c = sevColor[d.severity] ?? '#94a3b8';
                 const photos: string[] = Array.isArray(d.photos) ? d.photos : [];
                 return (
-                  <div key={d.id} className="bg-white rounded-2xl border overflow-hidden"
+                  <div key={d.id} className="bg-[var(--card)] rounded-2xl border overflow-hidden"
                     style={{ borderColor: 'var(--border)', borderLeft: `4px solid ${c}` }}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -399,3 +399,5 @@ export default function PropertyDetailPage() {
     </div>
   );
 }
+
+

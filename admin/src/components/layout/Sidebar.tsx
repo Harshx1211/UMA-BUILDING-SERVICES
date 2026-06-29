@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Briefcase, Building2,
   Users, FileText, Settings, Bell, ChevronLeft, ChevronRight,
-  ClipboardList, LogOut, Shield, X, BookOpen, MessageSquare,
+  ClipboardList, LogOut, Shield, X, BookOpen, MessageSquare, ShieldAlert,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -24,8 +24,8 @@ const NAV_SECTIONS = [
     title: 'Management',
     items: [
       { label: 'Technicians',   href: '/technicians',   icon: Users },
+      { label: 'Defects',       href: '/defects',       icon: ShieldAlert },
       { label: 'Quotes',        href: '/quotes',        icon: FileText },
-      { label: 'Enquiries',     href: '/enquiries',     icon: MessageSquare },
       { label: 'Catalogue',     href: '/catalogue',     icon: BookOpen },
       { label: 'Reports',       href: '/reports',       icon: ClipboardList },
     ],
@@ -60,7 +60,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       <div className="flex items-center gap-3 px-4 h-16 flex-shrink-0"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 4px 14px rgba(249,115,22,0.45)' }}>
+          style={{ background: 'linear-gradient(135deg,#FF7A20,#E8650A)', boxShadow: '0 4px 14px rgba(232,101,10,0.45)' }}>
           <Shield size={17} color="#fff" strokeWidth={2.5} />
         </div>
         {(!collapsed || mobileOpen) && (
@@ -94,14 +94,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                   <Link key={href} href={href} title={collapsed && !mobileOpen ? label : undefined}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative overflow-hidden"
                     style={{
-                      color: active ? '#ffffff' : 'rgba(255,255,255,0.50)',
-                      background: active ? 'rgba(249,115,22,0.14)' : 'transparent',
-                      borderLeft: active ? '2.5px solid #F97316' : '2.5px solid transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,0.50)',
+                      background: active ? 'rgba(232,101,10,0.14)' : 'transparent',
+                      borderLeft: active ? '2.5px solid #E8650A' : '2.5px solid transparent',
                     }}>
                     <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl"
                       style={{ background: 'rgba(255,255,255,0.06)' }} />
                     <Icon size={17} strokeWidth={active ? 2.2 : 1.8} className="flex-shrink-0 relative z-10"
-                      style={{ color: active ? '#F97316' : undefined }} />
+                      style={{ color: active ? '#E8650A' : undefined }} />
                     {(!collapsed || mobileOpen) && (
                       <span className="truncate relative z-10">{label}</span>
                     )}
@@ -123,12 +123,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         {(!collapsed || mobileOpen) ? (
           <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors group cursor-default">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)' }}>
+              style={{ background: 'linear-gradient(135deg,#FF7A20,#E8650A)' }}>
               {user?.full_name?.charAt(0).toUpperCase() ?? 'A'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-white text-xs font-semibold leading-tight truncate">{user?.full_name ?? 'Admin'}</p>
-              <p className="text-xs truncate leading-tight mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{user?.email}</p>
+              <p className="text-xs truncate leading-tight mt-0.5 capitalize" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                {user?.role ? user.role.replace('_', ' ') : 'Administrator'}
+              </p>
             </div>
             <button onClick={signOut} title="Sign out"
               className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
@@ -156,7 +158,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         <NavContent />
         {/* Collapse toggle */}
         <button onClick={() => setCollapsed(c => !c)}
-          className="absolute -right-3.5 top-[60px] w-7 h-7 rounded-full border-2 bg-white flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow z-20"
+          className="absolute -right-3.5 top-[60px] w-7 h-7 rounded-full border-2 bg-[var(--card)] flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow z-20"
           style={{ borderColor: 'var(--border)' }}>
           {collapsed
             ? <ChevronRight size={12} strokeWidth={2.5} style={{ color: 'var(--text-secondary)' }} />
@@ -180,3 +182,5 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     </>
   );
 }
+
+

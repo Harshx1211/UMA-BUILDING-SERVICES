@@ -21,7 +21,7 @@ const SEV_COLORS = { minor: '#f59e0b', major: '#f97316', critical: '#ef4444' };
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white rounded-xl border p-3 shadow-xl text-xs" style={{ borderColor: 'var(--border)' }}>
+    <div className="bg-[var(--card)] rounded-xl border p-3 shadow-xl text-xs" style={{ borderColor: 'var(--border)' }}>
       <p className="font-bold mb-2" style={{ color: 'var(--text)' }}>{label}</p>
       {payload.map((p: any) => (
         <div key={p.name} className="flex items-center gap-2">
@@ -172,7 +172,7 @@ export default function DashboardPage() {
       {/* ── Charts Row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Weekly Bar Chart */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border p-6 animate-fade-in-up"
+        <div className="lg:col-span-2 bg-[var(--card)] rounded-2xl border p-6 animate-fade-in-up"
           style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animationDelay: '100ms' }}>
           <div className="flex items-start justify-between mb-5">
             <div>
@@ -193,15 +193,15 @@ export default function DashboardPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc', radius: 6 }} />
-              <Bar dataKey="scheduled" name="Scheduled" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="completed" name="Completed" fill="#1B2D4F" radius={[4, 4, 0, 0]} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--primary-light)', radius: 6 }} />
+              <Bar dataKey="scheduled" name="Scheduled" fill="var(--border-strong)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="completed" name="Completed" fill="var(--accent)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Pie Chart */}
-        <div className="bg-white rounded-2xl border p-6 animate-fade-in-up"
+        <div className="bg-[var(--card)] rounded-2xl border p-6 animate-fade-in-up"
           style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animationDelay: '150ms' }}>
           <p className="font-bold text-sm mb-0.5" style={{ color: 'var(--text)' }}>Defects by Severity</p>
           <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>All open defects</p>
@@ -232,14 +232,14 @@ export default function DashboardPage() {
       {/* ── Bottom Row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Jobs */}
-        <div className="bg-white rounded-2xl border animate-fade-in-up"
+        <div className="bg-[var(--card)] rounded-2xl border animate-fade-in-up"
           style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animationDelay: '200ms' }}>
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <div>
               <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>Recent Jobs</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Latest scheduled work orders</p>
             </div>
-            <Link href="/jobs" className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors hover:bg-orange-50"
+            <Link href="/jobs" className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--primary-light)]"
               style={{ color: 'var(--accent)' }}>
               View all <ArrowUpRight size={12} />
             </Link>
@@ -252,11 +252,11 @@ export default function DashboardPage() {
               </div>
             ) : recentJobs.map((job: any, i) => (
               <Link href={`/jobs/${job.id}`} key={job.id}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-gray-50 group"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-[var(--primary-light)] group"
                 style={{ animationDelay: `${i * 40}ms` }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: '#eff6ff' }}>
-                  <Briefcase size={14} style={{ color: '#3b82f6' }} />
+                  style={{ background: 'var(--primary-light)' }}>
+                  <Briefcase size={14} style={{ color: 'var(--text-secondary)' }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{job.property?.name ?? '—'}</p>
@@ -274,14 +274,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Defects */}
-        <div className="bg-white rounded-2xl border animate-fade-in-up"
+        <div className="bg-[var(--card)] rounded-2xl border animate-fade-in-up"
           style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animationDelay: '250ms' }}>
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <div>
               <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>Recent Defects</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Latest defects requiring action</p>
             </div>
-            <Link href="/defects" className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors hover:bg-orange-50"
+            <Link href="/defects" className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--primary-light)]"
               style={{ color: 'var(--accent)' }}>
               View all <ArrowUpRight size={12} />
             </Link>
@@ -294,9 +294,9 @@ export default function DashboardPage() {
               </div>
             ) : recentDefects.map((defect: any, i) => {
               const sevColor = defect.severity === 'critical' ? '#ef4444' : defect.severity === 'major' ? '#f97316' : '#f59e0b';
-              const sevBg = defect.severity === 'critical' ? '#fef2f2' : defect.severity === 'major' ? '#fff7ed' : '#fffbeb';
+              const sevBg = defect.severity === 'critical' ? 'var(--error-dark)' : defect.severity === 'major' ? 'var(--warning-dark)' : 'var(--warning-dark)';
               return (
-                <div key={defect.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                <div key={defect.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--primary-light)] transition-colors"
                   style={{ animationDelay: `${i * 40}ms` }}>
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: sevBg }}>
                     <ShieldAlert size={14} style={{ color: sevColor }} />

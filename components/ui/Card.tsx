@@ -31,7 +31,7 @@ export function Card({ children, style, padding = 16, noPadding, color, onPress 
     {
       padding: noPadding ? 0 : padding,
       backgroundColor: color || C.surface,
-      borderColor: (C as any).cardBorder || 'rgba(27,45,79,0.09)',
+      borderColor: C.cardBorder,
     },
     style,
   ];

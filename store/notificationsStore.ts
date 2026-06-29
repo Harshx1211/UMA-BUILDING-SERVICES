@@ -20,6 +20,7 @@ export interface AppNotification {
   title: string;
   message: string;
   job_id: string | null;
+  user_id: string | null; // which technician this notification is for (null = broadcast)
   is_read: boolean;       // SQLite stores as 0/1; we convert to bool
   created_at: string;     // ISO 8601
 }
@@ -52,6 +53,7 @@ function mapRow(row: Record<string, unknown>): AppNotification {
     title: row.title as string,
     message: row.message as string,
     job_id: (row.job_id as string | null) ?? null,
+    user_id: (row.user_id as string | null) ?? null,
     is_read: (row.is_read as number) === 1,
     created_at: row.created_at as string,
   };
@@ -125,9 +127,9 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
       const now = new Date().toISOString();
       const db = openDatabase();
       db.runSync(
-        `INSERT INTO notifications (id, type, title, message, job_id, is_read, created_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?)`,
-        [id, data.type, data.title, data.message, data.job_id ?? null, now]
+        `INSERT INTO notifications (id, type, title, message, job_id, user_id, is_read, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+        [id, data.type, data.title, data.message, data.job_id ?? null, (data as AppNotification).user_id ?? null, now]
       );
       const newNotif: AppNotification = {
         id,
@@ -135,6 +137,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
         title: data.title,
         message: data.message,
         job_id: data.job_id ?? null,
+        user_id: (data as AppNotification).user_id ?? null,
         is_read: false,
         created_at: now,
       };

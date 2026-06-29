@@ -33,7 +33,7 @@ export function ScreenHeader({ title, subtitle, rightComponent, showBack = false
       <View style={styles.row}>
         {showBack && (
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)' as never)}
             style={styles.backBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 13,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.72)',
     marginTop: 3,
   },
   right: {

@@ -100,10 +100,10 @@ export default function JobsPage() {
   };
 
   const QUICK_STATS = [
-    { label: 'Scheduled',   value: stats.scheduled,   color: '#3b82f6', bg: '#eff6ff', icon: Calendar     },
-    { label: 'In Progress', value: stats.in_progress,  color: '#F97316', bg: '#fff7ed', icon: Clock         },
-    { label: 'Completed',   value: stats.completed,    color: '#22c55e', bg: '#f0fdf4', icon: CheckCircle2  },
-    { label: 'Urgent',      value: stats.urgent,       color: '#ef4444', bg: '#fef2f2', icon: AlertTriangle },
+    { label: 'Scheduled',   value: stats.scheduled,   color: '#3b82f6', bg: 'var(--primary-light)', icon: Calendar     },
+    { label: 'In Progress', value: stats.in_progress,  color: '#F97316', bg: 'rgba(249,115,22,0.15)', icon: Clock         },
+    { label: 'Completed',   value: stats.completed,    color: '#22c55e', bg: 'rgba(34,197,94,0.15)', icon: CheckCircle2  },
+    { label: 'Urgent',      value: stats.urgent,       color: '#ef4444', bg: 'rgba(239,68,68,0.15)', icon: AlertTriangle },
   ];
 
   return (
@@ -116,7 +116,7 @@ export default function JobsPage() {
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: '#fff' }}>
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
               <Download size={14} /> Export CSV
             </button>
             <button
@@ -133,7 +133,7 @@ export default function JobsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {QUICK_STATS.map((s, i) => (
           <div key={s.label}
-            className="bg-white rounded-2xl border p-4 flex items-center gap-3 animate-fade-in-up"
+            className="bg-[var(--card)] rounded-2xl border p-4 flex items-center gap-3 animate-fade-in-up"
             style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', animationDelay: `${i * 50}ms` }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: s.bg }}>
               <s.icon size={18} style={{ color: s.color }} />
@@ -147,7 +147,7 @@ export default function JobsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border p-4 flex flex-wrap gap-3 items-center"
+      <div className="bg-[var(--card)] rounded-2xl border p-4 flex flex-wrap gap-3 items-center"
         style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         <div className="relative flex-1 min-w-[220px]">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
@@ -156,16 +156,16 @@ export default function JobsPage() {
             onChange={e => { setSearch(e.target.value); setPage(0); }}
             placeholder="Search jobs…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm outline-none transition-all"
-            style={{ borderColor: 'var(--border)', color: 'var(--text)', background: '#f8fafc' }}
-            onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = '#fff'; }}
-            onBlur={e =>  { e.target.style.borderColor = 'var(--border)';  e.target.style.background = '#f8fafc'; }}
+            style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--bg)' }}
+            onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; }}
+            onBlur={e =>  { e.target.style.borderColor = 'var(--border)';  e.target.style.background = 'var(--bg)'; }}
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Status filter */}
           <select value={statusF} onChange={e => { setStatusF(e.target.value); setPage(0); }}
-            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-            style={{ borderColor: statusF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: statusF ? '#f0f4ff' : '#f8fafc', fontWeight: statusF ? 600 : 400 }}>
+            className="px-3 py-2.5 rounded-xl border text-sm font-medium outline-none transition-all cursor-pointer"
+            style={{ borderColor: statusF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: statusF ? 'var(--primary-light)' : 'var(--bg)' }}>
             <option value="">Status: All</option>
             {STATUSES.filter(Boolean).map(o => (
               <option key={o} value={o}>{o.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
@@ -174,8 +174,8 @@ export default function JobsPage() {
 
           {/* Type filter — granular routine service options */}
           <select value={typeF} onChange={e => { setTypeF(e.target.value); setPage(0); }}
-            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-            style={{ borderColor: typeF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: typeF ? '#f0f4ff' : '#f8fafc', fontWeight: typeF ? 600 : 400 }}>
+            className="px-3 py-2.5 rounded-xl border text-sm font-medium outline-none transition-all cursor-pointer"
+            style={{ borderColor: typeF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: typeF ? 'var(--primary-light)' : 'var(--bg)' }}>
             {JOB_TYPE_FILTER_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
@@ -183,8 +183,8 @@ export default function JobsPage() {
 
           {/* Priority filter */}
           <select value={priorityF} onChange={e => { setPriorityF(e.target.value); setPage(0); }}
-            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-            style={{ borderColor: priorityF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: priorityF ? '#f0f4ff' : '#f8fafc', fontWeight: priorityF ? 600 : 400 }}>
+            className="px-3 py-2.5 rounded-xl border text-sm font-medium outline-none transition-all cursor-pointer"
+            style={{ borderColor: priorityF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: priorityF ? 'var(--primary-light)' : 'var(--bg)' }}>
             <option value="">Priority: All</option>
             {PRIORITIES.filter(Boolean).map(o => (
               <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>
@@ -193,8 +193,8 @@ export default function JobsPage() {
 
           {/* PDF / Report filter */}
           <select value={reportF} onChange={e => { setReportF(e.target.value); setPage(0); }}
-            className="px-3 py-2.5 rounded-xl border text-sm outline-none transition-all cursor-pointer"
-            style={{ borderColor: reportF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: reportF ? '#f0f4ff' : '#f8fafc', fontWeight: reportF ? 600 : 400 }}>
+            className="px-3 py-2.5 rounded-xl border text-sm font-medium outline-none transition-all cursor-pointer"
+            style={{ borderColor: reportF ? 'var(--primary)' : 'var(--border)', color: 'var(--text)', background: reportF ? 'var(--primary-light)' : 'var(--bg)' }}>
             <option value="">Report: All</option>
             <option value="yes">Has PDF</option>
             <option value="no">No PDF yet</option>
@@ -204,7 +204,7 @@ export default function JobsPage() {
             <button
               onClick={() => { setStatusF(''); setTypeF(''); setPriorityF(''); setReportF(''); setSearch(''); setPage(0); }}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
-              style={{ color: 'var(--error)', background: '#fef2f2' }}>
+              style={{ color: 'var(--error)', background: 'rgba(239,68,68,0.15)' }}>
               <X size={13} /> Clear
             </button>
           )}
@@ -213,7 +213,7 @@ export default function JobsPage() {
       </div>
 
       {/* Jobs Table */}
-      <div className="bg-white rounded-2xl border overflow-hidden"
+      <div className="bg-[var(--card)] rounded-2xl border overflow-hidden"
         style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         {loading ? (
           <div className="flex items-center justify-center h-48">
@@ -237,7 +237,7 @@ export default function JobsPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
                     {['Property', 'Type', 'Technician', 'Date', 'Priority', 'Status', 'Report', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide"
                         style={{ color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>{h}</th>
@@ -247,14 +247,14 @@ export default function JobsPage() {
                 <tbody>
                   {jobs.map((job, i) => (
                     <tr key={job.id}
-                      className="border-b last:border-0 hover:bg-gray-50 transition-colors cursor-pointer group animate-fade-in"
+                      className="border-b last:border-0 hover:bg-white/5 transition-colors cursor-pointer group animate-fade-in"
                       style={{ borderColor: 'var(--border)', animationDelay: `${i * 20}ms` }}
                       onClick={() => router.push(`/jobs/${job.id}`)}>
 
                       {/* Property */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#eff6ff' }}>
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)' }}>
                             <MapPin size={13} style={{ color: '#3b82f6' }} />
                           </div>
                           <div className="min-w-0">
@@ -318,7 +318,7 @@ export default function JobsPage() {
                             rel="noopener noreferrer"
                             title="Open PDF report"
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all hover:opacity-80 active:scale-95"
-                            style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }}>
+                            style={{ background: 'rgba(34,197,94,0.15)', color: '#16a34a', border: '1px solid #bbf7d0' }}>
                             <FileText size={11} />
                             PDF
                             <Download size={10} />
@@ -349,13 +349,13 @@ export default function JobsPage() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-5 py-3 border-t"
-                style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
+                style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                 <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                   Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
                 </p>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setPage(p => p - 1)} disabled={page === 0}
-                    className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 hover:bg-white"
+                    className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 hover:bg-[var(--card)]"
                     style={{ borderColor: 'var(--border)' }}>
                     <ChevronLeft size={14} style={{ color: 'var(--text-secondary)' }} />
                   </button>
@@ -374,7 +374,7 @@ export default function JobsPage() {
                     );
                   })}
                   <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}
-                    className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 hover:bg-white"
+                    className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 hover:bg-[var(--card)]"
                     style={{ borderColor: 'var(--border)' }}>
                     <ChevronRight size={14} style={{ color: 'var(--text-secondary)' }} />
                   </button>
@@ -403,3 +403,6 @@ export default function JobsPage() {
     </div>
   );
 }
+
+
+

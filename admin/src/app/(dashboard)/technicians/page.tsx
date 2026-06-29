@@ -87,18 +87,18 @@ export default function TechniciansPage() {
       <div className="flex gap-4">
         {/* List Panel */}
         <div className="flex-1">
-          <div className="bg-white rounded-2xl border p-4 mb-4 flex gap-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border p-4 mb-4 flex gap-3" style={{ borderColor: 'var(--border)' }}>
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search team..." className="w-full pl-9 pr-4 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--border)', color: 'var(--text)' }} />
             </div>
-            <select value={roleF} onChange={e => setRoleF(e.target.value)} className="px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
+            <select value={roleF} onChange={e => setRoleF(e.target.value)} className="px-3 py-2 rounded-lg border text-sm font-medium outline-none cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
               <option value="">Role: All</option>
               <option value="technician">Technician</option>
               <option value="subcontractor">Subcontractor</option>
               <option value="admin">Admin</option>
             </select>
-            {(search || roleF) && <button onClick={() => { setSearch(''); setRoleF(''); }} className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--error)', background: '#fef2f2' }}><X size={13} />Clear</button>}
+            {(search || roleF) && <button onClick={() => { setSearch(''); setRoleF(''); }} className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--error)', background: 'rgba(239,68,68,0.15)' }}><X size={13} />Clear</button>}
           </div>
 
           {loading ? (
@@ -108,7 +108,7 @@ export default function TechniciansPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((u, i) => (
-                <button key={u.id} onClick={() => openDetail(u)} className="w-full bg-white rounded-2xl border p-4 flex items-center gap-4 hover:shadow-sm transition-all text-left animate-fade-in-up"
+                <button key={u.id} onClick={() => openDetail(u)} className="w-full bg-[var(--card)] rounded-2xl border p-4 flex items-center gap-4 hover:shadow-sm transition-all text-left animate-fade-in-up"
                   style={{ borderColor: selected?.id === u.id ? 'var(--accent)' : 'var(--border)', animationDelay: `${i * 20}ms` }}>
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                     style={{ background: u.is_active ? 'var(--primary)' : '#94a3b8' }}>
@@ -131,7 +131,7 @@ export default function TechniciansPage() {
         {/* Detail Panel */}
         {selected && (
           <div className="w-80 flex-shrink-0 space-y-4 animate-slide-left">
-            <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold text-white" style={{ background: selected.is_active ? 'var(--primary)' : '#94a3b8' }}>
                   {getInitials(selected.full_name)}
@@ -152,19 +152,19 @@ export default function TechniciansPage() {
                   <p className="text-2xl font-bold" style={{ color: 'var(--text)' }}>{jobStats.total}</p>
                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Total Jobs</p>
                 </div>
-                <div className="rounded-xl p-3 text-center" style={{ background: '#f0fdf4' }}>
+                <div className="rounded-xl p-3 text-center" style={{ background: 'rgba(34,197,94,0.15)' }}>
                   <p className="text-2xl font-bold" style={{ color: '#16a34a' }}>{jobStats.completed}</p>
                   <p className="text-xs" style={{ color: '#16a34a' }}>Completed</p>
                 </div>
               </div>
               <button onClick={() => toggleActive(selected)} className="w-full mt-4 py-2.5 rounded-xl text-sm font-medium transition-all"
-                style={{ background: selected.is_active ? '#fef2f2' : '#f0fdf4', color: selected.is_active ? '#ef4444' : '#16a34a' }}>
+                style={{ background: selected.is_active ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)', color: selected.is_active ? '#ef4444' : '#16a34a' }}>
                 {selected.is_active ? 'Deactivate User' : 'Activate User'}
               </button>
             </div>
 
             {timeLogs.length > 0 && (
-              <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+              <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
                 <p className="font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text)' }}><Clock size={15} />Recent Time Logs</p>
                 {timeLogs.slice(0, 5).map(tl => (
                   <div key={tl.id} className="py-2.5 border-b last:border-0 text-xs" style={{ borderColor: 'var(--border)' }}>
@@ -181,7 +181,7 @@ export default function TechniciansPage() {
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-in-up">
+          <div className="bg-[var(--card)] rounded-2xl shadow-2xl w-full max-w-md animate-fade-in-up">
             <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--border)' }}>
               <p className="font-bold text-lg" style={{ color: 'var(--text)' }}>Invite Team Member</p>
               <button onClick={() => setShowCreate(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100"><X size={16} /></button>
@@ -217,3 +217,6 @@ export default function TechniciansPage() {
     </div>
   );
 }
+
+
+

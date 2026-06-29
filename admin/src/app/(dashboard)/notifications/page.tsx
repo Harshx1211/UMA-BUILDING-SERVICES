@@ -16,8 +16,8 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   general:       <Info size={15} style={{ color: '#94a3b8' }} />,
 };
 const TYPE_BG: Record<string, string> = {
-  new_job: '#eff6ff', urgent_job: '#fef2f2', defect_flagged: '#fff7ed',
-  sync_complete: '#f0fdf4', general: '#f8fafc',
+  new_job: 'var(--primary-light)', urgent_job: 'rgba(239,68,68,0.15)', defect_flagged: 'rgba(249,115,22,0.15)',
+  sync_complete: 'rgba(34,197,94,0.15)', general: 'var(--bg)',
 };
 
 export default function NotificationsPage() {
@@ -70,7 +70,7 @@ export default function NotificationsPage() {
     <div className="animate-fade-in">
       <PageHeader title="Notifications" subtitle={`${unreadCount} unread`} action={
         unreadCount > 0 && (
-          <button onClick={markAllRead} className="text-sm font-medium px-3 py-2 rounded-xl border hover:bg-gray-50" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          <button onClick={markAllRead} className="text-sm font-medium px-3 py-2 rounded-xl border hover:bg-white/5" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             Mark all read
           </button>
         )
@@ -79,10 +79,10 @@ export default function NotificationsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Notifications list */}
         <div className="lg:col-span-2">
-          <div className="flex gap-1 mb-4 p-1 rounded-xl border bg-white w-fit" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex gap-1 mb-4 p-1 rounded-xl border bg-[var(--card)] w-fit" style={{ borderColor: 'var(--border)' }}>
             {(['all', 'unread'] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize"
+              <button key={f} onClick={() => setFilter(f as any)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap"
                 style={filter === f ? { background: 'var(--primary)', color: '#fff' } : { color: 'var(--text-secondary)' }}>
                 {f}{f === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
               </button>
@@ -96,8 +96,8 @@ export default function NotificationsPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map((n: any, i: number) => (
-                <div key={n.id} className="bg-white rounded-2xl border p-4 flex items-start gap-3 animate-fade-in-up" style={{ borderColor: n.is_read ? 'var(--border)' : 'var(--accent)', animationDelay: `${i * 15}ms` }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: TYPE_BG[n.type] ?? '#f8fafc' }}>
+                <div key={n.id} className="bg-[var(--card)] rounded-2xl border p-4 flex items-start gap-3 animate-fade-in-up" style={{ borderColor: n.is_read ? 'var(--border)' : 'var(--accent)', animationDelay: `${i * 15}ms` }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: TYPE_BG[n.type] ?? 'var(--bg)' }}>
                     {TYPE_ICON[n.type] ?? TYPE_ICON.general}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -118,7 +118,7 @@ export default function NotificationsPage() {
 
         {/* Broadcast panel */}
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
             <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Send Notification</p>
             <div className="space-y-3">
               <div>
@@ -141,7 +141,7 @@ export default function NotificationsPage() {
           </div>
 
           {/* Stats */}
-          <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
             <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Stats</p>
             {[
               { label: 'Total', value: notifications.length },
@@ -159,3 +159,5 @@ export default function NotificationsPage() {
     </div>
   );
 }
+
+

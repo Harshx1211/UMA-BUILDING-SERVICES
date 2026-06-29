@@ -33,8 +33,8 @@ export function Input({
   const borderColor = error
     ? C.error
     : isFocused
-      ? C.primary
-      : (C as any).cardBorder || C.border;
+      ? C.accentLight
+      : C.cardBorder;
 
   const backgroundColor = isFocused ? C.surface : C.backgroundSecondary;
 

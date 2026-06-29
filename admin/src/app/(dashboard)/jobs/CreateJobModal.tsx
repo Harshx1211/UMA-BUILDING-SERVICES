@@ -84,15 +84,19 @@ export default function CreateJobModal({
     }
     setCreating(true);
     try {
+      const cleanNotes = form.notes.trim();
+      const finalNotes = assetsToRepair?.length 
+        ? `${cleanNotes}\n\nRepair assets: ${assetsToRepair.join(', ')}`.trim() 
+        : cleanNotes;
+
       const { error, data: newJob } = await adminApi.insert<any[]>('jobs', {
-        ...form, job_type: selectedJobType, status: 'scheduled',
+        ...form, 
+        notes: finalNotes,
+        job_type: selectedJobType, 
+        status: 'scheduled',
       });
       if (error) throw new Error(error);
-      if (assetsToRepair?.length && Array.isArray(newJob) && newJob[0]?.id) {
-        await adminApi.update('jobs', {
-          notes: `${form.notes}\n\nRepair assets: ${assetsToRepair.join(', ')}`,
-        }, newJob[0].id);
-      }
+
       toast.success('Job created!');
       onCreated();
     } catch (err: any) {
@@ -109,7 +113,7 @@ export default function CreateJobModal({
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col animate-scale-in"
+        className="bg-[var(--card)] rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col animate-scale-in"
         style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid var(--border)' }}
       >
         {/* ── Header ── */}
@@ -141,7 +145,7 @@ export default function CreateJobModal({
                   onChange={e => f(field, e.target.value)}
                   disabled={disabled}
                   className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text)', background: disabled ? '#f8fafc' : '#fff' }}
+                  style={{ borderColor: 'var(--border)', color: 'var(--text)', background: disabled ? 'var(--bg)' : 'var(--card)' }}
                   onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
                   onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }}
                 >
@@ -180,10 +184,10 @@ export default function CreateJobModal({
                         key={cat.value}
                         type="button"
                         onClick={() => handleCategoryClick(cat)}
-                        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-white/5"
                         style={{
                           borderBottom: isLast ? 'none' : '1px solid var(--border)',
-                          background: isSelected ? '#f0f4ff' : undefined,
+                          background: isSelected ? 'var(--primary-light)' : undefined,
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -195,7 +199,7 @@ export default function CreateJobModal({
                               background: isSelected ? '#1B2D4F' : 'transparent',
                             }}
                           >
-                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[var(--card)]" />}
                           </div>
                           <div>
                             <p className="text-sm font-semibold" style={{ color: isSelected ? '#1B2D4F' : 'var(--text)' }}>
@@ -228,10 +232,10 @@ export default function CreateJobModal({
                           key={freq.value}
                           type="button"
                           onClick={() => setSelectedJobType(freq.value)}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
                           style={{
                             borderBottom: isLast ? 'none' : '1px solid var(--border)',
-                            background: isSelected ? '#f0f4ff' : undefined,
+                            background: isSelected ? 'var(--primary-light)' : undefined,
                           }}
                         >
                           <div
@@ -241,7 +245,7 @@ export default function CreateJobModal({
                               background: isSelected ? '#1B2D4F' : 'transparent',
                             }}
                           >
-                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[var(--card)]" />}
                           </div>
                           <div className="flex items-center justify-between flex-1">
                             <p className="text-sm font-semibold" style={{ color: isSelected ? '#1B2D4F' : 'var(--text)' }}>
@@ -262,7 +266,7 @@ export default function CreateJobModal({
               {/* Selected summary pill */}
               {selectedJobType && (
                 <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
-                  style={{ background: '#f0f4ff', border: '1px solid #c7d7fd' }}>
+                  style={{ background: 'var(--primary-light)', border: '1px solid #c7d7fd' }}>
                   <p className="text-xs font-semibold" style={{ color: '#1B2D4F' }}>
                     ✓ {getJobTypeLabel(selectedJobType)}
                   </p>
@@ -286,7 +290,7 @@ export default function CreateJobModal({
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs font-semibold transition-all"
                       style={{
                         borderColor: active ? '#1B2D4F' : 'var(--border)',
-                        background: active ? '#f0f4ff' : '#fafafa',
+                        background: active ? 'var(--primary-light)' : '#fafafa',
                         color: active ? '#1B2D4F' : 'var(--text-secondary)',
                       }}>
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.dot }} />
@@ -309,7 +313,7 @@ export default function CreateJobModal({
                   </label>
                   <input type={type} value={(form as any)[field]} onChange={e => f(field, e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text)', background: '#fff' }}
+                    style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--card)' }}
                     onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
                     onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }} />
                 </div>
@@ -322,7 +326,7 @@ export default function CreateJobModal({
               <textarea value={form.notes} onChange={e => f('notes', e.target.value)} rows={2}
                 placeholder="Special instructions or site notes…"
                 className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
-                style={{ borderColor: 'var(--border)', color: 'var(--text)', background: '#fff' }}
+                style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--card)' }}
                 onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
                 onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }} />
             </div>
@@ -330,7 +334,7 @@ export default function CreateJobModal({
             {/* Actions */}
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50 transition-all"
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5 transition-all"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                 Cancel
               </button>
@@ -348,3 +352,6 @@ export default function CreateJobModal({
     </div>
   );
 }
+
+
+

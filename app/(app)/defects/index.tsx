@@ -35,12 +35,12 @@ type StatusFilter = 'all' | DefectStatus;
 const SEVERITY_COLORS: Record<DefectSeverity, string> = {
   [DefectSeverity.Critical]: '#DC2626',
   [DefectSeverity.Major]:    '#EA580C',
-  [DefectSeverity.Minor]:    '#2563EB',
+  [DefectSeverity.Minor]:    '#D97706',  // amber — consistent with Warning token
 };
 
 const STATUS_COLORS: Record<DefectStatus, string> = {
   [DefectStatus.Open]:       '#DC2626',
-  [DefectStatus.Monitoring]: '#D97706',
+  [DefectStatus.Monitoring]: '#7C3AED',  // purple — distinct from amber Minor
   [DefectStatus.Quoted]:     '#2563EB',
   [DefectStatus.Repaired]:   '#16A34A',
 };

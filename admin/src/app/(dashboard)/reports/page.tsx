@@ -64,12 +64,12 @@ export default function ReportsPage() {
       {/* Compliance Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Sites', value: stats.properties, icon: Building2, color: '#3b82f6', bg: '#eff6ff' },
-          { label: 'Compliant', value: stats.compliant, icon: CheckCircle2, color: '#22c55e', bg: '#f0fdf4' },
-          { label: 'Non-Compliant', value: stats.nonCompliant, icon: ShieldAlert, color: '#ef4444', bg: '#fef2f2' },
-          { label: 'Overdue', value: stats.overdue, icon: TrendingUp, color: '#f97316', bg: '#fff7ed' },
+          { label: 'Total Sites', value: stats.properties, icon: Building2, color: '#3b82f6', bg: 'var(--primary-light)' },
+          { label: 'Compliant', value: stats.compliant, icon: CheckCircle2, color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
+          { label: 'Non-Compliant', value: stats.nonCompliant, icon: ShieldAlert, color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+          { label: 'Overdue', value: stats.overdue, icon: TrendingUp, color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
         ].map((s, i) => (
-          <div key={s.label} className="bg-white rounded-2xl border p-5 animate-fade-in-up" style={{ borderColor: 'var(--border)', animationDelay: `${i * 50}ms` }}>
+          <div key={s.label} className="bg-[var(--card)] rounded-2xl border p-5 animate-fade-in-up" style={{ borderColor: 'var(--border)', animationDelay: `${i * 50}ms` }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: s.bg }}>
               <s.icon size={18} style={{ color: s.color }} />
             </div>
@@ -85,7 +85,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Exports */}
-      <div className="bg-white rounded-2xl border p-5 mb-6" style={{ borderColor: 'var(--border)' }}>
+      <div className="bg-[var(--card)] rounded-2xl border p-5 mb-6" style={{ borderColor: 'var(--border)' }}>
         <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Export Reports</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
@@ -96,7 +96,7 @@ export default function ReportsPage() {
             <button key={e.type} onClick={() => exportCSV(e.type)}
               className="flex items-start gap-3 p-4 rounded-xl border hover:shadow-sm hover:border-orange-200 transition-all text-left"
               style={{ borderColor: 'var(--border)' }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#fff4ed' }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(249,115,22,0.15)' }}>
                 <e.icon size={16} style={{ color: 'var(--accent)' }} />
               </div>
               <div>
@@ -111,7 +111,7 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Overdue Properties */}
-        <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>⚠️ Overdue for Inspection</p>
           {loading ? <div className="h-32 flex items-center justify-center"><div className="w-5 h-5 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
           : overdueProperties.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No overdue properties 🎉</p>
@@ -127,7 +127,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Critical Open Defects */}
-        <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>🔴 Critical Open Defects</p>
           {loading ? <div className="h-32 flex items-center justify-center"><div className="w-5 h-5 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
           : openDefects.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No critical defects open 🎉</p>
@@ -145,3 +145,6 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+
+

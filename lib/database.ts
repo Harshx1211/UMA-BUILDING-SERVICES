@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 16;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -63,6 +63,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS users (
       id         TEXT PRIMARY KEY NOT NULL,
+      company_id TEXT,
       email      TEXT UNIQUE NOT NULL,
       full_name  TEXT NOT NULL,
       role       TEXT NOT NULL DEFAULT 'technician',
@@ -75,6 +76,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS properties (
       id                 TEXT PRIMARY KEY NOT NULL,
+      company_id         TEXT,
       name               TEXT NOT NULL,
       address            TEXT,
       suburb             TEXT,
@@ -93,6 +95,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS assets (
       id                TEXT PRIMARY KEY NOT NULL,
+      company_id        TEXT,
       property_id       TEXT NOT NULL,
       asset_type        TEXT NOT NULL,
       variant           TEXT,
@@ -111,6 +114,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS jobs (
       id             TEXT PRIMARY KEY NOT NULL,
+      company_id     TEXT,
       property_id    TEXT NOT NULL,
       assigned_to    TEXT NOT NULL,
       job_type       TEXT NOT NULL,
@@ -128,6 +132,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS job_assets (
       id               TEXT PRIMARY KEY NOT NULL,
+      company_id       TEXT,
       job_id           TEXT NOT NULL,
       asset_id         TEXT NOT NULL,
       result           TEXT,
@@ -142,6 +147,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS defects (
       id          TEXT PRIMARY KEY NOT NULL,
+      company_id  TEXT,
       job_id      TEXT NOT NULL,
       asset_id    TEXT NOT NULL,
       property_id TEXT NOT NULL,
@@ -159,6 +165,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS inspection_photos (
       id          TEXT PRIMARY KEY NOT NULL,
+      company_id  TEXT,
       job_id      TEXT NOT NULL,
       asset_id    TEXT,
       photo_url   TEXT NOT NULL,
@@ -173,6 +180,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS signatures (
       id             TEXT PRIMARY KEY NOT NULL,
+      company_id     TEXT,
       job_id         TEXT NOT NULL UNIQUE,
       signature_url  TEXT NOT NULL,
       signed_by_name TEXT NOT NULL,
@@ -182,6 +190,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS time_logs (
       id                  TEXT PRIMARY KEY NOT NULL,
+      company_id          TEXT,
       job_id              TEXT NOT NULL,
       user_id             TEXT NOT NULL,
       clock_in            TEXT NOT NULL,
@@ -233,7 +242,7 @@ export function initializeSchema(): void {
     CREATE TABLE IF NOT EXISTS quote_items (
       id                TEXT PRIMARY KEY NOT NULL,
       quote_id          TEXT NOT NULL,
-      inventory_item_id TEXT NOT NULL,
+      inventory_item_id TEXT,           -- nullable: supports custom line items with item_name
       defect_id         TEXT,
       quantity          INTEGER NOT NULL DEFAULT 1,
       unit_price        REAL NOT NULL DEFAULT 0.0,
@@ -248,6 +257,7 @@ export function initializeSchema(): void {
       title      TEXT NOT NULL,
       message    TEXT NOT NULL,
       job_id     TEXT,
+      user_id    TEXT,           -- which technician this notification is for
       is_read    INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -273,7 +283,8 @@ export function initializeSchema(): void {
       variants           TEXT    NOT NULL DEFAULT '[]',
       is_active          INTEGER NOT NULL DEFAULT 1,
       sort_order         INTEGER NOT NULL DEFAULT 0,
-      created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+      created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS defect_codes (
@@ -638,6 +649,95 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '13')`);
   }
 
+  // Migration 14: batch of schema alignment fixes
+  //   14a — quote_items.inventory_item_id: make nullable (supports custom line items)
+  //   14b — notifications: add user_id column (aligns with Supabase schema)
+  //   14c — asset_type_definitions: add updated_at column
+  if (currentVersion < 14) {
+    // 14a: SQLite cannot change NOT NULL without table rebuild — inventory_item_id was
+    // already nullable in practice (INSERT OR REPLACE always worked), so this is a
+    // documentation-only fix in the CREATE TABLE above. No ALTER needed.
+
+    // 14b: notifications.user_id
+    try {
+      db.runSync('ALTER TABLE notifications ADD COLUMN user_id TEXT;');
+      if (__DEV__)
+        console.log('[UMA BUILDING SERVICES DB] Migration 14b: added notifications.user_id');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column'))
+        console.error('[UMA BUILDING SERVICES DB] Migration 14b failed:', msg);
+    }
+
+    // 14c: asset_type_definitions.updated_at
+    try {
+      db.runSync("ALTER TABLE asset_type_definitions ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));");
+      if (__DEV__)
+        console.log('[UMA BUILDING SERVICES DB] Migration 14c: added asset_type_definitions.updated_at');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column'))
+        console.error('[UMA BUILDING SERVICES DB] Migration 14c failed:', msg);
+    }
+
+    currentVersion = 14;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '14')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 14: schema alignment complete');
+  }
+
+  // Migration 15: SaaS Pivot - add company_id to all tenant-scoped tables
+  // We do a soft wipe of local data here because the remote DB was wiped
+  // and we don't want orphaned records trying to push without a company_id.
+  if (currentVersion < 15) {
+    try {
+      const tables = [
+        'users', 'properties', 'assets', 'jobs', 'job_assets', 
+        'defects', 'inspection_photos', 'signatures', 'time_logs'
+      ];
+      
+      for (const table of tables) {
+        db.runSync(`DELETE FROM ${table};`); // Wipe old single-tenant data
+        db.runSync(`ALTER TABLE ${table} ADD COLUMN company_id TEXT;`);
+      }
+      
+      // Also clear sync queue to prevent errors
+      db.runSync(`DELETE FROM sync_queue;`);
+      
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 15: added company_id & cleared old data');
+    } catch (err: unknown) {
+      console.warn('[UMA BUILDING SERVICES DB] Migration 15 failed (expected if already applied):', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 15;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '15')`);
+  }
+
+  // Migration 16: Robust SaaS wipe. Migration 15 might have failed midway if columns existed.
+  if (currentVersion < 16) {
+    const tables = [
+      'users', 'properties', 'assets', 'jobs', 'job_assets', 
+      'defects', 'inspection_photos', 'signatures', 'time_logs'
+    ];
+    
+    // First, robustly wipe all tables
+    for (const table of tables) {
+      try {
+        db.runSync(`DELETE FROM ${table};`);
+      } catch (e) {}
+    }
+    try { db.runSync(`DELETE FROM sync_queue;`); } catch (e) {}
+    
+    // Second, robustly ensure company_id exists
+    for (const table of tables) {
+      try {
+        db.runSync(`ALTER TABLE ${table} ADD COLUMN company_id TEXT;`);
+      } catch (e) {} // Will fail if column already exists, which is fine
+    }
+    
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 16: Robust wipe and company_id check complete');
+    
+    currentVersion = 16;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '16')`);
+  }
 
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
@@ -874,6 +974,34 @@ export function getDefectsForJob<T = RecordData>(jobId: string): T[] {
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getDefectsForJob(${jobId}) error:`, err);
     return [];
+  }
+}
+
+/** Returns the active (not clocked-out) time log for this job+user, or null. */
+export function getActiveTimeLog(jobId: string, userId: string): { id: string; clock_in: string } | null {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ id: string; clock_in: string }>(
+      'SELECT id, clock_in FROM time_logs WHERE job_id = ? AND user_id = ? AND clock_out IS NULL LIMIT 1',
+      [jobId, userId]
+    );
+    return row ?? null;
+  } catch (err) {
+    return null;
+  }
+}
+
+/** Returns the existing job_asset inspection record for a specific asset+job, or null. */
+export function getJobAssetRecord(jobId: string, assetId: string): { id: string; result: string | null; technician_notes: string | null } | null {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ id: string; result: string | null; technician_notes: string | null }>(
+      'SELECT id, result, technician_notes FROM job_assets WHERE job_id = ? AND asset_id = ? LIMIT 1',
+      [jobId, assetId]
+    );
+    return row ?? null;
+  } catch (err) {
+    return null;
   }
 }
 
@@ -1339,7 +1467,22 @@ export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
 export function getAllDefects<T = RecordData>(status?: string): T[] {
   try {
     const db = openDatabase();
-    const where = status ? `WHERE d.status = '${status}'` : '';
+    // Security: use parameterised query — never interpolate status string directly into SQL
+    if (status) {
+      return db.getAllSync<T>(
+        `SELECT d.*,
+                a.asset_type, a.location_on_site,
+                p.name AS property_name,
+                j.scheduled_date, j.job_type
+         FROM defects d
+         LEFT JOIN assets a ON d.asset_id = a.id
+         LEFT JOIN properties p ON d.property_id = p.id
+         LEFT JOIN jobs j ON d.job_id = j.id
+         WHERE d.status = ?
+         ORDER BY d.created_at DESC`,
+        [status],
+      );
+    }
     return db.getAllSync<T>(
       `SELECT d.*,
               a.asset_type, a.location_on_site,
@@ -1349,7 +1492,6 @@ export function getAllDefects<T = RecordData>(status?: string): T[] {
        LEFT JOIN assets a ON d.asset_id = a.id
        LEFT JOIN properties p ON d.property_id = p.id
        LEFT JOIN jobs j ON d.job_id = j.id
-       ${where}
        ORDER BY d.created_at DESC`,
     );
   } catch (err) {
@@ -1415,3 +1557,15 @@ export function seedInventoryFromDefectCodes(): void {
   }
 }
 
+export function getUnreadNotificationCount(userId: string): number {
+  try {
+    const db = openDatabase();
+    const res = db.getFirstSync<{ count: number }>(`
+      SELECT count(*) as count FROM notifications
+      WHERE user_id = ? AND is_read = 0
+    `, [userId]);
+    return res?.count || 0;
+  } catch (err) {
+    return 0;
+  }
+}

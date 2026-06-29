@@ -1,380 +1,373 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  TouchableOpacity,
+  View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
-import { Text } from 'react-native-paper';
-import { useLocalSearchParams, router } from 'expo-router';
-import { WebView } from 'react-native-webview';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { generateJobReport, ReportStage } from '@/lib/pdfGenerator';
-import { ScreenHeader, Button } from '@/components/ui';
-import { useColors } from '@/hooks/useColors';
-import { useJobsStore } from '@/store/jobsStore';
-import { JobStatus } from '@/constants/Enums';
-import Toast from 'react-native-toast-message';
+import * as FileSystem from 'expo-file-system';
+import { getJobById, getDefectsForJob, getSignatureForJob, getCompanySettings, getRecord } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
+import { C } from '@/constants/Config';
+import type { Job, Defect, Signature, CompanySettings, User } from '@/types';
 
-// ─── Stage display config ──────────────────────────────────────────────────────
-
-type StageConfig = {
-  label: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  step: number;
+type JobFull = Job & {
+  property_name?: string; address?: string; suburb?: string; state?: string; postcode?: string;
+  client_name?: string; building_class?: string; site_contact_name?: string;
 };
 
-const STAGE_CONFIG: Record<ReportStage, StageConfig> = {
-  fetching_data:     { label: 'Loading job data',               icon: 'database-outline',       step: 1 },
-  processing_photos: { label: 'Encoding photos',                 icon: 'image-multiple-outline', step: 2 },
-  building_html:     { label: 'Building report layout',          icon: 'file-document-outline',  step: 3 },
-  generating_pdf:    { label: 'Rendering PDF — please wait',    icon: 'file-pdf-box',           step: 4 },
-  uploading:         { label: 'Saving to cloud',                 icon: 'cloud-upload-outline',   step: 5 },
-  sharing:           { label: 'Ready',                           icon: 'check-circle-outline',   step: 5 },
-};
-const TOTAL_STEPS = 5;
+type Stage = 'idle' | 'loading' | 'generating' | 'uploading' | 'done' | 'error';
 
-// ─── Progress indicator ────────────────────────────────────────────────────────
-
-type ProgressProps = {
-  stage: ReportStage;
-  detail?: string;
-  primaryColor: string;
-  textColor: string;
-  textSecondary: string;
-  surface: string;
-  border: string;
+const STAGE_LABEL: Record<Stage, string> = {
+  idle:       'Ready to generate',
+  loading:    'Loading job data…',
+  generating: 'Generating PDF…',
+  uploading:  'Uploading to cloud…',
+  done:       'Report ready!',
+  error:      'Error occurred',
 };
 
-function GeneratingView({ stage, detail, primaryColor, textColor, textSecondary, surface, border }: ProgressProps) {
-  const cfg      = STAGE_CONFIG[stage] ?? STAGE_CONFIG.fetching_data;
-  const progress = cfg.step / TOTAL_STEPS;
-
-  return (
-    <Animated.View entering={FadeIn} style={styles.generatingWrap}>
-      {/* Icon circle */}
-      <View style={[styles.genIconCircle, { backgroundColor: primaryColor + '18', borderColor: primaryColor + '30' }]}>
-        <MaterialCommunityIcons name={cfg.icon} size={36} color={primaryColor} />
-      </View>
-
-      <Text style={[styles.genTitle, { color: textColor }]}>Preparing Report</Text>
-      <Text style={[styles.genStage, { color: primaryColor }]}>{cfg.label}…</Text>
-
-      {/* Progress bar */}
-      <View style={[styles.progressTrack, { backgroundColor: border }]}>
-        <Animated.View
-          style={[styles.progressFill, { backgroundColor: primaryColor, width: `${progress * 100}%` }]}
-        />
-      </View>
-
-      <Text style={[styles.genStep, { color: textSecondary }]}>
-        Step {cfg.step} of {TOTAL_STEPS}
-      </Text>
-
-      {detail ? (
-        <Text style={[styles.genDetail, { color: textSecondary }]}>{detail}</Text>
-      ) : null}
-
-      <Text style={[styles.genHint, { color: textSecondary }]}>
-        {stage === 'generating_pdf'
-          ? 'Rendering PDF with all photos. This takes 15–40s on first run — screen is not frozen.'
-          : stage === 'processing_photos'
-          ? 'Photos are encoded in parallel. Large jobs may take 10–20s.'
-          : 'Please keep this screen open until complete.'}
-      </Text>
-    </Animated.View>
-  );
+function fmtAbn(raw: string): string {
+  const d = raw.replace(/\D/g, '');
+  if (d.length !== 11) return raw;
+  return `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8, 11)}`;
 }
 
-// ─── Main screen ───────────────────────────────────────────────────────────────
+function buildHtml(
+  job: JobFull,
+  defects: Defect[],
+  sig: Signature | null,
+  company: CompanySettings | null,
+  tech: User | null,
+): string {
+  const companyName = company?.company_name ?? 'UMA Building Services Pty Ltd';
+  const abn         = company?.abn ? `ABN: ${fmtAbn(company.abn)}` : '';
+  const address     = [company?.address_line1, company?.address_line2].filter(Boolean).join(', ');
+  const phone       = company?.phone ?? '';
+  const email       = company?.email ?? '';
+
+  const criticalCount = defects.filter(d => d.severity === 'critical').length;
+  const majorCount    = defects.filter(d => d.severity === 'major').length;
+  const minorCount    = defects.filter(d => d.severity === 'minor').length;
+
+  const defectRows = defects.map(d => `
+    <tr>
+      <td>${d.defect_code ?? '—'}</td>
+      <td>${d.description}</td>
+      <td style="color:${d.severity === 'critical' ? '#dc2626' : d.severity === 'major' ? '#e8650a' : '#d97706'};font-weight:700">
+        ${d.severity.toUpperCase()}
+      </td>
+      <td>${d.status.toUpperCase()}</td>
+      <td>${d.quote_price != null ? `$${d.quote_price.toFixed(2)}` : '—'}</td>
+    </tr>
+  `).join('');
+
+  const sigBlock = sig
+    ? `<div class="sig-block">
+        <img src="${sig.signature_url}" class="sig-img" alt="Signature"/>
+        <div class="sig-meta">
+          <strong>${sig.signed_by_name}</strong><br/>
+          ${new Date(sig.signed_at).toLocaleString('en-AU')}<br/>
+          ${sig.device_info ?? ''}
+        </div>
+       </div>`
+    : '<p class="no-sig">No signature captured for this job.</p>';
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<style>
+  body{font-family:Arial,sans-serif;font-size:11pt;color:#1e293b;margin:0;padding:32px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f1e3c;padding-bottom:16px;margin-bottom:24px}
+  .company h1{font-size:18pt;color:#0f1e3c;margin:0}
+  .company p{margin:2px 0;font-size:9pt;color:#64748b}
+  .doc-title{text-align:right}
+  .doc-title h2{font-size:14pt;font-weight:700;color:#0f1e3c;margin:0}
+  .doc-title .report-no{font-size:10pt;color:#64748b;margin-top:4px}
+  .section{margin-bottom:24px}
+  .section-title{font-size:10pt;font-weight:700;color:#0f1e3c;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
+  .field label{font-size:8.5pt;color:#64748b;font-weight:600}
+  .field span{display:block;font-size:10.5pt;color:#1e293b;font-weight:500}
+  table{width:100%;border-collapse:collapse;font-size:9.5pt}
+  th{background:#0f1e3c;color:#fff;padding:8px;text-align:left;font-size:8.5pt}
+  td{padding:7px 8px;border-bottom:1px solid #e2e8f0}
+  tr:nth-child(even)td{background:#f8fafc}
+  .kpi-row{display:flex;gap:16px;margin-bottom:20px}
+  .kpi{flex:1;background:#f1f5f9;border-radius:8px;padding:12px;text-align:center}
+  .kpi .val{font-size:18pt;font-weight:700}
+  .kpi .lbl{font-size:8pt;color:#64748b;text-transform:uppercase}
+  .kpi.critical .val{color:#dc2626}
+  .kpi.major .val{color:#e8650a}
+  .kpi.minor .val{color:#d97706}
+  .sig-block{margin-top:12px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;display:flex;gap:24px;align-items:center}
+  .sig-img{max-width:200px;max-height:80px;border-bottom:1px solid #0f1e3c}
+  .sig-meta{font-size:9pt;color:#64748b;line-height:1.6}
+  .no-sig{color:#dc2626;font-style:italic}
+  .as1851{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;font-size:8.5pt;color:#0369a1;margin-top:20px}
+  .fpas-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:9pt}
+  footer{margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:8pt;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="company">
+    <h1>${companyName}</h1>
+    <p>${abn}</p>
+    ${address ? `<p>${address}</p>` : ''}
+    ${phone ? `<p>Phone: ${phone}</p>` : ''}
+    ${email ? `<p>Email: ${email}</p>` : ''}
+  </div>
+  <div class="doc-title">
+    <h2>FIRE SAFETY INSPECTION REPORT</h2>
+    <div class="report-no">Report No: ${job.report_number ?? 'PENDING'}</div>
+    <div class="report-no">AS 1851:2012 Routine Service</div>
+    <div class="report-no">Date: ${job.scheduled_date}</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Property Details</div>
+  <div class="grid">
+    <div class="field"><label>Property Name</label><span>${job.property_name ?? '—'}</span></div>
+    <div class="field"><label>Client / Owner</label><span>${job.client_name ?? '—'}</span></div>
+    <div class="field"><label>Address</label><span>${[job.address, job.suburb, job.state, job.postcode].filter(Boolean).join(', ') || '—'}</span></div>
+    <div class="field"><label>NCC Building Class</label><span>${job.building_class ?? '—'}</span></div>
+    <div class="field"><label>Site Contact</label><span>${job.site_contact_name ?? '—'}</span></div>
+    <div class="field"><label>Inspection Date</label><span>${job.scheduled_date}</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Defect Summary</div>
+  <div class="kpi-row">
+    <div class="kpi critical"><div class="val">${criticalCount}</div><div class="lbl">Critical</div></div>
+    <div class="kpi major"><div class="val">${majorCount}</div><div class="lbl">Major</div></div>
+    <div class="kpi minor"><div class="val">${minorCount}</div><div class="lbl">Minor</div></div>
+    <div class="kpi"><div class="val">${defects.length}</div><div class="lbl">Total</div></div>
+  </div>
+  ${defects.length > 0 ? `
+  <table>
+    <thead><tr><th>Code</th><th>Description</th><th>Severity</th><th>Status</th><th>Est. Cost</th></tr></thead>
+    <tbody>${defectRows}</tbody>
+  </table>` : '<p style="color:#16a34a;font-weight:600">✅ No defects recorded — all items compliant.</p>'}
+</div>
+
+${tech ? `
+<div class="section">
+  <div class="section-title">Technician &amp; FPAS Accreditation</div>
+  <div class="fpas-box">
+    <div class="grid">
+      <div class="field"><label>Technician</label><span>${tech.full_name}</span></div>
+      <div class="field"><label>FPAS Number</label><span>${tech.fpas_number ?? '—'}</span></div>
+      <div class="field"><label>FPAS Class</label><span>${tech.fpas_class ?? '—'}</span></div>
+      <div class="field"><label>FPAS Expiry</label><span>${tech.fpas_expiry ?? '—'}</span></div>
+      <div class="field"><label>State Licence</label><span>${tech.state_license ?? '—'}</span></div>
+    </div>
+  </div>
+</div>
+` : ''}
+
+<div class="section">
+  <div class="section-title">Client Sign-Off</div>
+  ${sigBlock}
+</div>
+
+<div class="as1851">
+  This inspection report has been prepared in accordance with <strong>AS 1851:2012 — Routine service of fire protection systems and equipment</strong>.
+  All work is carried out by accredited FPAS technicians. This report is intended for the building owner/manager and relevant
+  regulatory authorities. Defects classified as <strong>Critical</strong> require immediate rectification.
+</div>
+
+<footer>
+  ${companyName}  ${abn ? '• ' + abn : ''}  •  Generated by SiteTrack Field Operations System<br/>
+  Report No: ${job.report_number ?? 'PENDING'}  •  ${new Date().toLocaleString('en-AU')}
+</footer>
+
+</body>
+</html>`;
+}
 
 export default function PreviewScreen() {
-  const C = useColors();
-  const { id: jobId } = useLocalSearchParams<{ id: string }>();
-  const { updateJobStatus } = useJobsStore();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const [stage, setStage]     = useState<Stage>('idle');
+  const [pdfUri, setPdfUri]   = useState<string | null>(null);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
 
-  const [isGenerating, setIsGenerating] = useState(true);
-  const [stage, setStage]               = useState<ReportStage>('fetching_data');
-  const [stageDetail, setStageDetail]   = useState<string | undefined>();
-  const [htmlContent, setHtmlContent]   = useState<string | null>(null);
-  const [pdfUri, setPdfUri]             = useState<string | null>(null);
-  const [pdfTitle, setPdfTitle]         = useState('Service Report');
-  const [webViewReady, setWebViewReady] = useState(false);
-  const [isSharing, setIsSharing]       = useState(false);
-  const [jobCompleted, setJobCompleted] = useState(false);
-  const isMountedRef                    = useRef(true);
+  useEffect(() => { _generate(); }, []);
 
-  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
-
-  // M6: `generate` as useCallback so the retry Alert always calls the current closure
-  const generate = useCallback(async () => {
-    if (!jobId) return;
-    setIsGenerating(true);
-    setStage('fetching_data');
+  async function _generate() {
+    if (!id) return;
+    setStage('loading');
     try {
-      const result = await generateJobReport(jobId, (s, detail) => {
-        if (!isMountedRef.current) return;
-        setStage(s);
-        setStageDetail(detail);
-      });
+      const job      = getJobById<JobFull>(id);
+      const defects  = getDefectsForJob<Defect>(id);
+      const sig      = getSignatureForJob<Signature>(id);
+      const company  = getCompanySettings<CompanySettings>();
+      const tech     = job ? getRecord<User>('users', job.assigned_to) : null;
 
-      if (!isMountedRef.current) return;
-      setHtmlContent(result.html);
-      setPdfUri(result.pdfUri);
-      setPdfTitle(result.title);
+      if (!job) { setStage('error'); return; }
 
-      // Only mark the job complete if pdfGenerator confirmed it was ALREADY completed
-      // before generation. Draft previews (in_progress → /preview) set result.completed=false
-      // even when a reportUrl exists, preserving the CompletionBottomSheet signature gate.
-      if (result.completed) {
-        setJobCompleted(true);
-        updateJobStatus(jobId, JobStatus.Completed);
-        Toast.show({
-          type: 'success',
-          text1: '✅ Report Uploaded',
-          text2: 'Job marked complete. Admin can now access this report.',
-        });
-      } else if (result.reportUrl) {
-        // Draft preview — PDF saved to cloud but job remains in-progress
-        Toast.show({
-          type: 'info',
-          text1: '📄 Draft Saved',
-          text2: 'Complete the job first to finalise this report.',
-        });
+      setStage('generating');
+      const html = buildHtml(job, defects, sig, company, tech);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      setPdfUri(uri);
+
+      // Try to upload to Supabase Storage
+      setStage('uploading');
+      const fileName = `${job.report_number ?? id}.pdf`;
+      const content  = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const { data: upload } = await supabase.storage
+        .from('job-reports')
+        .upload(fileName, _b64ToUint8(content), { contentType: 'application/pdf', upsert: true });
+
+      if (upload?.path) {
+        const { data: pub } = supabase.storage.from('job-reports').getPublicUrl(upload.path);
+        setReportUrl(pub.publicUrl);
       }
-
-      setIsGenerating(false);
-    } catch (e: unknown) {
-      if (!isMountedRef.current) return;
-      const msg = e instanceof Error ? e.message : 'Unknown error occurred';
-      console.error('[UMA BUILDING SERVICES] Preview generation failed:', e);
-      Alert.alert(
-        'Generation Failed',
-        'The PDF report could not be generated.\n\n' + msg,
-        [
-          {
-            text: 'Retry',
-            // M6: Calling the stable useCallback ref — never a stale closure
-            onPress: () => generate(),
-          },
-          { text: 'Go Back', style: 'cancel', onPress: () => router.back() },
-        ]
-      );
-      setIsGenerating(false);
+      setStage('done');
+    } catch (err) {
+      console.error('[Preview] Error:', err);
+      setStage('error');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+  }
 
-  // Kick off generation on mount
-  useEffect(() => {
-    generate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
-
-  const handleShare = useCallback(async () => {
-    if (!pdfUri || isSharing) return;
-    setIsSharing(true);
-    try {
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        Toast.show({ type: 'error', text1: 'Sharing not available on this device' });
-        return;
-      }
-      await Sharing.shareAsync(pdfUri, {
-        mimeType:    'application/pdf',
-        dialogTitle: pdfTitle,
-        UTI:         'com.adobe.pdf',
-      });
-    } catch (e) {
-      console.error('[UMA BUILDING SERVICES] Share failed:', e);
-      Toast.show({ type: 'error', text1: 'Failed to share report', text2: 'Please try again' });
-    } finally {
-      setIsSharing(false);
+  function _b64ToUint8(b64: string): Uint8Array {
+    // React Native (Hermes) does not have atob — use manual decode
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const clean  = b64.replace(/=+$/, '');
+    const bytes: number[] = [];
+    for (let i = 0; i < clean.length; i += 4) {
+      const a = chars.indexOf(clean[i]);
+      const b = chars.indexOf(clean[i + 1]);
+      const c = chars.indexOf(clean[i + 2] ?? 'A');
+      const d = chars.indexOf(clean[i + 3] ?? 'A');
+      bytes.push((a << 2) | (b >> 4));
+      if (clean[i + 2]) bytes.push(((b & 15) << 4) | (c >> 2));
+      if (clean[i + 3]) bytes.push(((c & 3) << 6) | d);
     }
-  }, [pdfUri, pdfTitle, isSharing]);
+    return new Uint8Array(bytes);
+  }
 
+  async function _share() {
+    if (!pdfUri) return;
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) await Sharing.shareAsync(pdfUri, { mimeType: 'application/pdf' });
+    else Alert.alert('Sharing not available on this device');
+  }
+
+  async function _print() {
+    if (!pdfUri) return;
+    await Print.printAsync({ uri: pdfUri });
+  }
+
+  const isDone  = stage === 'done';
+  const isError = stage === 'error';
+  const isWorking = !isDone && !isError;
 
   return (
-    <View style={[styles.screen, { backgroundColor: C.background }]}>
-      <ScreenHeader
-        title="PDF Preview"
-        subtitle={isGenerating ? 'Generating…' : pdfTitle}
-        showBack={!isGenerating}
-        curved={false}
-      />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Inspection Report</Text>
+        <View style={{ width: 60 }} />
+      </View>
 
-      {isGenerating ? (
-        <GeneratingView
-          stage={stage}
-          detail={stageDetail}
-          primaryColor={C.primary}
-          textColor={C.text}
-          textSecondary={C.textSecondary}
-          surface={C.surface}
-          border={C.border}
-        />
-      ) : htmlContent ? (
-        <Animated.View entering={FadeIn.duration(350)} style={styles.content}>
-          {/* WebView renders the same HTML used for the PDF — 1:1 preview */}
-          {!webViewReady && (
-            <View style={[styles.webviewLoader, { backgroundColor: C.background }]}>
-              <ActivityIndicator color={C.primary} size="large" />
-              <Text style={[styles.webviewLoaderText, { color: C.textSecondary }]}>
-                Rendering preview…
-              </Text>
-            </View>
-          )}
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: htmlContent }}
-            style={styles.webview}
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-            onLoadEnd={() => setWebViewReady(true)}
-            // Scale down for mobile so the A4 layout is readable
-            injectedJavaScript={`
-              (function() {
-                var meta = document.querySelector('meta[name="viewport"]');
-                if (meta) {
-                  meta.setAttribute('content', 'width=794, initial-scale=${Platform.OS === 'ios' ? 0.45 : 0.42}, minimum-scale=0.3, maximum-scale=2.0, user-scalable=yes');
-                }
-              })();
-              true;
-            `}
-          />
-
-          {/* Job completed banner — shown when upload succeeded */}
-          {jobCompleted && (
-            <Animated.View
-              entering={FadeInDown.duration(400)}
-              style={[styles.completedBanner, { backgroundColor: C.successLight, borderColor: C.success }]}
-            >
-              <MaterialCommunityIcons name="check-decagram" size={18} color={C.successDark} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.completedBannerTitle, { color: C.successDark }]}>Job Marked Complete</Text>
-                <Text style={[styles.completedBannerSub, { color: C.success }]}>Report is live — admin can now view and share it.</Text>
-              </View>
-            </Animated.View>
-          )}
-
-          {/* Bottom action bar */}
-          <View style={[styles.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-            {/* PDF info chip */}
-            <View style={[styles.pdfInfoChip, { backgroundColor: C.backgroundTertiary ?? '#F1F5F9', borderColor: C.border }]}>
-              <MaterialCommunityIcons name="file-pdf-box" size={18} color="#DC2626" />
-              <Text style={[styles.pdfInfoText, { color: C.textSecondary }]} numberOfLines={1}>
-                {pdfTitle}
-              </Text>
-            </View>
-
-            <Button
-              title={isSharing ? 'Sharing…' : 'Share / Save PDF'}
-              onPress={handleShare}
-              icon={
-                isSharing
-                  ? <ActivityIndicator size="small" color="#FFF" />
-                  : <MaterialCommunityIcons name="share-variant-outline" size={20} color="#FFF" />
-              }
-              style={{ height: 52, borderRadius: 26, flex: 1 }}
-            />
+      <View style={styles.body}>
+        {/* Stage indicator */}
+        <View style={styles.stageCard}>
+          <View style={[styles.stageIcon, isDone && styles.stageIconDone, isError && styles.stageIconError]}>
+            {isWorking && <ActivityIndicator color={C.accent} size="large" />}
+            {isDone  && <Text style={styles.stageEmoji}>✅</Text>}
+            {isError && <Text style={styles.stageEmoji}>❌</Text>}
           </View>
-        </Animated.View>
-      ) : (
-        /* Error state */
-        <Animated.View entering={FadeIn} style={styles.errorWrap}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={52} color={C.error} />
-          <Text style={[styles.errorTitle, { color: C.text }]}>Preview Unavailable</Text>
-          <Text style={[styles.errorSub, { color: C.textSecondary }]}>
-            The report could not be generated. Please go back and try again.
+          <Text style={[styles.stageLabel, isDone && { color: C.success }, isError && { color: C.danger }]}>
+            {STAGE_LABEL[stage]}
           </Text>
-          <View style={{ marginTop: 20 }}>
-            <Button title="Go Back" onPress={() => router.back()} />
+
+          {/* Progress steps */}
+          <View style={styles.steps}>
+            {(['loading', 'generating', 'uploading', 'done'] as Stage[]).map((s, i) => {
+              const stages: Stage[] = ['loading', 'generating', 'uploading', 'done'];
+              const currentIdx = stages.indexOf(stage);
+              const thisIdx    = stages.indexOf(s);
+              const done       = isError ? false : thisIdx < currentIdx || (isDone && thisIdx <= currentIdx);
+              const active     = s === stage && !isDone && !isError;
+              return (
+                <View key={s} style={styles.stepWrap}>
+                  <View style={[styles.stepDot, done && styles.stepDotDone, active && styles.stepDotActive]} />
+                  <Text style={[styles.stepLabel, done && { color: C.success }, active && { color: C.accent }]}>
+                    {STAGE_LABEL[s]}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
-        </Animated.View>
-      )}
+        </View>
+
+        {/* Actions */}
+        {isDone && (
+          <View style={styles.actions}>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionShare]} onPress={_share}>
+              <Text style={styles.actionBtnText}>Share PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionPrint]} onPress={_print}>
+              <Text style={styles.actionBtnText}>Print</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {isDone && reportUrl && (
+          <Text style={styles.cloudNote}>☁️  Report uploaded to cloud storage</Text>
+        )}
+        {isError && (
+          <TouchableOpacity style={styles.retryBtn} onPress={_generate}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  screen:  { flex: 1 },
-  content: { flex: 1 },
-  webview: { flex: 1, backgroundColor: '#F8FAFC' },
-
-  // Generating
-  generatingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 10,
+  container:        { flex: 1, backgroundColor: C.primary },
+  header:           {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.surface,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  genIconCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, marginBottom: 8,
+  backBtn:          { paddingVertical: 4 },
+  backText:         { color: C.accent, fontSize: 14, fontWeight: '600' },
+  title:            { color: C.textLight, fontSize: 17, fontWeight: '700' },
+  body:             { flex: 1, padding: 24, justifyContent: 'center' },
+  stageCard:        { backgroundColor: C.surface, borderRadius: 20, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  stageIcon:        {
+    width: 80, height: 80, borderRadius: 40, backgroundColor: C.primaryLight,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    borderWidth: 2, borderColor: C.border,
   },
-  genTitle:  { fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  genStage:  { fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  genStep:   { fontSize: 12, marginTop: 4 },
-  genDetail: { fontSize: 11, textAlign: 'center', marginTop: 2 },
-  genHint:   { fontSize: 11, textAlign: 'center', marginTop: 12, lineHeight: 16, opacity: 0.7 },
-
-  progressTrack: { width: '100%', height: 5, borderRadius: 3, overflow: 'hidden', marginTop: 12 },
-  progressFill:  { height: '100%', borderRadius: 3 },
-
-  // WebView loading
-  webviewLoader: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  webviewLoaderText: { fontSize: 13, fontWeight: '500' },
-
-  // Bottom bar
-  bottomBar: {
-    padding: 14,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 18,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  pdfInfoChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 8,
-    borderRadius: 10, borderWidth: 1,
-    maxWidth: 140,
-  },
-  pdfInfoText: { fontSize: 10.5, fontWeight: '600', flex: 1 },
-
-  // Error
-  errorWrap: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 32, gap: 10,
-  },
-  errorTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
-  errorSub:   { fontSize: 13, textAlign: 'center', lineHeight: 20 },
-
-  // Job completed banner
-  completedBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 14, marginBottom: 6,
-    padding: 12, borderRadius: 14, borderWidth: 1.5,
-  },
-  completedBannerTitle: { fontSize: 13, fontWeight: '800', marginBottom: 2 },
-  completedBannerSub:   { fontSize: 11, fontWeight: '500' },
+  stageIconDone:    { borderColor: C.success, backgroundColor: 'rgba(22,163,74,0.1)' },
+  stageIconError:   { borderColor: C.danger, backgroundColor: 'rgba(220,38,38,0.1)' },
+  stageEmoji:       { fontSize: 32 },
+  stageLabel:       { color: C.textLight, fontSize: 18, fontWeight: '700', marginBottom: 24 },
+  steps:            { width: '100%', gap: 12 },
+  stepWrap:         { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepDot:          { width: 10, height: 10, borderRadius: 5, backgroundColor: C.border },
+  stepDotDone:      { backgroundColor: C.success },
+  stepDotActive:    { backgroundColor: C.accent },
+  stepLabel:        { color: C.textMuted, fontSize: 13 },
+  actions:          { flexDirection: 'row', gap: 12, marginTop: 20 },
+  actionBtn:        { flex: 1, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  actionShare:      { backgroundColor: C.accent },
+  actionPrint:      { backgroundColor: C.primaryLight, borderWidth: 1, borderColor: C.border },
+  actionBtnText:    { color: '#fff', fontSize: 15, fontWeight: '700' },
+  cloudNote:        { textAlign: 'center', color: C.textMuted, fontSize: 12, marginTop: 12 },
+  retryBtn:         { marginTop: 16, backgroundColor: 'rgba(220,38,38,0.12)', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: C.danger },
+  retryText:        { color: C.danger, fontWeight: '700' },
 });

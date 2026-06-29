@@ -87,10 +87,10 @@ export default function PropertiesPage() {
   };
 
   const SUMMARY_ITEMS = [
-    { label: 'Compliant',     value: summary.compliant,     color: '#22c55e', bg: '#f0fdf4', status: 'compliant' },
-    { label: 'Non-Compliant', value: summary.non_compliant, color: '#ef4444', bg: '#fef2f2', status: 'non_compliant' },
-    { label: 'Overdue',       value: summary.overdue,       color: '#f97316', bg: '#fff7ed', status: 'overdue' },
-    { label: 'Pending',       value: summary.pending,       color: '#94a3b8', bg: '#f8fafc', status: 'pending' },
+    { label: 'Compliant',     value: summary.compliant,     color: '#22c55e', bg: 'rgba(34,197,94,0.15)', status: 'compliant' },
+    { label: 'Non-Compliant', value: summary.non_compliant, color: '#ef4444', bg: 'rgba(239,68,68,0.15)', status: 'non_compliant' },
+    { label: 'Overdue',       value: summary.overdue,       color: '#f97316', bg: 'rgba(249,115,22,0.15)', status: 'overdue' },
+    { label: 'Pending',       value: summary.pending,       color: '#94a3b8', bg: 'var(--bg)', status: 'pending' },
   ];
 
   return (
@@ -102,12 +102,12 @@ export default function PropertiesPage() {
           <div className="flex items-center gap-2">
             <button onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: '#fff' }}>
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
               <Download size={14} /> Export CSV
             </button>
             <button onClick={() => setShowImport(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
-              style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: '#f0f4ff' }}>
+              style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--primary-light)' }}>
               <Upload size={14} /> Import CSV
             </button>
             <button onClick={() => setShowCreate(true)}
@@ -123,8 +123,8 @@ export default function PropertiesPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {SUMMARY_ITEMS.map((s, i) => (
           <button key={s.label} onClick={() => setComplianceF(complianceF === s.status ? '' : s.status)}
-            className="bg-white rounded-2xl border p-4 text-left transition-all hover:shadow-md active:scale-[0.98] animate-fade-in-up"
-            style={{ borderColor: complianceF === s.status ? s.color : 'var(--border)', animationDelay: `${i * 50}ms`, boxShadow: complianceF === s.status ? `0 0 0 2px ${s.color}` : '0 1px 4px rgba(0,0,0,0.04)', background: complianceF === s.status ? s.bg : '#fff' }}>
+            className="bg-[var(--card)] rounded-2xl border p-4 text-left transition-all hover:shadow-md active:scale-[0.98] animate-fade-in-up"
+            style={{ borderColor: complianceF === s.status ? s.color : 'var(--border)', animationDelay: `${i * 50}ms`, boxShadow: complianceF === s.status ? `0 0 0 2px ${s.color}` : '0 1px 4px rgba(0,0,0,0.04)', background: complianceF === s.status ? s.bg : 'var(--card)' }}>
             <p className="text-2xl font-extrabold leading-none" style={{ color: s.color }}>{s.value}</p>
             <p className="text-xs font-semibold mt-1.5" style={{ color: 'var(--text-secondary)' }}>{s.label}</p>
             {total > 0 && (
@@ -137,23 +137,23 @@ export default function PropertiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border p-4 flex flex-wrap gap-3 items-center" style={{ borderColor: 'var(--border)' }}>
+      <div className="bg-[var(--card)] rounded-2xl border p-4 flex flex-wrap gap-3 items-center" style={{ borderColor: 'var(--border)' }}>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search properties…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm outline-none transition-all"
-            style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}
-            onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = '#fff'; }}
-            onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = '#f8fafc'; }} />
+            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+            onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg)'; }} />
         </div>
         <select value={stateF} onChange={e => setStateF(e.target.value)}
-          className="px-3.5 py-2.5 rounded-xl border text-sm outline-none" style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}>
+          className="px-3.5 py-2.5 rounded-xl border text-sm font-medium outline-none cursor-pointer" style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}>
           {STATES.map(s => <option key={s} value={s}>{s || 'State: All'}</option>)}
         </select>
         {(search || complianceF || stateF) && (
           <button onClick={() => { setSearch(''); setComplianceF(''); setStateF(''); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ color: 'var(--error)', background: '#fef2f2' }}>
+            style={{ color: 'var(--error)', background: 'rgba(239,68,68,0.15)' }}>
             <X size={13} /> Clear
           </button>
         )}
@@ -163,11 +163,11 @@ export default function PropertiesPage() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl border h-40 animate-shimmer" style={{ borderColor: 'var(--border)' }} />
+            <div key={i} className="bg-[var(--card)] rounded-2xl border h-40 animate-shimmer" style={{ borderColor: 'var(--border)' }} />
           ))}
         </div>
       ) : properties.length === 0 ? (
-        <div className="bg-white rounded-2xl border flex flex-col items-center justify-center py-16" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-[var(--card)] rounded-2xl border flex flex-col items-center justify-center py-16" style={{ borderColor: 'var(--border)' }}>
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--bg)' }}>
             <Building2 size={24} style={{ color: 'var(--text-tertiary)' }} />
           </div>
@@ -178,7 +178,7 @@ export default function PropertiesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {properties.map((p, i) => (
             <Link key={p.id} href={`/properties/${p.id}`}
-              className="group bg-white rounded-2xl border overflow-hidden hover:shadow-md transition-all animate-fade-in-up"
+              className="group bg-[var(--card)] rounded-2xl border overflow-hidden hover:shadow-md transition-all animate-fade-in-up"
               style={{ borderColor: 'var(--border)', animationDelay: `${i * 30}ms` }}>
               {/* Top accent based on compliance */}
               <div className="h-1 w-full"
@@ -186,7 +186,7 @@ export default function PropertiesPage() {
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#f0f4ff' }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)' }}>
                       <Building2 size={16} style={{ color: 'var(--primary)' }} />
                     </div>
                     <div className="min-w-0">
@@ -244,7 +244,7 @@ export default function PropertiesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)' }}
           onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in"
+          <div className="bg-[var(--card)] rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in"
             style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
               <div>
@@ -267,9 +267,9 @@ export default function PropertiesPage() {
                   <input value={(form as any)[f.field]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
                     placeholder={f.placeholder}
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}
-                    onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = '#fff'; }}
-                    onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = '#f8fafc'; }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                    onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; }}
+                    onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg)'; }} />
                 </div>
               ))}
               <div className="grid grid-cols-3 gap-3">
@@ -282,14 +282,14 @@ export default function PropertiesPage() {
                     <input value={(form as any)[f.field]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
                       placeholder={f.placeholder}
                       className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                      style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                      style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                   </div>
                 ))}
                 <div>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>State</label>
                   <select value={form.state} onChange={e => setForm(p => ({ ...p, state: e.target.value }))}
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}>
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}>
                     {STATES.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -299,31 +299,31 @@ export default function PropertiesPage() {
                 <textarea value={form.access_notes} onChange={e => setForm(p => ({ ...p, access_notes: e.target.value }))} rows={2}
                   placeholder="Gate codes, parking, building entry instructions…"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none resize-none transition-all"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}
-                  onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = '#fff'; }}
-                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = '#f8fafc'; }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg)'; }} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Hazard Notes</label>
                 <textarea value={form.hazard_notes} onChange={e => setForm(p => ({ ...p, hazard_notes: e.target.value }))} rows={2}
                   placeholder="Known site hazards, safety requirements…"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none resize-none transition-all"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}
-                  onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = '#fff'; }}
-                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = '#f8fafc'; }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg)'; }} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Site Note</label>
                 <textarea value={form.site_note} onChange={e => setForm(p => ({ ...p, site_note: e.target.value }))} rows={2}
                   placeholder="General note for technicians about this site…"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none resize-none transition-all"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }}
-                  onFocus={e => { e.target.style.borderColor = '#16a34a'; e.target.style.background = '#fff'; }}
-                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = '#f8fafc'; }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                  onFocus={e => { e.target.style.borderColor = '#16a34a'; e.target.style.background = 'var(--card)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg)'; }} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50 transition-all"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5 transition-all"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
                 <button type="submit" disabled={creating}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-60"
@@ -360,3 +360,6 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
+
+

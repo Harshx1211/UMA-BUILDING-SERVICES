@@ -224,11 +224,11 @@ const s = StyleSheet.create({
     shadowRadius: 14,
     elevation: 4,
   },
-  strip:   { width: 6 },
+  strip:   { width: 4 },
   content: { flex: 1, paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
 
   row1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  propertyName: { fontSize: 15, fontWeight: '700', flex: 1, letterSpacing: -0.2 },
+  propertyName: { fontSize: 15, fontWeight: '800', flex: 1, letterSpacing: -0.2 },
 
   row2: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   address: { fontSize: 12, flex: 1, lineHeight: 17 },
@@ -236,7 +236,7 @@ const s = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
 
   row3: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   timeText:  { fontSize: 11, fontWeight: '500' },
   navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   navText:   { fontSize: 11, fontWeight: '600' },

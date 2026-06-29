@@ -69,14 +69,18 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
     });
     if (qErr || !quote) { toast.error(qErr ?? 'Failed to create quote'); setSaving(false); return; }
 
-    for (const l of lines) {
-      await adminApi.insert('quote_items', {
+    try {
+      await Promise.all(lines.map(l => adminApi.insert('quote_items', {
         quote_id: quote.id,
         inventory_item_id: l.inventoryItemId,
         defect_id: l.defectId,
-        quantity: l.quantity,
+        quantity: Math.max(1, l.quantity),
         unit_price: l.unitPrice,
-      });
+      })));
+    } catch (err) {
+      toast.error('Quote created, but some line items failed to save.');
+      setSaving(false);
+      return;
     }
 
     toast.success('Quote created!');
@@ -93,7 +97,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col animate-scale-in"
+      <div className="bg-[var(--card)] rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col animate-scale-in"
         style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
 
         {/* Header */}
@@ -116,7 +120,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
               <input value={jobSearch} onChange={e => setJobSearch(e.target.value)}
                 placeholder="Search property or technician…"
                 className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
               {filteredJobs.length === 0 && (
                 <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No completed or in-progress jobs found</p>
               )}
@@ -147,7 +151,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                   </p>
                   {defects.map(d => (
                     <div key={d.id} className="mb-2">
-                      <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: '#fff7ed' }}>
+                      <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'rgba(249,115,22,0.15)' }}>
                         <p className="flex-1 text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{d.description}</p>
                         <button onClick={() => setShowInvPicker(d.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white flex-shrink-0"
@@ -160,7 +164,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                         <div className="mt-1 border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
                           {inventory.map(inv => (
                             <button key={inv.id} onClick={() => addLine(inv, d.id)}
-                              className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 border-b last:border-0 transition-colors"
+                              className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 border-b last:border-0 transition-colors"
                               style={{ borderColor: 'var(--border)' }}>
                               <span style={{ color: 'var(--text)' }}>{inv.name}</span>
                               <span className="font-semibold" style={{ color: '#16a34a' }}>{formatCurrency(inv.price)}</span>
@@ -182,7 +186,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                   <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>General Items</p>
                   <button onClick={() => setShowInvPicker(showInvPicker === 'general' ? null : 'general')}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
-                    style={{ background: '#f0f4ff', color: 'var(--primary)' }}>
+                    style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}>
                     <Plus size={11} /> Add item
                   </button>
                 </div>
@@ -190,7 +194,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                   <div className="border rounded-xl overflow-hidden mb-3" style={{ borderColor: 'var(--border)' }}>
                     {inventory.map(inv => (
                       <button key={inv.id} onClick={() => addLine(inv, null)}
-                        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 border-b last:border-0 transition-colors"
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 border-b last:border-0 transition-colors"
                         style={{ borderColor: 'var(--border)' }}>
                         <span style={{ color: 'var(--text)' }}>{inv.name}</span>
                         <span className="font-semibold" style={{ color: '#16a34a' }}>{formatCurrency(inv.price)}</span>
@@ -203,7 +207,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
               {/* Line items list */}
               {lines.length > 0 && (
                 <div className="border rounded-2xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-                  <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
+                  <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                     <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Quote Lines</p>
                   </div>
                   {lines.map((l, i) => (
@@ -216,7 +220,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                       </div>
                       <input type="number" min={1} value={l.quantity} onChange={e => updateQty(i, Number(e.target.value))}
                         className="w-14 text-center px-2 py-1.5 rounded-lg border text-sm outline-none"
-                        style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                        style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                       <span className="text-sm font-semibold w-20 text-right" style={{ color: '#16a34a' }}>
                         {formatCurrency(l.quantity * l.unitPrice)}
                       </span>
@@ -239,7 +243,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
         {step === 'items' && (
           <div className="px-6 pb-6 pt-4 border-t flex gap-3 flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
             <button onClick={() => setStep('job')}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>← Back</button>
             <button onClick={save} disabled={saving || lines.length === 0}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
@@ -252,3 +256,6 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
     </div>
   );
 }
+
+
+

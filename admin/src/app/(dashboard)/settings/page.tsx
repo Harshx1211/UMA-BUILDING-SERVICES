@@ -41,11 +41,11 @@ export default function SettingsPage() {
       <div className="flex gap-5">
         {/* Sidebar */}
         <div className="w-52 flex-shrink-0">
-          <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
             {SECTIONS.map(s => (
               <button key={s.id} onClick={() => setSection(s.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-left transition-all border-b last:border-0"
-                style={{ borderColor: 'var(--border)', background: section === s.id ? '#fff4ed' : 'transparent', color: section === s.id ? 'var(--accent)' : 'var(--text-secondary)', borderLeft: section === s.id ? '3px solid var(--accent)' : '3px solid transparent' }}>
+                style={{ borderColor: 'var(--border)', background: section === s.id ? 'rgba(249,115,22,0.15)' : 'transparent', color: section === s.id ? 'var(--accent)' : 'var(--text-secondary)', borderLeft: section === s.id ? '3px solid var(--accent)' : '3px solid transparent' }}>
                 <s.icon size={16} />
                 {s.label}
               </button>
@@ -56,7 +56,7 @@ export default function SettingsPage() {
         {/* Content */}
         <div className="flex-1">
           {section === 'company' && (
-            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
               <p className="font-semibold text-lg mb-5" style={{ color: 'var(--text)' }}>Company Information</p>
               <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>This information appears on generated PDF reports and client communications.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -89,7 +89,7 @@ export default function SettingsPage() {
           )}
 
           {section === 'notifications' && (
-            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
               <p className="font-semibold text-lg mb-5" style={{ color: 'var(--text)' }}>Notification Settings</p>
               <div className="space-y-4">
                 {[
@@ -106,7 +106,7 @@ export default function SettingsPage() {
                     </div>
                     <button className="relative w-10 h-6 rounded-full transition-colors flex-shrink-0"
                       style={{ background: item.enabled ? 'var(--primary)' : '#cbd5e1' }}>
-                      <span className="absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow-sm"
+                      <span className="absolute w-4 h-4 bg-[var(--card)] rounded-full top-1 transition-all shadow-sm"
                         style={{ left: item.enabled ? '22px' : '4px' }} />
                     </button>
                   </div>
@@ -119,7 +119,7 @@ export default function SettingsPage() {
           )}
 
           {section === 'compliance' && (
-            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
               <p className="font-semibold text-lg mb-5" style={{ color: 'var(--text)' }}>Compliance Standards</p>
               <div className="space-y-4">
                 {[
@@ -128,7 +128,7 @@ export default function SettingsPage() {
                   { label: 'AS1670 – Fire Detection & Alarm', sub: 'Detection and alarm system maintenance', active: false },
                   { label: 'BCA / NCC Essential Services', sub: 'Building Code of Australia compliance tracking', active: true },
                 ].map((std, i) => (
-                  <div key={i} className="flex items-start gap-4 p-4 rounded-xl border" style={{ borderColor: 'var(--border)', background: std.active ? '#f0fdf4' : '#fafafa' }}>
+                  <div key={i} className="flex items-start gap-4 p-4 rounded-xl border" style={{ borderColor: 'var(--border)', background: std.active ? 'rgba(34,197,94,0.15)' : '#fafafa' }}>
                     <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: std.active ? '#22c55e' : '#cbd5e1' }}>
                       {std.active && <Check size={11} color="white" strokeWidth={3} />}
                     </div>
@@ -146,7 +146,7 @@ export default function SettingsPage() {
           )}
 
           {section === 'appearance' && (
-            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
               <p className="font-semibold text-lg mb-5" style={{ color: 'var(--text)' }}>Appearance</p>
               <div className="space-y-5">
                 <div>
@@ -156,7 +156,7 @@ export default function SettingsPage() {
                       { label: 'Light', colors: ['#F0F4F8', '#1B2D4F', '#F97316'] },
                       { label: 'Dark (coming soon)', colors: ['#0F172A', '#334155', '#F97316'] },
                     ].map(t => (
-                      <div key={t.label} className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer" style={{ borderColor: t.label === 'Light' ? 'var(--accent)' : 'var(--border)', background: t.label === 'Light' ? '#fff4ed' : '#fafafa' }}>
+                      <div key={t.label} className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer" style={{ borderColor: t.label === 'Light' ? 'var(--accent)' : 'var(--border)', background: t.label === 'Light' ? 'rgba(249,115,22,0.15)' : '#fafafa' }}>
                         <div className="flex gap-1">
                           {t.colors.map((c, i) => <span key={i} className="w-4 h-4 rounded-full" style={{ background: c }} />)}
                         </div>
@@ -180,7 +180,7 @@ export default function SettingsPage() {
           )}
 
           {section === 'database' && (
-            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
+            <div className="bg-[var(--card)] rounded-2xl border p-6" style={{ borderColor: 'var(--border)' }}>
               <p className="font-semibold text-lg mb-2" style={{ color: 'var(--text)' }}>Data & Storage</p>
               <p className="text-sm mb-5" style={{ color: 'var(--text-secondary)' }}>Powered by Supabase — PostgreSQL database with row-level security.</p>
               <div className="space-y-3">
@@ -195,7 +195,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{r.label}</p>
                       <p className="text-xs mt-0.5 font-mono" style={{ color: 'var(--text-secondary)' }}>{r.value}</p>
                     </div>
-                    <span className="chip" style={{ background: '#f0fdf4', color: '#16a34a' }}>{r.status}</span>
+                    <span className="chip" style={{ background: 'rgba(34,197,94,0.15)', color: '#16a34a' }}>{r.status}</span>
                   </div>
                 ))}
               </div>
@@ -206,3 +206,6 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+
+

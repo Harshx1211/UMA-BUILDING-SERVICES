@@ -20,11 +20,12 @@ import {
   markSyncItemComplete,
   updateRecord,
   getRecord,
+  incrementSyncRetry,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
-import { useAuthStore } from '@/store/authStore';
+
 
 /** Max concurrent photo binary uploads per sync cycle */
 const UPLOAD_CONCURRENCY = 3;
@@ -136,7 +137,7 @@ export function queuePhotoUpload(
  * Uploads run in parallel batches of UPLOAD_CONCURRENCY (default 3) for speed.
  * Failed uploads are left in the queue for retry on the next sync cycle.
  */
-export async function processPhotoQueue(): Promise<void> {
+export async function processPhotoQueue(currentUserId: string): Promise<void> {
   try {
     const pending    = getPendingSyncItems();
     const photoTasks = pending.filter(i => i.operation === ('photo_upload' as any));
@@ -147,7 +148,6 @@ export async function processPhotoQueue(): Promise<void> {
 
     // H1: Guard — don't attempt photo sync without a valid user ID.
     // An empty uploaded_by value causes Supabase FK constraint failures silently.
-    const currentUserId = useAuthStore.getState().user?.id;
     if (!currentUserId) {
       if (__DEV__) console.warn('[PhotoUpload] No authenticated user — deferring photo queue until next sync');
       return;
@@ -210,7 +210,7 @@ export async function processPhotoQueue(): Promise<void> {
           if (__DEV__) console.log(`[PhotoUpload] Uploaded: ${publicUrl}`);
         } else {
           if (__DEV__) console.log(`[PhotoUpload] Upload failed for task ${task.id} — will retry next cycle`);
-          // Leave in queue — do NOT mark complete
+          incrementSyncRetry(task.id);
         }
       }));
     }

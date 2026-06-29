@@ -32,9 +32,23 @@ export default function InventoryTab() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name) { toast.error('Name is required'); return; }
+    const cleanName = form.name.trim();
+    const cleanDesc = form.description ? form.description.trim() : null;
+    
+    if (!cleanName) { toast.error('Name is required'); return; }
+    
+    let parsedPrice = Number(form.price);
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      toast.error('Unit Price must be a valid positive number');
+      return;
+    }
+
     setSaving(true);
-    const payload = { name: form.name, description: form.description || null, price: Number(form.price) || 0 };
+    const payload = { 
+      name: cleanName, 
+      description: cleanDesc, 
+      price: parsedPrice 
+    };
     const { error } = editing
       ? await adminApi.update('inventory_items', payload, editing.id)
       : await adminApi.insert('inventory_items', payload);
@@ -54,7 +68,7 @@ export default function InventoryTab() {
   };
 
   return (
-    <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+    <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
         <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
@@ -85,7 +99,7 @@ export default function InventoryTab() {
       ) : (
         <table className="w-full">
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+            <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
               {['Item Name', 'Description', 'Unit Price (ex-GST)', ''].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide"
                   style={{ color: 'var(--text-tertiary)' }}>{h}</th>
@@ -94,7 +108,7 @@ export default function InventoryTab() {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors animate-fade-in"
+              <tr key={r.id} className="border-b last:border-0 hover:bg-white/5 transition-colors animate-fade-in"
                 style={{ borderColor: 'var(--border)', animationDelay: `${i * 15}ms` }}>
                 <td className="px-5 py-3.5 text-sm font-semibold" style={{ color: 'var(--text)' }}>{r.name}</td>
                 <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{r.description ?? '—'}</td>
@@ -120,7 +134,7 @@ export default function InventoryTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-md animate-scale-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+          <div className="bg-[var(--card)] rounded-3xl w-full max-w-md animate-scale-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
               <h3 className="font-extrabold text-lg" style={{ color: 'var(--text)' }}>{editing ? 'Edit Item' : 'Add Inventory Item'}</h3>
               <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-100"><X size={16} /></button>
@@ -130,24 +144,24 @@ export default function InventoryTab() {
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Item Name *</label>
                 <input value={form.name} onChange={e => f('name', e.target.value)} placeholder="e.g. Replace Smoke Alarm 240V"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Description</label>
                 <textarea value={form.description} onChange={e => f('description', e.target.value)} rows={2}
                   placeholder="Optional detail shown on quote line items"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none resize-none"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Unit Price ($ ex-GST)</label>
                 <input type="number" step="0.01" value={form.price} onChange={e => f('price', e.target.value)} placeholder="0.00"
                   className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                  style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
               </div>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
                 <button type="submit" disabled={saving}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60"
@@ -171,3 +185,6 @@ export default function InventoryTab() {
     </div>
   );
 }
+
+
+

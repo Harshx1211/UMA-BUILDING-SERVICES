@@ -40,9 +40,21 @@ export default function AssetTypesTab() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.value || !form.label) { toast.error('Value and Label are required'); return; }
+    const cleanValue = form.value.trim();
+    const cleanLabel = form.label.trim();
+    const cleanFullLabel = form.full_label.trim();
+    
+    if (!cleanValue || !cleanLabel) { toast.error('Value and Label are required'); return; }
+    if (!form.color.startsWith('#') || form.color.length < 4) { toast.error('Invalid hex color'); return; }
+
     setSaving(true);
-    const payload = { ...form, updated_at: new Date().toISOString() };
+    const payload = { 
+      ...form, 
+      value: cleanValue,
+      label: cleanLabel,
+      full_label: cleanFullLabel,
+      updated_at: new Date().toISOString() 
+    };
     const { error } = editing
       ? await adminApi.update('asset_type_definitions', payload, editing.id)
       : await adminApi.insert('asset_type_definitions', { ...payload, sort_order: rows.length + 1 });
@@ -64,7 +76,7 @@ export default function AssetTypesTab() {
   const f = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
   return (
-    <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+    <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
         <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
@@ -87,7 +99,7 @@ export default function AssetTypesTab() {
             const variants: string[] = r.variants ?? [];
             return (
               <div key={r.id} className="border-b last:border-0 animate-fade-in" style={{ borderColor: 'var(--border)', animationDelay: `${i * 20}ms` }}>
-                <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors">
                   {/* Color dot */}
                   <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: r.color }} />
                   <div className="flex-1 min-w-0">
@@ -108,7 +120,7 @@ export default function AssetTypesTab() {
                   </div>
                 </div>
                 {open && variants.length > 0 && (
-                  <div className="px-5 pb-3 flex flex-wrap gap-1.5" style={{ background: '#f8fafc' }}>
+                  <div className="px-5 pb-3 flex flex-wrap gap-1.5" style={{ background: 'var(--bg)' }}>
                     {variants.map(v => (
                       <span key={v} className="px-2.5 py-1 rounded-lg text-xs font-medium"
                         style={{ background: '#e8f0fe', color: '#1e3a8a' }}>{v}</span>
@@ -126,9 +138,9 @@ export default function AssetTypesTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in"
+          <div className="bg-[var(--card)] rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in"
             style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b sticky top-0 bg-[var(--card)] z-10" style={{ borderColor: 'var(--border)' }}>
               <h3 className="font-extrabold text-lg" style={{ color: 'var(--text)' }}>{editing ? 'Edit Asset Type' : 'Add Asset Type'}</h3>
               <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-100"><X size={16} /></button>
             </div>
@@ -144,7 +156,7 @@ export default function AssetTypesTab() {
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>{label}</label>
                   <input value={(form as any)[key]} onChange={e => f(key, e.target.value)} placeholder={placeholder}
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </div>
               ))}
 
@@ -159,7 +171,7 @@ export default function AssetTypesTab() {
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>Hex</label>
                   <input value={form.color} onChange={e => f('color', e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none font-mono"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </div>
               </div>
 
@@ -171,7 +183,7 @@ export default function AssetTypesTab() {
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addVariant())}
                     placeholder="Type a variant and press Enter or Add"
                     className="flex-1 px-3.5 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ borderColor: 'var(--border)', background: '#f8fafc', color: 'var(--text)' }} />
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
                   <button type="button" onClick={addVariant}
                     className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
                     style={{ background: 'var(--primary)' }}>Add</button>
@@ -191,7 +203,7 @@ export default function AssetTypesTab() {
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-gray-50"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Cancel</button>
                 <button type="submit" disabled={saving}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60"
@@ -215,3 +227,6 @@ export default function AssetTypesTab() {
     </div>
   );
 }
+
+
+

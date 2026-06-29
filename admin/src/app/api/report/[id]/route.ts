@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAdminCompanyId } from '@/lib/supabase-server';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const companyId = await getAdminCompanyId();
+
+  if (!companyId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const [{ data: p }, { data: assets }, { data: jobs }, { data: defects }] = await Promise.all([
-    supabaseAdmin.from('properties').select('*').eq('id', id).single(),
-    supabaseAdmin.from('assets').select('*').eq('property_id', id).order('asset_type'),
-    supabaseAdmin.from('jobs').select('*, assigned_user:users(full_name)').eq('property_id', id).order('scheduled_date', { ascending: false }).limit(30),
-    supabaseAdmin.from('defects').select('*, asset:assets(asset_type,location_on_site)').eq('property_id', id).order('created_at', { ascending: false }),
+    supabaseAdmin.from('properties').select('*').eq('id', id).eq('company_id', companyId).single(),
+    supabaseAdmin.from('assets').select('*').eq('property_id', id).eq('company_id', companyId).order('asset_type'),
+    supabaseAdmin.from('jobs').select('*, assigned_user:users(full_name)').eq('property_id', id).eq('company_id', companyId).order('scheduled_date', { ascending: false }).limit(30),
+    supabaseAdmin.from('defects').select('*, asset:assets(asset_type,location_on_site)').eq('property_id', id).eq('company_id', companyId).order('created_at', { ascending: false }),
   ]);
 
-  if (!p) return NextResponse.json({ error: 'Property not found' }, { status: 404 });
+  if (!p) return NextResponse.json({ error: 'Property not found or access denied' }, { status: 404 });
 
   const today = new Date().toISOString().split('T')[0];
   const isOverdue = p.next_inspection_date && p.next_inspection_date < today;
@@ -45,11 +51,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   @media print {
     .no-print { display: none !important; }
     body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .page-break { page-break-before: always; }
   }
 
   /* Print button */
-  .print-bar { position: fixed; top: 0; left: 0; right: 0; background: #1B2D4F; padding: 12px 20px; display: flex; align-items: center; justify-between; gap: 12px; z-index: 100; }
+  .print-bar { position: fixed; top: 0; left: 0; right: 0; background: #1B2D4F; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 100; }
   .print-bar p { color: #fff; font-size: 13px; font-weight: 600; flex: 1; }
   .print-btn { background: #F97316; color: #fff; border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .print-btn:hover { background: #ea580c; }
@@ -79,19 +84,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .stat-card.success .stat-value { color: #16a34a; }
 
   /* Sections */
-  .section { margin-bottom: 24px; }
+  .section { margin-bottom: 24px; page-break-inside: avoid; }
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; border-bottom: 2px solid #F97316; padding-bottom: 6px; margin-bottom: 14px; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; page-break-inside: avoid; }
   .info-row { display: contents; }
   .info-label { background: #f8fafc; padding: 9px 14px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
   .info-value { padding: 9px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #e2e8f0; }
   .info-label:last-of-type, .info-value:last-of-type { border-bottom: none; }
 
   /* Table */
-  table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; page-break-inside: auto; }
   thead tr { background: #f8fafc; }
   th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
   td { padding: 9px 12px; font-size: 12px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tr { page-break-inside: avoid; orphans: 3; widows: 3; }
   tr:last-child td { border-bottom: none; }
   tr.overdue td { background: #fff7ed; }
   .mono { font-family: monospace; font-size: 11px; }
@@ -176,7 +182,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   </div>` : ''}
 
   <!-- Asset Register -->
-  <div class="section page-break">
+  <div class="section">
     <div class="section-title">Asset Register (${(assets ?? []).length} assets)</div>
     ${(assets ?? []).length === 0 ? '<p style="color:#94a3b8;font-size:13px">No assets registered at this property.</p>' : `
     <table>

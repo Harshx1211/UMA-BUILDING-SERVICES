@@ -10,6 +10,7 @@ import {
   getJobStatus,
   getDeletedPhotoIds,
   getFailedSyncItems,
+  getRecord,
 } from '@/lib/database';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
@@ -183,7 +184,7 @@ export async function runSync(userId?: string): Promise<boolean> {
     if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Syncing for user: ${resolvedUserId}`);
 
     // ── 2. PUSH — upload photo binaries then flush sync queue ────
-    await processPhotoQueue();
+    await processPhotoQueue(resolvedUserId);
     if (_shouldStop) return false;
     await _pushQueue();
     if (_shouldStop) return false;
@@ -246,7 +247,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   }
 
   // Preemptively fetch and upsert the current user to satisfy job's assigned_to FK
-  const { data: techUser } = await supabase.from('users').select('*').eq('id', userId).single();
+  const { data: techUser } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
   if (techUser) {
     upsertRecord('users', techUser as Record<string, string | number | boolean | null>);
   }
@@ -356,7 +357,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   // Pull catalogue reference tables (asset types + defect codes)
   const { data: assetTypeDefs } = await supabase
     .from('asset_type_definitions')
-    .select('id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at')
+    .select('id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
     .eq('is_active', true);
   if (assetTypeDefs) {
     for (const row of assetTypeDefs) {
@@ -463,6 +464,13 @@ async function _pushQueue(): Promise<void> {
       }
 
       if (item.operation === SyncOperation.Insert) {
+        // Inject company_id from the active user profile so SaaS RLS doesn't reject it
+        if (_cachedUserId && !payload.company_id) {
+          const u = getRecord<{ company_id: string }>('users', _cachedUserId);
+          if (u?.company_id) {
+            payload.company_id = u.company_id;
+          }
+        }
         const result = await supabase.from(item.table_name).insert(payload);
         error = result.error;
       } else if (item.operation === SyncOperation.Update) {

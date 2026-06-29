@@ -1,0 +1,9 @@
+no,equipment_code,level,location,status,details,serial_number,install_date
+1,FD,C2-11,fs adj garbage room,p,,SN-001,1/15/2020
+2,FD,C2-11,garbage room,p,,SN-002,1/15/2020
+3,FD,C2-11,E&C cabinet,p,"seq,sh,rtc",SN-003,1/15/2020
+4,HLV,C2-10,fs adj garbage rm,p,,SN-004,6/1/2019
+5,2.5A,C2-10,adj lifts,p,"2026,exp",SN-005,6/1/2019
+6,EM,C2-9,corridor near stairwell,p,,SN-006,3/10/2021
+7,e228,C2-8,fs adj garbage room,p,,SN-007,3/10/2021
+8,sfl,C2-8,adj garbage room,p,,SN-008,3/10/2021

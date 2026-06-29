@@ -3,6 +3,7 @@
 // go through here — server-side only, uses the service_role key so RLS is bypassed.
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAdminCompanyId } from '@/lib/supabase-server';
 
 const ALLOWED_TABLES = [
   'jobs', 'properties', 'assets', 'defects', 'users',
@@ -29,20 +30,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Table '${table}' is not allowed` }, { status: 400 });
     }
 
+    // MULTI-TENANT ISOLATION: Fetch authenticated admin's company_id
+    const companyId = await getAdminCompanyId();
+    if (!companyId) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid admin session or missing company_id' }, { status: 401 });
+    }
+
     let result: { data: unknown; error: unknown };
 
     switch (action) {
       case 'insert': {
         if (!data) return NextResponse.json({ error: 'insert requires data' }, { status: 400 });
-        result = await supabaseAdmin.from(table).insert(data).select().single();
+        // Force-inject company_id
+        const insertData = { ...data, company_id: companyId };
+        result = await supabaseAdmin.from(table).insert(insertData).select().single();
         break;
       }
       case 'update': {
         if (!data) return NextResponse.json({ error: 'update requires data' }, { status: 400 });
         if (!id && !match) return NextResponse.json({ error: 'update requires id or match' }, { status: 400 });
-        let q = supabaseAdmin.from(table).update(data);
+        // Prevent bypassing company_id on update data payload
+        const updateData = { ...data };
+        if ('company_id' in updateData) delete updateData.company_id; 
+        
+        let q = supabaseAdmin.from(table).update(updateData);
         if (id)    q = (q as any).eq('id', id);
         if (match) Object.entries(match).forEach(([k, v]) => { q = (q as any).eq(k, v); });
+        
+        // Force restrict to the admin's company_id
+        q = (q as any).eq('company_id', companyId);
+        
         result = await (q as any).select().single();
         break;
       }
@@ -51,12 +68,18 @@ export async function POST(req: NextRequest) {
         let q = supabaseAdmin.from(table).delete();
         if (id)    q = (q as any).eq('id', id);
         if (match) Object.entries(match).forEach(([k, v]) => { q = (q as any).eq(k, v); });
+        
+        // Force restrict to the admin's company_id
+        q = (q as any).eq('company_id', companyId);
+        
         result = await q;
         break;
       }
       case 'upsert': {
         if (!data) return NextResponse.json({ error: 'upsert requires data' }, { status: 400 });
-        result = await supabaseAdmin.from(table).upsert(data).select().single();
+        // Force-inject company_id
+        const upsertData = { ...data, company_id: companyId };
+        result = await supabaseAdmin.from(table).upsert(upsertData).select().single();
         break;
       }
       case 'create-user' as Action: {
@@ -77,6 +100,7 @@ export async function POST(req: NextRequest) {
         }
         const { error: profileErr } = await supabaseAdmin.from('users').insert({
           id: authUser.user.id,
+          company_id: companyId,
           email,
           full_name,
           role: userRole ?? 'technician',

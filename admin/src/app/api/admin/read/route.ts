@@ -3,6 +3,7 @@
 // all technicians, not just the ones visible to the currently logged-in user.
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAdminCompanyId } from '@/lib/supabase-server';
 
 const ALLOWED_TABLES = [
   'jobs', 'properties', 'assets', 'defects', 'users',
@@ -40,10 +41,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Table '${table}' is not allowed` }, { status: 400 });
     }
 
-    // supabaseAdmin bypasses RLS — all rows visible
+    // MULTI-TENANT ISOLATION: Fetch authenticated admin's company_id
+    const companyId = await getAdminCompanyId();
+    if (!companyId) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid admin session or missing company_id' }, { status: 401 });
+    }
+
+    // supabaseAdmin bypasses RLS, so we MUST manually enforce the tenant boundary
     let q = supabaseAdmin
       .from(table)
-      .select(select, count ? { count: 'exact' } : undefined) as any;
+      .select(select, count ? { count: 'exact' } : undefined)
+      .eq('company_id', companyId) as any;
 
     // Equality filters
     for (const [col, val] of Object.entries(filters)) {

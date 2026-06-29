@@ -16,8 +16,8 @@ export function EmptyState({ emoji, title, subtitle, actionLabel, onAction }: Pr
   const C = useColors();
   return (
     <View style={styles.wrap}>
-      {/* Icon container */}
-      <View style={[styles.emojiContainer, { backgroundColor: C.backgroundSecondary, borderColor: C.border, borderWidth: 1 }]}>
+      {/* Orange-tinted icon container */}
+      <View style={[styles.emojiContainer, { backgroundColor: C.accent + '10', borderColor: C.accent + '28', borderWidth: 1.5 }]}>
         <Text style={styles.emoji}>{emoji}</Text>
       </View>
       <Text style={[styles.title, { color: C.text }]}>{title}</Text>
@@ -46,20 +46,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emojiContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: 84,
+    height: 84,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   emoji: {
-    fontSize: 36,
-    lineHeight: 44,
+    fontSize: 40,
+    lineHeight: 48,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     marginTop: 4,
     textAlign: 'center',
     letterSpacing: -0.2,
@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 20,
+    paddingHorizontal: 8,
   },
   actionBtn: {
     marginTop: 20,

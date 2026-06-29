@@ -1,17 +1,18 @@
 /**
- * useColors — returns the correct colour palette based on system colour scheme.
+ * useColors — always returns the dark navy palette.
  *
- * Returns `typeof Colors.light` (the concrete type) because both the light and
- * dark themes share an identical set of keys. This means every colour token —
- * including cardBorder, successDark, accentDark, etc. — is fully typed with no
- * `as any` casts needed anywhere in the codebase.
+ * SiteTrack is a field-service app designed for technicians working on-site.
+ * The dark navy theme (#0F1E3C / #182745 / #2D4068 / #E8650A) is the primary
+ * design language matching the Project Work prototype and the app.json setting
+ * of userInterfaceStyle: "dark".
  *
- * Usage:  const C = useColors();   →  C.primary, C.cardBorder, C.successDark …
+ * We do NOT switch to the light theme based on system preferences —
+ * the app is always dark to maintain consistent field-app aesthetics.
+ *
+ * Usage:  const C = useColors();  →  C.primary, C.surface, C.accent …
  */
-import { useColorScheme } from 'react-native';
 import Colors from '@/constants/Colors';
 
-export function useColors(): typeof Colors.light {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? Colors.dark : Colors.light;
+export function useColors(): typeof Colors.dark {
+  return Colors.dark;
 }

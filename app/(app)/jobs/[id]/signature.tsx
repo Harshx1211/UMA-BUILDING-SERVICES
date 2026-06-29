@@ -1,599 +1,260 @@
-// app/(app)/jobs/[id]/signature.tsx
-// Fix: signature is now saved as a local file:// PNG so pdfGenerator can always
-// encode it as a data: URI — even when the device is offline. The Supabase public
-// URL is still uploaded and used in the sync-queue payload for cloud replication,
-// but the local file path is what goes into the signatures SQLite row.
-// Fixed: signature canvas scroll conflict, sign detection improved,
-// existing signature image shown in read-only view, captured sig shown in success overlay
-import React, { useRef, useState } from 'react';
+import { useState, useRef } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, Alert,
-  Platform, ScrollView, Image,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  Alert, ScrollView, Platform, Dimensions,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
-import { Text } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
-import Toast from 'react-native-toast-message';
-import { getValidLocalUri } from '@/utils/fileHelpers';
-import Animated, { FadeIn, ZoomIn, FadeInDown } from 'react-native-reanimated';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useColors } from '@/hooks/useColors';
-import { Card, Input, ScreenHeader } from '@/components/ui';
-import { upsertRecord, addToSyncQueue, getRecord, queryRecords } from '@/lib/database';
+import { WebView } from 'react-native-webview';
+import { upsertRecord, addToSyncQueue } from '@/lib/database';
+import { runSync } from '@/lib/sync';
+import { C } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
-import { supabase } from '@/lib/supabase';
-import { generateUUID } from '@/utils/uuid';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+const SIG_PAD_H = 220;
+
+// Inline signature pad HTML — no external dependencies, works fully offline
+const SIG_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#182745; }
+    canvas { display:block; touch-action:none; cursor:crosshair; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  let hasMark = false;
+
+  function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas.width = w;
+    canvas.height = h;
+    ctx.putImageData(img, 0, 0);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+
+  canvas.addEventListener('pointerdown', e => { drawing = true; hasMark = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+  canvas.addEventListener('pointermove', e => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  canvas.addEventListener('pointerup',   () => { drawing = false; });
+
+  window.clearSig = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); hasMark = false; };
+  window.getSig   = () => hasMark ? canvas.toDataURL('image/png') : null;
+</script>
+</body>
+</html>
+`;
 
 export default function SignatureScreen() {
-  const C = useColors();
-  const { id: jobId } = useLocalSearchParams<{ id: string }>();
-  const sigRef = useRef<SignatureViewRef>(null);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const webRef = useRef<WebView>(null);
 
+  const [signedBy, setSignedBy] = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [sigError, setSigError] = useState('');
 
+  const CONSENT_STATEMENT =
+    'By signing below, I confirm that the inspection described in this report was completed ' +
+    'on the property on the date shown, and that I have been given the opportunity to review ' +
+    'the findings. This signature is legally binding under the Electronic Transactions Act 1999 (Cth).';
 
-  const [clientName, setClientName] = useState('');
-  const [nameError,  setNameError]  = useState(false);
-  const [hasSig,     setHasSig]     = useState(false);
-  const [isSaving,   setIsSaving]   = useState(false);
-  const [showSuccess,setShowSuccess] = useState(false);
-  const [quoteTotal, setQuoteTotal]  = useState<number | null>(null);
-  // Stores the captured signature data URI so we can preview it in the success overlay
-  const [capturedSigUri, setCapturedSigUri] = useState<string | null>(null);
+  function _clear() {
+    webRef.current?.injectJavaScript('window.clearSig(); true;');
+  }
 
-  // FLOW-7: tracks an existing signature — full record including signature_url for image preview
-  const [existingSig, setExistingSig] = useState<{
-    signed_by_name: string;
-    signed_at: string;
-    signature_url: string;
-  } | null>(null);
-
-  // H6: useFocusEffect so re-visiting the screen always shows the latest signature state
-  useFocusEffect(React.useCallback(() => {
-    if (!jobId) return;
-    try {
-      const job = getRecord<{ site_contact_name: string | null }>('jobs', jobId);
-      if (job?.site_contact_name) setClientName(job.site_contact_name);
-      const quotes = queryRecords<{ total_amount: number; status: string }>('quotes', { job_id: jobId });
-      if (quotes.length > 0 && quotes[0].status === 'approved') {
-        setQuoteTotal(quotes[0].total_amount);
-      }
-      // FLOW-7 FIX: Check for existing signature — show readonly state with image if already captured
-      const sigs = queryRecords<{ signed_by_name: string; signed_at: string; signature_url: string }>(
-        'signatures', { job_id: jobId }
-      );
-      if (sigs.length > 0) setExistingSig(sigs[0]);
-      else setExistingSig(null); // Reset if signature was cleared
-    } catch { /* ignore */ }
-  }, [jobId]));
-
-  const handleClear = () => {
-    sigRef.current?.clearSignature();
-    setHasSig(false);
-    setCapturedSigUri(null);
-  };
-
-  const handleConfirm = () => {
-    if (!clientName.trim()) {
-      setNameError(true);
-      Toast.show({ type: 'error', text1: 'Name Required', text2: 'Enter the client\'s full name first.' });
+  async function _save() {
+    if (!signedBy.trim()) {
+      setSigError('Please enter the name of the person signing.');
       return;
     }
-    if (!hasSig) {
-      Alert.alert('Signature Required', 'Please ask the client to sign in the box below before confirming.');
-      return;
-    }
-    sigRef.current?.readSignature();
-  };
+    setSigError('');
+    setSaving(true);
 
-  const handleSignature = async (base64: string) => {
-    if (!jobId) return;
-    setIsSaving(true);
+    // Get signature data URL from canvas
+    webRef.current?.injectJavaScript(`
+      window.ReactNativeWebView.postMessage(JSON.stringify({ sig: window.getSig() }));
+      true;
+    `);
+  }
+
+  async function _onMessage(event: { nativeEvent: { data: string } }) {
     try {
-      const signatureDataUri = base64.startsWith('data:')
-        ? base64
-        : `data:image/png;base64,${base64}`;
-
-      // Store for preview in success overlay
-      setCapturedSigUri(signatureDataUri);
-
-      const pureB64 = signatureDataUri.split(',')[1];
-
-      // ── 1. Save to a permanent local file so pdfGenerator can encode it ──
-      // This works offline and survives app restarts (documentDirectory is stable).
-      const localFilename = `sig_${jobId}.png`;
-      const localPath     = `${FileSystem.documentDirectory}${localFilename}`;
-      let   localSigUrl   = signatureDataUri; // fallback: use data: URI if write fails
-      try {
-        await FileSystem.writeAsStringAsync(localPath, pureB64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        localSigUrl = localPath;
-      } catch (writeErr) {
-        console.warn('[Signature] Could not write local file — falling back to data: URI:', writeErr);
+      const { sig } = JSON.parse(event.nativeEvent.data) as { sig: string | null };
+      if (!sig) {
+        setSigError('Please draw a signature before saving.');
+        setSaving(false);
+        return;
       }
 
-      // ── 2. Try uploading to Supabase (for cloud sync / other devices) ──
-      let supabaseUrl: string | null = null;
-      try {
-        const byteChars = atob(pureB64);
-        const byteArr   = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-        const storagePath = `signatures/${jobId}/signature.png`;
-        const { error: uploadErr } = await supabase.storage
-          .from('job-photos')
-          .upload(storagePath, byteArr, { contentType: 'image/png', upsert: true });
-        if (!uploadErr) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('job-photos')
-            .getPublicUrl(storagePath);
-          supabaseUrl = publicUrl;
-        }
-      } catch (up) {
-        console.warn('[Signature] Supabase upload failed (will retry on next sync):', up);
-      }
+      const deviceInfo = `${Platform.OS === 'ios' ? 'iOS' : 'Android'}`;
+      const now = new Date().toISOString();
+      const newId = `sig-${id}`;
 
-      // ── 3. Resolve the row id — reuse existing if re-signing ──────────────────
-      // The signatures table has UNIQUE(job_id). If we always generate a new UUID,
-      // a re-sign attempt produces a new id that doesn't conflict on 'id' — but DOES
-      // conflict on 'job_id' — and upsertRecord's ON CONFLICT(id) handler won't fire.
-      // Fix: look up any existing row and reuse its id so the upsert updates in-place.
-      const existingRow = queryRecords<{ id: string }>('signatures', { job_id: jobId })[0];
-      const sigId = existingRow?.id ?? generateUUID();
-      const now   = new Date().toISOString();
-      const isUpdate = Boolean(existingRow);
-
-      // SQLite row stores the LOCAL file:// URI so pdfGenerator always finds it.
-      // If the file write failed we fall back to the data: URI (large but safe).
-      const payload = {
-        id: sigId,
-        job_id: jobId,
-        signature_url: localSigUrl,
-        signed_by_name: clientName.trim(),
+      const record = {
+        id: newId,
+        job_id: id!,
+        signature_url: sig,       // stored as base64 data URL for offline PDF rendering
+        signed_by_name: signedBy.trim(),
         signed_at: now,
+        device_info: deviceInfo,
       };
-      upsertRecord('signatures', payload);
 
-      // Sync-queue uses the Supabase URL if available so the cloud row has a real URL.
-      // If offline, the data: URI is queued and will be synced on the next run.
-      const syncPayload = {
-        ...payload,
-        signature_url: supabaseUrl ?? signatureDataUri,
-      };
-      // Use Update if overwriting an existing signature, Insert if brand new.
-      addToSyncQueue('signatures', sigId, isUpdate ? SyncOperation.Update : SyncOperation.Insert, syncPayload);
+      upsertRecord('signatures', record as any);
+      addToSyncQueue('signatures', newId, SyncOperation.Insert, record);
 
-
-      setShowSuccess(true);
-      Toast.show({ type: 'success', text1: '✅ Signature Saved', text2: `Signed by ${clientName.trim()}` });
-      setTimeout(() => { router.back(); }, 2800);
-    } catch (err: any) {
-      console.error('[Signature] Save error:', err);
-      Alert.alert('Error', 'Failed to save signature.\n' + String(err?.message ?? err));
-    } finally {
-      setIsSaving(false);
+      void runSync();
+      setSaving(false);
+      Alert.alert('Signature Saved', 'The client signature has been recorded.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch {
+      setSaving(false);
+      setSigError('Failed to capture signature. Please try again.');
     }
-  };
-
-  const handleEmpty = () => {
-    Alert.alert('Canvas is Empty', 'Please ask the client to sign before confirming.');
-  };
-
-  // ── Inline webStyle injected into the WebView ──────────────
-  const webStyle = `
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 0;
-      background: #ffffff;
-      overflow: hidden;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    .m-signature-pad {
-      box-shadow: none;
-      border: none;
-      margin: 0;
-      padding: 0;
-      position: absolute;
-      inset: 0;
-    }
-    .m-signature-pad--body {
-      position: absolute;
-      inset: 0;
-      border: none;
-      border-radius: 0;
-      background: #ffffff;
-    }
-    .m-signature-pad--footer { display: none !important; }
-    canvas { width: 100% !important; height: 100% !important; background: #ffffff; }
-  `;
-
-  // ── EXISTING SIGNATURE — read-only, professional view ──────
-  if (existingSig) {
-    const isDataUri = existingSig.signature_url?.startsWith('data:') || existingSig.signature_url?.startsWith('http');
-    return (
-      <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader
-          eyebrow="JOB REQUIREMENTS"
-          title="Client Sign-Off"
-          subtitle="Capture official client signature"
-          showBack={true}
-          curved={false}
-        />
-        <ScrollView contentContainerStyle={s.existingScroll} showsVerticalScrollIndicator={false}>
-          <Animated.View entering={FadeInDown.duration(400)} style={[s.existingCard, { backgroundColor: C.surface, borderColor: C.success + '40', shadowColor: C.success }]}>
-            {/* Checkmark badge */}
-            <View style={[s.existingBadge, { backgroundColor: C.successLight }]}>
-              <MaterialCommunityIcons name="check-decagram" size={36} color={C.success} />
-            </View>
-
-            <Text style={[s.existingTitle, { color: C.text }]}>Signature Captured</Text>
-            <Text style={[s.existingSub, { color: C.textSecondary }]}>
-              Signed by{' '}<Text style={{ fontWeight: '800', color: C.text }}>{existingSig.signed_by_name}</Text>
-            </Text>
-            <Text style={[s.existingDate, { color: C.textTertiary }]}>
-              {new Date(existingSig.signed_at).toLocaleString('en-AU', {
-                day: 'numeric', month: 'short', year: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-              })}
-            </Text>
-
-            {/* Actual signature image preview */}
-            {isDataUri && (
-              <View style={[s.sigPreviewBox, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
-                <Image
-                  source={{ uri: getValidLocalUri(existingSig.signature_url) }}
-                  style={s.sigPreviewImg}
-                  resizeMode="contain"
-                />
-                <View style={[s.sigPreviewLabel, { backgroundColor: C.surface, borderColor: C.border }]}>
-                  <MaterialCommunityIcons name="draw" size={11} color={C.textTertiary} />
-                  <Text style={[s.sigPreviewLabelTxt, { color: C.textTertiary }]}>Client Signature</Text>
-                </View>
-              </View>
-            )}
-          </Animated.View>
-
-          {/* Actions */}
-          <Animated.View entering={FadeInDown.delay(120).duration(400)} style={s.existingActions}>
-            <TouchableOpacity
-              style={[s.existingBtn, { backgroundColor: C.backgroundTertiary, borderWidth: 1.5, borderColor: C.border }]}
-              onPress={() => setExistingSig(null)}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons name="lead-pencil" size={18} color={C.primary} />
-              <Text style={[s.existingBtnTxt, { color: C.primary }]}>Re-sign (override existing)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.existingBtn, { backgroundColor: C.primary }]}
-              onPress={() => router.back()}
-              activeOpacity={0.85}
-            >
-              <MaterialCommunityIcons name="check" size={18} color="#FFF" />
-              <Text style={[s.existingBtnTxt, { color: '#FFF' }]}>Done</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </ScrollView>
-      </View>
-    );
   }
 
   return (
-    <View style={[s.screen, { backgroundColor: C.background }]}>
-      <ScreenHeader
-        eyebrow="JOB REQUIREMENTS"
-        title="Client Sign-Off"
-        subtitle="Capture official client signature"
-        showBack={true}
-        curved={false}
-      />
-
-      {/* Use ScrollView only ABOVE the canvas — canvas must NOT be inside a scrollable */}
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={!hasSig}
-      >
-        {/* ── Instruction card ────────────────────── */}
-        <Card style={s.infoCard}>
-          <MaterialCommunityIcons name="hand-pointing-right" size={20} color={C.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={[s.infoTitle, { color: C.text }]}>Hand device to client</Text>
-            <Text style={[s.infoBody, { color: C.textSecondary }]}>
-              Ask the client to sign in the box below to confirm the inspection was completed to their satisfaction.
-            </Text>
-          </View>
-        </Card>
-
-        {/* ── Quote summary if applicable ──────────────── */}
-        {quoteTotal !== null && (
-          <View style={[s.quoteBanner, { backgroundColor: C.successLight, borderColor: C.success }]}>
-            <MaterialCommunityIcons name="currency-usd" size={18} color={C.success} />
-            <View style={{ flex: 1 }}>
-              <Text style={[s.quoteTitle, { color: C.successDark }]}>Approved Quote Total</Text>
-              <Text style={[s.quoteAmount, { color: C.success }]}>${quoteTotal.toFixed(2)} (to be invoiced)</Text>
-            </View>
-          </View>
-        )}
-
-        {/* ── Client name input ────────────────────────── */}
-        <View style={s.fieldGroup}>
-          <Input
-            label="Client Full Name *"
-            placeholder="e.g. John Smith"
-            value={clientName}
-            onChangeText={(v) => { setClientName(v); setNameError(false); }}
-            autoCapitalize="words"
-            error={nameError ? 'Full name is required before confirming' : undefined}
-          />
-        </View>
-
-        {/* ── Signature label ──────────────────────────── */}
-        <View style={s.sigLabelRow}>
-          <Text style={[s.sigLabel, { color: C.text }]}>Signature *</Text>
-          {hasSig && (
-            <TouchableOpacity
-              style={[s.clearBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-              onPress={handleClear}
-            >
-              <MaterialCommunityIcons name="eraser" size={13} color={C.textSecondary} />
-              <Text style={[s.clearBtnTxt, { color: C.textSecondary }]}>Clear</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* ── SIGNATURE BOX — rendered OUTSIDE ScrollView to prevent touch hijacking ── */}
-      <View style={[s.sigBox, {
-        backgroundColor: C.surface,
-        borderColor: hasSig ? C.success : C.border,
-        borderWidth: hasSig ? 2.5 : 1.5,
-        shadowColor: hasSig ? C.success : C.primary,
-      }]}>
-        <SignatureCanvas
-          ref={sigRef}
-          onOK={handleSignature}
-          onEmpty={handleEmpty}
-          onBegin={() => setHasSig(true)}
-          webStyle={webStyle}
-          backgroundColor="rgb(255,255,255)"
-          imageType="image/png"
-          dataURL="image/png"
-          descriptionText=""
-          clearText=""
-          confirmText=""
-          style={s.sigCanvas}
-          scrollable={false}
-        />
-        {/* Placeholder overlay — shown only when no signature yet */}
-        {!hasSig && (
-          <View style={s.sigPlaceholder} pointerEvents="none">
-            <MaterialCommunityIcons name="gesture" size={32} color={C.border} />
-            <Text style={[s.sigPlaceholderTxt, { color: C.textTertiary }]}>Sign here</Text>
-            <Text style={[s.sigPlaceholderHint, { color: C.border }]}>Draw your signature in this area</Text>
-          </View>
-        )}
-        {/* Status corner pill */}
-        <View style={[s.sigCornerLabel, {
-          backgroundColor: hasSig ? C.success : C.backgroundTertiary,
-          borderColor: hasSig ? C.success + '80' : C.border,
-        }]}>
-          <MaterialCommunityIcons
-            name={hasSig ? 'check-circle' : 'draw'}
-            size={12}
-            color={hasSig ? '#FFF' : C.textTertiary}
-          />
-          <Text style={[s.sigCornerTxt, { color: hasSig ? '#FFF' : C.textTertiary }]}>
-            {hasSig ? 'Signed ✓' : 'Touch to sign'}
-          </Text>
-        </View>
-      </View>
-
-      {/* ── BOTTOM ACTION BAR ─────────────────────────── */}
-      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {hasSig && (
-          <TouchableOpacity
-            style={[s.clearBtnLarge, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-            onPress={handleClear}
-          >
-            <MaterialCommunityIcons name="eraser" size={16} color={C.textSecondary} />
-            <Text style={[s.clearBtnLargeTxt, { color: C.textSecondary }]}>Clear</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[
-            s.confirmBtn,
-            {
-              backgroundColor: (hasSig && clientName.trim()) ? C.success : C.backgroundTertiary,
-              flex: hasSig ? 2 : 1,
-              borderWidth: (hasSig && clientName.trim()) ? 0 : 1.5,
-              borderColor: C.border,
-            },
-          ]}
-          onPress={handleConfirm}
-          disabled={isSaving}
-          activeOpacity={0.85}
-        >
-          {isSaving ? (
-            <Text style={[s.confirmBtnTxt, { color: '#FFF' }]}>Saving…</Text>
-          ) : (
-            <>
-              <MaterialCommunityIcons
-                name={hasSig && clientName.trim() ? 'check-decagram' : 'pen-off'}
-                size={20}
-                color={(hasSig && clientName.trim()) ? '#FFF' : C.textTertiary}
-              />
-              <Text style={[s.confirmBtnTxt, {
-                color: (hasSig && clientName.trim()) ? '#FFF' : C.textTertiary,
-              }]}>
-                {!clientName.trim() ? 'Enter Name Above' : !hasSig ? 'Awaiting Signature…' : 'Confirm & Save'}
-              </Text>
-            </>
-          )}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Client Signature</Text>
+        <TouchableOpacity onPress={_clear} style={styles.clearBtn}>
+          <Text style={styles.clearText}>Clear</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── SUCCESS OVERLAY ──────────────────────────── */}
-      {showSuccess && (
-        <Animated.View entering={FadeIn.duration(250)} style={[StyleSheet.absoluteFill, s.successOverlay]}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            onPress={() => { setShowSuccess(false); router.back(); }}
-            activeOpacity={1}
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Consent statement */}
+        <View style={styles.consentCard}>
+          <Text style={styles.consentTitle}>CONSENT STATEMENT</Text>
+          <Text style={styles.consentText}>{CONSENT_STATEMENT}</Text>
+        </View>
+
+        {/* Name field */}
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Full Name of Authorised Person *</Text>
+          <TextInput
+            style={[styles.input, sigError && !signedBy && styles.inputError]}
+            placeholder="e.g. John Smith"
+            placeholderTextColor={C.textMuted}
+            value={signedBy}
+            onChangeText={t => { setSignedBy(t); setSigError(''); }}
+            autoCapitalize="words"
+            returnKeyType="done"
           />
-          <Animated.View entering={ZoomIn.springify().damping(14).delay(150)} style={[s.successCard, { backgroundColor: C.surface }]}>
-            {/* Top accent bar */}
-            <View style={[s.successAccentBar, { backgroundColor: C.success }]} />
+        </View>
 
-            <View style={[s.successCircle, { backgroundColor: C.successLight }]}>
-              <MaterialCommunityIcons name="check-decagram" size={44} color={C.success} />
-            </View>
+        {/* Signature pad */}
+        <View style={styles.padWrap}>
+          <Text style={styles.label}>Signature *</Text>
+          <View style={[styles.padBorder, sigError.includes('draw') && styles.padBorderError]}>
+            <WebView
+              ref={webRef}
+              source={{ html: SIG_HTML }}
+              style={{ width: SCREEN_W - 64, height: SIG_PAD_H, backgroundColor: C.surface }}
+              scrollEnabled={false}
+              onMessage={_onMessage}
+              javaScriptEnabled
+            />
+          </View>
+          <Text style={styles.padHint}>Draw signature above using your finger or stylus</Text>
+        </View>
 
-            <Text style={[s.successTitle, { color: C.text }]}>Signature Saved!</Text>
-            <Text style={[s.successSub, { color: C.textSecondary }]}>
-              Signed by <Text style={{ fontWeight: '800', color: C.text }}>{clientName}</Text>
-            </Text>
+        {sigError ? <Text style={styles.error}>{sigError}</Text> : null}
 
-            {/* Show the actual captured signature image */}
-            {capturedSigUri && (
-              <View style={[s.successSigBox, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
-                <Image
-                  source={{ uri: getValidLocalUri(capturedSigUri) }}
-                  style={s.successSigImg}
-                  resizeMode="contain"
-                />
-              </View>
-            )}
+        {/* Legal note */}
+        <View style={styles.legalNote}>
+          <Text style={styles.legalText}>
+            🔒 This signature is captured in accordance with the{'\n'}
+            Electronic Transactions Act 1999 (Cth){'\n'}
+            Device: {Platform.OS === 'ios' ? 'iOS' : 'Android'}  •  {new Date().toLocaleDateString('en-AU')}
+          </Text>
+        </View>
 
-            <View style={[s.successDivider, { backgroundColor: C.border }]} />
-            <View style={s.successHintRow}>
-              <MaterialCommunityIcons name="gesture-tap" size={14} color={C.textTertiary} />
-              <Text style={[s.successHint, { color: C.textTertiary }]}>Tap anywhere to continue</Text>
-            </View>
-          </Animated.View>
-        </Animated.View>
-      )}
+        {/* Save button */}
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+          onPress={_save}
+          disabled={saving}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Signature'}</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  screen: { flex: 1 },
-  scroll: { padding: 16, paddingBottom: 8 },
-
-  // Info card
-  infoCard:  { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
-  infoTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
-  infoBody:  { fontSize: 13, lineHeight: 20 },
-
-  // Quote banner
-  quoteBanner: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 16, borderWidth: 1, marginBottom: 16 },
-  quoteTitle:  { fontSize: 13, fontWeight: '800', marginBottom: 2 },
-  quoteAmount: { fontSize: 18, fontWeight: '800' },
-
-  fieldGroup: { marginBottom: 14 },
-
-  // Sig label row
-  sigLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sigLabel:    { fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
-  clearBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
-  clearBtnTxt: { fontSize: 12, fontWeight: '600' },
-
-  // Signature box — OUTSIDE scrollview
-  sigBox: {
-    marginHorizontal: 16,
-    height: 220,
-    borderRadius: 16,
-    overflow: 'hidden',
-    position: 'relative',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+const styles = StyleSheet.create({
+  container:    { flex: 1, backgroundColor: C.primary },
+  header:       {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.surface,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  sigCanvas: { flex: 1 },
-  sigPlaceholder: {
-    position: 'absolute', inset: 0,
-    alignItems: 'center', justifyContent: 'center', gap: 8,
-    pointerEvents: 'none',
-  } as any,
-  sigPlaceholderTxt:  { fontSize: 18, fontWeight: '700' },
-  sigPlaceholderHint: { fontSize: 12 },
-  sigCornerLabel: {
-    position: 'absolute', top: 10, right: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
-    borderWidth: 1,
+  backBtn:      { paddingVertical: 4, paddingRight: 8 },
+  backText:     { color: C.accent, fontSize: 14, fontWeight: '600' },
+  title:        { color: C.textLight, fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
+  clearBtn:     { paddingVertical: 4, paddingLeft: 8 },
+  clearText:    { color: C.danger, fontSize: 14, fontWeight: '600' },
+  scroll:       { padding: 20, paddingBottom: 40 },
+  consentCard:  {
+    backgroundColor: 'rgba(37,99,235,0.08)', borderRadius: 14, borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.3)', padding: 16, marginBottom: 20,
   },
-  sigCornerTxt: { fontSize: 11, fontWeight: '700' },
-
-  // Bottom bar
-  bottomBar: {
-    flexDirection: 'row', gap: 10,
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    borderTopWidth: 1,
+  consentTitle: { color: C.info, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 8 },
+  consentText:  { color: C.textBody, fontSize: 13, lineHeight: 20 },
+  fieldWrap:    { marginBottom: 20 },
+  label:        { color: C.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 },
+  input:        {
+    backgroundColor: C.surface, borderRadius: 12, borderWidth: 1,
+    borderColor: C.border, color: C.textLight, fontSize: 15,
+    paddingHorizontal: 16, paddingVertical: 14,
   },
-  clearBtnLarge:    { flex: 1, height: 56, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
-  clearBtnLargeTxt: { fontSize: 15, fontWeight: '800' },
-  confirmBtn:       { height: 56, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  confirmBtnTxt:    { fontSize: 16, fontWeight: '800' },
-
-  // ── EXISTING SIG READ-ONLY VIEW ──────────────────────────
-  existingScroll: { padding: 20, paddingBottom: 40, gap: 16 },
-  existingCard: {
-    borderRadius: 16, padding: 24,
-    alignItems: 'center', gap: 12,
-    borderWidth: 1.5,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 6,
+  inputError:   { borderColor: C.danger },
+  padWrap:      { marginBottom: 16 },
+  padBorder:    {
+    borderRadius: 14, borderWidth: 1.5, borderColor: C.border,
+    overflow: 'hidden', backgroundColor: C.surface,
   },
-  existingBadge:  { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  existingTitle:  { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
-  existingSub:    { fontSize: 15, textAlign: 'center' },
-  existingDate:   { fontSize: 12, textAlign: 'center', marginTop: 2 },
-
-  // Sig preview in read-only view
-  sigPreviewBox: {
-    width: '100%', borderRadius: 14, borderWidth: 1.5,
-    overflow: 'hidden', marginTop: 8, position: 'relative',
+  padBorderError: { borderColor: C.danger },
+  padHint:      { color: C.textMuted, fontSize: 11, textAlign: 'center', marginTop: 8 },
+  error:        { color: '#FCA5A5', fontSize: 13, marginBottom: 12 },
+  legalNote:    {
+    backgroundColor: C.primaryLight, borderRadius: 12, padding: 14, marginBottom: 20,
+    borderWidth: 1, borderColor: C.border,
   },
-  sigPreviewImg: { width: '100%', height: 120 },
-  sigPreviewLabel: {
-    position: 'absolute', bottom: 8, right: 8,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
+  legalText:    { color: C.textMuted, fontSize: 11, lineHeight: 18, textAlign: 'center' },
+  saveBtn:      {
+    backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center', shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
   },
-  sigPreviewLabelTxt: { fontSize: 10, fontWeight: '600' },
-
-  existingActions: { gap: 10 },
-  existingBtn: { height: 54, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  existingBtnTxt: { fontSize: 15, fontWeight: '700' },
-
-  // ── SUCCESS OVERLAY ──────────────────────────────────────
-  successOverlay: { backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  successCard:    {
-    width: '100%', borderRadius: 28, overflow: 'hidden',
-    alignItems: 'center', gap: 8,
-    elevation: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 24,
-  },
-  successAccentBar: { width: '100%', height: 5 },
-  successCircle:  { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginTop: 20, marginBottom: 4 },
-  successTitle:   { fontSize: 24, fontWeight: '800', letterSpacing: -0.3, marginTop: 4 },
-  successSub:     { fontSize: 14, marginBottom: 4 },
-
-  // Signature image in success overlay
-  successSigBox: {
-    width: '85%', borderRadius: 14, borderWidth: 1.5,
-    overflow: 'hidden', marginVertical: 8,
-    height: 100,
-  },
-  successSigImg: { width: '100%', height: '100%' },
-
-  successDivider: { height: 1, width: '70%', marginVertical: 8 },
-  successHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 24 },
-  successHint:    { fontSize: 12 },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText:  { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
