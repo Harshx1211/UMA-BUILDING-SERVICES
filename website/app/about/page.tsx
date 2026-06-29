@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { Shield, FileText, Smartphone, ArrowRight, CheckCircle } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'About Us | UMA Building Services',
-  description: 'UMA Building Services is a specialist fire safety inspection and defect repair company operating across commercial and industrial properties in Australia.',
+  title: 'About Us | SiteTrack',
+  description: 'SiteTrack is the leading platform for fire safety and compliance management.',
 };
 
 const VALUES = [
@@ -26,77 +26,90 @@ const VALUES = [
 ];
 
 const CONTRAST = [
-  { old: 'Paper forms filled out by hand on site',      uma: 'Digital logging via our own mobile platform, in real time' },
+  { old: 'Paper forms filled out by hand on site',      uma: 'Digital logging via offline-first mobile app in real time' },
   { old: 'General pass/fail notation per site visit',   uma: 'Per-asset Pass/Fail result logged individually, every job' },
-  { old: 'Reports written up manually after the visit', uma: 'PDF report auto-generated at job completion, every time' },
-  { old: 'No photographic evidence attached',           uma: 'Photos captured on-site and linked to the job record' },
-  { old: 'Paper compliance records, hard to retrieve',  uma: 'All records stored digitally and accessible when needed' },
+  { old: 'Reports written up manually after the visit', uma: 'AS1851 PDF report auto-generated instantly on job completion' },
+  { old: 'No photographic evidence attached',           uma: 'Photos captured on-site, synced to the cloud, and linked to the job record' },
+  { old: 'Paper compliance records, hard to retrieve',  uma: 'All records stored digitally, multi-tenant secure, and accessible instantly' },
 ];
 
 export default function AboutPage() {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────── */}
-      <section style={{ background: 'linear-gradient(145deg,#060f1e 0%,#0A1628 40%,#0F1E3C 100%)', paddingTop: 72 }}>
-        <div className="container" style={{ paddingTop: 72, paddingBottom: 72 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#F97316', marginBottom: 20 }}>
-            About UMA Building Services
-          </p>
-          <h1 style={{ fontSize: 'clamp(30px,7.5vw,54px)', fontWeight: 900, color: 'white', letterSpacing: '-0.04em', lineHeight: 1.08, marginBottom: 22, maxWidth: 620 }}>
-            A Building Services Company Built Around the Paper Problem
+      <section style={{ paddingTop: 110, paddingBottom: 60, position: 'relative', overflow: 'hidden' }}>
+        {/* Background Glow */}
+        <div style={{
+          position: 'absolute', width: 600, height: 600, borderRadius: '50%',
+          background: 'rgba(249,115,22,0.07)', filter: 'blur(100px)',
+          top: '-200px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none',
+        }} />
+
+        <div className="container" style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
+            background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
+            borderRadius: 999, marginBottom: 24
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#fdba74', letterSpacing: '0.04em' }}>
+              About SiteTrack
+            </span>
+          </div>
+          <h1 className="heading-xl mx-auto" style={{ color: 'white', marginBottom: 24 }}>
+            A Platform Built Around<br />the <span style={{ color: '#F97316' }}>Paper Problem.</span>
           </h1>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.48)', lineHeight: 1.8, maxWidth: 480, marginBottom: 36 }}>
-            UMA Building Services is a specialist fire safety inspection and defect repair company operating across commercial and industrial properties throughout Australia.
+          <p className="hero-sub mx-auto">
+            SiteTrack is the operating system for fire safety inspection and defect repair companies operating across commercial and industrial properties.
           </p>
-          <div className="cta-group" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15, padding: '12px 26px' }}>
-              Get in Touch <ArrowRight size={16} />
+          <div className="cta-group" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Link href="/contact" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: 16 }}>
+              Get in Touch <ArrowRight size={18} />
             </Link>
           </div>
         </div>
       </section>
 
       {/* ── Our Story — 2-col ────────────────────────── */}
-      <section className="section" style={{ background: 'white' }}>
+      <section className="section">
         <div className="container">
           <div className="about-story-grid">
             <div>
               <p className="section-eyebrow">Our Story</p>
-              <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 24 }}>
-                Why UMA Exists
+              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 24 }}>
+                Why SiteTrack Exists
               </h2>
-              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.85, marginBottom: 18 }}>
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 18 }}>
                 The building services industry has long relied on paper-based processes — forms filled out by hand, reports written up after the fact, compliance records that are difficult to retrieve and impossible to verify quickly.
               </p>
-              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.85, marginBottom: 18 }}>
-                We started UMA Building Services because we believed there was a better standard for this work. Rather than adapting existing tools, we built our own platform from the ground up — designed specifically around how fire safety inspections and building compliance work is actually carried out.
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 18 }}>
+                We built SiteTrack because we believed there was a better standard for this work. Rather than adapting generic form tools, we built our own platform from the ground up — designed specifically around how fire safety inspections and AS1851 compliance work is actually carried out in the field.
               </p>
-              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.85 }}>
-                The result is a company that operates with the structure and documentation discipline of a far larger organisation — applied consistently, across every property we service.
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85 }}>
+                The result is a platform that lets any fire safety business operate with the structure and documentation discipline of a massive enterprise.
               </p>
             </div>
 
             {/* Right: clean checklist card */}
-            <div className="about-checklist-card">
-              <p style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 24 }}>
-                Every Job Produces
+            <div className="about-checklist-card" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>
+                Platform Capabilities
               </p>
               {[
-                'Individual Pass/Fail result per asset',
-                'Photo evidence of any defects found',
-                'Defect severity classification on site',
-                'Client signature at job completion',
-                'Structured digital PDF service report',
-                'Permanent record stored in our system',
+                'Offline-first React Native mobile app',
+                'Asset-level pass/fail data logging',
+                'Instant AS1851 compliant PDF generation',
+                'Automated quote calculation from defects',
+                'Multi-tenant secure database architecture',
+                'Superadmin and Admin dashboard workflows',
               ].map((item, i, arr) => (
                 <div key={item} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 12,
                   paddingBottom: i < arr.length - 1 ? 14 : 0,
                   marginBottom: i < arr.length - 1 ? 14 : 0,
-                  borderBottom: i < arr.length - 1 ? '1px solid #E5E7EB' : 'none',
+                  borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                 }}>
                   <CheckCircle size={15} color="#F97316" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 3 }} />
-                  <span style={{ fontSize: 14.5, color: '#374151', lineHeight: 1.6 }}>{item}</span>
+                  <span style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{item}</span>
                 </div>
               ))}
             </div>
@@ -104,40 +117,40 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Traditional vs UMA ───────────────────────── */}
-      <section className="section" style={{ background: '#F9FAFB' }}>
+      {/* ── Traditional vs SiteTrack ───────────────────────── */}
+      <section className="section">
         <div className="container">
           <div style={{ maxWidth: 520, marginBottom: 48 }}>
             <p className="section-eyebrow">A Different Approach</p>
-            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 16 }}>
-              How We Operate Differently
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+              How SiteTrack Operates Differently
             </h2>
-            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.75 }}>
-              Most fire safety companies still operate the way they always have. Here is the difference.
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
+              Most software still operates like digital paper. Here is the difference.
             </p>
           </div>
 
           {/* Header row — hidden on mobile */}
-          <div className="cmp-table-header" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderRadius: '14px 14px 0 0', overflow: 'hidden', border: '1px solid #E5E7EB', borderBottom: 'none' }}>
-            <div style={{ padding: '14px 24px', background: '#F9FAFB', borderRight: '1px solid #E5E7EB' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9CA3AF' }}>Traditional Approach</span>
+          <div className="cmp-table-header" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderRadius: '14px 14px 0 0', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none' }}>
+            <div style={{ padding: '14px 24px', background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Traditional Software</span>
             </div>
-            <div style={{ padding: '14px 24px' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#F97316' }}>The UMA Approach</span>
+            <div style={{ padding: '14px 24px', background: 'rgba(255,255,255,0.05)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#F97316' }}>SiteTrack App</span>
             </div>
           </div>
 
           {/* Rows — become stacked on mobile */}
-          <div style={{ border: '1px solid #E5E7EB', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'white' }}>
+          <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
             {CONTRAST.map((row, i, arr) => (
-              <div key={i} className="cmp-row" style={{ borderBottom: i < arr.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
-                <div className="cmp-cell-old">
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#D1D5DB', flexShrink: 0, marginTop: 8 }} />
-                  <span style={{ fontSize: 14, color: '#9CA3AF', lineHeight: 1.65 }}>{row.old}</span>
+              <div key={i} className="cmp-row" style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                <div className="cmp-cell-old" style={{ borderRight: '1px solid rgba(255,255,255,0.04)' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', flexShrink: 0, marginTop: 8 }} />
+                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', lineHeight: 1.65 }}>{row.old}</span>
                 </div>
                 <div className="cmp-cell-new">
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316', flexShrink: 0, marginTop: 8 }} />
-                  <span style={{ fontSize: 14, color: '#111827', fontWeight: 500, lineHeight: 1.65 }}>{row.uma}</span>
+                  <span style={{ fontSize: 14, color: 'white', fontWeight: 500, lineHeight: 1.65 }}>{row.uma}</span>
                 </div>
               </div>
             ))}
@@ -146,12 +159,12 @@ export default function AboutPage() {
       </section>
 
       {/* ── Values ───────────────────────────────────── */}
-      <section className="section" style={{ background: 'white' }}>
+      <section className="section">
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 500, margin: '0 auto 52px' }}>
             <p className="section-eyebrow" style={{ textAlign: 'center' }}>What We Stand For</p>
-            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 16 }}>
-              The Principles Behind Every Job
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+              The Principles Behind The Platform
             </h2>
           </div>
           <div className="about-values-grid">
@@ -159,18 +172,18 @@ export default function AboutPage() {
               const Icon = v.icon;
               return (
                 <div key={v.title} style={{
-                  border: '1px solid #E5E7EB', borderRadius: 12, padding: '32px 28px',
-                  background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '32px 28px',
+                  background: 'rgba(255,255,255,0.02)', boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
                 }}>
                   <div style={{
                     width: 44, height: 44, borderRadius: 10,
-                    background: 'rgba(15,30,60,0.07)', border: '1px solid rgba(15,30,60,0.09)',
+                    background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
                   }}>
-                    <Icon size={20} color="#0F1E3C" strokeWidth={1.8} />
+                    <Icon size={20} color="#F97316" strokeWidth={1.8} />
                   </div>
-                  <h3 style={{ fontSize: 17, fontWeight: 700, color: '#111827', marginBottom: 12, letterSpacing: '-0.015em' }}>{v.title}</h3>
-                  <p style={{ fontSize: 14.5, color: '#6B7280', lineHeight: 1.8 }}>{v.body}</p>
+                  <h3 style={{ fontSize: 17, fontWeight: 700, color: 'white', marginBottom: 12, letterSpacing: '-0.015em' }}>{v.title}</h3>
+                  <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>{v.body}</p>
                 </div>
               );
             })}
@@ -179,18 +192,17 @@ export default function AboutPage() {
       </section>
 
       {/* ── CTA ──────────────────────────────────────── */}
-      <section style={{ background: 'linear-gradient(135deg,#0A1628 0%,#0F1E3C 50%,#1B2D4F 100%)', padding: '88px 0' }}>
+      <section style={{ padding: '88px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="container" style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(249,115,22,0.8)', marginBottom: 20 }}>Work With Us</p>
           <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', lineHeight: 1.1, maxWidth: 480, margin: '0 auto 20px' }}>
-            Ready to Get Your Property Serviced?
+            Ready to scale your business?
           </h2>
           <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 380, margin: '0 auto 36px', lineHeight: 1.75 }}>
-            Send us your property details and we&apos;ll respond within one business day.
+            Send us your details and start your free trial today.
           </p>
           <div className="cta-group" style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
             <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15.5, padding: '14px 32px' }}>
-              Get a Free Quote <ArrowRight size={17} />
+              Get Started <ArrowRight size={17} />
             </Link>
           </div>
         </div>
@@ -242,10 +254,8 @@ export default function AboutPage() {
           /* Stack comparison table */
           .cmp-table-header { display: none !important; }
           .cmp-row { grid-template-columns: 1fr; border: none !important; }
-          .cmp-cell-old { border-right: none; border-bottom: none; padding: 12px 20px; background: #F9FAFB; }
-          .cmp-cell-new { padding: 14px 20px; border-bottom: 1px solid #F3F4F6; }
-          .cmp-cell-old span { color: #9CA3AF; font-size: 13px; }
-          .cmp-cell-new span { font-size: 14px; }
+          .cmp-cell-old { border-right: none !important; border-bottom: none; padding: 12px 20px; background: rgba(255,255,255,0.01); }
+          .cmp-cell-new { padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); }
         }
         @media (max-width: 480px) {
           .about-checklist-card { padding: 24px 20px; }

@@ -26,19 +26,19 @@ export default function CTABanner() {
           maxWidth: 520,
           margin: '0 auto 18px',
         }}>
-          Ready to Get Your Property Compliant?
+          Ready to scale your fire safety operations?
         </h2>
 
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 400, margin: '0 auto 40px', lineHeight: 1.75 }}>
-          Send us your property details and we&apos;ll respond within one business day.
+          Join the platform built exclusively for modern Fire Safety and Building Compliance companies.
         </p>
 
         <div id="cta-banner-buttons" className="cta-group" style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
           <Link href="/contact" id="cta-banner-primary" className="btn btn-primary" style={{ fontSize: 15.5, padding: '14px 32px' }}>
-            Get a Free Quote <ArrowRight size={17} />
+            Start Free Trial <ArrowRight size={17} />
           </Link>
-          <Link href="/services" id="cta-banner-secondary" className="btn btn-outline" style={{ fontSize: 15.5, padding: '14px 26px' }}>
-            View Services
+          <Link href="/about" id="cta-banner-secondary" className="btn btn-outline" style={{ fontSize: 15.5, padding: '14px 26px' }}>
+            Book a Demo
           </Link>
         </div>
 

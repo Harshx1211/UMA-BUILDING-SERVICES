@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { ArrowRight, CalendarClock, ClipboardList, Camera, FileText, PenLine, CheckCircle } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Our Services | UMA Building Services',
-  description: 'Learn what happens on every UMA Building Services inspection — per-asset logging, photo evidence, defect classification, and digital PDF report generation.',
+  title: 'Platform Features | SiteTrack',
+  description: 'Learn how SiteTrack standardizes fire safety inspections with per-asset logging, photo evidence, and digital PDF generation.',
 };
 
 const VISIT_STEPS = [
@@ -37,52 +37,66 @@ export default function ServicesPage() {
   return (
     <>
       {/* Hero */}
-      <section style={{ background: 'linear-gradient(145deg,#060f1e 0%,#0A1628 40%,#0F1E3C 100%)', paddingTop: 72 }}>
-        <div className="container" style={{ paddingTop: 72, paddingBottom: 72 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#F97316', marginBottom: 20 }}>
-            Services
-          </p>
-          <h1 style={{ fontSize: 'clamp(30px,7.5vw,58px)', fontWeight: 900, color: 'white', letterSpacing: '-0.04em', lineHeight: 1.06, marginBottom: 22, maxWidth: 640 }}>
-            What Happens on Every Service Visit
+      {/* Hero */}
+      <section style={{ paddingTop: 110, paddingBottom: 60, position: 'relative', overflow: 'hidden' }}>
+        {/* Background Glow */}
+        <div style={{
+          position: 'absolute', width: 600, height: 600, borderRadius: '50%',
+          background: 'rgba(249,115,22,0.07)', filter: 'blur(100px)',
+          top: '-200px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none',
+        }} />
+
+        <div className="container" style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
+            background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
+            borderRadius: 999, marginBottom: 24
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#fdba74', letterSpacing: '0.04em' }}>
+              Features
+            </span>
+          </div>
+          <h1 className="heading-xl mx-auto" style={{ maxWidth: 800, color: 'white', marginBottom: 24 }}>
+            What Happens on <br /><span style={{ color: '#F97316' }}>Every Mobile Job.</span>
           </h1>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.50)', lineHeight: 1.8, maxWidth: 500, marginBottom: 36 }}>
-            Every job we carry out follows the same structured digital process — regardless of service frequency.
+          <p className="hero-sub mx-auto">
+            Every inspection your technicians carry out follows a rigorous digital structure — resulting in perfect compliance records, every time.
           </p>
-          <div className="cta-group" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15, padding: '12px 26px' }}>
-              Get a Free Quote <ArrowRight size={16} />
+          <div className="cta-group" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Link href="/contact" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: 16 }}>
+              Start Free Trial <ArrowRight size={18} />
             </Link>
           </div>
         </div>
       </section>
 
       {/* What happens on a visit */}
-      <section className="section" style={{ background: 'white' }}>
+      <section className="section">
         <div className="container">
           <div style={{ maxWidth: 560, marginBottom: 48 }}>
-            <p className="section-eyebrow">The Process</p>
-            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 16 }}>
-              What Our Technician Does on Site
+            <p className="section-eyebrow">The Mobile Process</p>
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+              What Your Technician Does on Site
             </h2>
-            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.75 }}>
-              Every inspection is logged through our own platform in real time. The record is created as the job is carried out — not filled in afterward.
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
+              Every inspection is logged through the SiteTrack mobile app in real time. The record is created as the job is carried out — not typed up afterward.
             </p>
           </div>
 
-          <div style={{ border: '1px solid #E5E7EB', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
             {VISIT_STEPS.map((step, i) => {
               const Icon = step.icon;
               return (
-                <div key={step.title} className="visit-step-row" style={{ borderBottom: i < VISIT_STEPS.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                <div key={step.title} className="visit-step-row" style={{ borderBottom: i < VISIT_STEPS.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: 'transparent' }}>
                   <div className="visit-step-left">
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#D1D5DB', letterSpacing: '0.04em', minWidth: 22 }}>0{i + 1}</span>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(15,30,60,0.07)', border: '1px solid rgba(15,30,60,0.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Icon size={18} color="#0F1E3C" strokeWidth={1.8} />
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.04em', minWidth: 22 }}>0{i + 1}</span>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon size={18} color="#F97316" strokeWidth={1.8} />
                     </div>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 700, color: '#111827', marginBottom: 6, letterSpacing: '-0.01em' }}>{step.title}</h3>
-                    <p style={{ fontSize: 14.5, color: '#6B7280', lineHeight: 1.75 }}>{step.description}</p>
+                    <h3 style={{ fontSize: 15.5, fontWeight: 700, color: 'white', marginBottom: 6, letterSpacing: '-0.01em' }}>{step.title}</h3>
+                    <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>{step.description}</p>
                   </div>
                 </div>
               );
@@ -92,27 +106,27 @@ export default function ServicesPage() {
       </section>
 
       {/* What the report contains */}
-      <section className="section" style={{ background: '#F9FAFB' }}>
+      <section className="section">
         <div className="container">
           <div className="svc-report-grid">
             <div>
-              <p className="section-eyebrow">The Report</p>
-              <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 20 }}>
-                What Your PDF Service Report Includes
+              <p className="section-eyebrow">The PDF Output</p>
+              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 20 }}>
+                What Your Generated PDF Report Includes
               </h2>
-              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8, marginBottom: 16 }}>
-                A PDF service report is generated automatically at the completion of every job. It is a structured document built from the data logged by your technician on site.
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, marginBottom: 16 }}>
+                A PDF service report is generated automatically by the platform at the completion of every job. It is a structured document built from the data logged by your technician on site.
               </p>
-              <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8 }}>
-                Reports are stored digitally and can be provided to building owners, property managers, or compliance auditors as required.
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>
+                Reports are stored digitally and can be instantly emailed to building owners, property managers, or compliance auditors as required.
               </p>
             </div>
-            <div style={{ background: 'white', border: '1px solid #E5E7EB', borderRadius: 14, padding: '32px 28px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 22 }}>Report Contents</p>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '32px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 22 }}>Report Contents</p>
               {REPORT_ITEMS.map((item, i, arr) => (
-                <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: i < arr.length - 1 ? 14 : 0, marginBottom: i < arr.length - 1 ? 14 : 0, borderBottom: i < arr.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: i < arr.length - 1 ? 14 : 0, marginBottom: i < arr.length - 1 ? 14 : 0, borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                   <CheckCircle size={15} color="#F97316" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 2 }} />
-                  <span style={{ fontSize: 14.5, color: '#374151', lineHeight: 1.6 }}>{item}</span>
+                  <span style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{item}</span>
                 </div>
               ))}
             </div>
@@ -121,26 +135,26 @@ export default function ServicesPage() {
       </section>
 
       {/* Service frequencies detail */}
-      <section className="section" style={{ background: 'white' }}>
+      <section className="section">
         <div className="container">
           <div style={{ maxWidth: 560, marginBottom: 48 }}>
             <p className="section-eyebrow">Service Frequencies</p>
-            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 16 }}>
-              Which Frequency Is Right for Your Property?
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+              Support For Every Compliance Cycle
             </h2>
-            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.75 }}>
-              Under AS1851, different fire safety asset classes require inspection at different intervals. We service every frequency — from monthly through to 5-yearly.
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
+              Under AS1851, different fire safety asset classes require inspection at different intervals. SiteTrack supports scheduling for every frequency — from monthly through to 5-yearly.
             </p>
           </div>
           <div className="services-grid">
             {FREQUENCIES.map(f => (
-              <div key={f.schedule} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '24px 22px' }}>
+              <div key={f.schedule} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '24px 22px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
                   <CalendarClock size={15} color="#9CA3AF" strokeWidth={1.8} />
                   <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9CA3AF' }}>{f.schedule}</span>
                 </div>
-                <h3 style={{ fontSize: 15.5, fontWeight: 700, color: '#111827', marginBottom: 8, letterSpacing: '-0.01em' }}>{f.heading}</h3>
-                <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.75 }}>{f.body}</p>
+                <h3 style={{ fontSize: 15.5, fontWeight: 700, color: 'white', marginBottom: 8, letterSpacing: '-0.01em' }}>{f.heading}</h3>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>{f.body}</p>
               </div>
             ))}
           </div>
@@ -148,28 +162,26 @@ export default function ServicesPage() {
       </section>
 
       {/* CTA */}
-      <section style={{ background: 'linear-gradient(135deg,#0A1628 0%,#0F1E3C 50%,#1B2D4F 100%)', padding: '88px 0' }}>
+      <section style={{ padding: '88px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="container" style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(249,115,22,0.8)', marginBottom: 20 }}>Get Started</p>
           <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', lineHeight: 1.1, maxWidth: 520, margin: '0 auto 20px' }}>
-            Ready to Book a Service?
+            Ready to upgrade your system?
           </h2>
           <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 400, margin: '0 auto 36px', lineHeight: 1.75 }}>
-            Tell us your property address and preferred frequency.
+            Create an account and start managing properties today.
           </p>
           <div className="cta-group" style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
             <Link href="/contact" className="btn btn-primary" style={{ fontSize: 15.5, padding: '14px 32px' }}>
-              Get a Free Quote <ArrowRight size={17} />
+              Get Started <ArrowRight size={17} />
             </Link>
           </div>
         </div>
       </section>
 
       <style>{`
-        /* Visit step row */
         .visit-step-row {
           display: flex; align-items: flex-start; gap: 20;
-          padding: 24px 24px; background: white;
+          padding: 24px 24px; background: transparent;
         }
         .visit-step-left {
           display: flex; align-items: center; gap: 14px; flex-shrink: 0;

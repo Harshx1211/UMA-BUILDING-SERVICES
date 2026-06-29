@@ -24,20 +24,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email address.' }, { status: 400 });
     }
 
-    const { error } = await supabase.from('enquiries').insert({
-      name:             name.trim(),
-      company:          company?.trim() || null,
-      email:            email.trim().toLowerCase(),
-      phone:            phone?.trim() || null,
-      service_type:     service_type || null,
-      property_address: property_address?.trim() || null,
-      message:          message.trim(),
-    });
+    // Insert into the database as a platform-level lead (company_id is null)
+    // The RLS policy "enquiries_public_insert" allows anon inserts.
+    const { error } = await supabase.from('enquiries').insert([{
+      company_id: null, // Indicates a SaaS lead, not a tenant lead
+      name,
+      email,
+      phone,
+      service: service_type || 'Platform Demo Request',
+      message: `${company ? `Company: ${company}\n` : ''}${property_address ? `Property: ${property_address}\n` : ''}Message: ${message}`,
+      status: 'new',
+    }]);
 
     if (error) {
-      console.error('Supabase enquiry insert error:', error);
-      return NextResponse.json({ error: 'Failed to save enquiry.' }, { status: 500 });
+      console.error('Failed to insert SaaS lead:', error);
+      return NextResponse.json({ error: 'Failed to submit enquiry.' }, { status: 500 });
     }
+
+    console.log('[SaaS Lead Captured in DB]:', { name, email, phone });
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {

@@ -5,11 +5,11 @@ import Footer from '@/components/Footer';
 
 export const metadata: Metadata = {
   title: {
-    default: 'UMA Building Services | Fire Safety & Building Compliance',
-    template: '%s | UMA Building Services',
+    default: 'SiteTrack | Fire Safety & Building Compliance Platform',
+    template: '%s | SiteTrack',
   },
   description:
-    'UMA Building Services delivers professional fire safety inspections, routine maintenance and defect repairs for commercial and industrial properties across Australia. Powered by purpose-built digital reporting.',
+    'SiteTrack is the ultimate SaaS platform for Fire Safety and Building Compliance companies. Power your technicians with a mobile app, offline sync, and automated reporting.',
   keywords: [
     'fire safety inspection',
     'building compliance',
@@ -17,13 +17,13 @@ export const metadata: Metadata = {
     'defect repair',
     'fire extinguisher inspection',
     'emergency lighting',
-    'building services Australia',
-    'UMA Building Services',
+    'building services software',
+    'SiteTrack SaaS',
   ],
   openGraph: {
-    title: 'UMA Building Services | Fire Safety & Building Compliance',
+    title: 'SiteTrack | Fire Safety & Building Compliance Platform',
     description:
-      'Professional fire safety inspections, routine maintenance and defect repairs with digital reporting.',
+      'The ultimate software platform for modern fire safety companies. Automate compliance, dispatch technicians, and generate PDF reports instantly.',
     type: 'website',
     locale: 'en_AU',
   },
@@ -36,7 +36,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en-AU" suppressHydrationWarning data-scroll-behavior="smooth">
-      <body>
+      <body className="bg-[#060f1e] text-[#F8FAFC]">
         <Navbar />
         <main className="animate-page-enter">{children}</main>
         <Footer />

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, Shield, ArrowRight } from 'lucide-react';
 
-// Only 3 links — "Get a Free Quote" CTA covers Contact separately
+// 3 nav links (Contact removed to avoid duplicating the Get Started CTA)
 const NAV_LINKS = [
   { href: '/',         label: 'Home' },
   { href: '/services', label: 'Services' },
@@ -43,9 +43,9 @@ export default function Navbar() {
             </div>
             <div>
               <div className={scrolled ? 'navbar-logo-name scrolled' : 'navbar-logo-name'}>
-                UMA Building
+                SiteTrack
               </div>
-              <div className="navbar-logo-sub">Services</div>
+              <div className="navbar-logo-sub">Platform</div>
             </div>
           </Link>
 
@@ -60,8 +60,8 @@ export default function Navbar() {
                   id={`nav-${l.label.toLowerCase()}`}
                   className={[
                     'navbar-link',
-                    scrolled ? 'navbar-link-light' : 'navbar-link-dark',
-                    active ? (scrolled ? 'active-light' : 'active-dark') : '',
+                    scrolled ? 'navbar-link-dark' : 'navbar-link-dark',
+                    active ? (scrolled ? 'active-dark' : 'active-dark') : '',
                   ].join(' ')}
                 >
                   {l.label}
@@ -77,14 +77,14 @@ export default function Navbar() {
             id="nav-cta"
             className="navbar-cta hide-mobile-nav"
           >
-            Get a Free Quote <ArrowRight size={14} />
+            Get Started <ArrowRight size={14} />
           </Link>
 
           {/* Hamburger */}
           <button
             id="nav-hamburger"
             onClick={() => setOpen(!open)}
-            className={scrolled ? 'navbar-burger navbar-burger-light show-mobile-nav' : 'navbar-burger show-mobile-nav'}
+            className="navbar-burger show-mobile-nav"
             aria-label="Toggle menu"
           >
             {open ? <X size={20} /> : <Menu size={20} />}
@@ -113,7 +113,7 @@ export default function Navbar() {
                 onClick={() => setOpen(false)}
                 className="navbar-mobile-cta"
               >
-                Get a Free Quote <ArrowRight size={16} />
+                Get Started <ArrowRight size={16} />
               </Link>
             </div>
           </div>
@@ -124,16 +124,16 @@ export default function Navbar() {
         /* ── Navbar shell ── */
         .navbar {
           position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-          transition: background 350ms, box-shadow 350ms, border-color 350ms;
+          transition: background 350ms, box-shadow 350ms, border-color 350ms, backdrop-filter 350ms;
           background: transparent;
           border-bottom: 1px solid transparent;
         }
         .navbar-scrolled {
-          background: rgba(255,255,255,0.97);
+          background: rgba(10,22,40,0.7);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
-          border-bottom: 1px solid rgba(226,232,240,0.80);
-          box-shadow: 0 2px 24px rgba(0,0,0,0.06);
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 4px 32px rgba(0,0,0,0.4);
         }
         .navbar-inner {
           display: flex; align-items: center; height: 72px; gap: 8px;
@@ -154,7 +154,7 @@ export default function Navbar() {
           font-weight: 900; font-size: 14.5px; letter-spacing: -0.03em;
           color: white; line-height: 1.1; transition: color 350ms;
         }
-        .navbar-logo-name.scrolled { color: #0F1E3C; }
+        .navbar-logo-name.scrolled { color: white; }
         .navbar-logo-sub {
           font-weight: 700; font-size: 9.5px; letter-spacing: 0.09em;
           text-transform: uppercase; color: #F97316; line-height: 1;
@@ -203,19 +203,20 @@ export default function Navbar() {
 
         /* ── Mobile menu ── */
         .navbar-mobile {
-          background: white; border-top: 1px solid #e2e8f0;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.14);
+          background: rgba(10,22,40,0.95); border-top: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+          backdrop-filter: blur(24px);
         }
         .navbar-mobile-inner {
           padding: 12px 18px 20px; display: flex; flex-direction: column; gap: 2px;
         }
         .navbar-mobile-link {
           padding: 13px 16px; border-radius: 10px; font-size: 15px; font-weight: 600;
-          color: #475569; background: transparent; border-left: 3px solid transparent;
+          color: rgba(255,255,255,0.7); background: transparent; border-left: 3px solid transparent;
           transition: all 150ms; text-decoration: none;
         }
         .navbar-mobile-link.active {
-          color: #0F1E3C; background: rgba(15,30,60,0.06); border-left-color: #F97316;
+          color: white; background: rgba(255,255,255,0.05); border-left-color: #F97316;
         }
         .navbar-mobile-cta {
           margin-top: 10px; display: flex; align-items: center; justify-content: center;

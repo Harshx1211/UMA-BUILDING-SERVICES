@@ -3,10 +3,10 @@ import { useEffect, useRef } from 'react';
 import { Smartphone, FileBarChart2, MapPin, ClipboardCheck } from 'lucide-react';
 
 const FEATURES = [
-  { icon: Smartphone,    title: 'Purpose-Built Platform',     description: 'Our technicians use our own mobile app on every job, logging results, capturing photos, and collecting signatures in real time.' },
-  { icon: FileBarChart2, title: 'Digital PDF Service Reports', description: 'A structured PDF is generated at job completion, documenting every asset inspected, result recorded, and defect found on site.' },
-  { icon: ClipboardCheck, title: 'Per-Asset Inspection Log',   description: 'Every fire safety asset is individually logged with a Pass or Fail result, severity classification, and photo evidence.' },
-  { icon: MapPin,        title: 'Multi-Site Management',       description: 'We manage multiple properties simultaneously, each with its own asset register, compliance history, and scheduled service dates.' },
+  { icon: Smartphone,    title: 'Offline-First App',          description: 'Our mobile app caches all checklists and data locally, seamlessly syncing to the cloud when signal returns.' },
+  { icon: FileBarChart2, title: 'Instant PDF Generation',     description: 'No more evening paperwork. Generate professional AS1851 PDFs directly from the field the moment a job is done.' },
+  { icon: ClipboardCheck, title: 'Digital Asset Registers',   description: 'Build complete digital histories of every fire safety asset across all your client sites.' },
+  { icon: MapPin,        title: 'Multi-Tenant Architecture',  description: 'Enterprise-grade security using advanced Row-Level Security ensuring your data is completely isolated.' },
 ];
 
 export default function WhyUsSection() {
@@ -29,22 +29,22 @@ export default function WhyUsSection() {
   }, []);
 
   return (
-    <section id="why-us" className="section" style={{ background: 'white' }} ref={ref}>
+    <section id="why-us" className="section" style={{ background: 'transparent' }} ref={ref}>
       <div className="container">
 
         <div className="why-outer-grid">
 
           {/* Left: copy */}
           <div>
-            <p className="section-eyebrow">Why UMA</p>
-            <h2 className="heading-lg" style={{ color: '#0F1E3C', marginBottom: 24 }}>
-              Technology-Backed<br />Building Services
+            <p className="section-eyebrow" style={{ color: '#F97316' }}>Why SiteTrack</p>
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 24 }}>
+              Built for<br />Modern Businesses
             </h2>
-            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8, marginBottom: 18 }}>
-              Unlike traditional building services companies using paper-based processes, UMA Building Services operates with its own purpose-built digital platform, built specifically for our workflow.
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, marginBottom: 18 }}>
+              Unlike generic field service software, SiteTrack is built specifically for the Fire Safety industry. We know that compliance is everything, and paperwork is the enemy.
             </p>
-            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.8 }}>
-              Every service visit produces a clear, structured digital record, giving our clients accurate documentation of what was inspected, what was found, and what was done about it.
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>
+              Equip your technicians with the tools they need to complete AS1851 inspections accurately and efficiently, while giving your admin team the oversight they need to scale the business.
             </p>
           </div>
 
@@ -55,30 +55,27 @@ export default function WhyUsSection() {
               return (
                 <div
                   key={f.title}
-                  className="why-card"
+                  className="why-card card-glass"
                   style={{
-                    background: '#F9FAFB',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 12,
                     padding: '24px 22px',
                     opacity: 0,
                     transform: 'translateY(18px)',
-                    transition: `opacity 0.5s ease ${i * 80}ms, transform 0.5s ease ${i * 80}ms`,
+                    transition: `opacity 0.5s ease ${i * 80}ms, transform 0.5s ease ${i * 80}ms, border-color 0.2s`,
+                    cursor: 'default',
                   }}
                 >
                   <div style={{
                     width: 40, height: 40, borderRadius: 10,
-                    background: 'rgba(15,30,60,0.07)',
-                    border: '1px solid rgba(15,30,60,0.09)',
+                    background: 'rgba(249,115,22,0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     marginBottom: 14,
                   }}>
-                    <Icon size={18} color="#0F1E3C" strokeWidth={1.8} />
+                    <Icon size={18} color="#F97316" strokeWidth={1.8} />
                   </div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 7, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'white', marginBottom: 7, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
                     {f.title}
                   </h3>
-                  <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', lineHeight: 1.7 }}>
                     {f.description}
                   </p>
                 </div>
