@@ -43,11 +43,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
-    const { name, abn, subscription_status } = await req.json();
+    const { name, abn, subscription_status, custom_sidebar_label, custom_sidebar_url } = await req.json();
 
     const { data, error } = await supabaseAdmin
       .from('companies')
-      .update({ name, abn, subscription_status })
+      .update({ name, abn, subscription_status, custom_sidebar_label, custom_sidebar_url })
       .eq('id', id)
       .select()
       .single();

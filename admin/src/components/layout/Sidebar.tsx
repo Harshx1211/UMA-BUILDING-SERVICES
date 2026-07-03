@@ -49,11 +49,17 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [companyName, setCompanyName] = useState('');
+  const [customLink, setCustomLink] = useState<{label: string, url: string} | null>(null);
   const { user, signOut } = useAuth();
 
   useEffect(() => {
     fetch('/api/admin/company').then(res => res.json()).then(json => {
-      if (json.data?.name) setCompanyName(json.data.name);
+      if (json.data?.name) {
+        setCompanyName(json.data.name);
+        if (json.data.custom_sidebar_url && json.data.custom_sidebar_label) {
+          setCustomLink({ label: json.data.custom_sidebar_label, url: json.data.custom_sidebar_url });
+        }
+      }
     }).catch(() => {});
   }, []);
 
@@ -124,6 +130,40 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
             </div>
           </div>
         ))}
+
+        {customLink && (
+          <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            {(!collapsed || mobileOpen) && (
+              <p className="text-xs font-semibold uppercase tracking-widest px-3 mb-2 mt-2"
+                style={{ color: 'rgba(255,255,255,0.22)', letterSpacing: '0.1em' }}>
+                Integrations
+              </p>
+            )}
+            <div className="space-y-0.5">
+              <Link href={customLink.url} title={collapsed && !mobileOpen ? customLink.label : undefined}
+                target={customLink.url.startsWith('http') ? '_blank' : undefined}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative overflow-hidden"
+                style={{
+                  color: isActive(customLink.url) ? '#fff' : 'rgba(255,255,255,0.50)',
+                  background: isActive(customLink.url) ? 'rgba(232,101,10,0.14)' : 'transparent',
+                  borderLeft: isActive(customLink.url) ? '2.5px solid #E8650A' : '2.5px solid transparent',
+                }}>
+                <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <MessageSquare size={17} strokeWidth={isActive(customLink.url) ? 2.2 : 1.8} className="flex-shrink-0 relative z-10"
+                  style={{ color: isActive(customLink.url) ? '#E8650A' : undefined }} />
+                {(!collapsed || mobileOpen) && (
+                  <span className="truncate relative z-10">{customLink.label}</span>
+                )}
+                {collapsed && !mobileOpen && (
+                  <span className="absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-900 text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-50 shadow-2xl border border-gray-800">
+                    {customLink.label}
+                  </span>
+                )}
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Spacer to push nav up if needed, but flex-1 handles it */}

@@ -57,9 +57,12 @@ export async function generateMetadata(): Promise<Metadata> {
         'The ultimate software platform for modern fire safety companies. Automate compliance, dispatch technicians, and generate PDF reports instantly.',
       images: ['/og-image.jpg'],
     },
-    themeColor: '#0F1E3C', // matches --navy — controls mobile browser chrome color
   };
 }
+
+export const viewport = {
+  themeColor: '#0F1E3C', // matches --navy — controls mobile browser chrome color
+};
 
 export default async function RootLayout({
   children,

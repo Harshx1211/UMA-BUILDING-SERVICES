@@ -22,7 +22,7 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 }
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
+  useSafeAreaInsets();
   const { user } = useAuth();
   const { signOut, company, updateUser } = useAuthStore();
   const C = useColors();

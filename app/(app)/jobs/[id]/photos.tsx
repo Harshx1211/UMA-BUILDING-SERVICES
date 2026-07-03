@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';

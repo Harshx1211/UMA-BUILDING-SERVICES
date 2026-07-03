@@ -24,7 +24,6 @@ export default function Navbar({ platformName = 'SiteTrack' }: { platformName?: 
   }, []);
 
   const [prevPath, setPrevPath] = useState(pathname);
-
   if (pathname !== prevPath) {
     setPrevPath(pathname);
     setOpen(false);

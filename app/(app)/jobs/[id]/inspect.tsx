@@ -256,6 +256,7 @@ export default function AssetInspectionScreen() {
   useEffect(() => {
     if (jobId) store.loadAssetsForInspection(jobId);
     return () => store.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   const filteredAssets = useMemo(() => {

@@ -69,15 +69,6 @@ export default function SignatureScreen() {
     setHasSig(false);
   }
 
-  function _handleStartEditing() {
-    // Pre-fill tech sig from existing record if available so it can be carried forward
-    setTechSigBase64(existingSig?.tech_signature_url ?? null);
-    setSignedBy(existingSig?.signed_by_name ?? '');
-    setStep('tech');
-    setHasSig(false);
-    setSigError('');
-    setIsEditing(true);
-  }
 
   function _handleResetAll() {
     Alert.alert('Restart Sign-off', 'This will delete the captured technician signature. Are you sure?', [

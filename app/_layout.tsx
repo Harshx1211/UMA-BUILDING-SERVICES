@@ -6,14 +6,13 @@ import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Text, AppState, 
 import { Slot, ErrorBoundaryProps } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Provider as PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
+import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, clearFailedSyncItems } from '@/lib/database';
 import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
 import Colors from '@/constants/Colors';
-import * as ScreenCapture from 'expo-screen-capture';
 import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync();
@@ -34,11 +33,9 @@ const paperDarkTheme = {
     onSurface:    Colors.dark.text,
   },
 };
-// Alias — both colorScheme branches resolve to the same dark theme.
-const paperLightTheme = paperDarkTheme;
+
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const { isLoading, restoreSession } = useAuthStore();
 
   // ── Screenshot / Screen-capture prevention ─────────────────────────────────

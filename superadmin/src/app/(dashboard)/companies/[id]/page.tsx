@@ -82,7 +82,13 @@ export default function SuperadminCompanyDetailPage() {
     try {
       const res = await adminFetch(`/api/superadmin/companies/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: form.name, abn: form.abn, subscription_status: form.subscription_status }),
+        body: JSON.stringify({ 
+          name: form.name, 
+          abn: form.abn, 
+          subscription_status: form.subscription_status,
+          custom_sidebar_label: form.custom_sidebar_label,
+          custom_sidebar_url: form.custom_sidebar_url
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Save failed');
@@ -241,6 +247,19 @@ export default function SuperadminCompanyDetailPage() {
               <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
                 Suspending a tenant locks out all their users from the platform.
               </p>
+            </div>
+
+            <div className="pt-4 border-t space-y-4" style={{ borderColor: 'var(--border)' }}>
+              <div>
+                <p className="font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}>
+                  <Settings size={16} className="text-indigo-500" /> Dynamic External Sidebar Link
+                </p>
+                <p className="text-xs mt-1 mb-4" style={{ color: 'var(--text-tertiary)' }}>
+                  Inject a custom navigation link into this specific tenant's admin portal sidebar (e.g., to their UMA Website Leads page or CRM).
+                </p>
+              </div>
+              <FieldDisplay editing={editing} form={form} setForm={setForm} label="Sidebar Label (e.g. Website Leads)" field="custom_sidebar_label" />
+              <FieldDisplay editing={editing} form={form} setForm={setForm} label="Sidebar URL (e.g. /leads or https://...)" field="custom_sidebar_url" />
             </div>
           </div>
 

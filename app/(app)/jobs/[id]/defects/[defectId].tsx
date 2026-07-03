@@ -60,7 +60,7 @@ const STATUS_COLORS: Record<DefectStatus, string> = {
 
 export default function DefectDetailScreen() {
   const C = useColors();
-  const { id: jobId, defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
+  const { defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
   const { deleteDefect } = useDefectsStore();
 
   const [defect,      setDefect]      = useState<FullDefect | null>(null);
