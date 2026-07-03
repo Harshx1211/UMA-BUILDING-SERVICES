@@ -11,12 +11,12 @@ import toast from 'react-hot-toast';
 const TYPE_ICON: Record<string, React.ReactNode> = {
   new_job:       <Briefcase size={15} style={{ color: '#3b82f6' }} />,
   urgent_job:    <Briefcase size={15} style={{ color: '#ef4444' }} />,
-  defect_flagged:<ShieldAlert size={15} style={{ color: '#f97316' }} />,
+  defect_flagged:<ShieldAlert size={15} style={{ color: 'var(--accent)' }} />,
   sync_complete: <CheckCircle2 size={15} style={{ color: '#22c55e' }} />,
   general:       <Info size={15} style={{ color: '#94a3b8' }} />,
 };
 const TYPE_BG: Record<string, string> = {
-  new_job: 'var(--primary-light)', urgent_job: 'rgba(239,68,68,0.15)', defect_flagged: 'rgba(249,115,22,0.15)',
+  new_job: 'var(--primary-light)', urgent_job: 'rgba(239,68,68,0.15)', defect_flagged: 'rgba(232,101,10,0.15)',
   sync_complete: 'rgba(34,197,94,0.15)', general: 'var(--bg)',
 };
 

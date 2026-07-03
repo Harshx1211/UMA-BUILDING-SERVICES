@@ -129,7 +129,7 @@ export default function PropertiesPage() {
   const SUMMARY_ITEMS = [
     { label: 'Compliant',     value: summary.compliant,     color: '#22c55e', bg: 'rgba(34,197,94,0.15)', status: 'compliant' },
     { label: 'Non-Compliant', value: summary.non_compliant, color: '#ef4444', bg: 'rgba(239,68,68,0.15)', status: 'non_compliant' },
-    { label: 'Overdue',       value: summary.overdue,       color: '#f97316', bg: 'rgba(249,115,22,0.15)', status: 'overdue' },
+    { label: 'Overdue',       value: summary.overdue,       color: 'var(--accent)', bg: 'rgba(232,101,10,0.15)', status: 'overdue' },
     { label: 'Pending',       value: summary.pending,       color: '#94a3b8', bg: 'var(--bg)', status: 'pending' },
   ];
 
@@ -222,7 +222,7 @@ export default function PropertiesPage() {
               style={{ borderColor: 'var(--border)', animationDelay: `${i * 30}ms` }}>
               {/* Top accent based on compliance */}
               <div className="h-1 w-full"
-                style={{ background: p.compliance_status === 'compliant' ? '#22c55e' : p.compliance_status === 'overdue' ? '#f97316' : p.compliance_status === 'non_compliant' ? '#ef4444' : '#cbd5e1' }} />
+                style={{ background: p.compliance_status === 'compliant' ? '#22c55e' : p.compliance_status === 'overdue' ? 'var(--accent)' : p.compliance_status === 'non_compliant' ? '#ef4444' : '#cbd5e1' }} />
               <div className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2.5 min-w-0">

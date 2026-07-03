@@ -82,7 +82,7 @@ export default function SettingsPage() {
             {SECTIONS.map(s => (
               <button key={s.id} onClick={() => setSection(s.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-left transition-all border-b last:border-0"
-                style={{ borderColor: 'var(--border)', background: section === s.id ? 'rgba(249,115,22,0.15)' : 'transparent', color: section === s.id ? 'var(--accent)' : 'var(--text-secondary)', borderLeft: section === s.id ? '3px solid var(--accent)' : '3px solid transparent' }}>
+                style={{ borderColor: 'var(--border)', background: section === s.id ? 'rgba(232,101,10,0.15)' : 'transparent', color: section === s.id ? 'var(--accent)' : 'var(--text-secondary)', borderLeft: section === s.id ? '3px solid var(--accent)' : '3px solid transparent' }}>
                 <s.icon size={16} />
                 {s.label}
               </button>
@@ -191,13 +191,13 @@ export default function SettingsPage() {
                   <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>Theme</p>
                   <div className="flex gap-3">
                     {[
-                      { label: 'Light', colors: ['#F0F4F8', '#1B2D4F', '#F97316'] },
-                      { label: 'Dark (coming soon)', colors: ['#0F172A', '#334155', '#F97316'] },
+                      { label: 'Light', colors: ['#F0F4F8', '#1B2D4F', 'var(--accent)'] },
+                      { label: 'Dark (coming soon)', colors: ['#0F172A', '#334155', 'var(--accent)'] },
                     ].map(t => (
                       <div key={t.label} 
                         onClick={() => { if (t.label === 'Light') setCompany(c => ({ ...c, appearance_settings: { ...c.appearance_settings, theme: 'Light' } })) }}
                         className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors" 
-                        style={{ borderColor: company.appearance_settings.theme === t.label ? 'var(--accent)' : 'var(--border)', background: company.appearance_settings.theme === t.label ? 'rgba(249,115,22,0.15)' : 'var(--bg)' }}>
+                        style={{ borderColor: company.appearance_settings.theme === t.label ? 'var(--accent)' : 'var(--border)', background: company.appearance_settings.theme === t.label ? 'rgba(232,101,10,0.15)' : 'var(--bg)' }}>
                         <div className="flex gap-1">
                           {t.colors.map((c, i) => <span key={i} className="w-4 h-4 rounded-full" style={{ background: c }} />)}
                         </div>

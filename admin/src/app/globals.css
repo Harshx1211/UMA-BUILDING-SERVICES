@@ -73,8 +73,8 @@
 
   /* Sidebar */
   --sidebar-bg:         #0F1E3C;
-  --sidebar-active:     rgba(249,115,22,0.14);
-  --sidebar-active-border: #F97316;
+  --sidebar-active:     rgba(232,101,10,0.14);
+  --sidebar-active-border: var(--accent);
 
   /* Surface */
   --bg:                 #0B162C;
@@ -93,7 +93,7 @@
   --shadow-md:   0 4px 12px rgba(0,0,0,0.10), 0 12px 32px rgba(0,0,0,0.06);
   --shadow-lg:   0 8px 24px rgba(0,0,0,0.12), 0 24px 48px rgba(0,0,0,0.08);
   --shadow-xl:   0 16px 48px rgba(0,0,0,0.16), 0 32px 64px rgba(0,0,0,0.10);
-  --shadow-glow-orange: 0 4px 20px rgba(249,115,22,0.35);
+  --shadow-glow-orange: 0 4px 20px rgba(232,101,10,0.35);
   --shadow-glow-navy:   0 4px 20px rgba(27,45,79,0.30);
 
   /* Radii */
@@ -540,7 +540,7 @@ th    { text-align: left; white-space: nowrap; }
 
 /* ─── Severity Left Border ───────────────────────────────────────────────────── */
 .severity-critical { border-left: 4px solid #ef4444; }
-.severity-major    { border-left: 4px solid #f97316; }
+.severity-major    { border-left: 4px solid var(--accent); }
 .severity-minor    { border-left: 4px solid #f59e0b; }
 
 /* ─── Scrollable X ───────────────────────────────────────────────────────────── */

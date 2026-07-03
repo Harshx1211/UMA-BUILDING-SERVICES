@@ -20,7 +20,7 @@ import Link from 'next/link';
 
 const CACHE_KEY = 'dashboard';
 
-const SEV_COLORS = { minor: '#f59e0b', major: '#f97316', critical: '#ef4444' };
+const SEV_COLORS = { minor: '#f59e0b', major: 'var(--accent)', critical: '#ef4444' };
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -97,8 +97,8 @@ export default function DashboardPage() {
       <div className="relative rounded-2xl overflow-hidden p-6 flex items-center justify-between"
         style={{ background: 'linear-gradient(135deg, #0F1E3C 0%, #1B2D4F 60%, #1e3560 100%)', minHeight: 100 }}>
         {/* Decorative blobs */}
-        <div className="absolute w-56 h-56 rounded-full -top-16 -right-8 opacity-10" style={{ background: '#F97316' }} />
-        <div className="absolute w-32 h-32 rounded-full -bottom-10 right-32 opacity-5" style={{ background: '#F97316' }} />
+        <div className="absolute w-56 h-56 rounded-full -top-16 -right-8 opacity-10" style={{ background: 'var(--accent)' }} />
+        <div className="absolute w-32 h-32 rounded-full -bottom-10 right-32 opacity-5" style={{ background: 'var(--accent)' }} />
         <div className="relative z-10">
           <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-1">Overview</p>
           <h2 className="text-white text-2xl font-extrabold leading-tight" style={{ letterSpacing: '-0.03em' }}>
@@ -295,7 +295,7 @@ export default function DashboardPage() {
                 <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>No defects recorded</p>
               </div>
             ) : recentDefects.map((defect: any, i) => {
-              const sevColor = defect.severity === 'critical' ? '#ef4444' : defect.severity === 'major' ? '#f97316' : '#f59e0b';
+              const sevColor = defect.severity === 'critical' ? '#ef4444' : defect.severity === 'major' ? 'var(--accent)' : '#f59e0b';
               const sevBg = defect.severity === 'critical' ? 'var(--error-dark)' : defect.severity === 'major' ? 'var(--warning-dark)' : 'var(--warning-dark)';
               return (
                 <div key={defect.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--primary-light)] transition-colors"

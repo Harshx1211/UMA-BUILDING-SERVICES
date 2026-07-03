@@ -318,7 +318,7 @@ export default function QuotesPage() {
                 <div className="border-t pb-2" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                   <div className="pt-4">
                     {renderDefectsGroup('Critical / Immediate', q.defects.filter((d:any) => d.severity === 'critical'), '#ef4444')}
-                    {renderDefectsGroup('Major Defects', q.defects.filter((d:any) => d.severity === 'major'), '#f97316')}
+                    {renderDefectsGroup('Major Defects', q.defects.filter((d:any) => d.severity === 'major'), 'var(--accent)')}
                     {renderDefectsGroup('Minor Defects', q.defects.filter((d:any) => d.severity === 'minor'), '#eab308')}
                   </div>
                   <div className="px-4 py-3 border-t flex justify-between" style={{ borderColor: 'var(--border)', background: '#f0f4f8' }}>

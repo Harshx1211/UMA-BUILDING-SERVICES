@@ -159,7 +159,7 @@ export default function TermsOfService() {
             </section>
 
             {/* Section 6 - Mutual Indemnification */}
-            <section className="relative p-8 rounded-2xl border border-[rgba(249,115,22,0.3)] bg-[rgba(249,115,22,0.05)] overflow-hidden">
+            <section className="relative p-8 rounded-2xl border border-[rgba(232,101,10,0.3)] bg-[rgba(232,101,10,0.05)] overflow-hidden">
               <div className="absolute top-0 left-0 w-1.5 h-full bg-[var(--accent)]" />
               <h2 className="flex items-center gap-3 text-2xl font-bold text-[var(--accent)] mb-6">
                 <ShieldAlert size={28} />

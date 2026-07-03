@@ -20,13 +20,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : 'ΓÇö';
   const cap = (s: string) => s ? s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'ΓÇö';
 
-  const sevColor: Record<string, string> = { critical: '#dc2626', major: '#ea580c', minor: '#d97706' };
+  const sevColor: Record<string, string> = { critical: '#dc2626', major: 'var(--accent)', minor: '#d97706' };
   const statusColor: Record<string, string> = {
     active: '#16a34a', decommissioned: '#94a3b8',
-    compliant: '#16a34a', non_compliant: '#dc2626', overdue: '#ea580c', pending: '#94a3b8',
+    compliant: '#16a34a', non_compliant: '#dc2626', overdue: 'var(--accent)', pending: '#94a3b8',
     open: '#dc2626', quoted: '#d97706', repaired: '#16a34a', monitoring: '#3b82f6',
-    scheduled: '#3b82f6', in_progress: '#f97316', completed: '#16a34a', cancelled: '#94a3b8',
-    urgent: '#dc2626', high: '#ea580c', normal: '#3b82f6', low: '#94a3b8',
+    scheduled: '#3b82f6', in_progress: 'var(--accent)', completed: '#16a34a', cancelled: '#94a3b8',
+    urgent: '#dc2626', high: 'var(--accent)', normal: '#3b82f6', low: '#94a3b8',
     draft: '#94a3b8', approved: '#16a34a', rejected: '#dc2626',
   };
   const badge = (v: string) =>
@@ -51,8 +51,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   /* Print button */
   .print-bar { position: fixed; top: 0; left: 0; right: 0; background: #1B2D4F; padding: 12px 20px; display: flex; align-items: center; justify-between; gap: 12px; z-index: 100; }
   .print-bar p { color: #fff; font-size: 13px; font-weight: 600; flex: 1; }
-  .print-btn { background: #F97316; color: #fff; border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
-  .print-btn:hover { background: #ea580c; }
+  .print-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .print-btn:hover { background: var(--accent); }
   .content { padding-top: 52px; }
   @media print { .print-bar { display: none; } .content { padding-top: 0; } }
 
@@ -62,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   /* Header */
   .header { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px; background: linear-gradient(135deg, #1B2D4F 0%, #243a65 100%); border-radius: 12px; margin-bottom: 20px; color: #fff; }
   .header-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .header-logo-icon { width: 36px; height: 36px; background: #F97316; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .header-logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
   .header-logo-text { font-size: 15px; font-weight: 700; color: #fff; }
   .header-title { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
   .header-sub { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
@@ -75,12 +75,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .stat-value { font-size: 24px; font-weight: 800; color: #1e293b; letter-spacing: -0.04em; }
   .stat-label { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
   .stat-card.danger .stat-value { color: #dc2626; }
-  .stat-card.warning .stat-value { color: #ea580c; }
+  .stat-card.warning .stat-value { color: var(--accent); }
   .stat-card.success .stat-value { color: #16a34a; }
 
   /* Sections */
   .section { margin-bottom: 24px; }
-  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; border-bottom: 2px solid #F97316; padding-bottom: 6px; margin-bottom: 14px; }
+  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-bottom: 14px; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
   .info-row { display: contents; }
   .info-label { background: #f8fafc; padding: 9px 14px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
@@ -96,7 +96,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   tr.overdue td { background: #fff7ed; }
   .mono { font-family: monospace; font-size: 11px; }
   .text-danger { color: #dc2626; font-weight: 600; }
-  .text-warn { color: #ea580c; font-weight: 600; }
+  .text-warn { color: var(--accent); font-weight: 600; }
 
   /* Notes box */
   .notes-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #78350f; line-height: 1.5; }

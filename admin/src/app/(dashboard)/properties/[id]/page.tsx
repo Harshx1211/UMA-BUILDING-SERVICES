@@ -126,11 +126,11 @@ export default function PropertyDetailPage() {
       {/* Hero */}
       <div className="relative overflow-hidden rounded-3xl p-6"
         style={{ background: 'linear-gradient(135deg,#1B2D4F 0%,#243a65 100%)', boxShadow: '0 8px 32px rgba(27,45,79,0.35)' }}>
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, #F97316 0%, transparent 60%)' }} />
+        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, var(--accent) 0%, transparent 60%)' }} />
         <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(249,115,22,0.2)' }}>
-              <Building2 size={26} style={{ color: '#F97316' }} />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(232,101,10,0.2)' }}>
+              <Building2 size={26} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-white" style={{ letterSpacing: '-0.03em' }}>{property.name}</h1>
@@ -160,7 +160,7 @@ export default function PropertyDetailPage() {
             <button
               onClick={() => setTab('jobs')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-              style={{ background: '#F97316', color: '#fff', boxShadow: '0 4px 14px rgba(249,115,22,0.4)' }}>
+              style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 4px 14px rgba(232,101,10,0.4)' }}>
               <FileText size={14} /> View Jobs &amp; Reports
             </button>
           </div>
@@ -332,7 +332,7 @@ export default function PropertyDetailPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90"
-                              style={{ background: 'linear-gradient(135deg,#F97316,#ea580c)' }}
+                              style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent))' }}
                             >
                               <Download size={11} /> View PDF
                             </a>
@@ -359,7 +359,7 @@ export default function PropertyDetailPage() {
                 <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>All clear 🎉</p>
               </div>
             : defects.map(d => {
-                const sevColor: Record<string,string> = { critical:'#ef4444', major:'#f97316', minor:'#f59e0b' };
+                const sevColor: Record<string,string> = { critical:'#ef4444', major:'var(--accent)', minor:'#f59e0b' };
                 const c = sevColor[d.severity] ?? '#94a3b8';
                 const photos: string[] = Array.isArray(d.photos) ? d.photos : [];
                 return (

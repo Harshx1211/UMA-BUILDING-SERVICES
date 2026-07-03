@@ -130,7 +130,7 @@ export default function JobsPage() {
 
   const QUICK_STATS = [
     { label: 'Scheduled',   value: stats.scheduled,   color: '#3b82f6', bg: 'var(--primary-light)', icon: Calendar     },
-    { label: 'In Progress', value: stats.in_progress,  color: '#F97316', bg: 'rgba(249,115,22,0.15)', icon: Clock         },
+    { label: 'In Progress', value: stats.in_progress,  color: 'var(--accent)', bg: 'rgba(232,101,10,0.15)', icon: Clock         },
     { label: 'Completed',   value: stats.completed,    color: '#22c55e', bg: 'rgba(34,197,94,0.15)', icon: CheckCircle2  },
     { label: 'Urgent',      value: stats.urgent,       color: '#ef4444', bg: 'rgba(239,68,68,0.15)', icon: AlertTriangle },
   ];

@@ -60,7 +60,7 @@ export default function PlatformSettingsPage() {
           <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-left transition-all border-b last:border-0"
-              style={{ borderColor: 'var(--border)', background: 'rgba(249,115,22,0.15)', color: 'var(--accent)', borderLeft: '3px solid var(--accent)' }}>
+              style={{ borderColor: 'var(--border)', background: 'rgba(232,101,10,0.15)', color: 'var(--accent)', borderLeft: '3px solid var(--accent)' }}>
               <Settings2 size={16} />
               Global Branding
             </button>
@@ -71,7 +71,7 @@ export default function PlatformSettingsPage() {
         <div className="flex-1">
           <div className="bg-[var(--card)] rounded-2xl border p-6 md:p-8" style={{ borderColor: 'var(--border)', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
             <div className="flex items-center gap-4 border-b pb-5 mb-6" style={{ borderColor: 'var(--border)' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(249,115,22,0.1)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(232,101,10,0.1)' }}>
                 <Settings2 size={20} style={{ color: 'var(--accent)' }} />
               </div>
               <div>

@@ -12,7 +12,7 @@ import {
 
 const PRIORITIES = [
   { value: 'urgent', label: 'Urgent',  dot: '#ef4444' },
-  { value: 'high',   label: 'High',    dot: '#f97316' },
+  { value: 'high',   label: 'High',    dot: 'var(--accent)' },
   { value: 'normal', label: 'Normal',  dot: '#3b82f6' },
   { value: 'low',    label: 'Low',     dot: '#94a3b8' },
 ];

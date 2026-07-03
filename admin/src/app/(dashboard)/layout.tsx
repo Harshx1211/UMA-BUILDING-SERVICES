@@ -19,8 +19,8 @@ function LoadingSplash() {
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center"
           style={{
-            background: 'linear-gradient(135deg,#F97316,#ea6900)',
-            boxShadow: '0 8px 32px rgba(249,115,22,0.4)',
+            background: 'linear-gradient(135deg,var(--accent),var(--accent))',
+            boxShadow: '0 8px 32px rgba(232,101,10,0.4)',
           }}
         >
           <Zap size={24} color="white" strokeWidth={2.5} />
@@ -48,26 +48,18 @@ function LoadingSplash() {
 /* ── Inner layout ─────────────────────────────────────────────────────────── */
 function LayoutInner({ children }: { children: React.ReactNode }) {
   const { user, loading, hydrated, signOut } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Redirect to login only when we are 100% sure the user is gone.
-  // All three must be true simultaneously:
-  //   hydrated  → localStorage has been read (not mid-initialization)
-  //   !loading  → async profile fetch is done
-  //   !user     → definitely no authenticated user
   useEffect(() => {
     if (hydrated && !loading) {
-      if (!user) {
-        router.replace('/login');
-      } else if (user.role !== 'admin') {
-        // Kick out superadmins or technicians who try to access the admin portal via shared localhost sessions
-        signOut();
-        router.replace('/login');
+      if (!user || user.role !== 'admin') {
+        // Hard redirect to clear stuck states and flush cache properly
+        if (user) signOut();
+        window.location.href = '/login';
       }
     }
-  }, [hydrated, loading, user, router, signOut]);
+  }, [hydrated, loading, user, signOut]);
 
   // Heartbeat access check: Poll every 30s + on navigation
   useEffect(() => {
@@ -97,17 +89,17 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  // ① If fully loaded and NO user or wrong role, redirect is in flight. Return null to avoid flashing data.
+  // ① If fully loaded and NO user or wrong role, block render entirely
   if (hydrated && !loading && (!user || user.role !== 'admin')) return null;
 
-  // ② Render the dashboard shell universally (SSR and client) to allow Next.js streaming of children
+  // ② Render the dashboard shell
   return (
     <div
       className="flex h-screen overflow-hidden relative"
       style={{ background: 'var(--bg)' }}
     >
-      {/* Show Loading Splash overlay if hydrating or fetching first-time user */}
-      {(!hydrated || (loading && !user)) && (
+      {/* Show Loading Splash overlay ONLY if genuinely loading */}
+      {(!hydrated || loading) && (
         <div className="absolute inset-0 z-50">
           <LoadingSplash />
         </div>
@@ -127,8 +119,8 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header onMenuClick={() => setMobileOpen(o => !o)} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 relative">
-          {/* Hide children only if redirecting, so we don't flash unauthorized content */}
-          {(!hydrated || (user && user.role === 'admin')) ? children : null}
+          {/* Strict guard: never render children if unauthorized, prevents 401 errors */}
+          {(!hydrated || loading || !user || user.role !== 'admin') ? null : children}
         </main>
       </div>
     </div>

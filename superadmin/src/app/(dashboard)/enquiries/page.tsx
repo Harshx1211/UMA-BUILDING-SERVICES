@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_ACTIONS: Record<string, { next: string; label: string; color: string; bg: string }[]> = {
-  new:       [{ next: 'contacted', label: 'Mark Contacted', color: '#c2410c', bg: 'rgba(249,115,22,0.15)' }],
+  new:       [{ next: 'contacted', label: 'Mark Contacted', color: '#c2410c', bg: 'rgba(232,101,10,0.15)' }],
   contacted: [
     { next: 'converted', label: 'Mark Converted',  color: '#15803d', bg: 'rgba(34,197,94,0.15)' },
     { next: 'closed',    label: 'Mark Closed',     color: '#475569', bg: 'var(--bg)' },
@@ -114,7 +114,7 @@ export default function EnquiriesPage() {
 
   const SUMMARY_ITEMS = [
     { key: 'new',       label: 'New',       color: '#2563eb', bg: 'var(--primary-light)' },
-    { key: 'contacted', label: 'Contacted', color: '#c2410c', bg: 'rgba(249,115,22,0.15)' },
+    { key: 'contacted', label: 'Contacted', color: '#c2410c', bg: 'rgba(232,101,10,0.15)' },
     { key: 'converted', label: 'Converted', color: '#15803d', bg: 'rgba(34,197,94,0.15)' },
     { key: 'closed',    label: 'Closed',    color: '#64748b', bg: 'var(--bg)' },
   ];
@@ -350,7 +350,7 @@ export default function EnquiriesPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary)' }}>Service Requested</p>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
-                    style={{ background: 'rgba(249,115,22,0.10)', color: 'var(--accent-dark, #ea6900)' }}>
+                    style={{ background: 'rgba(232,101,10,0.10)', color: 'var(--accent-dark, #ea6900)' }}>
                     <Clock size={11} /> {selected.service_type}
                   </span>
                 </div>

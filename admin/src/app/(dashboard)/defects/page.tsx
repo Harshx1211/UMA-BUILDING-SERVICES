@@ -31,7 +31,7 @@ interface SiteGroup {
   minor: number;
 }
 
-const SEV_COLORS = { minor: '#f59e0b', major: '#f97316', critical: '#ef4444' };
+const SEV_COLORS = { minor: '#f59e0b', major: 'var(--accent)', critical: '#ef4444' };
 const SEV_BG = { minor: 'var(--warning-dark)', major: 'var(--warning-dark)', critical: 'var(--error-dark)' };
 
 export default function DefectsPage() {
@@ -126,7 +126,7 @@ export default function DefectsPage() {
               <div key={group.property.id} 
                 className="bg-[var(--card)] rounded-2xl border overflow-hidden animate-fade-in-up transition-shadow"
                 style={{ 
-                  borderColor: isExpanded ? 'rgba(249,115,22,0.3)' : 'var(--border)', 
+                  borderColor: isExpanded ? 'rgba(232,101,10,0.3)' : 'var(--border)', 
                   animationDelay: `${i * 30}ms`,
                   boxShadow: isExpanded ? '0 12px 32px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.03)'
                 }}
@@ -161,9 +161,9 @@ export default function DefectsPage() {
                         </div>
                       )}
                       {group.major > 0 && (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(249,115,22,0.1)' }}>
-                          <span className="w-2 h-2 rounded-full" style={{ background: '#f97316' }} />
-                          <span className="text-xs font-bold" style={{ color: '#f97316' }}>{group.major} Major</span>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(232,101,10,0.1)' }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
+                          <span className="text-xs font-bold" style={{ color: 'var(--accent)' }}>{group.major} Major</span>
                         </div>
                       )}
                       {group.minor > 0 && (

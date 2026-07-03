@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from '@/context/AuthContext';
+import { ClientToaster } from '@/components/ui/ClientToaster';
 
 export const metadata: Metadata = {
   title: { default: 'SiteTrack Superadmin', template: '%s | SiteTrack Superadmin' },
@@ -21,21 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           {children}
         </AuthProvider>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3500,
-            style: {
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '14px',
-              fontWeight: 500,
-              borderRadius: '10px',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-            },
-            success: { iconTheme: { primary: '#22c55e', secondary: 'var(--card)' } },
-            error:   { iconTheme: { primary: '#ef4444', secondary: 'var(--card)' } },
-          }}
-        />
+        <div>
+          <ClientToaster />
+        </div>
       </body>
     </html>
   );

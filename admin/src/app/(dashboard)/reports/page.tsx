@@ -85,7 +85,7 @@ export default function ReportsPage() {
           { label: 'Total Sites', value: stats.properties, icon: Building2, color: '#3b82f6', bg: 'var(--primary-light)' },
           { label: 'Compliant', value: stats.compliant, icon: CheckCircle2, color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
           { label: 'Non-Compliant', value: stats.nonCompliant, icon: ShieldAlert, color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
-          { label: 'Overdue', value: stats.overdue, icon: TrendingUp, color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
+          { label: 'Overdue', value: stats.overdue, icon: TrendingUp, color: 'var(--accent)', bg: 'rgba(232,101,10,0.15)' },
         ].map((s, i) => (
           <div key={s.label} className="bg-[var(--card)] rounded-2xl border p-5 animate-fade-in-up" style={{ borderColor: 'var(--border)', animationDelay: `${i * 50}ms` }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: s.bg }}>
@@ -114,7 +114,7 @@ export default function ReportsPage() {
             <button key={e.type} onClick={() => exportCSV(e.type)}
               className="flex items-start gap-3 p-4 rounded-xl border hover:shadow-sm hover:border-orange-200 transition-all text-left"
               style={{ borderColor: 'var(--border)' }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(249,115,22,0.15)' }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(232,101,10,0.15)' }}>
                 <e.icon size={16} style={{ color: 'var(--accent)' }} />
               </div>
               <div>

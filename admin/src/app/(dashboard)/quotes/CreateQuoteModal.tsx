@@ -153,7 +153,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                   </p>
                   {defects.map(d => (
                     <div key={d.id} className="mb-2">
-                      <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'rgba(249,115,22,0.15)' }}>
+                      <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'rgba(232,101,10,0.15)' }}>
                         <p className="flex-1 text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{d.description}</p>
                         <button onClick={() => setShowInvPicker(d.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white flex-shrink-0"

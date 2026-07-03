@@ -31,6 +31,20 @@ export default function LegalGate({ userId, onAccepted }: LegalGateProps) {
         throw new Error(json.error || 'Failed to record acceptance.');
       }
       
+      const responseData = await res.json();
+      
+      // Instantly mutate the cache so the reload doesn't flash the gate
+      try {
+        const cached = localStorage.getItem('sitetrack_admin_profile');
+        if (cached) {
+          const user = JSON.parse(cached);
+          user.accepted_tos_at = responseData.accepted_tos_at || new Date().toISOString();
+          localStorage.setItem('sitetrack_admin_profile', JSON.stringify(user));
+        }
+      } catch (e) {
+        console.error('Failed to update local cache', e);
+      }
+
       toast.success('Terms accepted successfully.');
       onAccepted();
     } catch (err: any) {
@@ -76,8 +90,8 @@ export default function LegalGate({ userId, onAccepted }: LegalGateProps) {
           {/* Card 1 */}
           <div className="bg-[var(--card)] p-5 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(249,115,22,0.1)' }}>
-                <AlertTriangle size={16} style={{ color: '#F97316' }} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(232,101,10,0.1)' }}>
+                <AlertTriangle size={16} style={{ color: 'var(--accent)' }} />
               </div>
               <h2 className="font-bold text-base tracking-tight" style={{ color: 'var(--text)' }}>1. Binding Acknowledgment of Software Utility</h2>
             </div>

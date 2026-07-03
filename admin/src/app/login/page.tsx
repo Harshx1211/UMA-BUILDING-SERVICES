@@ -58,9 +58,9 @@ export default function LoginPage() {
 
         {/* Decorative shapes */}
         <div className="absolute w-[420px] h-[420px] rounded-full opacity-[0.07] -top-24 -right-24"
-          style={{ background: '#F97316' }} />
+          style={{ background: 'var(--accent)' }} />
         <div className="absolute w-64 h-64 rounded-full opacity-[0.04] bottom-12 -left-16"
-          style={{ background: '#F97316' }} />
+          style={{ background: 'var(--accent)' }} />
         <div className="absolute inset-0 opacity-[0.015]"
           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)', backgroundSize: '28px 28px' }} />
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
         <div className="relative z-10 p-10 pb-0">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)', boxShadow: '0 8px 24px rgba(249,115,22,0.45)' }}>
+              style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent))', boxShadow: '0 8px 24px rgba(232,101,10,0.45)' }}>
               <Zap size={21} color="#fff" strokeWidth={2.5} />
             </div>
             <div>
@@ -82,13 +82,13 @@ export default function LoginPage() {
         <div className="relative z-10 px-10 flex-1 flex flex-col justify-center">
           <div className="mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5"
-              style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.25)' }}>
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#F97316' }} />
+              style={{ background: 'rgba(232,101,10,0.15)', border: '1px solid rgba(232,101,10,0.25)' }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
               <span className="text-xs font-semibold" style={{ color: '#fdba74' }}>Field Service Management</span>
             </div>
             <h2 className="text-3xl font-extrabold text-white leading-snug" style={{ letterSpacing: '-0.03em' }}>
               Manage your entire<br />
-              <span style={{ color: '#F97316' }}>field operation</span><br />
+              <span style={{ color: 'var(--accent)' }}>field operation</span><br />
               from one place.
             </h2>
             <p className="mt-4 text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
@@ -101,14 +101,14 @@ export default function LoginPage() {
             {FEATURES.map(({ icon: Icon, title, sub }) => (
               <div key={title} className="flex items-center gap-3.5">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.2)' }}>
-                  <Icon size={16} style={{ color: '#F97316' }} />
+                  style={{ background: 'rgba(232,101,10,0.15)', border: '1px solid rgba(232,101,10,0.2)' }}>
+                  <Icon size={16} style={{ color: 'var(--accent)' }} />
                 </div>
                 <div>
                   <p className="text-white font-semibold text-sm leading-tight">{title}</p>
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.42)' }}>{sub}</p>
                 </div>
-                <CheckCircle2 size={14} className="ml-auto flex-shrink-0" style={{ color: 'rgba(249,115,22,0.5)' }} />
+                <CheckCircle2 size={14} className="ml-auto flex-shrink-0" style={{ color: 'rgba(232,101,10,0.5)' }} />
               </div>
             ))}
           </div>
@@ -140,7 +140,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-2.5 mb-8">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)' }}>
+              style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent))' }}>
               <Zap size={17} color="#fff" strokeWidth={2.5} />
             </div>
             <span className="text-lg font-extrabold" style={{ color: 'var(--primary)', letterSpacing: '-0.02em' }}>{platformName.toUpperCase()} Admin</span>

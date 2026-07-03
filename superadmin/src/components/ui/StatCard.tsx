@@ -18,9 +18,9 @@ interface StatCardProps {
 const COLOR_MAP = {
   orange: {
     iconBg: 'linear-gradient(135deg,#ff9a3c,var(--accent))',
-    glow: 'rgba(249,115,22,0.25)',
+    glow: 'rgba(232,101,10,0.25)',
     accent: 'var(--accent)',
-    light: 'rgba(249,115,22,0.15)',
+    light: 'rgba(232,101,10,0.15)',
   },
   blue: {
     iconBg: 'linear-gradient(135deg,#60a5fa,#3b82f6)',

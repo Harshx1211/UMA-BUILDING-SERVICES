@@ -93,17 +93,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', su.id)
         .maybeSingle();
 
-      if (data) {
-        const companyStatus = (data as any).companies?.subscription_status;
-        if (data.is_active === false || companyStatus === 'suspended') {
-          clearCache();
-          setUserSync(null);
-          await supabase.auth.signOut();
-          return;
-        }
+      if (!data) {
+        // If the user does not exist in public.users, they have no business in the admin portal.
+        // This prevents superadmin accounts or incomplete signups from getting stuck in an infinite LegalGate loop.
+        clearCache();
+        setUserSync(null);
+        await supabase.auth.signOut();
+        return;
       }
 
-      const resolved = data ? (data as User) : buildFallback(su);
+      const companyStatus = (data as any).companies?.subscription_status;
+      if (data.is_active === false || companyStatus === 'suspended') {
+        clearCache();
+        setUserSync(null);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      const resolved = data as User;
       
       // Prevent UI flicker: only update state if data actually changed
       if (!userRef.current || JSON.stringify(userRef.current) !== JSON.stringify(resolved)) {
@@ -200,12 +207,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /* ── signOut ─────────────────────────────────────────────────────────── */
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     clearCache();
     setUserSync(null);
+    setLoading(false);
     await supabase.auth.signOut();
     // onAuthStateChange SIGNED_OUT event will also fire and is idempotent.
-  };
+  }, [setUserSync]);
 
   return (
     <AuthContext.Provider value={{ user, loading, hydrated, signIn, signOut }}>

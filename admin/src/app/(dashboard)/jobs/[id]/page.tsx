@@ -83,7 +83,7 @@ export default function JobDetailPage() {
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
-          style={{ background: 'linear-gradient(135deg,#F97316,#ea580c)', boxShadow: '0 4px 14px rgba(249,115,22,0.35)' }}
+          style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent))', boxShadow: '0 4px 14px rgba(232,101,10,0.35)' }}
         >
           <Download size={14} /> Download PDF Report
         </a>
@@ -328,7 +328,7 @@ export default function JobDetailPage() {
                   rel="noopener noreferrer"
                   download
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                  style={{ background:'linear-gradient(135deg,#F97316,#ea580c)', boxShadow:'0 4px 14px rgba(249,115,22,0.3)' }}
+                  style={{ background:'linear-gradient(135deg,var(--accent),var(--accent))', boxShadow:'0 4px 14px rgba(232,101,10,0.3)' }}
                 >
                   <Download size={14}/> Download / Share PDF
                 </a>
@@ -341,8 +341,8 @@ export default function JobDetailPage() {
                   className="w-full h-full border-0"
                 >
                   <div className="flex flex-col items-center justify-center h-full p-8 text-center" style={{ background: 'var(--card)' }}>
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background:'rgba(249,115,22,0.15)' }}>
-                      <FileText size={28} style={{ color:'#f97316' }}/>
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background:'rgba(232,101,10,0.15)' }}>
+                      <FileText size={28} style={{ color:'var(--accent)' }}/>
                     </div>
                     <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
                       Your browser does not support inline PDFs.
@@ -352,7 +352,7 @@ export default function JobDetailPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-5 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                      style={{ background:'linear-gradient(135deg,#F97316,#ea580c)', boxShadow:'0 4px 14px rgba(249,115,22,0.3)' }}
+                      style={{ background:'linear-gradient(135deg,var(--accent),var(--accent))', boxShadow:'0 4px 14px rgba(232,101,10,0.3)' }}
                     >
                       <Download size={14}/> Download PDF
                     </a>
@@ -379,8 +379,8 @@ export default function JobDetailPage() {
           ) : (
             // Job complete but report not uploaded yet
             <div className="bg-[var(--card)] rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'rgba(249,115,22,0.15)' }}>
-                <FileText size={28} style={{ color:'#f97316' }}/>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'rgba(232,101,10,0.15)' }}>
+                <FileText size={28} style={{ color:'var(--accent)' }}/>
               </div>
               <div className="text-center">
                 <p className="font-semibold text-base" style={{ color:'var(--text)' }}>Report Not Uploaded</p>
