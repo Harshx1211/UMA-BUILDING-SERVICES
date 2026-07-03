@@ -140,7 +140,6 @@ export default function DefectDetailScreen() {
         title={defect.asset_type ? formatAssetType(defect.asset_type) : 'Defect Details'}
         subtitle={defect.property_name || defect.location_on_site || ''}
         showBack
-        curved
         rightComponent={
           <View style={[s.statusChip, { backgroundColor: statusColor + '22', borderColor: statusColor + '55' }]}>
             <View style={[s.statusDot, { backgroundColor: statusColor }]} />
@@ -169,7 +168,7 @@ export default function DefectDetailScreen() {
         <Animated.View entering={FadeInDown.delay(40).duration(380)}>
           <View style={[s.sevBanner, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
             <View style={[s.sevIconWrap, { backgroundColor: sev.color }]}>
-              <MaterialCommunityIcons name={sev.icon as any} size={22} color="#FFF" />
+              <MaterialCommunityIcons name={sev.icon as any} size={22} color={C.textOnPrimary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.sevLabel, { color: sev.color }]}>{sev.label.toUpperCase()} DEFECT</Text>
@@ -178,9 +177,9 @@ export default function DefectDetailScreen() {
               </Text>
             </View>
             {defect.quote_price ? (
-              <View style={[s.priceBadge, { backgroundColor: '#10B981' + '18', borderColor: '#10B981' + '40' }]}>
-                <MaterialCommunityIcons name="tag-outline" size={11} color="#10B981" />
-                <Text style={s.priceBadgeTxt}>${defect.quote_price}</Text>
+              <View style={[s.priceBadge, { backgroundColor: C.success + '18', borderColor: C.success + '40' }]}>
+                <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
+                <Text style={[s.priceBadgeTxt, { color: C.success }]}>${defect.quote_price}</Text>
               </View>
             ) : (
               <View style={[s.priceBadge, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
@@ -259,8 +258,8 @@ export default function DefectDetailScreen() {
                     style={s.photoThumbWrap}
                   >
                     <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} resizeMode="cover" />
-                    <View style={[s.photoOverlay, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
-                      <MaterialCommunityIcons name="magnify-plus-outline" size={18} color="#FFF" />
+                    <View style={[s.photoOverlay, { backgroundColor: C.shadow + '26' }]}>
+                      <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={C.textOnPrimary} />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -305,9 +304,9 @@ export default function DefectDetailScreen() {
 
       {/* Photo Lightbox */}
       <Modal visible={!!lightboxUri} transparent animationType="fade" onRequestClose={() => setLightboxUri(null)}>
-        <View style={s.lightbox}>
-          <TouchableOpacity style={s.lightboxClose} onPress={() => setLightboxUri(null)}>
-            <MaterialCommunityIcons name="close" size={28} color="#FFF" />
+        <View style={[s.lightbox, { backgroundColor: C.shadow + 'EB' }]}>
+          <TouchableOpacity style={[s.lightboxClose, { backgroundColor: C.textOnPrimary + '26' }]} onPress={() => setLightboxUri(null)}>
+            <MaterialCommunityIcons name="close" size={28} color={C.textOnPrimary} />
           </TouchableOpacity>
           {lightboxUri && (
             <Image source={{ uri: getValidLocalUri(lightboxUri) }} style={s.lightboxImg} resizeMode="contain" />
@@ -334,6 +333,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 12, paddingVertical: 8,
     borderRadius: 10, borderWidth: 1, marginBottom: 12,
+    ...cardShadow,
   },
   lockedTxt: { fontSize: 12, fontStyle: 'italic', flex: 1 },
 
@@ -341,6 +341,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 14, borderRadius: 16, borderWidth: 1,
     marginBottom: 12,
+    ...cardShadow,
   },
   sevIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   sevLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
@@ -349,12 +350,13 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
   },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#10B981' },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '800' },
 
   codeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 12, borderRadius: 16, borderWidth: 1,
     marginBottom: 12,
+    ...cardShadow,
   },
   codeIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   codeLabel:    { fontSize: 12, fontWeight: '700' },
@@ -399,11 +401,10 @@ const s = StyleSheet.create({
   },
   bottomBtnTxt: { fontSize: 14, fontWeight: '700' },
 
-  lightbox:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  lightbox:      { flex: 1, alignItems: 'center', justifyContent: 'center' },
   lightboxClose: {
     position: 'absolute', top: Platform.OS === 'ios' ? 56 : 20, right: 20,
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     zIndex: 10,
   },

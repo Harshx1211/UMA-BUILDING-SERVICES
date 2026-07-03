@@ -1,5 +1,5 @@
 /**
- * UMA BUILDING SERVICES — Help & Support Screen
+ * SiteTrack — Help & Support Screen
  * Accordion guides, FAQ, feedback email, walkthrough replay, app version
  */
 import React, { useState, useCallback, useRef } from 'react';
@@ -46,7 +46,7 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: string }) {
     <Card style={{ marginBottom: 12 }} noPadding>
       <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={{ padding: 16 }}>
         <View style={s.accordionHeader}>
-          <Text style={s.accordionIcon}>{icon}</Text>
+          <MaterialCommunityIcons name={icon as any} size={18} color={C.accent} style={{ width: 28, textAlign: 'center' }} />
           <Text style={[s.accordionTitle, { color: C.text }]}>{item.title}</Text>
           <MaterialCommunityIcons
             name={open ? 'chevron-up' : 'chevron-down'}
@@ -65,24 +65,24 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: string }) {
 // ─── Onboarding walkthrough modal ───────────
 const WALKTHROUGH_STEPS = [
   {
-    emoji: '🏠',
+    icon: 'home',
     title: 'Your Dashboard',
     body: 'This is your command centre. See today\'s job count, check your next job, and access quick actions — all in one place.',
   },
   {
-    emoji: '📋',
+    icon: 'calendar',
     title: 'Schedule Tab',
     body: 'Tap "Schedule" at the bottom to see all your jobs. Filter by Today, This Week, or All Jobs. Switch to Map view to plan your route.',
   },
   {
-    emoji: '🔥',
+    icon: 'fire',
     title: 'Inspecting Assets',
     body: 'Tap a job → Clock In → then tap "Inspect All Assets". Mark each asset as Pass, Fail, or Not Tested. Log defects and take photos as you go.',
   },
   {
-    emoji: '📶',
+    icon: 'wifi-off',
     title: 'Offline First',
-    body: 'You\'re in a basement with no signal? No problem. Everything saves to your phone instantly. When you\'re back in range, UMA BUILDING SERVICES syncs automatically.',
+    body: 'You\'re in a basement with no signal? No problem. Everything saves to your phone instantly. When you\'re back in range, SiteTrack syncs automatically.',
   },
 ];
 
@@ -103,7 +103,7 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={wt.overlay}>
+      <View style={[wt.overlay, { backgroundColor: C.shadow + '99' }]}>
         <View style={[wt.card, { backgroundColor: C.surface, padding: 16 }]}>
           {/* Progress dots */}
           <View style={wt.dots}>
@@ -112,14 +112,14 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
             ))}
           </View>
 
-          <Text style={wt.emoji}>{current.emoji}</Text>
+          <MaterialCommunityIcons name={current.icon as any} size={56} color={C.accent} style={{ marginBottom: 4 }} />
           <Text style={[wt.title, { color: C.text }]}>{current.title}</Text>
           <Text style={[wt.body, { color: C.textSecondary }]}>{current.body}</Text>
 
           <View style={wt.btnRow}>
             {step > 0 ? (
               <View style={{ flex: 1 }}>
-                <Button variant="outline" title="← Back" onPress={handleBack} />
+                <Button variant="secondary" title="← Back" onPress={handleBack} />
               </View>
             ) : (
               <View style={wt.skipBtn}>
@@ -139,12 +139,11 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
 }
 
 const wt = StyleSheet.create({
-  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
+  overlay:   { flex: 1, justifyContent: 'center', padding: 24 },
   card:      { borderRadius: 24, alignItems: 'center', gap: 12 },
   dots:      { flexDirection: 'row', gap: 6, marginBottom: 8 },
   dot:       { width: 8, height: 8, borderRadius: 4 },
   dotActive: { width: 20 },
-  emoji:     { fontSize: 56, marginBottom: 4 },
   title:     { fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 },
   body:      { fontSize: 15, textAlign: 'center', lineHeight: 22 },
   btnRow:    { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
@@ -155,7 +154,7 @@ const wt = StyleSheet.create({
 // ─── Data ────────────────────────────────────
 const HOW_TO: { item: AccordionItem; icon: string }[] = [
   {
-    icon: '🕐',
+    icon: 'clock-outline',
     item: {
       id: 'start',
       title: 'Starting a Job',
@@ -163,7 +162,7 @@ const HOW_TO: { item: AccordionItem; icon: string }[] = [
     },
   },
   {
-    icon: '🔥',
+    icon: 'fire',
     item: {
       id: 'inspect',
       title: 'Inspecting Assets',
@@ -171,7 +170,7 @@ const HOW_TO: { item: AccordionItem; icon: string }[] = [
     },
   },
   {
-    icon: '⚠️',
+    icon: 'alert',
     item: {
       id: 'defects',
       title: 'Logging Defects',
@@ -179,7 +178,7 @@ const HOW_TO: { item: AccordionItem; icon: string }[] = [
     },
   },
   {
-    icon: '✍️',
+    icon: 'draw',
     item: {
       id: 'sig',
       title: 'Collecting Signatures',
@@ -187,24 +186,24 @@ const HOW_TO: { item: AccordionItem; icon: string }[] = [
     },
   },
   {
-    icon: '📄',
+    icon: 'file-document-outline',
     item: {
       id: 'report',
       title: 'Generating Reports',
-      content: '1. From the job detail screen, tap "Generate Report" at the bottom\n2. UMA BUILDING SERVICES compiles all inspection data, defects, and the signature\n3. A PDF is generated on your device — no internet needed\n4. Tap "Share" to email it directly to the client or office\n5. The report includes pass/fail colour coding and a compliance footer',
+      content: '1. From the job detail screen, tap "Generate Report" at the bottom\n2. SiteTrack compiles all inspection data, defects, and the signature\n3. A PDF is generated on your device — no internet needed\n4. Tap "Share" to email it directly to the client or office\n5. The report includes pass/fail colour coding and a compliance footer',
     },
   },
 ];
 
 const FAQ_ITEMS: { item: AccordionItem; icon: string }[] = [
-  { icon: '📶', item: { id: 'faq1', title: 'What if I have no signal on site?', content: 'UMA BUILDING SERVICES is built offline-first. Everything saves to your phone instantly — inspections, photos, defects, signatures. When you\'re back in range, the app syncs automatically in the background. You\'ll see a green "All synced" banner when it\'s done.' } },
-  { icon: '📷', item: { id: 'faq2', title: 'Can I add photos after leaving the site?', content: 'Photos taken while offline are queued and uploaded when you reconnect. The orange pending-upload dot on the Photos screen shows what\'s still waiting. Don\'t delete the photos app or clear cache until they\'ve synced.' } },
-  { icon: '🔴', item: { id: 'faq3', title: 'What is a defect?', content: 'A defect is any fire safety asset that failed inspection or has an issue needing follow-up. Defects are categorised as Minor, Major, or Critical. They appear in the compliance report and are tracked until repaired.' } },
+  { icon: 'wifi-off', item: { id: 'faq1', title: 'What if I have no signal on site?', content: 'SiteTrack is built offline-first. Everything saves to your phone instantly — inspections, photos, defects, signatures. When you\'re back in range, the app syncs automatically in the background. You\'ll see a green "All synced" banner when it\'s done.' } },
+  { icon: 'camera', item: { id: 'faq2', title: 'Can I add photos after leaving the site?', content: 'Photos taken while offline are queued and uploaded when you reconnect. The orange pending-upload dot on the Photos screen shows what\'s still waiting. Don\'t delete the photos app or clear cache until they\'ve synced.' } },
+  { icon: 'alert-circle', item: { id: 'faq3', title: 'What is a defect?', content: 'A defect is any fire safety asset that failed inspection or has an issue needing follow-up. Defects are categorised as Minor, Major, or Critical. They appear in the compliance report and are tracked until repaired.' } },
 
-  { icon: '🔄', item: { id: 'faq5', title: 'How often does the app sync?', content: 'The sync engine runs automatically every 60 seconds when you\'re online. You can also force a sync from the Profile screen → "Force Sync Now". The sync uploads your local changes and pulls in any new jobs assigned by your office.' } },
-  { icon: '🔑', item: { id: 'faq6', title: 'I forgot my password — what do I do?', content: 'Contact your company administrator. They can reset your password through the UMA BUILDING SERVICES admin portal. Your app data is not lost — it will re-sync once you log back in.' } },
-  { icon: '📑', item: { id: 'faq7', title: 'Who receives the PDF report?', content: 'The report is generated on your device. You can share it directly to email, WhatsApp, or any other app via the native Android share sheet. It\'s your responsibility to send it to the relevant parties — typically office admin and the client.' } },
-  { icon: '⚡', item: { id: 'faq8', title: 'The app seems slow — what should I do?', content: 'Try force-closing and reopening the app. Make sure you\'re running the latest version. If the jobs list is slow, try the "Force Sync" in Profile to refresh your local database. If problems persist, send feedback using the button below.' } },
+  { icon: 'sync', item: { id: 'faq5', title: 'How often does the app sync?', content: 'The sync engine runs automatically every 60 seconds when you\'re online. You can also force a sync from the Profile screen → "Force Sync Now". The sync uploads your local changes and pulls in any new jobs assigned by your office.' } },
+  { icon: 'key', item: { id: 'faq6', title: 'I forgot my password — what do I do?', content: 'Contact your company administrator. They can reset your password through the SiteTrack admin portal. Your app data is not lost — it will re-sync once you log back in.' } },
+  { icon: 'file-pdf-box', item: { id: 'faq7', title: 'Who receives the PDF report?', content: 'The report is generated on your device. You can share it directly to email, WhatsApp, or any other app via the native Android share sheet. It\'s your responsibility to send it to the relevant parties — typically office admin and the client.' } },
+  { icon: 'lightning-bolt', item: { id: 'faq8', title: 'The app seems slow — what should I do?', content: 'Try force-closing and reopening the app. Make sure you\'re running the latest version. If the jobs list is slow, try the "Force Sync" in Profile to refresh your local database. If problems persist, send feedback using the button below.' } },
 ];
 
 // ─── Main Screen ─────────────────────────────
@@ -217,19 +216,18 @@ export default function HelpScreen() {
 
   const handleFeedback = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const subject = encodeURIComponent(`UMA BUILDING SERVICES Feedback — v${version}`);
-    const body    = encodeURIComponent('Hi UMA BUILDING SERVICES team,\n\nI have the following feedback:\n\n');
+    const subject = encodeURIComponent(`SiteTrack Feedback — v${version}`);
+    const body    = encodeURIComponent('Hi SiteTrack team,\n\nI have the following feedback:\n\n');
     Linking.openURL(`mailto:support@uma-building-services.com.au?subject=${subject}&body=${body}`);
   }, [version]);
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader 
-        curved={true} 
         title="Help & Support" 
-        subtitle={`UMA BUILDING SERVICES v${version}`} 
+        subtitle={`SiteTrack v${version}`} 
         showBack={true} 
-        rightComponent={<MaterialCommunityIcons name="lifebuoy" size={26} color="rgba(255,255,255,0.5)" />} 
+        rightComponent={<MaterialCommunityIcons name="lifebuoy" size={26} color={C.textTertiary} />} 
       />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -237,12 +235,12 @@ export default function HelpScreen() {
         {/* ── Walkthrough CTA ── */}
         <Reanimated.View entering={FadeInDown.delay(30).duration(350)}>
           <Card 
-            style={[s.walkthroughCard, { borderColor: 'rgba(249, 115, 22, 0.15)', borderWidth: 1.5 }]} 
+            style={[s.walkthroughCard, { borderColor: C.accent + '26', borderWidth: 1.5 }]} 
             noPadding
           >
             <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowWalkthrough(true); }} activeOpacity={0.8} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
               <View style={[s.walkthroughIcon, { backgroundColor: C.accentLight }]}>
-                <Text style={{ fontSize: 26 }}>🎓</Text>
+                <MaterialCommunityIcons name="school-outline" size={26} color={C.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[s.walkthroughTitle, { color: C.text }]}>App Walkthrough</Text>
@@ -255,7 +253,7 @@ export default function HelpScreen() {
 
         {/* ── How To Use ── */}
         <Reanimated.View entering={FadeInDown.delay(80).duration(350)} style={s.section}>
-          <SectionTitle title="HOW TO USE UMA BUILDING SERVICES" />
+          <SectionTitle title="HOW TO USE SiteTrack" />
           {HOW_TO.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
           ))}
@@ -271,17 +269,17 @@ export default function HelpScreen() {
 
         {/* ── Feedback button ── */}
         <Reanimated.View entering={FadeInDown.delay(180).duration(350)}>
-          <Button variant="outline" title="Send Feedback to Support" onPress={handleFeedback} />
+          <Button variant="secondary" title="Send Feedback to Support" onPress={handleFeedback} />
         </Reanimated.View>
 
         {/* ── App info row ── */}
         <Reanimated.View entering={FadeInDown.delay(210).duration(350)}>
           <Card style={s.versionCard}>
             <View style={[s.versionIconWrap, { backgroundColor: C.backgroundTertiary }]}>
-              <Text style={{ fontSize: 20 }}>🔥</Text>
+              <MaterialCommunityIcons name="fire" size={20} color={C.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.versionApp, { color: C.text }]}>UMA BUILDING SERVICES — Field Service App</Text>
+              <Text style={[s.versionApp, { color: C.text }]}>SiteTrack — Field Service App</Text>
               <Text style={[s.versionNum, { color: C.textTertiary }]}>Version {version} · Build 1 · Android</Text>
             </View>
           </Card>
@@ -317,7 +315,6 @@ const s = StyleSheet.create({
 
   // Accordion
   accordionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  accordionIcon:   { fontSize: 18, width: 28, textAlign: 'center' },
   accordionTitle:  { flex: 1, fontSize: 14, fontWeight: '600' },
   accordionBody:   { fontSize: 13, lineHeight: 21, paddingTop: 12, paddingLeft: 38 },
 

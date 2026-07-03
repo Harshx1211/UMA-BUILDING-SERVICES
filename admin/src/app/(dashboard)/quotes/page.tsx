@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { adminApi, adminRead } from '@/lib/admin-api';
-import { formatDate, formatCurrency, timeAgo } from '@/lib/utils';
+import { formatDate, formatCurrency } from '@/lib/utils';
 import Badge from '@/components/ui/Badge';
 import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
@@ -9,12 +9,16 @@ import PreviewModal from './PreviewModal';
 import CreateJobModal from '../jobs/CreateJobModal';
 import { FileText, Search, X, ChevronDown, ChevronUp, Check, Play, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getCached, setCached } from '@/lib/pageCache';
+import Skeleton from '@/components/ui/Skeleton';
 
 const STATUSES = ['', 'draft', 'approved', 'rejected'];
+const CACHE_KEY = 'quotes_list';
 
 export default function QuotesPage() {
-  const [mappedQuotes, setMappedQuotes] = useState<any[]>([]);
-  const [loading, setLoading]           = useState(true);
+  const cachedQuotes = getCached<any[]>(CACHE_KEY);
+  const [mappedQuotes, setMappedQuotes] = useState<any[]>(cachedQuotes ?? []);
+  const [loading, setLoading]           = useState(!cachedQuotes);
   const [search, setSearch]             = useState('');
   const [statusF, setStatusF]           = useState('');
   const [expanded, setExpanded]         = useState<string | null>(null);
@@ -53,6 +57,8 @@ export default function QuotesPage() {
       // Filter by status if selected
       const finalMapped = statusF ? mapped.filter(m => m.status === statusF) : mapped;
       setMappedQuotes(finalMapped);
+      // Cache the full (unfiltered) list for instant re-navigation
+      if (!statusF) setCached(CACHE_KEY, finalMapped);
     }
     setLoading(false);
   }, [statusF]);
@@ -226,8 +232,22 @@ export default function QuotesPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-[var(--card)] rounded-2xl border p-4" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex justify-between mb-4">
+                <div className="space-y-2">
+                  <Skeleton variant="text" className="h-4 w-40" />
+                  <Skeleton variant="text" className="h-3 w-24" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton variant="bg" className="h-5 w-20 ml-auto" />
+                  <Skeleton variant="text" className="h-4 w-16 ml-auto" />
+                </div>
+              </div>
+              <Skeleton variant="bg" className="h-10 w-full" />
+            </div>
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState icon={<FileText size={24} style={{ color: 'var(--text-tertiary)' }} />} title="No quotes to display" subtitle="When technicians log defects on jobs, draft quotes will automatically appear here." />
@@ -295,7 +315,7 @@ export default function QuotesPage() {
               </div>
 
               {expanded === q.id && (
-                <div className="border-t pb-2" style={{ borderColor: 'var(--border)', background: '#fafafa' }}>
+                <div className="border-t pb-2" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                   <div className="pt-4">
                     {renderDefectsGroup('Critical / Immediate', q.defects.filter((d:any) => d.severity === 'critical'), '#ef4444')}
                     {renderDefectsGroup('Major Defects', q.defects.filter((d:any) => d.severity === 'major'), '#f97316')}

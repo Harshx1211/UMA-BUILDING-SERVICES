@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminReadBatch } from '@/lib/admin-api';
 import { timeAgo } from '@/lib/utils';
 import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
@@ -31,10 +31,11 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: notifs }, { data: u }] = await Promise.all([
-        supabase.from('notifications').select('*, user:users(full_name)').order('created_at', { ascending: false }).limit(50),
-        supabase.from('users').select('id,full_name').eq('is_active', true).order('full_name'),
+      const results = await adminReadBatch([
+        { table: 'notifications', options: { select: '*, user:users(full_name)', order: { column: 'created_at', ascending: false }, limit: 50 } },
+        { table: 'users', options: { select: 'id,full_name', filters: { is_active: true }, order: { column: 'full_name' } } },
       ]);
+      const [{ data: notifs }, { data: u }] = results;
       setNotifications(notifs ?? []); setUsers(u ?? []); setLoading(false);
     }
     load();

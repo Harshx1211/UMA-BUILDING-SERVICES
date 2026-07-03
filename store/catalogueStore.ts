@@ -36,16 +36,19 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
       }>('SELECT * FROM asset_type_definitions WHERE is_active = 1 ORDER BY sort_order ASC');
 
       if (rows.length > 0) {
-        const types: AssetTypeDefinition[] = rows.map(r => ({
-          value:             r.value,
-          label:             r.label,
-          fullLabel:         r.full_label,
-          icon:              r.icon as any,
-          color:             r.color,
-          inspectionRoutine: r.inspection_routine,
-          variants:          (() => { try { return JSON.parse(r.variants); } catch { return []; } })(),
-        }));
-        set({ assetTypes: types });
+        const typesMap = new Map<string, AssetTypeDefinition>();
+        for (const r of rows) {
+          typesMap.set(r.value, {
+            value:             r.value,
+            label:             r.label,
+            fullLabel:         r.full_label,
+            icon:              r.icon as any,
+            color:             r.color,
+            inspectionRoutine: r.inspection_routine,
+            variants:          (() => { try { return JSON.parse(r.variants); } catch { return []; } })(),
+          });
+        }
+        set({ assetTypes: Array.from(typesMap.values()) });
       }
 
       // ── Defect Codes ─────────────────────────────────────
@@ -54,14 +57,16 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
       }>('SELECT * FROM defect_codes WHERE is_active = 1 ORDER BY sort_order ASC');
 
       if (codes.length > 0) {
-        set({
-          defectCodes: codes.map(c => ({
+        const codesMap = new Map<string, any>();
+        for (const c of codes) {
+          codesMap.set(c.code, {
             code:        c.code,
             description: c.description,
             quote_price: c.quote_price ?? undefined,
             category:    c.category as DefectCategory,
-          })),
-        });
+          });
+        }
+        set({ defectCodes: Array.from(codesMap.values()) });
       }
     } catch (e) {
       console.warn('[CatalogueStore] load error:', e);

@@ -6,7 +6,7 @@ export interface QuoteReportData {
 }
 
 const CompanyConfig = {
-  name: 'UMA Building Services Pty Ltd',
+  name: 'SiteTrack',
   addressLine1: 'P.O. Box 357',
   addressLine2: 'Lidcombe NSW 1825',
   abn: '51602019081',

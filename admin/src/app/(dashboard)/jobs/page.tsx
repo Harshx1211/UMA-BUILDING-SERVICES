@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { adminApi, adminRead } from '@/lib/admin-api';
-import { formatDate } from '@/lib/utils';
+import { adminApi, adminRead, adminReadBatch } from '@/lib/admin-api';
+import { formatDate, formatTime } from '@/lib/utils';
 import { exportToCsv, JOB_CSV_COLUMNS } from '@/lib/csv';
 import { getJobTypeLabel, JOB_TYPE_FILTER_OPTIONS, getJobTypeCategory } from '@/constants/jobTypes';
 import Badge from '@/components/ui/Badge';
@@ -11,20 +11,37 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import {
   Search, Plus, X, ChevronLeft, ChevronRight,
   Briefcase, Calendar, MapPin, ArrowUpRight, Clock,
-  CheckCircle2, AlertTriangle, Trash2, FileText, Download,
+  CheckCircle2, AlertTriangle, Trash2, FileText, Download, Upload,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CreateJobModal from './CreateJobModal';
+import { getCached, setCached } from '@/lib/pageCache';
+import Skeleton from '@/components/ui/Skeleton';
 
 const STATUSES   = ['', 'scheduled', 'in_progress', 'completed', 'cancelled'];
 const PRIORITIES = ['', 'urgent', 'high', 'normal', 'low'];
 const PAGE_SIZE  = 12;
+const CACHE_KEY  = 'jobs_list';
+
+interface JobRecord {
+  id: string;
+  property?: { name: string; suburb?: string; state?: string };
+  job_type: string;
+  assigned_user?: { full_name: string };
+  scheduled_date: string;
+  scheduled_time?: string;
+  priority: string;
+  status: string;
+  report_url?: string;
+  [key: string]: unknown;
+}
 
 export default function JobsPage() {
   const router = useRouter();
-  const [jobs,         setJobs]         = useState<any[]>([]);
-  const [total,        setTotal]        = useState(0);
-  const [loading,      setLoading]      = useState(true);
+  const cachedJobs = getCached<{ jobs: JobRecord[]; total: number }>(CACHE_KEY);
+  const [jobs,         setJobs]         = useState<JobRecord[]>(cachedJobs?.jobs ?? []);
+  const [total,        setTotal]        = useState(cachedJobs?.total ?? 0);
+  const [loading,      setLoading]      = useState(!cachedJobs);
   const [search,       setSearch]       = useState('');
   const [statusF,      setStatusF]      = useState('');
   const [typeF,        setTypeF]        = useState('');
@@ -32,15 +49,15 @@ export default function JobsPage() {
   const [reportF,      setReportF]      = useState('');   // 'yes' | 'no' | ''
   const [page,         setPage]         = useState(0);
   const [showCreate,   setShowCreate]   = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<JobRecord | null>(null);
   const [stats, setStats] = useState({ scheduled: 0, in_progress: 0, completed: 0, urgent: 0 });
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (forceSkeleton = false) => {
+    if (forceSkeleton) setLoading(true);
     const from = page * PAGE_SIZE;
     const to   = from + PAGE_SIZE - 1;
 
-    const { data, count } = await adminRead<any>('jobs', {
+    const { data, count } = await adminRead<JobRecord>('jobs', {
       select: '*, property:properties(name,suburb,state), assigned_user:users(full_name)',
       filters: {
         ...(statusF   ? { status:   statusF   } : {}),
@@ -55,24 +72,36 @@ export default function JobsPage() {
 
     // Client-side report filter (adminRead doesn't support IS NULL / IS NOT NULL)
     let rows = data ?? [];
-    if (reportF === 'yes') rows = rows.filter((j: any) => !!j.report_url);
-    if (reportF === 'no')  rows = rows.filter((j: any) => !j.report_url);
+    if (reportF === 'yes') rows = rows.filter((j: JobRecord) => !!j.report_url);
+    if (reportF === 'no')  rows = rows.filter((j: JobRecord) => !j.report_url);
 
     setJobs(rows);
     setTotal(count ?? 0);
+    // Only cache page-0 default view (no active filters)
+    if (page === 0 && !statusF && !typeF && !priorityF && !reportF && !search) {
+      setCached(CACHE_KEY, { jobs: rows, total: count ?? 0 });
+    }
     setLoading(false);
   }, [page, statusF, typeF, priorityF, reportF, search]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { 
+    const isDefaultView = page === 0 && !statusF && !typeF && !priorityF && !reportF && !search;
+    const hasCache = !!getCached(CACHE_KEY);
+    const timer = setTimeout(() => {
+      load(!(isDefaultView && hasCache)); 
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load, page, statusF, typeF, priorityF, reportF, search]);
 
   useEffect(() => {
     async function loadStats() {
-      const [s, ip, c, u] = await Promise.all([
-        adminRead('jobs', { filters: { status: 'scheduled'  }, count: true, limit: 0 }),
-        adminRead('jobs', { filters: { status: 'in_progress' }, count: true, limit: 0 }),
-        adminRead('jobs', { filters: { status: 'completed'  }, count: true, limit: 0 }),
-        adminRead('jobs', { filters: { priority: 'urgent'   }, count: true, limit: 0 }),
+      const results = await adminReadBatch([
+        { table: 'jobs', options: { filters: { status: 'scheduled'  }, count: true, limit: 0 } },
+        { table: 'jobs', options: { filters: { status: 'in_progress' }, count: true, limit: 0 } },
+        { table: 'jobs', options: { filters: { status: 'completed'  }, count: true, limit: 0 } },
+        { table: 'jobs', options: { filters: { priority: 'urgent'   }, count: true, limit: 0 } },
       ]);
+      const [s, ip, c, u] = results;
       setStats({ scheduled: s.count ?? 0, in_progress: ip.count ?? 0, completed: c.count ?? 0, urgent: u.count ?? 0 });
     }
     loadStats();
@@ -117,7 +146,7 @@ export default function JobsPage() {
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
-              <Download size={14} /> Export CSV
+              <Upload size={14} /> Export CSV
             </button>
             <button
               onClick={() => setShowCreate(true)}
@@ -216,11 +245,21 @@ export default function JobsPage() {
       <div className="bg-[var(--card)] rounded-2xl border overflow-hidden"
         style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} />
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading jobs…</p>
+          <div className="w-full">
+            <div className="border-b px-4 py-3 bg-[var(--bg)]" style={{ borderColor: 'var(--border)' }}>
+              <Skeleton variant="card" className="h-4 w-1/4" />
             </div>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="border-b last:border-0 px-4 py-3.5 flex items-center gap-4" style={{ borderColor: 'var(--border)' }}>
+                <Skeleton variant="bg" className="w-8 h-8 flex-shrink-0" />
+                <div className="space-y-2 flex-1">
+                  <Skeleton variant="text" className="h-3 w-1/3" />
+                  <Skeleton variant="text" className="h-2 w-1/4" />
+                </div>
+                <Skeleton variant="bg" className="h-6 w-16 flex-shrink-0" />
+                <Skeleton variant="bg" className="h-6 w-20 flex-shrink-0" />
+              </div>
+            ))}
           </div>
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -276,7 +315,7 @@ export default function JobsPage() {
                               <div className="flex items-center gap-1.5">
                                 {cat && <span className="text-sm">{cat.icon}</span>}
                                 <span className="text-xs font-medium px-2 py-1 rounded-lg"
-                                  style={{ background: cat?.bg ?? '#f1f5f9', color: cat?.color ?? 'var(--text-secondary)' }}>
+                                  style={{ background: cat?.bg === '#f1f5f9' ? 'var(--bg)' : (cat?.bg ?? 'var(--bg)'), color: cat?.color === '#64748b' ? 'var(--text-secondary)' : (cat?.color ?? 'var(--text-secondary)') }}>
                                   {getJobTypeLabel(job.job_type)}
                                 </span>
                               </div>
@@ -299,10 +338,19 @@ export default function JobsPage() {
 
                       {/* Date */}
                       <td className="px-4 py-3.5">
-                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{formatDate(job.scheduled_date)}</p>
-                        {job.scheduled_time && (
-                          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{job.scheduled_time}</p>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            Sch: <span className="font-medium" style={{ color: 'var(--text)' }}>{formatDate(job.scheduled_date)}</span>
+                          </p>
+                          {(job.status === 'completed' || job.status === 'in_progress') && job.updated_at ? (
+                            <p className="text-[11px] font-bold" style={{ color: job.status === 'completed' ? '#16a34a' : 'var(--primary)' }}>
+                              {job.status === 'completed' ? 'DONE: ' : 'STARTED: '}
+                              {formatDate(job.updated_at as string)}
+                            </p>
+                          ) : job.scheduled_time ? (
+                            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{formatTime(job.scheduled_time)}</p>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Priority / Status */}

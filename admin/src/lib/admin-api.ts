@@ -5,16 +5,27 @@
 //   const { error }       = await adminApi.update('jobs', { status: 'completed' }, id)
 //   const { error }       = await adminApi.delete('defects', id)
 
+import { supabase } from './supabase';
+
 type ApiResult<T = unknown> = { data: T | null; error: string | null };
 
 async function call<T>(body: object): Promise<ApiResult<T>> {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
     const res = await fetch('/api/admin', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     const json = await res.json();
+    if (res.status === 401 || res.status === 403) {
+      return { data: null, error: json.error ?? 'Unauthorized access' };
+    }
     if (!res.ok) return { data: null, error: json.error ?? 'Request failed' };
     return { data: json.data ?? null, error: null };
   } catch (err) {
@@ -47,12 +58,21 @@ export const adminApi = {
     rows: object[],
   ): Promise<{ inserted: number; errors: string[]; error: string | null }> => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
       const res = await fetch('/api/admin/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ table, rows }),
       });
       const json = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        return { inserted: 0, errors: [], error: json.error ?? 'Unauthorized access' };
+      }
       if (!res.ok) return { inserted: 0, errors: [], error: json.error ?? 'Request failed' };
       return { inserted: json.inserted ?? 0, errors: json.errors ?? [], error: null };
     } catch (err) {
@@ -87,16 +107,60 @@ export async function adminRead<T = Record<string, unknown>>(
   options: ReadOptions = {}
 ): Promise<ReadResult<T>> {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
     const res = await fetch('/api/admin/read', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ table, ...options }),
     });
     const json = await res.json();
+    if (res.status === 401 || res.status === 403) {
+      return { data: [], count: null, error: json.error ?? 'Unauthorized access' };
+    }
     if (!res.ok) return { data: [], count: null, error: json.error ?? 'Request failed' };
     return { data: json.data ?? [], count: json.count ?? null, error: null };
   } catch (err) {
     return { data: [], count: null, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+// ─── Admin Read Batch API ──────────────────────────────────────────────────
+// Executes multiple read queries in a single HTTP request to eliminate round-trip latency.
+
+export async function adminReadBatch(
+  queries: Array<{ table: string; options?: ReadOptions }>
+): Promise<Array<ReadResult<any>>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch('/api/admin/read-batch', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ queries }),
+    });
+    
+    const json = await res.json();
+    if (res.status === 401 || res.status === 403) {
+      return queries.map(() => ({ data: [], count: null, error: json.error ?? 'Unauthorized access' }));
+    }
+    if (!res.ok) {
+      return queries.map(() => ({ data: [], count: null, error: json.error ?? 'Request failed' }));
+    }
+    
+    return json.results ?? queries.map(() => ({ data: [], count: null, error: 'No results returned' }));
+  } catch (err) {
+    return queries.map(() => ({ 
+      data: [], count: null, error: err instanceof Error ? err.message : 'Network error' 
+    }));
   }
 }
 

@@ -115,8 +115,8 @@ export default function CsvImportModal({
               <div key={s} className="flex items-center gap-1">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
                   style={{
-                    background: active ? 'var(--primary)' : done ? '#dcfce7' : 'transparent',
-                    color: active ? '#fff' : done ? '#16a34a' : 'var(--text-tertiary)',
+                    background: active ? 'var(--primary)' : done ? 'rgba(34,197,94,0.15)' : 'transparent',
+                    color: active ? '#fff' : done ? '#4ade80' : 'var(--text-tertiary)',
                   }}>
                   {done ? <CheckCircle2 size={12} /> : null}
                   {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -150,7 +150,7 @@ export default function CsvImportModal({
                   <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Required CSV columns:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {requiredHeaders.map(h => (
-                      <code key={h} className="px-2 py-0.5 rounded-md text-xs font-mono" style={{ background: '#e8f0fe', color: '#1e3a8a' }}>{h}</code>
+                      <code key={h} className="px-2 py-0.5 rounded-md text-xs font-mono" style={{ background: 'var(--bg)', color: 'var(--accent)' }}>{h}</code>
                     ))}
                   </div>
                 </div>
@@ -169,7 +169,7 @@ export default function CsvImportModal({
                 }}
               >
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-                  style={{ background: dragging ? '#e8f0fe' : 'var(--border)' }}>
+                  style={{ background: dragging ? 'rgba(232,101,10,0.15)' : 'var(--bg)' }}>
                   <Upload size={24} style={{ color: dragging ? 'var(--accent)' : 'var(--text-tertiary)' }} />
                 </div>
                 <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
@@ -187,9 +187,9 @@ export default function CsvImportModal({
           {/* ── STEP: Preview ── */}
           {step === 'preview' && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid #bbf7d0' }}>
-                <FileText size={16} style={{ color: '#16a34a' }} />
-                <p className="text-sm font-semibold" style={{ color: '#15803d' }}>
+              <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)' }}>
+                <FileText size={16} style={{ color: '#4ade80' }} />
+                <p className="text-sm font-semibold" style={{ color: '#4ade80' }}>
                   {fileName} — <strong>{rows.length}</strong> row{rows.length !== 1 ? 's' : ''} detected
                 </p>
               </div>
@@ -227,10 +227,10 @@ export default function CsvImportModal({
                 )}
               </div>
 
-              <div className="p-3 rounded-xl border" style={{ background: 'rgba(245,158,11,0.15)', borderColor: '#fde68a' }}>
+              <div className="p-3 rounded-xl border" style={{ background: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.3)' }}>
                 <div className="flex items-start gap-2">
-                  <AlertCircle size={14} style={{ color: '#d97706', marginTop: 2, flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: '#92400e' }}>
+                  <AlertCircle size={14} style={{ color: '#fbbf24', marginTop: 2, flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: '#fbbf24' }}>
                     Rows with missing required fields will be skipped. Check the preview above before confirming.
                   </p>
                 </div>
@@ -262,10 +262,10 @@ export default function CsvImportModal({
               </div>
 
               {result.errors.length > 0 && (
-                <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: '#fecaca', background: 'rgba(239,68,68,0.15)' }}>
-                  <p className="text-xs font-bold" style={{ color: '#dc2626' }}>Errors ({result.errors.length})</p>
+                <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.15)' }}>
+                  <p className="text-xs font-bold" style={{ color: '#f87171' }}>Errors ({result.errors.length})</p>
                   {result.errors.map((e, i) => (
-                    <p key={i} className="text-xs font-mono" style={{ color: '#991b1b' }}>{e}</p>
+                    <p key={i} className="text-xs font-mono" style={{ color: '#f87171' }}>{e}</p>
                   ))}
                 </div>
               )}

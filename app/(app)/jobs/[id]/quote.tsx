@@ -21,14 +21,14 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { Defect } from '@/types';
 
-// ─── Severity colour palette ──────────────────────────────────
-const SEV: Record<DefectSeverity, { color: string; label: string; icon: string }> = {
-  [DefectSeverity.Critical]: { color: '#ef4444', label: 'Critical / Immediate',  icon: 'alert-octagon' },
-  [DefectSeverity.Major]:    { color: '#f97316', label: 'Major Defects',          icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: '#eab308', label: 'Minor Defects',          icon: 'alert-circle-outline' },
+// ─── Severity colour palette ──────────────────────────────────────────
+const SEV: Record<DefectSeverity, { color: (C: any) => string; label: string; icon: string }> = {
+  [DefectSeverity.Critical]: { color: (C) => C.error, label: 'Critical / Immediate',  icon: 'alert-octagon' },
+  [DefectSeverity.Major]:    { color: (C) => C.warning, label: 'Major Defects',          icon: 'alert' },
+  [DefectSeverity.Minor]:    { color: (C) => C.info, label: 'Minor Defects',          icon: 'alert-circle-outline' },
 };
 
-// ─── Single defect row (read-only) ───────────────────────────
+// ─── Single defect row (read-only) ────────────────────────────────────
 function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: any }) {
   const hasPrice = defect.quote_price != null && Number(defect.quote_price) > 0;
   return (
@@ -40,8 +40,8 @@ function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: any
         </Text>
       </View>
       {hasPrice ? (
-        <View style={[dr.pricePill, { backgroundColor: '#10B981' + '15' }]}>
-          <Text style={dr.priceTxt}>${Number(defect.quote_price).toFixed(2)}</Text>
+        <View style={[dr.pricePill, { backgroundColor: C.successLight }]}>
+          <Text style={[dr.priceTxt, { color: C.success }]}>${Number(defect.quote_price).toFixed(2)}</Text>
         </View>
       ) : (
         <View style={[dr.pricePill, { backgroundColor: C.backgroundTertiary }]}>
@@ -62,10 +62,10 @@ const dr = StyleSheet.create({
   desc:     { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   sub:      { fontSize: 11 },
   pricePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  priceTxt:  { fontSize: 12, fontWeight: '800', color: '#10B981' },
+  priceTxt:  { fontSize: 12, fontWeight: '800' },
 });
 
-// ─── Main Screen ─────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────
 export default function QuoteScreen() {
   const C = useColors();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
@@ -102,17 +102,18 @@ export default function QuoteScreen() {
     const defects = grouped[key];
     if (defects.length === 0) return null;
     const cfg = SEV[key === 'critical' ? DefectSeverity.Critical : key === 'major' ? DefectSeverity.Major : DefectSeverity.Minor];
+    const groupColor = cfg.color(C);
     return (
       <Animated.View key={key} entering={FadeInDown.delay(delay).duration(340)}>
         <View style={s.groupHeader}>
-          <View style={[s.groupDot, { backgroundColor: cfg.color }]} />
-          <MaterialCommunityIcons name={cfg.icon as any} size={14} color={cfg.color} />
+          <View style={[s.groupDot, { backgroundColor: groupColor }]} />
+          <MaterialCommunityIcons name={cfg.icon as any} size={14} color={groupColor} />
           <Text style={[s.groupTitle, { color: C.textTertiary }]}>
             {cfg.label} ({defects.length})
           </Text>
         </View>
         {defects.map(d => (
-          <DefectRow key={d.id} defect={d} color={cfg.color} C={C} />
+          <DefectRow key={d.id} defect={d} color={groupColor} C={C} />
         ))}
       </Animated.View>
     );
@@ -121,7 +122,7 @@ export default function QuoteScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack curved />
+        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack />
         <View style={{ paddingTop: 24, gap: 12 }}>
           <SkeletonCard /><SkeletonCard />
         </View>
@@ -136,11 +137,10 @@ export default function QuoteScreen() {
         title="Quote"
         subtitle={`${store.defects.length} defect${store.defects.length !== 1 ? 's' : ''} logged`}
         showBack
-        curved
         rightComponent={
           hasDefects && total > 0 ? (
-            <View style={[s.totalBadge, { backgroundColor: '#10B981' + '18', borderColor: '#10B981' + '40' }]}>
-              <Text style={s.totalBadgeTxt}>${total.toFixed(2)}</Text>
+            <View style={[s.totalBadge, { backgroundColor: C.successLight, borderColor: C.success + '50' }]}>
+              <Text style={[s.totalBadgeTxt, { color: C.success }]}>${total.toFixed(2)}</Text>
             </View>
           ) : undefined
         }
@@ -150,7 +150,7 @@ export default function QuoteScreen() {
       {!hasDefects ? (
         <View style={{ flex: 1, padding: 24, gap: 16 }}>
           <EmptyState
-            emoji="📋"
+            icon="file-document-outline"
             title="No defects logged yet"
             subtitle="Defects you log during the on-site inspection will appear here, grouped by severity. Admin will then set pricing for each item."
           />
@@ -184,7 +184,7 @@ export default function QuoteScreen() {
             <View style={[s.totalCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <View style={s.totalRow}>
                 <Text style={[s.totalLabel, { color: C.textSecondary }]}>Subtotal (ex-GST)</Text>
-                <Text style={[s.totalValue, { color: total > 0 ? '#10B981' : C.textTertiary }]}>
+                <Text style={[s.totalValue, { color: total > 0 ? C.success : C.textTertiary }]}>
                   {total > 0 ? `$${total.toFixed(2)}` : 'Pending pricing'}
                 </Text>
               </View>
@@ -210,7 +210,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 10, borderWidth: 1,
   },
-  totalBadgeTxt: { fontSize: 12, fontWeight: '800', color: '#10B981' },
+  totalBadgeTxt: { fontSize: 12, fontWeight: '800' },
 
   infoBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

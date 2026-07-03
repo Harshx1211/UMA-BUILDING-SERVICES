@@ -1,6 +1,6 @@
 'use client';
 import { usePathname } from 'next/navigation';
-import { Bell, Search, RefreshCw, ChevronRight, Home, Menu } from 'lucide-react';
+import { Bell, Search, RefreshCw, ChevronRight, Home, Menu, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { getInitials } from '@/lib/utils';
@@ -26,12 +26,12 @@ interface HeaderProps { onMenuClick: () => void; }
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const root = '/' + pathname.split('/')[1];
-  const meta = PAGE_META[root] ?? { title: 'Admin', emoji: '⚡', desc: 'UMA BUILDING SERVICES Admin Portal' };
+  const meta = PAGE_META[root] ?? { title: 'Superadmin', emoji: '⚡', desc: 'Platform Superadmin Portal' };
 
   // Fetch real unread notification count
   useEffect(() => {
@@ -55,32 +55,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
           style={{ borderColor: 'var(--border)' }}>
           <Menu size={17} style={{ color: 'var(--text-secondary)' }} />
         </button>
-        <div className="hidden sm:flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-          <Home size={11} />
-          <ChevronRight size={10} />
-          <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{meta.title}</span>
-        </div>
-        <div className="hidden sm:block w-px h-7" style={{ background: 'var(--border)' }} />
-        <div className="min-w-0">
-          <h1 className="text-sm sm:text-base font-bold leading-tight truncate"
-            style={{ color: 'var(--text)', letterSpacing: '-0.025em' }}>
-            <span className="hidden sm:inline">{meta.emoji} </span>{meta.title}
-          </h1>
-          <p className="text-xs hidden md:block leading-tight mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-            {meta.desc}
-          </p>
+        <div className="hidden sm:flex items-center gap-2 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+          <Home size={14} />
+          <ChevronRight size={12} style={{ opacity: 0.5 }} />
+          <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{meta.title}</span>
         </div>
       </div>
 
       {/* Right */}
       <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        <div className="hidden lg:flex items-center gap-2.5 px-3.5 py-2 rounded-xl border cursor-pointer transition-all hover:border-[var(--border-strong)] hover:shadow-sm"
-          style={{ borderColor: 'var(--border)', background: 'var(--primary)', minWidth: 200 }}>
-          <Search size={13} style={{ color: 'var(--text-tertiary)' }} />
-          <span className="text-sm flex-1" style={{ color: 'var(--text-tertiary)' }}>Quick search…</span>
-          <kbd className="text-xs px-1.5 py-0.5 rounded-md font-semibold"
-            style={{ background: 'var(--border)', color: 'var(--text-tertiary)', fontSize: 11 }}>⌘K</kbd>
-        </div>
 
         <button onClick={handleRefresh} title="Refresh"
           className="w-9 h-9 rounded-xl border flex items-center justify-center transition-all hover:bg-[var(--primary-light)] active:scale-95"
@@ -112,6 +95,11 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <p className="text-xs font-semibold leading-tight" style={{ color: 'var(--text)' }}>{user?.full_name ?? 'Admin'}</p>
             <p className="text-xs leading-tight" style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>{user?.role ?? 'Administrator'}</p>
           </div>
+          <button onClick={signOut}
+            className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all hover:bg-white/5 active:scale-95 ml-2"
+            style={{ borderColor: 'var(--border)' }}>
+            <LogOut size={14} style={{ color: 'var(--text-secondary)' }} />
+          </button>
         </div>
       </div>
     </header>

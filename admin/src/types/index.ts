@@ -22,6 +22,7 @@ export interface User {
   is_active: boolean;
   created_at: string;
   push_token: string | null;
+  accepted_tos_at: string | null;
 }
 
 export interface Property {

@@ -4,9 +4,8 @@ import { verifySuperAdmin } from '@/lib/supabase-server';
 
 export async function GET(req: NextRequest) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     // Fetch companies and some basic counts (using a lateral join or just select)
     // Supabase allows referencing related tables if FKs exist
     const { data, error } = await supabaseAdmin
@@ -37,7 +36,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();

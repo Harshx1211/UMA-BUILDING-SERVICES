@@ -178,7 +178,12 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
             <Text style={[s.jobCardAddress, { color: C.textSecondary }]} numberOfLines={1}>
               {getJobAddress(selectedJob) || 'No address'}
             </Text>
-            <Text style={[s.jobCardDate, { color: C.textTertiary }]}>📅 {selectedJob.scheduled_date}</Text>
+            <Text style={[s.jobCardDate, { color: C.textTertiary }]}>
+              📅 {selectedJob.scheduled_date}
+              {(selectedJob.status === 'in_progress' || selectedJob.status === 'completed') && selectedJob.updated_at
+                ? `  |  ${selectedJob.status === 'completed' ? '✓ Done' : '▶ Started'} ${selectedJob.updated_at.substring(0, 10)}`
+                : ''}
+            </Text>
           </View>
           <View style={s.jobCardActions}>
             <TouchableOpacity style={[s.closeBtn, { backgroundColor: C.backgroundTertiary }]} onPress={() => setSelectedJob(null)}>

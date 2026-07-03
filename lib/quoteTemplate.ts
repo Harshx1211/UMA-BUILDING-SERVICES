@@ -1,11 +1,9 @@
-import { CompanyConfig } from '@/constants/Company';
-import { Job, Defect } from '@/types';
-
 export interface QuoteReportData {
   job: any; // job with property, assigned_user, etc.
   defects: any[]; // list of defects with quote_price
   total_amount: number;
   reportId: string;
+  company?: any;
 }
 
 function fmtDateShort(iso: string | null | undefined): string {
@@ -30,7 +28,7 @@ const CSS = `
 @page { margin: 0; size: A4 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', Helvetica Neue, Helvetica, Arial, sans-serif;
   color: #1E293B;
   line-height: 1.5;
   font-size: 11px;
@@ -38,21 +36,13 @@ body {
 }
 .nb { page-break-inside: avoid; break-inside: avoid; }
 
-.footer {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  height: 44px;
-  background: #1C3048;
-  padding: 0 28px;
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 8.5px; color: rgba(255,255,255,0.65);
-  z-index: 1000;
+.section {
+  padding: 28px 32px 70px 32px;
+  page-break-before: always;
+  break-before: page;
+  box-sizing: border-box;
 }
-.f-left { line-height: 1.6; }
-.f-mid  { font-size: 9px; font-weight: 700; color: #E97316; text-align: center; white-space: nowrap; }
-.f-right { text-align: right; line-height: 1.6; }
-.page-num::after { content: counter(page); }
-
-.page { padding: 28px 32px 60px 32px; position: relative; }
+.section.first { page-break-before: auto; break-before: auto; }
 
 .brand-bar {
   display: flex; align-items: center; justify-content: space-between;
@@ -77,6 +67,7 @@ body {
   background: #1C3048; color: #fff; font-size: 10px; font-weight: 800;
   letter-spacing: 1.2px; text-transform: uppercase; padding: 7px 14px;
   border-radius: 4px 4px 0 0; border-left: 4px solid #E97316; margin-top: 18px;
+  page-break-after: avoid; break-after: avoid;
 }
 .sec-bar.first { margin-top: 0; }
 
@@ -126,49 +117,27 @@ body {
 .grand-val { font-weight: 900; font-size: 15px; color: #059669; min-width: 80px; text-align: right; }
 `;
 
-function logoHtml(reportNum: string): string {
+function logoHtml(reportNum: string, company: any): string {
+  const name = company?.name || 'Company Name';
   return `
-  <div class="brand-bar">
+  <div class="brand-bar" style="border-bottom: 2px solid #E2E8F0; padding-bottom: 16px;">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
+      <div style="width: 4px; height: 32px; background: #E97316; margin-right: 12px; border-radius: 2px;"></div>
       <div class="brand-text">
-        <div class="brand-name"><span>U</span>MA</div>
-        <div class="brand-sub">Building Services</div>
+        <div class="brand-name" style="font-size: 15px;">${name}</div>
+        <div class="brand-sub" style="font-size: 8px;">Facility Management & Maintenance</div>
       </div>
     </div>
     <div class="brand-meta">
-      <div class="brand-reportnum">Quotation ${reportNum}</div>
+      <div class="brand-reportnum" style="font-size: 14px; color: #1C3048;">
+        <span style="color: #94A3B8; font-weight: 600;">Quotation</span> ${reportNum}
+      </div>
       <div class="brand-reportlbl">Service Quote</div>
     </div>
   </div>`;
 }
 
-function footerHtml(): string {
-  return `
-  <div class="footer">
-    <div class="f-left">
-      <div>${CompanyConfig.name}</div>
-      <div>${CompanyConfig.addressLine1}, ${CompanyConfig.addressLine2} &nbsp;|&nbsp; ABN: ${CompanyConfig.abn}</div>
-    </div>
-    <div class="f-mid">Page <span class="page-num"></span> of <span id="ftotal">…</span></div>
-    <div class="f-right">
-      <div>&#127758; ${CompanyConfig.website}</div>
-      <div>&#9742; ${CompanyConfig.contactPhone} &nbsp;|&nbsp; &#64; ${CompanyConfig.contactEmail}</div>
-    </div>
-  </div>`;
-}
-
-function pageCountScript(): string {
-  return `<script>
-    window.addEventListener('load', function() {
-      try {
-        var pages = Math.max(1, Math.ceil(document.body.scrollHeight / 1123));
-        var el = document.getElementById('ftotal');
-        if (el) el.textContent = pages;
-      } catch(e) {}
-    });
-  </script>`;
-}
+// footer is now stamped by pdf-lib post-processing — no HTML footer needed here.
 
 export function generateQuoteHtml(data: QuoteReportData): string {
   const { job, defects, total_amount, reportId } = data;
@@ -209,54 +178,56 @@ export function generateQuoteHtml(data: QuoteReportData): string {
   <style>${CSS}</style>
 </head>
 <body>
-  ${footerHtml()}
-  <div class="page">
-    ${logoHtml(shortId(reportId, 6))}
+  <div class="section first">
+    ${logoHtml(shortId(reportId, 6), data.company)}
 
-    <div class="sec-bar first">Quotation Details</div>
-    <div class="info-grid">
-      <div class="info-cell">
-        <div class="info-label">Site / Property</div>
-        <div class="info-val">${propName}</div>
-        <div class="info-val muted" style="margin-top:4px;white-space:pre-line">${address || '—'}</div>
-      </div>
-      <div class="info-cell">
-        <div class="info-label">Site Contact</div>
-        <div class="info-val">${siteContact}</div>
-      </div>
-      <div class="info-cell">
-        <div class="info-label">Job Reference</div>
-        <div class="info-val">${refNum}</div>
-      </div>
-      <div class="info-cell accent">
-        <div class="info-label">Quote Date</div>
-        <div class="info-val">${dateStr}</div>
+    <div class="nb">
+      <div class="sec-bar first">Quotation Details</div>
+      <div class="info-grid">
+        <div class="info-cell">
+          <div class="info-label">Site / Property</div>
+          <div class="info-val">${propName}</div>
+          <div class="info-val muted" style="margin-top:4px;white-space:pre-line">${address || '—'}</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-label">Site Contact</div>
+          <div class="info-val">${siteContact}</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-label">Job Reference</div>
+          <div class="info-val">${refNum}</div>
+        </div>
+        <div class="info-cell accent">
+          <div class="info-label">Quote Date</div>
+          <div class="info-val">${dateStr}</div>
+        </div>
       </div>
     </div>
 
-    <div class="sec-bar">Proposed Works</div>
-    <div class="tbl-wrap">
-      ${renderGroup('Immediate / Critical Repairs', crit, 'crit')}
-      ${renderGroup('Major Defect Remediation', maj, 'maj')}
-      ${renderGroup('Minor Defect Remediation', min, 'min')}
-      
-      ${defects.length === 0 ? '<div style="padding:20px;text-align:center;color:#64748B;font-size:12px;">No items in quote</div>' : ''}
+    <div class="nb">
+      <div class="sec-bar">Proposed Works</div>
+      <div class="tbl-wrap">
+        ${renderGroup('Immediate / Critical Repairs', crit, 'crit')}
+        ${renderGroup('Major Defect Remediation', maj, 'maj')}
+        ${renderGroup('Minor Defect Remediation', min, 'min')}
+        
+        ${defects.length === 0 ? '<div style="padding:20px;text-align:center;color:#64748B;font-size:12px;">No items in quote</div>' : ''}
 
-      <div class="totals-row">
-        <div>Subtotal (excl. GST)</div>
-        <div style="min-width:80px;text-align:right;font-weight:600">${fmtCurrency(total_amount)}</div>
-      </div>
-      <div class="totals-row">
-        <div>GST (10%)</div>
-        <div style="min-width:80px;text-align:right">${fmtCurrency(gst)}</div>
-      </div>
-      <div class="totals-row grand">
-        <div class="grand-lbl">Total Quote</div>
-        <div class="grand-val">${fmtCurrency(grandTotal)}</div>
+        <div class="totals-row">
+          <div>Subtotal (excl. GST)</div>
+          <div style="min-width:80px;text-align:right;font-weight:600">${fmtCurrency(total_amount)}</div>
+        </div>
+        <div class="totals-row">
+          <div>GST (10%)</div>
+          <div style="min-width:80px;text-align:right">${fmtCurrency(gst)}</div>
+        </div>
+        <div class="totals-row grand">
+          <div class="grand-lbl">Total Quote</div>
+          <div class="grand-val">${fmtCurrency(grandTotal)}</div>
+        </div>
       </div>
     </div>
   </div>
-  ${pageCountScript()}
 </body>
 </html>`;
 }

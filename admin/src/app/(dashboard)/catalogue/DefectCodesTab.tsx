@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead } from '@/lib/admin-api';
 import { Plus, Pencil, Trash2, X, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -21,12 +21,12 @@ export default function DefectCodesTab() {
   const [delTarget, setDelTarget] = useState<any>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('defect_codes').select('*').order('sort_order');
+    const { data } = await adminRead('defect_codes', { order: { column: 'sort_order' } });
     setRows(data ?? []);
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line
   useEffect(() => { load(); }, [load]);
 
   const filtered = rows.filter(r => {

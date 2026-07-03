@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead } from '@/lib/admin-api';
 import { Plus, Pencil, Trash2, X, ChevronDown, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -20,12 +20,12 @@ export default function AssetTypesTab() {
   const [delTarget, setDelTarget]     = useState<any>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('asset_type_definitions').select('*').order('sort_order');
+    const { data } = await adminRead('asset_type_definitions', { order: { column: 'sort_order' } });
     setRows(data ?? []);
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line
   useEffect(() => { load(); }, [load]);
 
   const openAdd  = () => { setEditing(null); setForm({ ...EMPTY }); setVariantInput(''); setShowModal(true); };
@@ -120,10 +120,12 @@ export default function AssetTypesTab() {
                   </div>
                 </div>
                 {open && variants.length > 0 && (
-                  <div className="px-5 pb-3 flex flex-wrap gap-1.5" style={{ background: 'var(--bg)' }}>
+                  <div className="pr-5 pl-[48px] pb-5 pt-3 flex flex-wrap gap-2.5" style={{ background: 'transparent' }}>
                     {variants.map(v => (
-                      <span key={v} className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                        style={{ background: '#e8f0fe', color: '#1e3a8a' }}>{v}</span>
+                      <span key={v} className="px-3 py-1.5 rounded-md text-[11px] font-medium tracking-wide border"
+                        style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
+                        {v}
+                      </span>
                     ))}
                   </div>
                 )}
@@ -188,13 +190,14 @@ export default function AssetTypesTab() {
                     className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
                     style={{ background: 'var(--primary)' }}>Add</button>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {form.variants.map(v => (
-                    <span key={v} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
-                      style={{ background: '#e8f0fe', color: '#1e3a8a' }}>
+                    <span key={v} className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold tracking-wide border"
+                      style={{ background: 'var(--card)', color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
                       {v}
-                      <button type="button" onClick={() => setForm(p => ({ ...p, variants: p.variants.filter(x => x !== v) }))}>
-                        <X size={10} />
+                      <button type="button" onClick={() => setForm(p => ({ ...p, variants: p.variants.filter(x => x !== v) }))}
+                        className="opacity-60 hover:opacity-100 hover:text-red-400 transition-colors">
+                        <X size={12} />
                       </button>
                     </span>
                   ))}

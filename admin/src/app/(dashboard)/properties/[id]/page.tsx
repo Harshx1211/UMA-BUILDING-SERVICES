@@ -1,16 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @next/next/no-img-element */
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead, adminReadBatch } from '@/lib/admin-api';
 import { formatDate } from '@/lib/utils';
 import { exportToCsv, ASSET_CSV_COLUMNS, csvRowToAsset } from '@/lib/csv';
 import CsvImportModal from '@/components/ui/CsvImportModal';
 import Badge from '@/components/ui/Badge';
 import {
   ArrowLeft, Building2, MapPin, Phone, ShieldAlert, Briefcase,
-  Boxes, FileText, Edit3, Check, X, AlertTriangle, Calendar,
-  QrCode, ExternalLink, RefreshCw, ChevronRight, Download, Upload,
+  Boxes, FileText, Edit3, Check, X,
+  ExternalLink, RefreshCw, ChevronRight, Download, Upload,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -31,19 +32,21 @@ export default function PropertyDetailPage() {
   const [form, setForm]         = useState<any>({});
   const [showAssetImport, setShowAssetImport] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    const [{ data: p }, { data: a }, { data: j }, { data: d }] = await Promise.all([
-      supabase.from('properties').select('*').eq('id', id).single(),
-      supabase.from('assets').select('*').eq('property_id', id).order('asset_type'),
-      supabase.from('jobs').select('*, assigned_user:users(full_name)').eq('property_id', id).order('scheduled_date', { ascending: false }).limit(30),
-      supabase.from('defects').select('*, asset:assets(asset_type,location_on_site)').eq('property_id', id).order('created_at', { ascending: false }),
+  const load = useCallback(async () => {
+    const results = await adminReadBatch([
+      { table: 'properties', options: { filters: { id } } },
+      { table: 'assets', options: { filters: { property_id: id }, order: { column: 'asset_type' } } },
+      { table: 'jobs', options: { select: '*, assigned_user:users(full_name)', filters: { property_id: id }, order: { column: 'scheduled_date', ascending: false }, limit: 30 } },
+      { table: 'defects', options: { select: '*, asset:assets(asset_type,location_on_site)', filters: { property_id: id }, order: { column: 'created_at', ascending: false } } },
     ]);
-    setProperty(p); setForm(p ?? {}); setAssets(a ?? []); setJobs(j ?? []); setDefects(d ?? []);
+    const [{ data: pData }, { data: aData }, { data: jData }, { data: dData }] = results;
+    const p = pData?.[0] ?? null;
+    setProperty(p); setForm(p ?? {}); setAssets(aData ?? []); setJobs(jData ?? []); setDefects(dData ?? []);
     setLoading(false);
-  };
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  // eslint-disable-next-line
+  useEffect(() => { load(); }, [load]);
 
   const saveEdit = async () => {
     setSaving(true);
@@ -71,8 +74,16 @@ export default function PropertyDetailPage() {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} />
+    <div className="animate-fade-in space-y-4 max-w-6xl">
+      <div className="h-6 w-32 rounded-lg animate-pulse" style={{ background: 'var(--card)' }} />
+      <div className="rounded-3xl p-6 h-52 animate-pulse" style={{ background: 'var(--card)' }} />
+      <div className="flex gap-2">
+        {[1,2,3,4].map(i => <div key={i} className="h-10 w-24 rounded-xl animate-pulse" style={{ background: 'var(--card)', animationDelay: `${i*60}ms` }} />)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl h-64 animate-pulse" style={{ background: 'var(--card)' }} />
+        <div className="rounded-2xl h-64 animate-pulse" style={{ background: 'var(--card)', animationDelay: '80ms' }} />
+      </div>
     </div>
   );
   if (!property) return <p className="text-center py-16" style={{ color: 'var(--text-secondary)' }}>Property not found.</p>;
@@ -88,7 +99,7 @@ export default function PropertyDetailPage() {
     { id: 'defects',  label: `Defects (${defects.length})`, icon: ShieldAlert },
   ];
 
-  const F = ({ label, field, multiline = false, type = 'text' }: { label: string; field: string; multiline?: boolean; type?: string }) => (
+  const renderField = ({ label, field, multiline = false, type = 'text' }: { label: string; field: string; multiline?: boolean; type?: string }) => (
     <div>
       <p className="text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>{label}</p>
       {editing ? (
@@ -143,7 +154,7 @@ export default function PropertyDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={load} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <button onClick={() => { setLoading(true); load(); }} className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80" style={{ background: 'rgba(255,255,255,0.1)' }}>
               <RefreshCw size={14} className="text-white" />
             </button>
             <button
@@ -203,12 +214,12 @@ export default function PropertyDetailPage() {
                 </button>
               </div>
             </div>
-            <F label="Property Name" field="name" />
-            <F label="Street Address" field="address" />
+            {renderField({ label: "Property Name", field: "name" })}
+            {renderField({ label: "Street Address", field: "address" })}
             <div className="grid grid-cols-3 gap-3">
-              <F label="Suburb" field="suburb" />
-              <F label="State" field="state" />
-              <F label="Postcode" field="postcode" />
+              {renderField({ label: "Suburb", field: "suburb" })}
+              {renderField({ label: "State", field: "state" })}
+              {renderField({ label: "Postcode", field: "postcode" })}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-4">
               <div>
@@ -220,20 +231,20 @@ export default function PropertyDetailPage() {
                     </select>
                   : <Badge value={property.compliance_status} />}
               </div>
-              <F label="Next Inspection Date" field="next_inspection_date" type="date" />
+              {renderField({ label: "Next Inspection Date", field: "next_inspection_date", type: "date" })}
             </div>
           </div>
           <div className="space-y-4">
             <div className="bg-[var(--card)] rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
               <p className="font-bold" style={{ color: 'var(--text)' }}>Contact</p>
-              <F label="Site Contact Name" field="site_contact_name" />
-              <F label="Site Contact Phone" field="site_contact_phone" />
+              {renderField({ label: "Site Contact Name", field: "site_contact_name" })}
+              {renderField({ label: "Site Contact Phone", field: "site_contact_phone" })}
             </div>
             <div className="bg-[var(--card)] rounded-2xl border p-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
               <p className="font-bold" style={{ color: 'var(--text)' }}>Site Notes</p>
-              <F label="Access Notes" field="access_notes" multiline />
-              <F label="Hazard Notes" field="hazard_notes" multiline />
-              <F label="Site Note" field="site_note" multiline />
+              {renderField({ label: "Access Notes", field: "access_notes", multiline: true })}
+              {renderField({ label: "Hazard Notes", field: "hazard_notes", multiline: true })}
+              {renderField({ label: "Site Note", field: "site_note", multiline: true })}
             </div>
           </div>
         </div>
@@ -246,15 +257,13 @@ export default function PropertyDetailPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{assets.length} asset{assets.length !== 1 ? 's' : ''} registered</p>
             <div className="flex items-center gap-2">
-              <button onClick={handleExportAssets}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all hover:shadow-sm"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
-                <Download size={13} /> Export CSV
+              <button onClick={handleExportAssets} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-white/5 transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                <Upload size={13} /> Export CSV
               </button>
-              <button onClick={() => setShowAssetImport(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all hover:shadow-sm"
-                style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--primary-light)' }}>
-                <Upload size={13} /> Import CSV
+              <button onClick={() => setShowAssetImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-white/5 transition-colors"
+                style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+                <Download size={13} /> Import CSV
               </button>
             </div>
           </div>
@@ -270,7 +279,7 @@ export default function PropertyDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {assets.map((a, i) => {
+                    {assets.map((a) => {
                       return (
                         <tr key={a.id} className="border-b last:border-0 transition-colors"
                           style={{ borderColor: 'var(--border)' }}>

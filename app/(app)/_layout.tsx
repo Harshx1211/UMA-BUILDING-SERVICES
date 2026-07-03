@@ -1,6 +1,6 @@
 // Main app tab navigator — premium tab bar with active top indicator
 import { useEffect } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
 import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
@@ -10,6 +10,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useJobsStore } from '@/store/jobsStore';
 import { useDashboardStore } from '@/store/dashboardStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
+import { supabase } from '@/lib/supabase';
+import { T } from '@/constants/Colors';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -43,7 +45,7 @@ function TabIcon({ name, name_active, color, size, focused, label, activeColor }
 
 export default function AppLayout() {
   const C = useColors();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isForceSyncing } = useAuthStore();
   const { subscribeToSync: jobsSubscribe, unsubscribeFromSync: jobsUnsub } = useJobsStore();
   const { subscribeToSync: dashSubscribe, unsubscribeFromSync: dashUnsub } = useDashboardStore();
 
@@ -60,6 +62,23 @@ export default function AppLayout() {
 
   // Always mount the network listener at the root so it fires on ALL tabs
   useNetworkStatus();
+
+  // Heartbeat access check on mobile route changes
+  useEffect(() => {
+    if (user?.id) {
+      supabase.from('users').select('is_active, companies(subscription_status)').eq('id', user.id).single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            // @ts-ignore
+            const companyStatus = data.companies?.subscription_status;
+            if (data.is_active === false || companyStatus === 'suspended') {
+              console.warn('[AppLayout] Access revoked. Forcing graceful logout.');
+              useAuthStore.getState().forceFinalSyncAndSignOut();
+            }
+          }
+        });
+    }
+  }, [segments, user?.id]);
 
   // Start background sync interval on mount (runs immediately + every 60s)
   // NOTE: startSync() is intentionally called AFTER the stores subscribe
@@ -103,15 +122,16 @@ export default function AppLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
+    <>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
         tabBarStyle: hideTabBar ? { display: 'none' } : {
           backgroundColor: C.surface,
           borderTopColor: C.border,
           borderTopWidth: 1,
           elevation: 0,
-          shadowColor: '#0D1526',
+          shadowColor: C.shadow,
           shadowOffset: { width: 0, height: -3 },
           shadowOpacity: 0.10,
           shadowRadius: 16,
@@ -191,6 +211,20 @@ export default function AppLayout() {
       <Tabs.Screen name="help" options={{ href: null }} />
       <Tabs.Screen name="defects/index" options={{ href: null }} />
     </Tabs>
+
+    {isForceSyncing && (
+      <View style={StyleSheet.absoluteFill}>
+        <View style={styles.overlayBg} />
+        <View style={styles.overlayContent}>
+          <ActivityIndicator size="large" color={C.accent} style={{ marginBottom: 20 }} />
+          <Text style={styles.overlayTitle}>Account Deactivated</Text>
+          <Text style={styles.overlayText}>
+            Please wait while your final offline changes are securely synced to the server before logout...
+          </Text>
+        </View>
+      </View>
+    )}
+    </>
   );
 }
 
@@ -212,4 +246,29 @@ const styles = StyleSheet.create({
     height: 2.5,
     borderRadius: 2,
   },
+  overlayBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: T.background,
+    opacity: 0.95,
+  },
+  overlayContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+    zIndex: 100,
+  },
+  overlayTitle: {
+    color: T.textPrimary,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  overlayText: {
+    color: T.textSecondary,
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  }
 });

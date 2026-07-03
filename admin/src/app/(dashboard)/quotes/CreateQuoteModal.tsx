@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead } from '@/lib/admin-api';
 import { X, Plus, Trash2, ChevronRight } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -24,19 +24,21 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
   const [showInvPicker, setShowInvPicker] = useState<string | null>(null); // defect id or 'general'
 
   useEffect(() => {
-    supabase.from('jobs')
-      .select('*, property:properties(name,suburb), assigned_user:users(full_name)')
-      .in('status', ['completed', 'in_progress'])
-      .order('scheduled_date', { ascending: false })
-      .then(({ data }) => setJobs(data ?? []));
-    supabase.from('inventory_items').select('*').order('name')
+    adminRead('jobs', {
+      select: '*, property:properties(name,suburb), assigned_user:users(full_name)',
+      in: { column: 'status', values: ['completed', 'in_progress'] },
+      order: { column: 'scheduled_date', ascending: false }
+    }).then(({ data }) => setJobs(data ?? []));
+    
+    adminRead('inventory_items', { order: { column: 'name' } })
       .then(({ data }) => setInventory(data ?? []));
   }, []);
 
   const selectJob = async (job: any) => {
     setSelectedJob(job);
-    const { data } = await supabase.from('defects')
-      .select('*').eq('job_id', job.id).eq('status', 'open');
+    const { data } = await adminRead('defects', {
+      filters: { job_id: job.id, status: 'open' }
+    });
     setDefects(data ?? []);
     setStep('items');
   };
@@ -77,7 +79,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
         quantity: Math.max(1, l.quantity),
         unit_price: l.unitPrice,
       })));
-    } catch (err) {
+    } catch {
       toast.error('Quote created, but some line items failed to save.');
       setSaving(false);
       return;
@@ -126,7 +128,7 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
               )}
               {filteredJobs.map(j => (
                 <button key={j.id} onClick={() => selectJob(j)}
-                  className="w-full flex items-center gap-3 p-4 rounded-2xl border text-left hover:border-blue-300 hover:bg-blue-50 transition-all"
+                  className="w-full flex items-center gap-3 p-4 rounded-2xl border text-left hover:border-[var(--border-strong)] hover:bg-white/5 transition-all"
                   style={{ borderColor: 'var(--border)' }}>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{j.property?.name ?? '—'}</p>
@@ -224,14 +226,14 @@ export default function CreateQuoteModal({ onClose, onCreated }: Props) {
                       <span className="text-sm font-semibold w-20 text-right" style={{ color: '#16a34a' }}>
                         {formatCurrency(l.quantity * l.unitPrice)}
                       </span>
-                      <button onClick={() => removeLine(i)} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50">
+                      <button onClick={() => removeLine(i)} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-500/10">
                         <Trash2 size={13} style={{ color: '#ef4444' }} />
                       </button>
                     </div>
                   ))}
-                  <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#f0f4f8' }}>
+                  <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'var(--bg)' }}>
                     <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Total (ex-GST)</p>
-                    <p className="text-lg font-extrabold" style={{ color: 'var(--primary)' }}>{formatCurrency(total)}</p>
+                    <p className="text-lg font-extrabold" style={{ color: 'var(--accent)' }}>{formatCurrency(total)}</p>
                   </div>
                 </div>
               )}

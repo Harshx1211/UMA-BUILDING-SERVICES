@@ -1,65 +1,134 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
-import { Shield } from 'lucide-react';
+import { Zap } from 'lucide-react';
+import LegalGate from '@/components/layout/LegalGate';
 
-
-function LayoutInner({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!loading && !user) router.replace('/login');
-  }, [user, loading, router]);
-
-  // Lock body scroll when mobile menu is open
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
-  }, [mobileMenuOpen]);
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
-            <Shield size={22} color="white" strokeWidth={2} />
-          </div>
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="w-2 h-2 rounded-full animate-bounce"
-                style={{ background: 'var(--accent)', animationDelay: `${i * 120}ms` }} />
-            ))}
-          </div>
-          <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Loading UMA BUILDING SERVICES…
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
-
+/* ── Loading splash (first-time login only) ───────────────────────────────── */
+function LoadingSplash() {
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <Sidebar
-        mobileOpen={mobileMenuOpen}
-        onMobileClose={() => setMobileMenuOpen(false)}
-      />
+    <div
+      className="fixed inset-0 flex items-center justify-center z-50"
+      style={{ background: 'var(--bg)' }}
+    >
+      <div className="flex flex-col items-center gap-5">
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg,#F97316,#ea6900)',
+            boxShadow: '0 8px 32px rgba(249,115,22,0.4)',
+          }}
+        >
+          <Zap size={24} color="white" strokeWidth={2.5} />
+        </div>
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className="w-2 h-2 rounded-full animate-bounce"
+              style={{
+                background: 'var(--accent)',
+                animationDelay: `${i * 120}ms`,
+              }}
+            />
+          ))}
+        </div>
+        <p className="text-sm font-semibold tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+          LOADING WORKSPACE...
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Inner layout ─────────────────────────────────────────────────────────── */
+function LayoutInner({ children }: { children: React.ReactNode }) {
+  const { user, loading, hydrated, signOut } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Redirect to login only when we are 100% sure the user is gone.
+  // All three must be true simultaneously:
+  //   hydrated  → localStorage has been read (not mid-initialization)
+  //   !loading  → async profile fetch is done
+  //   !user     → definitely no authenticated user
+  useEffect(() => {
+    if (hydrated && !loading) {
+      if (!user) {
+        router.replace('/login');
+      } else if (user.role !== 'admin') {
+        // Kick out superadmins or technicians who try to access the admin portal via shared localhost sessions
+        signOut();
+        router.replace('/login');
+      }
+    }
+  }, [hydrated, loading, user, router, signOut]);
+
+  // Heartbeat access check: Poll every 30s + on navigation
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const checkAccess = () => {
+      supabase.from('users').select('is_active, companies(subscription_status)').eq('id', user.id).single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            // @ts-ignore
+            const companyStatus = data.companies?.subscription_status;
+            if (data.is_active === false || companyStatus === 'suspended') {
+              signOut();
+            }
+          }
+        });
+    };
+
+    checkAccess(); // Check immediately on mount/nav
+    const interval = setInterval(checkAccess, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, [pathname, user?.id, signOut]);
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileOpen]);
+
+  // ① If fully loaded and NO user or wrong role, redirect is in flight. Return null to avoid flashing data.
+  if (hydrated && !loading && (!user || user.role !== 'admin')) return null;
+
+  // ② Render the dashboard shell universally (SSR and client) to allow Next.js streaming of children
+  return (
+    <div
+      className="flex h-screen overflow-hidden relative"
+      style={{ background: 'var(--bg)' }}
+    >
+      {/* Show Loading Splash overlay if hydrating or fetching first-time user */}
+      {(!hydrated || (loading && !user)) && (
+        <div className="absolute inset-0 z-50">
+          <LoadingSplash />
+        </div>
+      )}
+
+      {/* Show Legal Gate overlay if terms not accepted */}
+      {hydrated && user && user.role === 'admin' && !user.accepted_tos_at && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+          <LegalGate 
+            userId={user.id} 
+            onAccepted={() => window.location.reload()} 
+          />
+        </div>
+      )}
+
+      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Header onMenuClick={() => setMobileMenuOpen(o => !o)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
-          {children}
+        <Header onMenuClick={() => setMobileOpen(o => !o)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 relative">
+          {/* Hide children only if redirecting, so we don't flash unauthorized content */}
+          {(!hydrated || (user && user.role === 'admin')) ? children : null}
         </main>
       </div>
     </div>

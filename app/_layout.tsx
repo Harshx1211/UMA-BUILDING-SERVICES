@@ -19,35 +19,23 @@ import * as SplashScreen from 'expo-splash-screen';
 SplashScreen.preventAutoHideAsync();
 
 
-const paperLightTheme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: Colors.light.primary,
-    secondary: Colors.light.accent,
-    background: Colors.light.background,
-    surface: Colors.light.surface,
-    error: Colors.light.error,
-    onPrimary: Colors.light.textOnPrimary,
-    onBackground: Colors.light.text,
-    onSurface: Colors.light.text,
-  },
-};
-
+// SiteTrack is dark-only — a single theme is used regardless of system preference.
 const paperDarkTheme = {
   ...MD3DarkTheme,
   colors: {
     ...MD3DarkTheme.colors,
-    primary: Colors.dark.primary,
-    secondary: Colors.dark.accent,
-    background: Colors.dark.background,
-    surface: Colors.dark.surface,
-    error: Colors.dark.error,
-    onPrimary: Colors.dark.textOnPrimary,
+    primary:      Colors.dark.primary,
+    secondary:    Colors.dark.accent,
+    background:   Colors.dark.background,
+    surface:      Colors.dark.surface,
+    error:        Colors.dark.error,
+    onPrimary:    Colors.dark.textOnPrimary,
     onBackground: Colors.dark.text,
-    onSurface: Colors.dark.text,
+    onSurface:    Colors.dark.text,
   },
 };
+// Alias — both colorScheme branches resolve to the same dark theme.
+const paperLightTheme = paperDarkTheme;
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -61,10 +49,10 @@ export default function RootLayout() {
   const obscureOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Activate expo-screen-capture prevention (works on both platforms)
-    ScreenCapture.preventScreenCaptureAsync();
+    // ⚠️ TEMPORARILY DISABLED FOR UI REVIEW — re-enable after screenshots are taken
+    // ScreenCapture.preventScreenCaptureAsync();
     return () => {
-      ScreenCapture.allowScreenCaptureAsync();
+      // ScreenCapture.allowScreenCaptureAsync();
     };
   }, []);
 
@@ -111,7 +99,8 @@ export default function RootLayout() {
     requestNotificationPermission();
   }, []);
 
-  const theme = colorScheme === 'dark' ? paperDarkTheme : paperLightTheme;
+  // Always dark — field service app.
+  const theme = paperDarkTheme;
 
   // Show a blank loading screen while session is being restored.
   // The Slot renders NOTHING until isLoading is false, so there is
@@ -139,7 +128,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
           <Slot />
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <StatusBar style="light" />
           <Toast />
           {/* iOS app-switcher screenshot shield */}
           {isObscured && (

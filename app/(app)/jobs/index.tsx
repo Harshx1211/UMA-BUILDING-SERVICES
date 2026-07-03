@@ -4,49 +4,71 @@ import {
   TextInput, RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
 import { C } from '@/constants/Config';
-import { JobStatus, Priority } from '@/constants/Enums';
 import type { Job } from '@/types';
+import { ScreenHeader, Badge } from '@/components/ui';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { cardShadow } from '@/components/ui/Card';
 
 type FilterTab = 'today' | 'week' | 'all';
 
 const PRIORITY_COLOR: Record<string, string> = {
   urgent: C.danger, high: C.warning, normal: C.info, low: C.textMuted,
 };
-const STATUS_LABEL: Record<string, string> = {
-  scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Done', cancelled: 'Cancelled',
-};
-const STATUS_COLOR: Record<string, string> = {
-  scheduled: C.info, in_progress: C.accent, completed: C.success, cancelled: C.textMuted,
-};
 
 export default function ScheduleScreen() {
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { jobs, loadJobs } = useJobsStore();
   const [filter, setFilter] = useState<FilterTab>('today');
   const [search, setSearch]  = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  // Use local timezone dates
+  const getLocalDate = (d: Date = new Date()) => 
+    new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  
+  const today = getLocalDate();
+
+  // Calculate Monday and Sunday of current week
+  const now = new Date();
+  const dayOfWeek = now.getDay() || 7; // 1 (Mon) to 7 (Sun)
+  
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dayOfWeek + 1);
+  const weekStart = getLocalDate(monday);
+  
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const weekEnd = getLocalDate(sunday);
 
   useEffect(() => {
     if (user) loadJobs(user.id);
     const fn = () => { if (user) loadJobs(user.id); };
     onSyncComplete(fn);
     return () => offSyncComplete(fn);
-  }, [user]);
+  }, [user, loadJobs]);
 
   type JobWithJoins = Job & { property_name?: string; address?: string };
 
   const filtered = jobs.filter((j: Job) => {
-    if (filter === 'today' && j.scheduled_date !== today) return false;
-    if (filter === 'week' && (j.scheduled_date < today || j.scheduled_date > weekEnd)) return false;
+    // If completed, the job effectively "happened" on its completion date.
+    const effectiveDateStr = j.status === 'completed' ? (j.updated_at || j.scheduled_date) : j.scheduled_date;
+    const filterDate = effectiveDateStr.substring(0, 10);
+    
+    // Overdue is strictly based on when it was supposed to happen
+    const scheduledOnlyDate = j.scheduled_date.substring(0, 10);
+    const isOverdue = scheduledOnlyDate < today && j.status !== 'completed' && j.status !== 'cancelled';
+    
+    if (filter === 'today') {
+      if (filterDate !== today && !isOverdue) return false;
+    }
+    if (filter === 'week') {
+      const inThisWeek = filterDate >= weekStart && filterDate <= weekEnd;
+      if (!isOverdue && !inThisWeek) return false;
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       const jj = j as JobWithJoins;
@@ -60,7 +82,10 @@ export default function ScheduleScreen() {
       s === 'in_progress' ? 0 : s === 'scheduled' ? 1 : s === 'completed' ? 2 : 3;
     const so = statusOrder(a.status) - statusOrder(b.status);
     if (so !== 0) return so;
-    return a.scheduled_date.localeCompare(b.scheduled_date);
+    
+    const dateA = a.status === 'completed' ? (a.updated_at || a.scheduled_date) : a.scheduled_date;
+    const dateB = b.status === 'completed' ? (b.updated_at || b.scheduled_date) : b.scheduled_date;
+    return dateA.localeCompare(dateB);
   });
 
   const onRefresh = useCallback(async () => {
@@ -70,14 +95,12 @@ export default function ScheduleScreen() {
   }, []);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Schedule</Text>
-        <Text style={styles.count}>{filtered.length} job{filtered.length !== 1 ? 's' : ''}</Text>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader
+        title="Schedule"
+        subtitle={`${filtered.length} job${filtered.length !== 1 ? 's' : ''} found`}
+      />
 
-      {/* Filter tabs */}
       <View style={styles.filterRow}>
         {(['today','week','all'] as FilterTab[]).map(f => (
           <TouchableOpacity
@@ -92,9 +115,8 @@ export default function ScheduleScreen() {
         ))}
       </View>
 
-      {/* Search */}
       <View style={styles.searchWrap}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialCommunityIcons name="magnify" size={16} color={C.textMuted} style={{ marginRight: 6 }} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search property or address…"
@@ -104,7 +126,7 @@ export default function ScheduleScreen() {
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Text style={styles.clearBtn}>✕</Text>
+            <MaterialCommunityIcons name="close-circle" size={16} color={C.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -146,22 +168,44 @@ function ScheduleJobCard({ job }: { job: Job }) {
           <Text style={styles.propName} numberOfLines={1}>
             {j.property_name ?? 'Unknown Property'}
           </Text>
-          <Text style={[styles.statusDot, { color: STATUS_COLOR[job.status] }]}>●</Text>
-          <Text style={[styles.statusLabel, { color: STATUS_COLOR[job.status] }]}>
-            {STATUS_LABEL[job.status]}
-          </Text>
+          <Badge status={job.status} />
         </View>
         <Text style={styles.address} numberOfLines={1}>
           {[j.address, j.suburb, j.state].filter(Boolean).join(', ')}
         </Text>
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>📅 {job.scheduled_date}</Text>
-          {job.scheduled_time && <Text style={styles.metaText}>  🕐 {job.scheduled_time}</Text>}
-          <View style={[styles.priorityChip, { borderColor: PRIORITY_COLOR[job.priority] }]}>
-            <Text style={[styles.priorityText, { color: PRIORITY_COLOR[job.priority] }]}>
-              {job.priority.toUpperCase()}
-            </Text>
-          </View>
+          {job.status === 'completed' ? (
+            <>
+              <MaterialCommunityIcons name="calendar-outline" size={11} color={C.textMuted} />
+              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              <MaterialCommunityIcons name="arrow-right" size={11} color={C.textMuted} style={{ marginLeft: 4 }} />
+              <MaterialCommunityIcons name="check-circle-outline" size={12} color={C.success} style={{ marginLeft: 4 }} />
+              <Text style={[styles.metaText, { color: C.success }]}>
+                {job.updated_at?.substring(0, 10) || job.scheduled_date}
+              </Text>
+            </>
+          ) : job.status === 'in_progress' ? (
+            <>
+              <MaterialCommunityIcons name="calendar-outline" size={11} color={C.textMuted} />
+              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              <MaterialCommunityIcons name="arrow-right" size={11} color={C.textMuted} style={{ marginLeft: 4 }} />
+              <MaterialCommunityIcons name="play-circle-outline" size={12} color={C.primary} style={{ marginLeft: 4 }} />
+              <Text style={[styles.metaText, { color: C.primary }]}>
+                Started {job.updated_at?.substring(0, 10)}
+              </Text>
+            </>
+          ) : (
+            <>
+              <MaterialCommunityIcons name="calendar-outline" size={11} color={C.textMuted} />
+              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              {job.scheduled_time && (
+                <>
+                  <MaterialCommunityIcons name="clock-outline" size={11} color={C.textMuted} style={{ marginLeft: 4 }} />
+                  <Text style={styles.metaText}>{job.scheduled_time.substring(0, 5)}</Text>
+                </>
+              )}
+            </>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -186,7 +230,7 @@ const styles = StyleSheet.create({
   },
   filterTabActive:   { backgroundColor: C.accent, borderColor: C.accent },
   filterTabText:     { color: C.textMuted, fontSize: 12, fontWeight: '600' },
-  filterTabTextActive: { color: '#fff' },
+  filterTabTextActive: { color: '#FFFFFF' },
   searchWrap:        {
     flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface,
     marginHorizontal: 16, marginTop: 10, borderRadius: 12, borderWidth: 1,
@@ -200,13 +244,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingVertical: 60,
     backgroundColor: C.surface, borderRadius: 16,
     borderWidth: 1, borderColor: C.border,
+    ...cardShadow,
   },
-  emptyIcon:         { fontSize: 40, marginBottom: 12 },
+  emptyIcon:         { fontSize: 32, marginBottom: 12 },
   emptyTitle:        { color: C.textLight, fontSize: 16, fontWeight: '700', marginBottom: 4 },
   emptyText:         { color: C.textMuted, fontSize: 13 },
   card:              {
     backgroundColor: C.surface, borderRadius: 16, borderWidth: 1,
     borderColor: C.border, flexDirection: 'row', overflow: 'hidden', marginBottom: 10,
+    ...cardShadow,
   },
   priorityBar:       { width: 4 },
   cardBody:          { flex: 1, padding: 14 },
@@ -216,7 +262,7 @@ const styles = StyleSheet.create({
   statusLabel:       { fontSize: 11, fontWeight: '600' },
   address:           { color: C.textMuted, fontSize: 12, marginBottom: 8 },
   metaRow:           { flexDirection: 'row', alignItems: 'center' },
-  metaText:          { color: C.textMuted, fontSize: 11 },
+  metaText:          { color: C.textMuted, fontSize: 11, paddingLeft: 4, paddingRight: 8 },
   priorityChip:      {
     marginLeft: 'auto' as any, borderRadius: 6, borderWidth: 1,
     paddingHorizontal: 6, paddingVertical: 2,

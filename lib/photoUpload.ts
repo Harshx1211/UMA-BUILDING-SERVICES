@@ -210,7 +210,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
           if (__DEV__) console.log(`[PhotoUpload] Uploaded: ${publicUrl}`);
         } else {
           if (__DEV__) console.log(`[PhotoUpload] Upload failed for task ${task.id} — will retry next cycle`);
-          incrementSyncRetry(task.id);
+          incrementSyncRetry(task.id, 'Upload failed');
         }
       }));
     }

@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Skeleton from '@/components/ui/Skeleton';
+import { adminFetch } from '@/lib/adminFetch';
 
 const STATUSES = ['', 'new', 'contacted', 'converted', 'closed'];
 
@@ -43,7 +45,7 @@ export default function EnquiriesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/superadmin/enquiries');
+      const res = await adminFetch('/api/superadmin/enquiries');
       if (!res.ok) {
         if (res.status === 401) throw new Error('Unauthorized: You do not have superadmin privileges.');
         throw new Error('Failed to fetch enquiries.');
@@ -66,7 +68,7 @@ export default function EnquiriesPage() {
   useEffect(() => {
     async function loadSummary() {
       try {
-        const res = await fetch('/api/superadmin/enquiries');
+        const res = await adminFetch('/api/superadmin/enquiries');
         const json = await res.json();
         const all = json.data || [];
         setSummary({
@@ -82,9 +84,8 @@ export default function EnquiriesPage() {
 
   const updateStatus = async (id: string, status: string) => {
     setUpdatingId(id);
-    const res = await fetch(`/api/superadmin/enquiries/${id}`, {
+    const res = await adminFetch(`/api/superadmin/enquiries/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
     setUpdatingId(null);
@@ -95,9 +96,8 @@ export default function EnquiriesPage() {
   };
 
   const updateNotes = async (id: string, notes: string) => {
-    const res = await fetch(`/api/superadmin/enquiries/${id}`, {
+    const res = await adminFetch(`/api/superadmin/enquiries/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes })
     });
     if (!res.ok) toast.error('Failed to save notes');
@@ -106,7 +106,7 @@ export default function EnquiriesPage() {
 
   const deleteEnquiry = async () => {
     if (!deleteTarget) return;
-    const res = await fetch(`/api/superadmin/enquiries/${deleteTarget.id}`, { method: 'DELETE' });
+    const res = await adminFetch(`/api/superadmin/enquiries/${deleteTarget.id}`, { method: 'DELETE' });
     if (!res.ok) toast.error('Failed to delete enquiry');
     else { toast.success('Enquiry deleted'); if (selected?.id === deleteTarget.id) setSelected(null); load(); }
     setDeleteTarget(null);
@@ -197,12 +197,12 @@ export default function EnquiriesPage() {
             <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="px-5 py-4 flex gap-4 items-center">
-                  <div className="animate-shimmer rounded-xl w-9 h-9 flex-shrink-0" />
+                  <Skeleton variant="bg" className="w-9 h-9 flex-shrink-0" />
                   <div className="flex-1 space-y-2">
-                    <div className="animate-shimmer rounded h-3.5 w-2/5" />
-                    <div className="animate-shimmer rounded h-3 w-3/5" />
+                    <Skeleton variant="text" className="h-3.5 w-2/5" />
+                    <Skeleton variant="text" className="h-3 w-3/5" />
                   </div>
-                  <div className="animate-shimmer rounded-full h-6 w-20" />
+                  <Skeleton variant="bg" className="h-6 w-20 flex-shrink-0" />
                 </div>
               ))}
             </div>

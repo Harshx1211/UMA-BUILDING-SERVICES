@@ -13,14 +13,29 @@ export default function PreviewModal({ quote, onClose }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    // Generate the HTML from the quote data
-    const generatedHtml = generateQuoteHtml({
-      job: quote.job,
-      defects: quote.defects,
-      total_amount: quote.total_amount,
-      reportId: quote.id,
-    });
-    setHtml(generatedHtml);
+    fetch('/api/admin/company')
+      .then(res => res.json())
+      .then(json => {
+        const generatedHtml = generateQuoteHtml({
+          job: quote.job,
+          defects: quote.defects,
+          total_amount: quote.total_amount,
+          reportId: quote.id,
+          company: json.data || {},
+        });
+        setHtml(generatedHtml);
+      })
+      .catch(() => {
+        // Fallback if network fails
+        const generatedHtml = generateQuoteHtml({
+          job: quote.job,
+          defects: quote.defects,
+          total_amount: quote.total_amount,
+          reportId: quote.id,
+          company: {},
+        });
+        setHtml(generatedHtml);
+      });
   }, [quote]);
 
   const handlePrint = () => {

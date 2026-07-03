@@ -55,8 +55,10 @@ function NotifCard({ item }: { item: AppNotification }) {
   return (
     <Card
       noPadding
-      color={!item.is_read ? C.warningLight : C.surface}
-      style={!item.is_read ? { borderLeftWidth: 3, borderLeftColor: C.accent } : undefined}
+      style={[
+        { backgroundColor: !item.is_read ? C.warningLight : C.surface },
+        !item.is_read ? { borderLeftWidth: 3, borderLeftColor: C.accent } : {}
+      ]}
     >
       <TouchableOpacity
         style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12, position: 'relative' }}
@@ -112,9 +114,8 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-      {/* ── Navy curved header ──────────────── */}
+      {/* ── Header ──────────────── */}
       <ScreenHeader 
-        curved={true} 
         title="Notifications" 
         showBack={true} 
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
@@ -144,7 +145,7 @@ export default function NotificationsScreen() {
           renderItem={({ item }) => <NotifCard item={item} />}
           ListEmptyComponent={
             <EmptyState 
-              emoji="🔔" 
+              icon="bell-outline" 
               title="No notifications yet" 
               subtitle="You're all caught up! New job assignments and system alerts will appear here." 
             />
@@ -153,9 +154,9 @@ export default function NotificationsScreen() {
             notifications.length > 0 ? (
               <View style={{ paddingBottom: 8 }}>
                 {isCapped && (
-                  <View style={[s.cappedBanner, { backgroundColor: '#FFF9C4' }]}>
-                    <MaterialCommunityIcons name="information-outline" size={14} color="#92400E" />
-                    <Text style={s.cappedText}>
+                  <View style={[s.cappedBanner, { backgroundColor: C.warningLight }]}>
+                    <MaterialCommunityIcons name="information-outline" size={14} color={C.warningDark} />
+                    <Text style={[s.cappedText, { color: C.warningDark }]}>
                       Showing the {notifications.length} most recent notifications ({totalCount} total). Clear old ones to see more.
                     </Text>
                   </View>
@@ -173,8 +174,8 @@ export default function NotificationsScreen() {
                     )
                   }
                 >
-                  <MaterialCommunityIcons name="delete-sweep-outline" size={16} color="#94A3B8" />
-                  <Text style={[s.clearBtnText, { color: '#94A3B8' }]}>Clear all notifications</Text>
+                  <MaterialCommunityIcons name="delete-sweep-outline" size={16} color={C.textTertiary} />
+                  <Text style={[s.clearBtnText, { color: C.textTertiary }]}>Clear all notifications</Text>
                 </TouchableOpacity>
               </View>
             ) : null
@@ -189,9 +190,7 @@ const s = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   backBtn:    { minHeight: 48, justifyContent: 'center' },
-  headerTitle:{ fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  headerSub:  { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
-  markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
+  markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   markAllText:{ fontSize: 12, fontWeight: '700' },
 
   list:      { padding: 16, gap: 12, paddingBottom: 32 },
@@ -233,5 +232,5 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10,
     borderRadius: 10, marginHorizontal: 0, marginBottom: 8,
   },
-  cappedText: { fontSize: 12, color: '#78350F', flex: 1, lineHeight: 17 },
+  cappedText: { fontSize: 12, flex: 1, lineHeight: 17 },
 });

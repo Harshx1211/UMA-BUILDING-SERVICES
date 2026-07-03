@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import Skeleton from '@/components/ui/Skeleton';
 
 interface StatCardProps {
   label: string;
@@ -11,13 +12,14 @@ interface StatCardProps {
   changeDir?: 'up' | 'down' | 'neutral';
   subtitle?: string;
   delay?: number;
+  isLoading?: boolean;
 }
 
 const COLOR_MAP = {
   orange: {
-    iconBg: 'linear-gradient(135deg,#ff9a3c,#F97316)',
+    iconBg: 'linear-gradient(135deg,#ff9a3c,var(--accent))',
     glow: 'rgba(249,115,22,0.25)',
-    accent: '#F97316',
+    accent: 'var(--accent)',
     light: 'rgba(249,115,22,0.15)',
   },
   blue: {
@@ -60,7 +62,7 @@ const COLOR_MAP = {
 
 export default function StatCard({
   label, value, icon: Icon, color,
-  change, changeDir = 'neutral', subtitle, delay = 0,
+  change, changeDir = 'neutral', subtitle, delay = 0, isLoading = false,
 }: StatCardProps) {
   const c = COLOR_MAP[color];
   return (
@@ -101,16 +103,20 @@ export default function StatCard({
       </div>
 
       <div className="relative">
-        <p className="text-[28px] font-extrabold leading-none mb-1"
-          style={{ color: 'var(--text)', letterSpacing: '-0.045em' }}>
-          {value}
-        </p>
+        {isLoading ? (
+          <Skeleton variant="text" className="h-[28px] w-20 mb-1" />
+        ) : (
+          <p className="text-[28px] font-extrabold leading-none mb-1"
+            style={{ color: 'var(--text)', letterSpacing: '-0.045em' }}>
+            {value}
+          </p>
+        )}
         <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</p>
         {subtitle && (
-          <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
             <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: c.accent }} />
-            {subtitle}
-          </p>
+            {isLoading ? <Skeleton variant="text" className="h-3 w-16 inline-block" /> : subtitle}
+          </div>
         )}
       </div>
     </div>

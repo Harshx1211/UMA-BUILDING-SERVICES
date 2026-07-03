@@ -1,4 +1,4 @@
-// Login screen — professional hero with branding + premium floating form
+// Login screen — Minimalist, professional SiteTrack dark mode aesthetic
 import { useState, useEffect, useRef } from 'react';
 import {
   KeyboardAvoidingView,
@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
-import { Card, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
@@ -41,10 +41,10 @@ export default function LoginScreen() {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [biometricType, setBiometricType]   = useState<'fingerprint' | 'face' | null>(null);
 
-  // Scroll down to form when keyboard opens so inputs are always visible
+  // Adjust scroll when keyboard opens so inputs remain visible
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      scrollRef.current?.scrollTo({ y: 150, animated: true });
     });
     return () => show.remove();
   }, []);
@@ -94,23 +94,19 @@ export default function LoginScreen() {
   const handleBiometric = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to UMA BUILDING SERVICES',
+        promptMessage: 'Sign in to SiteTrack',
         cancelLabel: 'Use Password',
         disableDeviceFallback: false,
       });
       if (result.success) {
-        // Restore the cached Supabase session — this sets user + isAuthenticated
-        // properly so the app layout doesn't redirect back to login.
         await restoreSession();
-        // router.replace is handled automatically by _layout.tsx once
-        // isAuthenticated becomes true.
       }
     } catch (err) { console.warn('[Login] Biometric error:', err); }
   };
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: C.primary }]}
+      style={[styles.container, { backgroundColor: C.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
@@ -120,74 +116,36 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* ── Hero with Branding ────── */}
-        <View style={[styles.heroSection, { backgroundColor: C.primary }]}>
-
-          {/* Background decorative circles for depth */}
-          <View style={[styles.decorCircle1, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
-          <View style={[styles.decorCircle2, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
-          <View style={[styles.decorCircle3, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
-
-          {/* App Logo */}
+        <View style={styles.content}>
+          {/* ── Brand Logo ────── */}
           <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
-            <View style={[styles.logoRing, { borderColor: 'rgba(255,255,255,0.3)' }]}>
-              <View style={[styles.logoInner, { backgroundColor: C.accent }]}>
-                <MaterialCommunityIcons name="tools" size={32} color="#FFFFFF" />
-              </View>
+            <View style={[styles.logoBox, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <MaterialCommunityIcons name="shield-check" size={42} color={C.primary} />
             </View>
+            <Animated.View entering={FadeInDown.delay(200).duration(500)}>
+              <Text style={[styles.brandName, { color: C.text }]}>SiteTrack</Text>
+              <Text style={[styles.brandTagline, { color: C.textSecondary }]}>Enter your credentials to continue</Text>
+            </Animated.View>
           </Animated.View>
 
-          {/* Brand name + tagline */}
-          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.brandBlock}>
-            <Text style={styles.brandName}>UMA BUILDING SERVICES</Text>
-            <Text style={styles.brandTagline}>Field Service Management</Text>
-          </Animated.View>
-
-          {/* Feature pills */}
-          <Animated.View entering={FadeInDown.delay(320).duration(500)} style={styles.featureStrip}>
-            {['📋 Jobs', '✅ Inspections', '📄 Reports'].map((f) => (
-              <View
-                key={f}
-                style={[styles.featurePill, {
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.1)',
-                }]}
-              >
-                <Text style={styles.featurePillTxt}>{f}</Text>
-              </View>
-            ))}
-          </Animated.View>
-        </View>
-
-        {/* ── Premium Form Card ─────────────── */}
-        {/* NOTE: Plain View here — Animated.View with entering= blocks TextInput touches on Android new arch */}
-        <View style={styles.cardWrapper}>
-          <Card style={styles.formCard}>
-
-            <Text style={[styles.formTitle, { color: C.text }]}>Welcome back 👋</Text>
-            <Text style={[styles.formSub, { color: C.textSecondary }]}>Sign in to your account to continue</Text>
-
-            {/* F7: Offline banner — biometric login still works offline (reads cached session).
-                Text clarifies this rather than falsely implying sign-in is impossible. */}
+          {/* ── Form Section ─────────────── */}
+          <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.formContainer}>
             {!isOnline && (
-              <View style={[styles.errorBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40', borderWidth: 1 }]}>
+              <View style={[styles.alertBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
                 <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />
-                <Text style={[styles.errorBannerText, { color: C.warningDark }]}>
+                <Text style={[styles.alertText, { color: C.warningDark }]}>
                   You are offline. Biometric sign-in still works. Signing in with a password requires internet.
                 </Text>
               </View>
             )}
 
-            {/* Error banner */}
             {error && (
-              <View style={[styles.errorBanner, { backgroundColor: C.errorLight, borderColor: C.error + '40', borderWidth: 1 }]}>
+              <View style={[styles.alertBanner, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
                 <MaterialCommunityIcons name="alert-circle" size={18} color={C.error} />
-                <Text style={[styles.errorBannerText, { color: C.error }]}>{error}</Text>
+                <Text style={[styles.alertText, { color: C.error }]}>{error}</Text>
               </View>
             )}
 
-            {/* Email */}
             <Input
               label="Email"
               value={email}
@@ -200,7 +158,6 @@ export default function LoginScreen() {
               style={{ marginBottom: 16 }}
             />
 
-            {/* Password */}
             <Input
               label="Password"
               value={password}
@@ -221,8 +178,7 @@ export default function LoginScreen() {
               style={{ marginBottom: 12 }}
             />
 
-            {/* Remember me + Forgot */}
-            <View style={styles.rememberRow}>
+            <View style={styles.optionsRow}>
               <TouchableOpacity
                 style={styles.rememberLeft}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRememberMe(v => !v); }}
@@ -231,53 +187,49 @@ export default function LoginScreen() {
                 <Checkbox
                   status={rememberMe ? 'checked' : 'unchecked'}
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRememberMe(v => !v); }}
-                  color={C.accent}
+                  color={C.primary}
                 />
                 <Text style={[styles.rememberLabel, { color: C.text }]}>Remember me</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-                <Text style={[styles.forgotLink, { color: C.accent }]}>Forgot Password?</Text>
+                <Text style={[styles.forgotLink, { color: C.primary }]}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Sign In */}
             <Button
               title="Sign In"
               onPress={handleSignIn}
               isLoading={isLoading}
-              style={{ height: 52, borderRadius: 26 }}
+              style={{ height: 52, borderRadius: 12, marginTop: 8 }}
             />
 
-            {/* Divider */}
             {biometricsAvailable && (
-              <View style={styles.dividerRow}>
-                <View style={[styles.divider, { backgroundColor: C.border }]} />
-                <Text style={[styles.dividerTxt, { color: C.textTertiary }]}>or continue with</Text>
-                <View style={[styles.divider, { backgroundColor: C.border }]} />
-              </View>
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                  <Text style={[styles.dividerTxt, { color: C.textTertiary }]}>or</Text>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                </View>
+                <Button
+                  title={biometricType === 'face' ? 'Sign in with Face ID' : 'Sign in with Fingerprint'}
+                  variant="secondary"
+                  onPress={handleBiometric}
+                  icon={
+                    <MaterialCommunityIcons
+                      name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
+                      size={20}
+                      color={C.primary}
+                    />
+                  }
+                  style={{ height: 52, borderRadius: 12 }}
+                />
+              </>
             )}
-
-            {/* Biometric */}
-            {biometricsAvailable && (
-              <Button
-                title={biometricType === 'face' ? 'Face ID' : 'Fingerprint'}
-                variant="outline"
-                onPress={handleBiometric}
-                icon={
-                  <MaterialCommunityIcons
-                    name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
-                    size={20}
-                    color={C.primary}
-                  />
-                }
-              />
-            )}
-          </Card>
+          </Animated.View>
         </View>
 
-        {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerTxt}>© 2025 UMA BUILDING SERVICES · Built for Australian trade professionals</Text>
+          <Text style={[styles.footerTxt, { color: C.textTertiary }]}>© 2026 SiteTrack · Field Service Platform</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -286,143 +238,101 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { flexGrow: 1 },
-
-  // ── Hero ──────────────────────────
-  heroSection: {
+  scroll: { flexGrow: 1, justifyContent: 'space-between' },
+  content: {
+    paddingHorizontal: 24,
+    paddingTop: 100,
+  },
+  
+  // ── Brand Logo ───────────────────
+  logoContainer: {
     alignItems: 'center',
-    paddingTop: 72,
-    paddingBottom: 60,
-    overflow: 'hidden',
-    position: 'relative',
+    marginBottom: 48,
   },
-  // Decorative depth circles
-  decorCircle1: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    top: -100,
-    right: -100,
-  },
-  decorCircle2: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    bottom: -50,
-    left: -70,
-  },
-  decorCircle3: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    top: 30,
-    left: 30,
-  },
-  // Logo
-  logoContainer: { marginBottom: 20 },
-  logoRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 2,
+  logoBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 20,
   },
-  logoInner: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  // Branding
-  brandBlock: { alignItems: 'center', marginBottom: 24 },
   brandName: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '800',
     letterSpacing: -0.5,
+    textAlign: 'center',
+    marginBottom: 6,
   },
   brandTagline: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 4,
+    fontSize: 15,
     fontWeight: '400',
-    letterSpacing: 0.5,
+    textAlign: 'center',
   },
-  // Feature pills
-  featureStrip: { flexDirection: 'row', gap: 8 },
-  featurePill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  featurePillTxt: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
 
-  // ── Form Card ─────────────────────
-  cardWrapper: {
-    marginHorizontal: 16,
-    marginTop: -32,
+  // ── Form Container ───────────────
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
-  formCard: {
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 12,
-    gap: 0,
-  },
-  formTitle: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
-  formSub: { fontSize: 14, marginBottom: 24, lineHeight: 20 },
 
-  // Error
-  errorBanner: {
+  // ── Alerts ───────────────────────
+  alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 20,
+    borderWidth: 1,
   },
-  errorBannerText: { fontSize: 13, fontWeight: '500', flex: 1 },
+  alertText: { 
+    fontSize: 13, 
+    fontWeight: '500', 
+    flex: 1, 
+    lineHeight: 18 
+  },
 
-  // Remember row
-  rememberRow: {
+  // ── Options Row ──────────────────
+  optionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  rememberLeft: { flexDirection: 'row', alignItems: 'center', marginLeft: -8 },
-  rememberLabel: { fontSize: 13 },
-  forgotLink: { fontSize: 13, fontWeight: '600' },
+  rememberLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginLeft: -8 
+  },
+  rememberLabel: { 
+    fontSize: 14, 
+    fontWeight: '500' 
+  },
+  forgotLink: { 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 
-  // Divider
+  // ── Divider ──────────────────────
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginVertical: 16,
+    gap: 12,
+    marginVertical: 24,
   },
   divider: { flex: 1, height: 1 },
-  dividerTxt: { fontSize: 11, fontWeight: '500' },
+  dividerTxt: { fontSize: 13, fontWeight: '500' },
 
-  // Footer
+  // ── Footer ───────────────────────
   footer: {
-    paddingVertical: 28,
+    paddingVertical: 32,
     alignItems: 'center',
-    paddingHorizontal: 32,
   },
   footerTxt: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 17,
   },
 });

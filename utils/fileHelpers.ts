@@ -50,32 +50,16 @@ export function getValidLocalUri(uri: string | null | undefined): string {
   // Already points to current session directory — no reconstruction needed
   if (uri.startsWith(baseDir)) return uri;
 
-  // Extract the relative path component.
-  //
-  // Expo's documentDirectory ends with /Documents/ on iOS.
-  // We extract everything after that segment so subdirectory structure is preserved:
-  //   "file:///prev-session/Documents/jobs/abc/photo.jpg"
-  //   → "jobs/abc/photo.jpg"
-  //   → baseDir + "jobs/abc/photo.jpg"
-  //
-  // Fallback: if the path doesn't contain /Documents/, use the bare filename
-  // (query strings stripped).
-  let relativePath: string;
-
-  const documentsMarker = '/Documents/';
-  const documentsIdx = uri.indexOf(documentsMarker);
-
-  if (documentsIdx !== -1) {
-    relativePath = uri.substring(documentsIdx + documentsMarker.length);
-  } else {
-    // Strip query string then take the last path component
-    const withoutQuery = uri.split('?')[0];
-    relativePath = withoutQuery.split('/').pop() ?? '';
-  }
-
-  if (!relativePath) return uri;
-
-  return `${baseDir}${relativePath}`;
+  // Extract the filename.
+  // We don't use subdirectories for image storage in this app.
+  // Taking the last path component perfectly adapts the URI to the new session's baseDir.
+  const withoutQuery = uri.split('?')[0];
+  const filename = withoutQuery.split('/').pop() ?? '';
+  
+  if (!filename) return uri;
+  
+  // baseDir already includes the trailing slash
+  return `${baseDir}${filename}`;
 }
 
 /**

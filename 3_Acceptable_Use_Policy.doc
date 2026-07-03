@@ -1,0 +1,65 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Acceptable Use Policy - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .clause { font-weight: bold; }
+        ul { margin-bottom: 15px; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>SITETRACK ACCEPTABLE USE POLICY (AUP)</h1>
+    <p><strong>Last Updated:</strong> [Insert Date]</p>
+
+    <p>This Acceptable Use Policy ("AUP") sets out the rules that govern the acceptable use of the SiteTrack web and mobile platform (the "Service") by all customers and their authorized users (e.g., administrators and technicians). By accessing the Service, you agree to comply with this AUP.</p>
+    
+    <p>SiteTrack reserves the right to immediately suspend or permanently terminate access to the Service for any user or organization that violates this AUP, without liability or refund.</p>
+
+    <h2>1. ZERO TOLERANCE FOR COMPLIANCE FRAUD</h2>
+    <p>Because the Service is used to manage critical fire safety data under AS 1851-2012, absolute data integrity is paramount. Users must <strong>strictly refrain</strong> from:</p>
+    <ul>
+        <li><span class="clause">Falsification of Records:</span> Entering false, misleading, or fraudulent data regarding fire safety inspections, defects, maintenance works, or timestamps.</li>
+        <li><span class="clause">Location Spoofing:</span> Utilizing VPNs, GPS spoofers, or other technologies to falsify the geographical location from which an inspection or clock-in event is recorded.</li>
+        <li><span class="clause">Unauthorised Sign-Off:</span> Approving or certifying compliance tasks for which the user is not legally qualified or accredited to perform.</li>
+    </ul>
+
+    <h2>2. ACCOUNT SECURITY & INTEGRITY</h2>
+    <p>To ensure accountability, platform access must remain strictly controlled:</p>
+    <ul>
+        <li><span class="clause">No Account Sharing:</span> Every individual using the Service must use their own unique login credentials. Sharing accounts between multiple technicians or personnel is strictly prohibited.</li>
+        <li><span class="clause">Prompt Reporting:</span> Users must immediately report any known or suspected security breaches, unauthorized access, or loss of login credentials to their system administrator and SiteTrack support.</li>
+    </ul>
+
+    <h2>3. TECHNICAL RESTRICTIONS</h2>
+    <p>Users must not use the Service in any way that disrupts or compromises the platform infrastructure. Users are prohibited from:</p>
+    <ul>
+        <li><span class="clause">Reverse Engineering:</span> Attempting to decompile, reverse engineer, or extract the source code of the SiteTrack mobile application, APIs, or web dashboard.</li>
+        <li><span class="clause">Malicious Software:</span> Uploading, distributing, or transmitting any viruses, malware, trojan horses, or other malicious code through the platform (including via image or document uploads).</li>
+        <li><span class="clause">Automated Access:</span> Using bots, scrapers, automated scripts, or excessive API requests that impose an unreasonable load on our infrastructure.</li>
+        <li><span class="clause">Unauthorized Penetration Testing:</span> Conducting vulnerability scanning, load testing, or penetration testing without explicit prior written authorization from SiteTrack.</li>
+    </ul>
+
+    <h2>4. LEGAL COMPLIANCE</h2>
+    <p>Users must not use the Service to:</p>
+    <ul>
+        <li>Violate any local, state, federal, or international laws or regulations.</li>
+        <li>Store, transmit, or process any highly sensitive data (such as financial information, credit card data, or personal health records) outside of the intended scope of the application's compliance management features.</li>
+        <li>Infringe upon the intellectual property rights, privacy rights, or other legal rights of SiteTrack, its customers, or third parties.</li>
+    </ul>
+
+    <h2>5. ENFORCEMENT AND INVESTIGATION</h2>
+    <p>SiteTrack monitors platform usage to ensure compliance with this AUP. If we suspect a violation, we reserve the right to:</p>
+    <ul>
+        <li>Investigate the incident, which may include reviewing log data, timestamps, and geolocation histories.</li>
+        <li>Suspend or terminate user accounts immediately.</li>
+        <li>Report illegal activity, including fraudulent fire safety sign-offs, to appropriate law enforcement or regulatory authorities.</li>
+    </ul>
+
+</body>
+</html>

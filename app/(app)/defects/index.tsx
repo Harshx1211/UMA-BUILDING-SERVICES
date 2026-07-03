@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { ScreenHeader } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
@@ -33,16 +34,16 @@ type SeverityFilter = 'all' | DefectSeverity;
 type StatusFilter = 'all' | DefectStatus;
 
 const SEVERITY_COLORS: Record<DefectSeverity, string> = {
-  [DefectSeverity.Critical]: '#DC2626',
-  [DefectSeverity.Major]:    '#EA580C',
-  [DefectSeverity.Minor]:    '#D97706',  // amber — consistent with Warning token
+  [DefectSeverity.Critical]: T.danger,
+  [DefectSeverity.Major]:    T.primary,
+  [DefectSeverity.Minor]:    T.warning,
 };
 
 const STATUS_COLORS: Record<DefectStatus, string> = {
-  [DefectStatus.Open]:       '#DC2626',
-  [DefectStatus.Monitoring]: '#7C3AED',  // purple — distinct from amber Minor
-  [DefectStatus.Quoted]:     '#2563EB',
-  [DefectStatus.Repaired]:   '#16A34A',
+  [DefectStatus.Open]:       T.danger,
+  [DefectStatus.Monitoring]: T.info,
+  [DefectStatus.Quoted]:     T.info,
+  [DefectStatus.Repaired]:   T.success,
 };
 
 // ─── Defect Row Card ──────────────────────────────────────
@@ -95,8 +96,8 @@ function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: ()
           </View>
         )}
         {defect.quote_price && (
-          <View style={[s.pricePill, { backgroundColor: '#10B981' + '15' }]}>
-            <Text style={s.pricePillTxt}>${defect.quote_price}</Text>
+          <View style={[s.pricePill, { backgroundColor: C.success + '26' }]}>
+            <Text style={[s.pricePillTxt, { color: C.success }]}>${defect.quote_price}</Text>
           </View>
         )}
         <Text style={[s.dateTxt, { color: C.textTertiary }]}>
@@ -118,7 +119,7 @@ function FilterPill({ label, isActive, color, onPress, C }: any) {
       onPress={onPress}
       activeOpacity={0.78}
     >
-      <Text style={[s.filterPillTxt, { color: isActive ? '#FFF' : C.textSecondary }]}>{label}</Text>
+      <Text style={[s.filterPillTxt, { color: isActive ? C.textOnPrimary : C.textSecondary }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -158,15 +159,14 @@ export default function GlobalDefectsScreen() {
         title="All Defects"
         subtitle={`${defects.length} total · ${openCount} open · ${criticalCount} critical`}
         showBack
-        curved
         rightComponent={
           openCount > 0 ? (
-            <View style={[s.openCountBadge, { backgroundColor: 'rgba(220,38,38,0.2)', borderColor: 'rgba(220,38,38,0.4)' }]}>
-              <Text style={s.openCountTxt}>{openCount} OPEN</Text>
+            <View style={[s.openCountBadge, { backgroundColor: C.error + '33', borderColor: C.error + '66' }]}>
+              <Text style={[s.openCountTxt, { color: C.error }]}>{openCount} OPEN</Text>
             </View>
           ) : (
-            <View style={[s.openCountBadge, { backgroundColor: 'rgba(74,222,128,0.2)', borderColor: 'rgba(74,222,128,0.4)' }]}>
-              <Text style={[s.openCountTxt, { color: '#4ADE80' }]}>ALL CLEAR</Text>
+            <View style={[s.openCountBadge, { backgroundColor: C.success + '33', borderColor: C.success + '66' }]}>
+              <Text style={[s.openCountTxt, { color: C.success }]}>ALL CLEAR</Text>
             </View>
           )
         }
@@ -211,7 +211,7 @@ export default function GlobalDefectsScreen() {
         </View>
       ) : filtered.length === 0 ? (
         <View style={s.center}>
-          <Text style={{ fontSize: 44 }}>{defects.length === 0 ? '🎉' : '🔍'}</Text>
+          <MaterialCommunityIcons name={defects.length === 0 ? "party-popper" : "magnify"} size={44} color={C.textTertiary} style={{ marginBottom: 10 }} />
           <Text style={[s.emptyTitle, { color: C.text }]}>
             {defects.length === 0 ? 'No defects on record' : 'No results match filters'}
           </Text>
@@ -264,7 +264,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 10, borderWidth: 1,
   },
-  openCountTxt: { fontSize: 10, fontWeight: '800', color: '#F87171', letterSpacing: 0.5 },
+  openCountTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   filterRow: {
     paddingHorizontal: 16, paddingVertical: 10, gap: 8,
@@ -283,7 +283,6 @@ const s = StyleSheet.create({
   defectRow: {
     borderRadius: 16, borderWidth: 1, borderLeftWidth: 4,
     padding: 14, marginBottom: 10,
-    shadowColor: '#0D1526',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -303,7 +302,7 @@ const s = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaTxt:  { fontSize: 11, flex: 1, maxWidth: 120 },
   pricePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  pricePillTxt: { fontSize: 10, fontWeight: '800', color: '#10B981' },
+  pricePillTxt: { fontSize: 10, fontWeight: '800' },
   dateTxt: { fontSize: 11, marginLeft: 'auto' },
 
   emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 8 },

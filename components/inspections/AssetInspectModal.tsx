@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AssetWithResult } from '@/store/inspectionStore';
 import * as Haptics from 'expo-haptics';
-import { cardShadow } from '@/components/ui/Card';
+import { Card, Button } from '@/components/ui';
 import { DefectSeverity } from '@/constants/Enums';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
@@ -185,9 +185,9 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {/* ── MODAL HEADER ──────────────────────────────────── */}
-          <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16) }]}>
-            <TouchableOpacity onPress={onClose} style={s.headerIconBtn} hitSlop={12}>
-              <MaterialCommunityIcons name="close" size={24} color={C.textSecondary} />
+          <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomColor: C.border, borderBottomWidth: 1 }]}>
+            <TouchableOpacity onPress={onClose} style={[s.headerIconBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border, borderWidth: 1 }]} hitSlop={12}>
+              <MaterialCommunityIcons name="close" size={22} color={C.text} />
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <Text style={[s.headerTitle, { color: C.text }]}>Log Defect</Text>
@@ -202,23 +202,25 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
             showsVerticalScrollIndicator={false}
           >
             {/* ── ASSET INFO BANNER ──────────────────────────── */}
-            <View style={[s.assetBanner, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-              <View style={[s.assetBannerIcon, { backgroundColor: C.errorLight }]}>
-                <MaterialCommunityIcons name="close-circle" size={22} color={C.error} />
+            <Card style={s.assetBanner} padding={14}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[s.assetBannerIcon, { backgroundColor: C.errorLight }]}>
+                  <MaterialCommunityIcons name="close-circle" size={22} color={C.error} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.assetBannerType, { color: C.text }]}>{asset.asset_type}</Text>
+                  <Text style={[s.assetBannerLoc, { color: C.textSecondary }]}>
+                    {asset.location_on_site || 'No location specified'}
+                  </Text>
+                  {asset.serial_number && (
+                    <Text style={[s.assetBannerSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text>
+                  )}
+                </View>
+                <View style={[s.failBadge, { backgroundColor: C.errorLight, borderColor: C.error }]}>
+                  <Text style={[s.failBadgeTxt, { color: C.error }]}>FAILED</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.assetBannerType, { color: C.text }]}>{asset.asset_type}</Text>
-                <Text style={[s.assetBannerLoc, { color: C.textSecondary }]}>
-                  {asset.location_on_site || 'No location specified'}
-                </Text>
-                {asset.serial_number && (
-                  <Text style={[s.assetBannerSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text>
-                )}
-              </View>
-              <View style={[s.failBadge, { backgroundColor: C.errorLight, borderColor: C.error }]}>
-                <Text style={[s.failBadgeTxt, { color: C.error }]}>FAILED</Text>
-              </View>
-            </View>
+            </Card>
 
             {/* ── SEVERITY SELECTOR ──────────────────────────── */}
             <View style={s.formSection}>
@@ -228,29 +230,31 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                   const isActive = severity === sev.value;
                   const colors   = getSeverityColors(sev.value, C);
                   return (
-                    <TouchableOpacity
+                    <Card
                       key={sev.value}
-                      style={[
-                        s.severityCard,
-                        { backgroundColor: isActive ? colors.active : C.surface, borderColor: isActive ? colors.active : C.border },
-                        !isActive && cardShadow,
-                      ]}
+                      style={{
+                        flex: 1,
+                        backgroundColor: isActive ? colors.active : C.backgroundTertiary,
+                        borderColor: isActive ? colors.active : C.border,
+                      }}
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setSeverity(sev.value);
                       }}
-                      activeOpacity={0.75}
+                      padding={12}
                     >
-                      <MaterialCommunityIcons
-                        name={sev.icon as any}
-                        size={20}
-                        color={isActive ? '#FFF' : colors.active}
-                      />
-                      <Text style={[s.severityLabel, { color: isActive ? '#FFF' : C.text }]}>{sev.label}</Text>
-                      <Text style={[s.severityDesc, { color: isActive ? 'rgba(255,255,255,0.75)' : C.textTertiary }]}>
-                        {sev.desc}
-                      </Text>
-                    </TouchableOpacity>
+                      <View style={{ alignItems: 'center', gap: 4 }}>
+                        <MaterialCommunityIcons
+                          name={sev.icon as any}
+                          size={20}
+                          color={isActive ? '#FFF' : colors.active}
+                        />
+                        <Text style={[s.severityLabel, { color: isActive ? '#FFF' : C.text }]}>{sev.label}</Text>
+                        <Text style={[s.severityDesc, { color: isActive ? 'rgba(255,255,255,0.75)' : C.textTertiary }]}>
+                          {sev.desc}
+                        </Text>
+                      </View>
+                    </Card>
                   );
                 })}
               </View>
@@ -267,45 +271,47 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
               )}
 
               {/* Code Library Button */}
-              <TouchableOpacity
-                style={[s.codePickerBtn, { backgroundColor: C.surface, borderColor: selectedCode ? C.primary : C.border }]}
+              <Card
+                style={[s.codePickerBtn, { borderColor: selectedCode ? C.primary : C.border }]}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPickerVisible(true); }}
-                activeOpacity={0.8}
+                padding={14}
               >
-                <View style={[s.codePickerIcon, { backgroundColor: selectedCode ? C.primary + '18' : C.backgroundTertiary }]}>
-                  <MaterialCommunityIcons
-                    name={selectedCode ? 'tag-check-outline' : 'tag-search-outline'}
-                    size={18}
-                    color={selectedCode ? C.primary : C.textSecondary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.codePickerTitle, { color: selectedCode ? C.primary : C.text }]}>
-                    {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from Code Library'}
-                  </Text>
-                  <Text style={[s.codePickerSub, { color: C.textSecondary }]} numberOfLines={1}>
-                    {selectedCode ? selectedCode.description : 'Browse 100+ Uptick defect codes'}
-                  </Text>
-                </View>
-                {/* Price badge */}
-                {suggestedPrice !== null && (
-                  <View style={s.priceBadge}>
-                    <Text style={s.priceBadgeTxt}>${suggestedPrice}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={[s.codePickerIcon, { backgroundColor: selectedCode ? C.primary + '18' : C.backgroundTertiary }]}>
+                    <MaterialCommunityIcons
+                      name={selectedCode ? 'tag-check-outline' : 'tag-search-outline'}
+                      size={18}
+                      color={selectedCode ? C.primary : C.textSecondary}
+                    />
                   </View>
-                )}
-                {/* Clear code */}
-                {selectedCode ? (
-                  <TouchableOpacity
-                    onPress={() => { setSelectedCode(null); setSuggestedPrice(null); }}
-                    hitSlop={8}
-                    style={{ padding: 4 }}
-                  >
-                    <MaterialCommunityIcons name="close-circle" size={18} color={C.textTertiary} />
-                  </TouchableOpacity>
-                ) : (
-                  <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
-                )}
-              </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.codePickerTitle, { color: selectedCode ? C.primary : C.text }]}>
+                      {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from Code Library'}
+                    </Text>
+                    <Text style={[s.codePickerSub, { color: C.textSecondary }]} numberOfLines={1}>
+                      {selectedCode ? selectedCode.description : 'Browse 100+ Uptick defect codes'}
+                    </Text>
+                  </View>
+                  {/* Price badge */}
+                  {suggestedPrice !== null && (
+                    <View style={s.priceBadge}>
+                      <Text style={s.priceBadgeTxt}>${suggestedPrice}</Text>
+                    </View>
+                  )}
+                  {/* Clear code */}
+                  {selectedCode ? (
+                    <TouchableOpacity
+                      onPress={() => { setSelectedCode(null); setSuggestedPrice(null); }}
+                      hitSlop={8}
+                      style={{ padding: 4 }}
+                    >
+                      <MaterialCommunityIcons name="close-circle" size={18} color={C.textTertiary} />
+                    </TouchableOpacity>
+                  ) : (
+                    <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
+                  )}
+                </View>
+              </Card>
 
               {/* Free-text input */}
               <TextInput
@@ -327,7 +333,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                 style={[
                   s.input,
                   s.textArea,
-                  { backgroundColor: C.backgroundTertiary, borderColor: reasonError ? C.error : 'transparent', color: C.text, marginTop: 10 },
+                  { backgroundColor: C.surface, borderColor: reasonError ? C.error : C.border, color: C.text },
                 ]}
               />
             </View>
@@ -341,7 +347,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
               <TextInput
                 style={[
                   s.input, s.textArea,
-                  { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text },
+                  { backgroundColor: C.surface, borderColor: C.border, color: C.text },
                 ]}
                 placeholder="e.g. Extinguisher requires replacement — valve corroded. Order part #FE-205."
                 placeholderTextColor={C.textTertiary}
@@ -417,14 +423,14 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
             </TouchableOpacity>
 
             {/* Save Defect */}
-            <TouchableOpacity
-              style={[s.saveBtn, { backgroundColor: C.error, flex: 1 }]}
-              onPress={handleSave}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons name="alert-circle-check" size={20} color="#FFF" />
-              <Text style={s.saveBtnTxt}>Save Defect</Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Button
+                variant="destructive"
+                title="Save Defect"
+                icon="alert-circle-check"
+                onPress={handleSave}
+              />
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -445,22 +451,18 @@ const s = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 18,
   },
-  headerIconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:   { fontSize: 16, fontWeight: '800' },
-  headerSub:     { fontSize: 12, marginTop: 2, fontWeight: '500' },
+  headerIconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:   { fontSize: 18, fontWeight: '900', letterSpacing: -0.2 },
+  headerSub:     { fontSize: 12, marginTop: 2, fontWeight: '600' },
 
-  scrollContent: { padding: 16, paddingBottom: 48 },
+  scrollContent: { padding: 16, paddingBottom: 130 },
 
   // Asset banner
-  assetBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, borderRadius: 16, borderWidth: 1,
-    marginBottom: 20,
-  },
-  assetBannerIcon:   { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  assetBanner: { marginBottom: 20 },
+  assetBannerIcon:   { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   assetBannerType:   { fontSize: 15, fontWeight: '700' },
   assetBannerLoc:    { fontSize: 12, marginTop: 2 },
   assetBannerSerial: { fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
@@ -485,12 +487,9 @@ const s = StyleSheet.create({
   severityDesc:  { fontSize: 9, textAlign: 'center', letterSpacing: 0.1 },
 
   // Code picker button
-  codePickerBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, borderRadius: 14, borderWidth: 1,
-  },
+  codePickerBtn: { marginBottom: 12 },
   codePickerIcon: {
-    width: 38, height: 38, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
   },
   codePickerTitle: { fontSize: 13, fontWeight: '700' },
@@ -508,10 +507,10 @@ const s = StyleSheet.create({
   // Input
   input: {
     borderWidth: 1, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 13,
-    fontSize: 15, lineHeight: 22,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 14, fontWeight: '500',
   },
-  textArea: { minHeight: 80, paddingTop: 13, textAlignVertical: 'top' },
+  textArea: { minHeight: 80, paddingTop: 12, textAlignVertical: 'top' },
 
   // Photos
   photoHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -536,16 +535,14 @@ const s = StyleSheet.create({
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', gap: 12,
-    padding: 16, paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+    padding: 20, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
-  saveBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 54 },
-  saveBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
   replaceBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, height: 54, borderWidth: 1, paddingHorizontal: 16,
+    borderRadius: 10, height: 48, borderWidth: 1, paddingHorizontal: 16,
   },
-  replaceBtnTxt: { fontSize: 15, fontWeight: '800' },
+  replaceBtnTxt: { fontSize: 14, fontWeight: '700' },
 });

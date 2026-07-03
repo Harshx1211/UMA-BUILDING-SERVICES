@@ -1,37 +1,56 @@
-// components/ui/EmptyState.tsx
+/**
+ * EmptyState — uniform empty state used across every zero-data screen.
+ *
+ * Rules:
+ *  - No emoji. A muted MaterialCommunityIcons icon only.
+ *  - Title in Typography.cardTitle (sentence case, not all-caps).
+ *  - Subtitle in Typography.body.
+ *  - CTA button uses Button variant="primary" if provided.
+ *
+ * Usage:
+ *   <EmptyState
+ *     icon="calendar-blank-outline"
+ *     title="No jobs scheduled today"
+ *     subtitle="Your queue is clear. Pull to refresh."
+ *   />
+ */
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useColors } from '@/hooks/useColors';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { T } from '@/constants/Colors';
+import { Typography } from '@/constants/Typography';
+import { Button } from './Button';
 
-interface Props {
-  emoji: string;
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+interface EmptyStateProps {
+  icon: MCIconName;
   title: string;
   subtitle?: string;
   actionLabel?: string;
   onAction?: () => void;
 }
 
-export function EmptyState({ emoji, title, subtitle, actionLabel, onAction }: Props) {
-  const C = useColors();
+export function EmptyState({ icon, title, subtitle, actionLabel, onAction }: EmptyStateProps) {
   return (
     <View style={styles.wrap}>
-      {/* Orange-tinted icon container */}
-      <View style={[styles.emojiContainer, { backgroundColor: C.accent + '10', borderColor: C.accent + '28', borderWidth: 1.5 }]}>
-        <Text style={styles.emoji}>{emoji}</Text>
+      <View style={styles.iconWrap}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={32}
+          color={T.textMuted}
+        />
       </View>
-      <Text style={[styles.title, { color: C.text }]}>{title}</Text>
-      {subtitle ? (
-        <Text style={[styles.subtitle, { color: C.textSecondary }]}>{subtitle}</Text>
-      ) : null}
+      <Text style={styles.title}>{title}</Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {actionLabel && onAction ? (
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: C.accent }]}
+        <Button
+          title={actionLabel}
           onPress={onAction}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionText}>{actionLabel}</Text>
-        </TouchableOpacity>
+          size="small"
+          style={styles.cta}
+        />
       ) : null}
     </View>
   );
@@ -41,46 +60,32 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 56,
-    paddingHorizontal: 32,
-    gap: 6,
+    paddingVertical: T.space32 + T.space16,
+    paddingHorizontal: T.space32,
+    gap: T.space8,
   },
-  emojiContainer: {
-    width: 84,
-    height: 84,
-    borderRadius: 24,
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: T.radiusCard,
+    backgroundColor: T.iconBg(T.textMuted),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-  },
-  emoji: {
-    fontSize: 40,
-    lineHeight: 48,
+    marginBottom: T.space8,
   },
   title: {
-    fontSize: 17,
-    fontWeight: '800',
-    marginTop: 4,
+    ...Typography.cardTitle,
+    color: T.textPrimary,
     textAlign: 'center',
-    letterSpacing: -0.2,
   },
   subtitle: {
-    fontSize: 13,
-    marginTop: 6,
+    ...Typography.body,
+    color: T.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    paddingHorizontal: 8,
+    paddingHorizontal: T.space8,
   },
-  actionBtn: {
-    marginTop: 20,
-    borderRadius: 10,
-    height: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  cta: {
+    marginTop: T.space16,
   },
 });

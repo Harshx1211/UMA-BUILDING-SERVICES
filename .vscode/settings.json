@@ -14,5 +14,9 @@
   "java.project.referencedLibraries": [],
   "files.watcherExclude": {
     "**/node_modules/**": true
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "search.exclude": {
+    "**/node_modules": true
   }
 }

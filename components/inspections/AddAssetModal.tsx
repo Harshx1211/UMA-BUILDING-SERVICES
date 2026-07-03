@@ -9,9 +9,9 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { cardShadow } from '@/components/ui/Card';
+import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
-import { insertRecord, addToSyncQueue } from '@/lib/database';
+import { upsertRecord, addToSyncQueue } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import type { Asset } from '@/types';
@@ -53,9 +53,12 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const routine   = useMemo(() => typeDef?.inspectionRoutine ?? '', [typeDef]);
 
   const filteredVariants = useMemo(() => {
-    if (!variantSearch.trim()) return variants;
-    const q = variantSearch.toLowerCase();
-    return variants.filter(v => v.toLowerCase().includes(q));
+    let arr = variants;
+    if (variantSearch.trim()) {
+      const q = variantSearch.toLowerCase();
+      arr = arr.filter(v => v.toLowerCase().includes(q));
+    }
+    return Array.from(new Set(arr));
   }, [variants, variantSearch]);
 
   // ── Reset ─────────────────────────────────────────────────────
@@ -96,10 +99,17 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   };
 
   const handleBack = () => {
-    if (step === 'variant') setStep('type');
-    else if (step === 'details') {
-      if (variants.length > 0) setStep('variant');
-      else setStep('type');
+    if (step === 'variant') {
+      setStep('type');
+      setSelectedType('');
+    } else if (step === 'details') {
+      if (variants.length > 0) {
+        setStep('variant');
+        setSelectedVariant('');
+      } else {
+        setStep('type');
+        setSelectedType('');
+      }
     }
   };
 
@@ -140,7 +150,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           status:           AssetStatus.Active,
           created_at:       now,
         };
-        insertRecord('assets', payload as any);
+        upsertRecord('assets', payload as any);
         addToSyncQueue('assets', id, SyncOperation.Insert, payload as any);
         created.push(payload as unknown as Asset);
       }
@@ -170,18 +180,18 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       <View style={[s.container, { backgroundColor: C.background }]}>
 
         {/* ── HEADER ── */}
-        <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16) }]}>
-          <TouchableOpacity onPress={step === 'type' ? handleClose : handleBack} style={s.headerIconBtn} hitSlop={12}>
+        <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomWidth: 1, borderBottomColor: C.border }]}>
+          <TouchableOpacity onPress={step === 'type' ? handleClose : handleBack} style={[s.headerIconBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]} hitSlop={12}>
             <MaterialCommunityIcons
               name={step === 'type' ? 'close' : 'arrow-left'}
-              size={24} color={C.textSecondary}
+              size={22} color={C.text}
             />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[s.headerTitle, { color: C.text }]}>{stepTitle}</Text>
             <Text style={[s.headerSub, { color: C.textTertiary }]} numberOfLines={1}>{stepSub}</Text>
           </View>
-          <View style={{ width: 44 }} />
+          <View style={{ width: 40 }} />
         </View>
 
         {/* ── STEP INDICATORS ── */}
@@ -195,9 +205,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 const isActive = step === s2;
                 return (
                   <View key={s2} style={s.stepItem}>
-                    <View style={[s.stepDot, { backgroundColor: isActive ? C.primary : isDone ? C.success : C.border }]}>
+                    <View style={[s.stepDot, { backgroundColor: isActive ? C.primary : isDone ? C.success : C.backgroundTertiary, borderColor: isActive ? C.primary : isDone ? C.success : C.border, borderWidth: 1 }]}>
                       {isDone
-                        ? <MaterialCommunityIcons name="check" size={10} color="#fff" />
+                        ? <MaterialCommunityIcons name="check" size={12} color="#fff" />
                         : <Text style={[s.stepNum, { color: isActive ? '#fff' : C.textTertiary }]}>{i + 1}</Text>
                       }
                     </View>
@@ -222,27 +232,29 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
             )}
             <View style={s.typeGrid}>
               {assetTypes.map(t => (
-                <TouchableOpacity
+                <Card
                   key={t.value}
-                  style={[s.typeCard, {
-                    backgroundColor: selectedType === t.value ? t.color : C.surface,
-                    borderColor: selectedType === t.value ? t.color : C.border,
-                  }, selectedType !== t.value && cardShadow]}
-                  onPress={() => handleTypeSelect(t.value)}
-                  activeOpacity={0.75}
+                  style={[s.typeCard, selectedType === t.value ? { borderColor: t.color, backgroundColor: t.color + '15' } : {}]}
+                  noPadding
                 >
-                  <View style={[s.typeIconWrap, {
-                    backgroundColor: selectedType === t.value ? 'rgba(255,255,255,0.2)' : t.color + '18',
-                  }]}>
-                    <MaterialCommunityIcons name={t.icon} size={26} color={selectedType === t.value ? '#fff' : t.color} />
-                  </View>
-                  <Text style={[s.typeLabel, { color: selectedType === t.value ? '#fff' : C.text }]}>{t.label}</Text>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={14}
-                    color={selectedType === t.value ? 'rgba(255,255,255,0.7)' : C.textTertiary}
-                  />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.typeCardTouch}
+                    onPress={() => handleTypeSelect(t.value)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[s.typeIconWrap, {
+                      backgroundColor: selectedType === t.value ? t.color : C.backgroundTertiary,
+                    }]}>
+                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? '#fff' : t.color} />
+                    </View>
+                    <Text style={[s.typeLabel, { color: selectedType === t.value ? t.color : C.text }]}>{t.label}</Text>
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={16}
+                      color={C.textTertiary}
+                    />
+                  </TouchableOpacity>
+                </Card>
               ))}
             </View>
           </ScrollView>
@@ -260,7 +272,6 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 placeholderTextColor={C.textTertiary}
                 value={variantSearch}
                 onChangeText={setVariantSearch}
-                autoFocus
               />
               {variantSearch.length > 0 && (
                 <TouchableOpacity onPress={() => setVariantSearch('')} hitSlop={8}>
@@ -276,19 +287,18 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               renderItem={({ item }) => {
                 const isSelected = selectedVariant === item;
                 return (
-                  <TouchableOpacity
-                    style={[s.variantRow, {
-                      backgroundColor: isSelected ? C.primary + '12' : 'transparent',
-                      borderBottomColor: C.border,
-                    }]}
-                    onPress={() => handleVariantSelect(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[s.variantTxt, { color: isSelected ? C.primary : C.text, fontWeight: isSelected ? '700' : '500' }]}>
-                      {item}
-                    </Text>
-                    {isSelected && <MaterialCommunityIcons name="check" size={18} color={C.primary} />}
-                  </TouchableOpacity>
+                  <Card key={item} style={[s.variantRow, isSelected ? { borderColor: C.primary, backgroundColor: C.primary + '15' } : {}]} noPadding>
+                    <TouchableOpacity
+                      style={s.variantTouch}
+                      onPress={() => handleVariantSelect(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.variantTxt, { color: isSelected ? C.primary : C.text, fontWeight: isSelected ? '800' : '600' }]}>
+                        {item}
+                      </Text>
+                      {isSelected && <MaterialCommunityIcons name="check" size={20} color={C.primary} />}
+                    </TouchableOpacity>
+                  </Card>
                 );
               }}
               ListEmptyComponent={
@@ -318,24 +328,20 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
             >
             {/* Inspection Routine (read-only) */}
             {routine ? (
-              <View style={[s.routineBox, { backgroundColor: C.primary + '12', borderColor: C.primary + '30' }]}>
-                <MaterialCommunityIcons name="calendar-check" size={15} color={C.primary} />
+              <Card variant="info" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+                <MaterialCommunityIcons name="calendar-check" size={18} color={C.info} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.routineLabel, { color: C.primary }]}>INSPECTION ROUTINE</Text>
+                  <Text style={[s.routineLabel, { color: C.info }]}>INSPECTION ROUTINE</Text>
                   <Text style={[s.routineValue, { color: C.text }]}>{routine}</Text>
                 </View>
-              </View>
+              </Card>
             ) : null}
 
-            <Text style={[s.sectionTitle, { color: C.textSecondary }]}>Core Details</Text>
-            <View style={[s.formCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-
+            <Card style={s.formCard} noPadding>
+              <View style={{ padding: 16 }}>
             {/* Location */}
             <View style={s.field}>
-              <Text style={[s.fieldLabel, { color: C.text }]}>Location on Site *</Text>
-              <Text style={[s.fieldHint, { color: C.textTertiary }]}>
-                Where is this asset physically located? e.g. &quot;13-roof adj rain water tank&quot;
-              </Text>
+              <Text style={[s.fieldLabel, { color: C.text }]}>Location on Site <Text style={{color: C.primary}}>*</Text></Text>
               {errors.location && (
                 <View style={[s.errorRow, { backgroundColor: C.errorLight, borderColor: C.error }]}>
                   <MaterialCommunityIcons name="alert-circle" size={13} color={C.error} />
@@ -344,7 +350,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               )}
               <TextInput
                 style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
-                placeholder="e.g. Level 2 – near lift bank"
+                placeholder="Location on site..."
                 placeholderTextColor={C.textTertiary}
                 value={location}
                 onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
@@ -353,13 +359,10 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
 
             {/* Ref */}
             <View style={s.field}>
-              <Text style={[s.fieldLabel, { color: C.text }]}>Ref (Asset Reference)</Text>
-              <Text style={[s.fieldHint, { color: C.textTertiary }]}>
-                Short reference number for this asset at the site. e.g. &quot;001&quot;, &quot;040&quot;
-              </Text>
+              <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
               <TextInput
                 style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                placeholder="e.g. 001"
+                placeholder="Reference code..."
                 placeholderTextColor={C.textTertiary}
                 value={assetRef}
                 onChangeText={setAssetRef}
@@ -368,30 +371,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               />
             </View>
 
-            {/* Notes */}
-            <View style={[s.field, { marginBottom: 0 }]}>
-              <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
-              <TextInput
-                style={[s.input, s.textArea, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
-                placeholder="Condition, age, additional info…"
-                placeholderTextColor={C.textTertiary}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-
-          <Text style={[s.sectionTitle, { color: C.textSecondary, marginTop: 4 }]}>Specification</Text>
-          <View style={[s.formCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-
-            {/* Quantity */}
             <View style={s.field}>
               <Text style={[s.fieldLabel, { color: C.text }]}>Quantity</Text>
-              <Text style={[s.fieldHint, { color: C.textTertiary }]}>
-                Adding multiple identical assets in the same area?
-              </Text>
               <View style={s.qtyRow}>
                 <TouchableOpacity
                   style={[s.qtyBtn, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent' }]}
@@ -418,9 +399,6 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
             {quantity === 1 && (
               <View style={s.field}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Base Date</Text>
-                <Text style={[s.fieldHint, { color: C.textTertiary }]}>
-                  Original install / commission date. Leave blank to use today.
-                </Text>
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                   placeholder="YYYY-MM-DD"
@@ -435,14 +413,11 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
 
             {/* Serial number (single asset only) */}
             {quantity === 1 && (
-              <View style={[s.field, { marginBottom: 0 }]}>
+              <View style={s.field}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
-                <Text style={[s.fieldHint, { color: C.textTertiary }]}>
-                  Found on the asset tag or compliance label.
-                </Text>
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                  placeholder="e.g. FE-20240415-0042"
+                  placeholder="Serial number or barcode..."
                   placeholderTextColor={C.textTertiary}
                   value={serialNumber}
                   onChangeText={setSerialNumber}
@@ -450,7 +425,21 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 />
               </View>
             )}
-          </View>
+            {/* Notes */}
+            <View style={[s.field, { marginBottom: 0 }]}>
+              <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
+              <TextInput
+                style={[s.input, s.textArea, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
+                placeholder="Condition, age, notes..."
+                placeholderTextColor={C.textTertiary}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+              </View>
+            </Card>
 
             {/* Spacer for bottom bar */}
             <View style={{ height: 16 }} />
@@ -458,21 +447,17 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
 
           {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
           <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-            <TouchableOpacity style={s.cancelBtn} onPress={handleClose} hitSlop={10}>
-              <Text style={[s.cancelBtnTxt, { color: C.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[s.saveBtn, { backgroundColor: C.primary }]}
-              onPress={handleSave}
-              disabled={isSaving}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#FFF" />
-              <Text style={s.saveBtnTxt}>
-                {isSaving ? 'Saving…' : quantity === 1 ? 'Add Asset' : `Add ${quantity} Assets`}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Button variant="secondary" title="Cancel" onPress={handleClose} />
+            </View>
+            <View style={{ flex: 2 }}>
+              <Button 
+                title={isSaving ? 'Saving…' : quantity === 1 ? 'Add Asset' : `Add ${quantity} Assets`} 
+                icon="check-circle" 
+                onPress={handleSave} 
+                disabled={isSaving} 
+              />
+            </View>
           </View>
         </View>
         )}
@@ -487,29 +472,37 @@ const s = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 18,
   },
-  headerIconBtn:  { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:    { fontSize: 16, fontWeight: '800' },
-  headerSub:      { fontSize: 12, marginTop: 2, fontWeight: '500' },
+  headerIconBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, color: '#FFF' },
+  headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
 
   // Step indicators
-  stepBar:    { flexDirection: 'row', paddingVertical: 12, paddingHorizontal: 24, borderBottomWidth: 1, justifyContent: 'space-around' },
-  stepItem:   { alignItems: 'center', gap: 4 },
-  stepDot:    { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  stepNum:    { fontSize: 11, fontWeight: '800' },
-  stepLabel:  { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  stepBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 1, justifyContent: 'space-between' },
+  stepItem:   { alignItems: 'center', gap: 6, flex: 1 },
+  stepDot:    { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  stepNum:    { fontSize: 11, fontWeight: '900' },
+  stepLabel:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
 
   // Type grid
-  typeScroll: { padding: 16, paddingBottom: 48 },
+  typeScroll: { padding: 16, paddingBottom: 40 },
   typeGrid:   { gap: 10 },
   typeCard: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 16, borderRadius: 16, borderWidth: 1, gap: 14,
+    gap: 14,
   },
-  typeIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  typeLabel:    { flex: 1, fontSize: 14, fontWeight: '700', lineHeight: 20 },
+  typeCardTouch: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, gap: 14, flex: 1,
+  },
+  typeIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  typeLabel:    { flex: 1, fontSize: 15, fontWeight: '800', letterSpacing: -0.1 },
 
   // Variant list
   searchBar: {
@@ -517,50 +510,55 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, gap: 10,
   },
-  searchInput:    { flex: 1, fontSize: 15, padding: 0 },
-  variantRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
-  variantTxt:     { flex: 1, fontSize: 15 },
-  emptyVariant:   { padding: 32, alignItems: 'center' },
-  skipBtn:        { borderTopWidth: 1, padding: 16, alignItems: 'center' },
-  skipTxt:        { fontSize: 13 },
+  searchInput: { flex: 1, fontSize: 15, fontWeight: '600', padding: 0 },
+  variantRow: {
+    marginHorizontal: 16, marginVertical: 4,
+  },
+  variantTouch: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  variantTxt:   { flex: 1, fontSize: 15, letterSpacing: -0.1 },
+  emptyVariant: { padding: 40, alignItems: 'center' },
+  skipBtn:      { borderTopWidth: 1, padding: 18, alignItems: 'center' },
+  skipTxt:      { fontSize: 13, fontWeight: '700' },
 
   // Details
-  detailsScroll: { padding: 16, paddingBottom: 48, gap: 4 },
+  detailsScroll: { padding: 16, paddingBottom: 100, gap: 6 },
 
-  routineBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
-  routineLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
-  routineValue: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  routineLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  routineValue: { fontSize: 14, fontWeight: '700', lineHeight: 20 },
 
-  sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4 },
-  formCard:     { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 20 },
+  sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
+  formCard:     { marginBottom: 16 },
 
-  field:      { marginBottom: 16 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
-  fieldHint:  { fontSize: 11, lineHeight: 16, marginBottom: 10 },
+  field:      { marginBottom: 18 },
+  fieldLabel: { fontSize: 13, fontWeight: '800', marginBottom: 6, letterSpacing: -0.1 },
+  fieldHint:  { fontSize: 12, lineHeight: 17, marginBottom: 10, fontWeight: '500' },
 
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 9, borderRadius: 8, borderWidth: 1, marginBottom: 10 },
-  errorTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 10 },
+  errorTxt: { fontSize: 12, fontWeight: '800', flex: 1 },
 
-  input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
-  textArea: { minHeight: 90, paddingTop: 13 },
+  input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
+  textArea: { minHeight: 80, paddingTop: 12 },
 
-  qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  qtyBtn:    { width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  qtyDisplay:{ flex: 1, borderWidth: 1, borderRadius: 12, alignItems: 'center', paddingVertical: 10, gap: 2 },
-  qtyValue:  { fontSize: 24, fontWeight: '800' },
-  qtyUnit:   { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
+  qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  qtyBtn:    { width: 40, height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  qtyDisplay:{ flex: 1, flexDirection: 'row', borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 40, gap: 6 },
+  qtyValue:  { fontSize: 16, fontWeight: '800' },
+  qtyUnit:   { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
 
   // Bottom action bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    padding: 16, paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 20, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   },
-  saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 54 },
-  saveBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
-  cancelBtn:  { paddingHorizontal: 8 },
-  cancelBtnTxt: { fontSize: 15, fontWeight: '700' },
+  saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, height: 54 },
+  saveBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  cancelBtn:  { paddingHorizontal: 12 },
+  cancelBtnTxt: { fontSize: 15, fontWeight: '800' },
 });

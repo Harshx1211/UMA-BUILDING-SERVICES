@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi } from '@/lib/admin-api';
+import { adminApi, adminRead } from '@/lib/admin-api';
 import { Plus, Pencil, Trash2, X, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -18,12 +18,12 @@ export default function InventoryTab() {
   const [delTarget, setDelTarget] = useState<any>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('inventory_items').select('*').order('name');
+    const { data } = await adminRead('inventory_items', { order: { column: 'name' } });
     setRows(data ?? []);
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line
   useEffect(() => { load(); }, [load]);
 
   const openAdd  = () => { setEditing(null); setForm({ ...EMPTY }); setShowModal(true); };
@@ -37,7 +37,7 @@ export default function InventoryTab() {
     
     if (!cleanName) { toast.error('Name is required'); return; }
     
-    let parsedPrice = Number(form.price);
+    const parsedPrice = Number(form.price);
     if (isNaN(parsedPrice) || parsedPrice < 0) {
       toast.error('Unit Price must be a valid positive number');
       return;
@@ -89,7 +89,7 @@ export default function InventoryTab() {
             <Package size={24} style={{ color: 'var(--text-tertiary)' }} />
           </div>
           <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>No inventory items yet</p>
-          <p className="text-sm mb-4" style={{ color: 'var(--text-tertiary)' }}>Add items here — they'll appear as line items when creating quotes</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-tertiary)' }}>Add items here — they&apos;ll appear as line items when creating quotes</p>
           <button onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white"
             style={{ background: 'linear-gradient(135deg,#1B2D4F,#243a65)' }}>

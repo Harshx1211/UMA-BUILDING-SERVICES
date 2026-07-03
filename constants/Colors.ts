@@ -1,122 +1,182 @@
-// UMA BUILDING SERVICES — design token palette
-//
-// Color philosophy:
-//   Dark  → Rich navy blues from the field app prototype  (#0F1E3C base)
-//   Light → Clean white/slate for admin/web surfaces
-//
-// The accent (#E8650A) and status greens/reds are identical in both modes
-// so PASS/FAIL/status badges look consistent regardless of color scheme.
+/**
+ * SiteTrack — Single Design Token Source of Truth
+ *
+ * SiteTrack is a dark-only field service app. There is no light mode.
+ * useColors() always returns this palette.
+ *
+ * Rule: Every color in the app must trace back to one of these tokens.
+ * No hardcoded hex values outside this file — ever.
+ */
 
+// ─── Raw Palette (do not use these directly in components) ────────────────────
+const palette = {
+  navy900: '#0A1525',
+  navy800: '#0F1E3C',
+  navy700: '#162338',
+  navy600: '#1B2D4F',
+  navy500: '#243759',
+  navy400: '#2D4068',
+  navy300: '#3D5280',
+
+  orange500: '#E8650A',
+  orange400: '#F07020',
+
+  slate400: '#94A3B8',
+  slate300: '#CBD5E1',
+  slate200: '#E2E8F0',
+
+  white:     '#FFFFFF',
+
+  green600:  '#16A34A',
+  green900:  '#14532D',
+  greenBg:   'rgba(22,163,74,0.15)',
+
+  amber600:  '#D97706',
+  amber900:  '#92400E',
+  amberBg:   'rgba(217,119,6,0.15)',
+
+  red600:    '#DC2626',
+  red900:    '#991B1B',
+  redBg:     'rgba(220,38,38,0.15)',
+
+  blue600:   '#2563EB',
+  blueBg:    'rgba(37,99,235,0.12)',
+};
+
+// ─── Semantic Tokens (use ONLY these in all components/screens) ───────────────
+export const T = {
+  // ── Backgrounds ──────────────────────────────────────────────────────────
+  /** App root background — deep navy */
+  background:        palette.navy800,
+  /** Card / container surface — slightly elevated above background */
+  surface:           palette.navy700,
+  /** Elevated modals / bottom sheets */
+  surfaceElevated:   palette.navy500,
+  /** Input fields, chips, pill backgrounds */
+  surfaceInput:      palette.navy500,
+
+  // ── Borders ──────────────────────────────────────────────────────────────
+  /** Default subtle border for cards, inputs */
+  border:            palette.navy400,
+  /** Slightly stronger border for focused inputs */
+  borderStrong:      palette.navy300,
+
+  // ── Text (3 tiers only — use nothing else) ───────────────────────────────
+  /** Primary text — highest contrast, headings and values */
+  textPrimary:       palette.white,
+  /** Secondary text — body copy, descriptions */
+  textSecondary:     palette.slate300,
+  /** Muted text — labels, timestamps, eyebrows, placeholders */
+  textMuted:         palette.slate400,
+
+  // ── Brand / Primary Action ────────────────────────────────────────────────
+  /**
+   * Orange — RESERVED for:
+   * - Primary CTA buttons only ("Start Job", "Save", "Complete")
+   * - The single active-state indicator (tab bar, focused input highlight)
+   * Do NOT use for icons, decoration, or stat numbers.
+   */
+  primary:           palette.orange500,
+  primaryPressed:    palette.orange400,
+
+  // ── Status Colors (strictly semantic — one purpose each) ─────────────────
+  /** Green — completed / passed / positive states only */
+  success:           palette.green600,
+  successBg:         palette.greenBg,
+  successDark:       palette.green900,
+
+  /** Amber — pending / attention / warning states only */
+  warning:           palette.amber600,
+  warningBg:         palette.amberBg,
+  warningDark:       palette.amber900,
+
+  /**
+   * Red — hazards / failed inspections / destructive actions only
+   * (formerly "error" — renamed for semantic clarity)
+   */
+  danger:            palette.red600,
+  dangerBg:          palette.redBg,
+  dangerDark:        palette.red900,
+
+  /**
+   * Blue — navigation links and info-only banners only.
+   * Do NOT use for badges, icon backgrounds, or decoration.
+   */
+  info:              palette.blue600,
+  infoBg:            palette.blueBg,
+
+  // ── Spacing Scale (export for shared usage) ───────────────────────────────
+  space4:   4,
+  space8:   8,
+  space12:  12,
+  space16:  16,
+  space24:  24,
+  space32:  32,
+
+  // ── Radius Scale ─────────────────────────────────────────────────────────
+  /** Cards, info blocks, list containers */
+  radiusCard:    16,
+  /** Buttons, text inputs */
+  radiusButton:  10,
+  /** Chips, status pills — fully rounded */
+  radiusPill:    999,
+
+  // ── Icon Tint Rule ────────────────────────────────────────────────────────
+  /**
+   * Icon circle background = iconColor at 15% opacity.
+   * Applied uniformly everywhere an icon sits in a circle bg.
+   * Usage: { backgroundColor: T.iconBg(T.textMuted) }
+   */
+  iconBg: (color: string) => color + '26', // 26 hex = 15% opacity
+} as const;
+
+// Keep Colors.dark as an alias so useColors() keeps working without changes
 const Colors = {
-  light: {
-    // Brand
-    primary:        '#1B2D4F',       // Deep Navy
-    primaryLight:   '#253D6B',       // Lighter navy for hover/active
-    primaryDark:    '#0F1D35',       // Darkest navy for pressed
-    accent:         '#E8650A',       // UMA orange — precise, not garish
-    accentLight:    '#F07D28',       // Lighter orange
-    accentDark:     '#C4540A',       // Darker orange for text on light bg
-
-    // Backgrounds
-    background:           '#F4F6FA', // Slightly blue-tinted white
-    backgroundSecondary:  '#EDF0F7',
-    backgroundTertiary:   '#E4E8F2', // Inputs, chips
-    surface:              '#FFFFFF', // Pure white cards
-    surfaceElevated:      '#FAFBFE',
-    cardBorder:           'rgba(27, 45, 79, 0.09)',
-
-    // Text
-    text:           '#0D1526',       // Near-black with navy hue
-    textSecondary:  '#44546A',       // Slate — readable secondary
-    textTertiary:   '#8898AA',       // Muted — labels, timestamps
-    textInverse:    '#FFFFFF',
-    textOnPrimary:  '#FFFFFF',
-    textOnAccent:   '#FFFFFF',
-
-    // Borders
-    border:         '#DCE3EE',
-    borderStrong:   '#C4CEDF',
-
-    // Status
-    success:        '#16A34A',
-    successLight:   '#DCFCE7',
-    successDark:    '#14532D',
-    warning:        '#D97706',
-    warningLight:   '#FEF3C7',
-    warningDark:    '#92400E',
-    error:          '#DC2626',
-    errorLight:     '#FEE2E2',
-    errorDark:      '#991B1B',
-    info:           '#2563EB',
-    infoLight:      '#DBEAFE',
-    infoDark:       '#1E3A8A',
-
-    // Misc
-    tint:           '#1B2D4F',
-    icon:           '#44546A',
-    tabIconDefault: '#8898AA',
-    tabIconSelected:'#1B2D4F',
-    shadow:         'rgba(13, 21, 38, 0.10)',
-    overlay:        'rgba(0, 0, 0, 0.5)',
-  },
-
   dark: {
-    // ── Palette sourced from the Project Work prototype (Config.ts) ──────
-    // primary = '#0F1E3C' navy, surface = '#182745', border = '#2D4068'
-    // These richer navy blues look more "field app" than plain near-black.
+    primary:             T.primary,
+    primaryLight:        T.primaryPressed,
+    primaryDark:         palette.navy600,
+    accent:              T.primary,           // alias — screens using C.accent get orange
+    accentLight:         T.primaryPressed,
+    accentDark:          T.primary,
 
-    // Brand
-    primary:        '#0F1E3C',       // Deep navy — matches prototype
-    primaryLight:   '#243759',       // Light navy card backgrounds
-    primaryDark:    '#0A1628',       // Darkest navy for pressed states
-    accent:         '#E8650A',       // UMA orange — identical to light mode
-    accentLight:    '#FF7A20',       // Prototype's accentSoft
-    accentDark:     '#C4540A',
+    background:          T.background,
+    backgroundSecondary: palette.navy700,
+    backgroundTertiary:  T.surfaceInput,
+    surface:             T.surface,
+    surfaceElevated:     T.surfaceElevated,
+    cardBorder:          T.border,
 
-    // Backgrounds
-    background:           '#0F1E3C', // Deep navy — prototype primary
-    backgroundSecondary:  '#1A2E52', // Prototype primaryMid
-    backgroundTertiary:   '#243759', // Prototype primaryLight
-    surface:              '#182745', // Prototype surface — card backgrounds
-    surfaceElevated:      '#1F3057', // Slightly elevated cards
-    cardBorder:           'rgba(255,255,255,0.06)',
+    text:                T.textPrimary,
+    textSecondary:       T.textSecondary,
+    textTertiary:        T.textMuted,
+    textInverse:         palette.navy800,
+    textOnPrimary:       palette.white,
+    textOnAccent:        palette.white,
 
-    // Text
-    text:           '#FFFFFF',       // Prototype textLight
-    textSecondary:  '#CBD5E1',       // Prototype textBody
-    textTertiary:   '#94A3B8',       // Prototype textMuted
-    textInverse:    '#0F1E3C',
-    textOnPrimary:  '#FFFFFF',
-    textOnAccent:   '#FFFFFF',
+    border:              T.border,
+    borderStrong:        T.borderStrong,
 
-    // Borders
-    border:         '#2D4068',       // Prototype border — subtle
-    borderStrong:   '#3A5280',
+    success:             T.success,
+    successLight:        T.successBg,
+    successDark:         T.successDark,
+    warning:             T.warning,
+    warningLight:        T.warningBg,
+    warningDark:         T.warningDark,
+    error:               T.danger,
+    errorLight:          T.dangerBg,
+    errorDark:           T.dangerDark,
+    info:                T.info,
+    infoLight:           T.infoBg,
+    infoDark:            '#1E3A8A',
 
-    // Status — match prototype exactly for PASS/FAIL/status badges
-    success:        '#16A34A',
-    successLight:   'rgba(22,163,74,0.15)',
-    successDark:    '#14532D',
-    warning:        '#D97706',
-    warningLight:   'rgba(217,119,6,0.15)',
-    warningDark:    '#92400E',
-    error:          '#DC2626',
-    errorLight:     'rgba(220,38,38,0.15)',
-    errorDark:      '#991B1B',
-    info:           '#2563EB',
-    infoLight:      'rgba(37,99,235,0.15)',
-    infoDark:       '#1E3A8A',
-
-    // Misc
-    tint:           '#E8650A',
-    icon:           '#94A3B8',
-    tabIconDefault: '#2D4068',
-    tabIconSelected:'#E8650A',
-    shadow:         'rgba(0, 0, 0, 0.6)',
-    overlay:        'rgba(0,0,0,0.55)',  // Prototype overlay
+    tint:                T.primary,
+    icon:                T.textSecondary,
+    tabIconDefault:      T.border,
+    tabIconSelected:     T.primary,
+    shadow:              'rgba(0, 0, 0, 0.6)',
+    overlay:             'rgba(0, 0, 0, 0.6)',
   },
 };
 
 export default Colors;
-export type ColorScheme = keyof typeof Colors;
-export type ColorToken = keyof typeof Colors.light;

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from './supabase-admin';
+import { NextRequest } from 'next/server';
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -29,25 +30,29 @@ export async function createClient() {
   );
 }
 
-// Helper to reliably check if the logged-in user is a superadmin
-export async function verifySuperAdmin(): Promise<boolean> {
+/**
+ * Verifies a superadmin request using a Bearer token from the Authorization header.
+ * This is reliable regardless of cookie state.
+ */
+export async function verifySuperAdmin(req: NextRequest): Promise<boolean> {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    // 1. Extract Bearer token from Authorization header
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return false;
 
-    // Fetch the user from super_admins table
-    const { data: profile, error } = await supabaseAdmin
+    // 2. Verify token and get user via service role (most reliable method)
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) return false;
+
+    // 3. Check super_admins table
+    const { data: superRow } = await supabaseAdmin
       .from('super_admins')
       .select('id')
       .eq('id', user.id)
       .maybeSingle();
-      
-    if (error) {
-      console.error('[supabase-server] Error checking super_admins:', error);
-    }
 
-    return !!profile;
+    return !!superRow;
   } catch (err) {
     console.error('[supabase-server] verifySuperAdmin error:', err);
     return false;

@@ -22,6 +22,9 @@
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 import {
   getJobById,
@@ -46,6 +49,7 @@ import {
 import { buildReportHtml, ReportData, AssetWithResult } from '@/lib/reportTemplate';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -57,7 +61,8 @@ export type ReportStage =
   | 'building_html'
   | 'generating_pdf'
   | 'uploading'
-  | 'sharing';
+  | 'sharing'
+  | 'cached';
 
 // ─── Image size presets ────────────────────────────────────────────────────────
 // CSS sizes in reportTemplate.ts:
@@ -80,7 +85,8 @@ const MAX_ENCODED_PHOTOS = 60;
 // gives ~4-5x speedup over sequential with no quality change.
 const ENCODE_CONCURRENCY = 5;
 
-const PDF_TIMEOUT_MS = 90_000;
+const PDF_TIMEOUT_MS       = 90_000;
+const PDF_STAMP_TIMEOUT_MS = 30_000;
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -93,21 +99,18 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
+// Minify HTML removed: the regex replacement was aggressively stripping spaces
+// and corrupting the base64 data URIs and CSS blocks, causing 200x zoom and broken images.
 function minifyHtml(html: string): string {
-  return html
-    // 1. Strip HTML comments
-    .replace(/<!--[\s\S]*?-->/g, '')
-    // 2. Collapse ALL whitespace runs to a single space
-    //    (handles tabs, newlines, multiple spaces in one pass)
-    .replace(/\s+/g, ' ')
-    // 3. Remove space between closing/opening tags
-    .replace(/> </g, '><')
-    // 4. Tighten CSS inside <style> blocks
-    .replace(/:\s+/g, ':').replace(/;\s+/g, ';').replace(/,\s+/g, ',')
-    .replace(/\{\s+/g, '{').replace(/\s+\}/g, '}')
-    // 5. Remove unnecessary attribute whitespace
-    .replace(/\s*=\s*"/g, '="')
-    .trim();
+  return html;
+}
+
+function hashCode(str: string): string {
+  let hash = 0;
+  for (let i = 0, len = str.length; i < len; i++) {
+    hash = Math.imul(31, hash) + str.charCodeAt(i) | 0;
+  }
+  return hash.toString();
 }
 
 // ─── Image encoding ────────────────────────────────────────────────────────────
@@ -122,16 +125,17 @@ function minifyHtml(html: string): string {
  *
  * Returns null (never throws) — callers show original URL as fallback.
  */
+const FALLBACK_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 async function toDataUri(
   url: string,
   width: number,
   quality: number,
   format: ImageManipulator.SaveFormat = ImageManipulator.SaveFormat.JPEG,
   cache: Map<string, string>,
-  pending: Map<string, Promise<string | null>>,
-): Promise<string | null> {
-  if (!url?.trim()) return null;
-  if (url.startsWith('data:')) return url;
+  pending: Map<string, Promise<string>>,
+): Promise<string> {
+  if (!url?.trim()) return FALLBACK_IMG;
 
   const cached = cache.get(url);
   if (cached) return cached;
@@ -141,17 +145,33 @@ async function toDataUri(
   const inFlight = pending.get(url);
   if (inFlight) return inFlight;
 
-  const promise = (async (): Promise<string | null> => {
+  const promise = (async (): Promise<string> => {
     let downloadedPath: string | null = null;
     let compressedPath: string | null = null;
     try {
       // ── Step 1: resolve to local file URI ───────────────────────────────────
       let localUri: string;
 
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        const safeName = url.split('/').pop()?.split('?')[0] ?? `dl-${Date.now()}.jpg`;
+      if (url.startsWith('data:')) {
+        const base64Data = url.split(',')[1];
+        const destPath = `${FileSystem.cacheDirectory}uma_signature_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
+        await FileSystem.writeAsStringAsync(destPath, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+        localUri = destPath;
+        downloadedPath = destPath; // Ensures it gets cleaned up in the finally block
+      } else if (url.startsWith('http://') || url.startsWith('https://')) {
+        // Fix localhost resolution for physical mobile devices running Expo Go
+        let downloadUrl = url;
+        if (url.includes('127.0.0.1') || url.includes('localhost')) {
+          const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.debuggerHost;
+          if (hostUri) {
+            const lanIp = hostUri.split(':')[0];
+            downloadUrl = url.replace(/127\.0\.0\.1|localhost/, lanIp);
+          }
+        }
+
+        const safeName = downloadUrl.split('/').pop()?.split('?')[0] ?? `dl-${Date.now()}.jpg`;
         const destPath = `${FileSystem.cacheDirectory}uma-building-services_${Date.now()}_${safeName}`;
-        const dl       = await FileSystem.downloadAsync(url, destPath);
+        const dl       = await FileSystem.downloadAsync(downloadUrl, destPath);
         downloadedPath = dl.uri;
         localUri       = downloadedPath;
       } else {
@@ -159,7 +179,8 @@ async function toDataUri(
         const info     = await FileSystem.getInfoAsync(validUri);
         if (!info.exists) {
           console.warn('[UMA PDF] toDataUri: file not found:', validUri);
-          return null;
+          cache.set(url, FALLBACK_IMG);
+          return FALLBACK_IMG;
         }
         localUri = validUri;
       }
@@ -188,7 +209,8 @@ async function toDataUri(
       return dataUri;
     } catch (err) {
       console.warn('[UMA PDF] toDataUri failed:', url, err);
-      return null;
+      cache.set(url, FALLBACK_IMG);
+      return FALLBACK_IMG;
     } finally {
       if (downloadedPath) FileSystem.deleteAsync(downloadedPath, { idempotent: true }).catch(() => {});
       if (compressedPath && compressedPath !== downloadedPath)
@@ -210,12 +232,13 @@ async function fetchReportData(jobId: string): Promise<ReportData> {
   const job = getJobById<Job>(jobId);
   if (!job) throw new Error(`Report: job "${jobId}" not found`);
 
-  const [assets, defects, signature, photos, quotes] = await Promise.all([
+  const [assets, defects, signature, photos, quotes, timeLogs] = await Promise.all([
     Promise.resolve(getAssetsWithJobResults<AssetWithResult>(jobId, (job as any).property_id)),
     Promise.resolve(getDefectsForJob<Defect>(jobId)),
     Promise.resolve(getSignatureForJob<Signature>(jobId)),
     Promise.resolve(getPhotosForJob<InspectionPhoto>(jobId)),
     Promise.resolve(queryRecords<Quote>('quotes', { job_id: jobId })),
+    Promise.resolve(queryRecords<any>('time_logs', { job_id: jobId })),
   ]);
 
   const tech     = getRecord<User>('users', (job as any).assigned_to);
@@ -233,9 +256,11 @@ async function fetchReportData(jobId: string): Promise<ReportData> {
     ]);
   }
 
+  const company = useAuthStore.getState().company;
+
   return {
-    job, assets, defects, signature, photos, timeLogs: [],
-    techName, reportId, approvedQuote, quoteItems, inventory,
+    job, assets, defects, signature, photos, timeLogs,
+    techName, reportId, approvedQuote, quoteItems, inventory, company,
   };
 }
 
@@ -255,7 +280,6 @@ function getReferencedPhotoIds(
   defects: Defect[],
   photos: InspectionPhoto[]
 ): Set<string> {
-  const assetIds       = new Set(assets.map(a => a.id));
   const failAssetIds   = new Set(assets.filter(a => a.result === 'fail').map(a => a.id));
   const passAssetIds   = new Set(assets.filter(a => a.result === 'pass').map(a => a.id));
   const defectIds      = new Set(defects.map(d => d.id));
@@ -287,34 +311,32 @@ async function processPhotos(
   // result cache: URL → data URI (shared across all encode calls in this run)
   const cache   = new Map<string, string>();
   // pending cache: URL → in-flight Promise (prevents duplicate parallel encodes)
-  const pending = new Map<string, Promise<string | null>>();
+  const pending = new Map<string, Promise<string>>();
 
   const failAssetIds   = new Set(data.assets.filter(a => (a as any).result === 'fail').map(a => a.id));
   const defectAssetIds = new Set(data.defects.map(d => d.asset_id));
 
   // ── Signature ────────────────────────────────────────────────────────────────
   let signature = data.signature;
-  if (signature?.signature_url) {
-    onProgress?.('Encoding signature…');
-    // IMPORTANT: Signatures are PNG with a transparent background.
-    // Encoding as JPEG (which has no alpha channel) fills transparency with BLACK,
-    // causing the "black box" in the PDF. We must encode as PNG to preserve transparency.
-    const uri = await toDataUri(
-      signature.signature_url, SIG_W, SIG_Q,
-      ImageManipulator.SaveFormat.PNG, cache, pending
-    );
-    if (uri) signature = { ...signature, signature_url: uri };
-    else {
-      try {
-        const { getValidLocalUri } = await import('@/utils/fileHelpers');
-        const localUri = getValidLocalUri(signature.signature_url);
-        const b64 = await (await import('expo-file-system/legacy')).readAsStringAsync(localUri, {
-          encoding: (await import('expo-file-system/legacy')).EncodingType.Base64,
-        });
-        if (b64) signature = { ...signature, signature_url: `data:image/png;base64,${b64}` };
-      } catch {
-        // Leave signature_url as-is — buildSig isSafe check will handle it
-      }
+  if (signature) {
+    // 1. Client Signature
+    if (signature.signature_url) {
+      onProgress?.('Encoding signature…');
+      const uri = await toDataUri(
+        signature.signature_url, SIG_W, SIG_Q,
+        ImageManipulator.SaveFormat.PNG, cache, pending
+      );
+      signature = { ...signature, signature_url: uri };
+    }
+
+    // 2. Technician Signature
+    if (signature.tech_signature_url) {
+      onProgress?.('Encoding technician signature…');
+      const techUri = await toDataUri(
+        signature.tech_signature_url, SIG_W, SIG_Q,
+        ImageManipulator.SaveFormat.PNG, cache, pending
+      );
+      signature = { ...signature, tech_signature_url: techUri };
     }
   }
 
@@ -357,7 +379,7 @@ async function processPhotos(
         const w = isDefect ? DEFECT_W : THUMB_W;
         const q = isDefect ? DEFECT_Q : THUMB_Q;
         return toDataUri(photo.photo_url, w, q, ImageManipulator.SaveFormat.JPEG, cache, pending)
-          .then(uri => uri ? { ...photo, photo_url: uri } : photo);
+          .then(uri => ({ ...photo, photo_url: uri }));
       })
     );
     results.forEach((r, j) => { encodedPhotos[i + j] = r; });
@@ -383,7 +405,6 @@ async function processPhotos(
       const encodedUrls = await Promise.all(
         rawPhotos.map(rawUrl =>
           toDataUri(rawUrl, DEFECT_W, DEFECT_Q, ImageManipulator.SaveFormat.JPEG, cache, pending)
-            .then(enc => enc ?? rawUrl)
         )
       );
       return { ...defect, photos: encodedUrls } as Defect;
@@ -414,6 +435,111 @@ async function generatePdf(html: string): Promise<string> {
     'printToFileAsync'
   );
   return result.uri;
+}
+
+// ─── PDF-lib footer stamping ───────────────────────────────────────────────────────
+
+/**
+ * Strips characters outside WinAnsi encoding (the only range StandardFonts.Helvetica
+ * can render). Removes emoji, accented chars, and replaces common typographic
+ * punctuation with ASCII equivalents.
+ */
+function pdfSafeText(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[^\x00-\x7F]/g, '');
+}
+
+/**
+ * Opens the raw PDF generated by expo-print and stamps a corporate footer bar
+ * (navy rectangle + company name, ABN, centred page X of Y in orange, contact info)
+ * onto every real physical page using pdf-lib's drawing API.
+ *
+ * This is done AFTER pagination so the page count and positions are guaranteed
+ * correct, regardless of how much content any section contained.
+ */
+async function addFooterToPdf(
+  pdfUri: string,
+  company: any,
+  _reportId: string,
+): Promise<string> {
+  // Read raw bytes
+  const base64 = await FileSystem.readAsStringAsync(pdfUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const CHUNK = 8192;
+  let binary = '';
+  for (let i = 0; i < base64.length; i += CHUNK) {
+    binary += atob(base64.slice(i, i + CHUNK));
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const pdfDoc  = await PDFDocument.load(bytes);
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const pages    = pdfDoc.getPages();
+  const total    = pages.length;
+
+  const NAVY        = rgb(0x1C / 255, 0x30 / 255, 0x48 / 255);
+  const ORANGE      = rgb(0xE9 / 255, 0x73 / 255, 0x16 / 255);
+  const WHITE       = rgb(1, 1, 1);
+  const WHITE_DIM   = rgb(0.7, 0.7, 0.7);
+  const FOOTER_H    = 44;
+
+  const companyName = pdfSafeText(company?.name)   || 'Company Name';
+  const abn         = pdfSafeText(company?.abn)    || 'Not Provided';
+  const phone       = pdfSafeText(company?.phone)  || 'Not Provided';
+  const email       = pdfSafeText(company?.contact_email) || 'Not Provided';
+  const contactLine = `P: ${phone} | E: ${email}`;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pages.forEach((page: any, i: number) => {
+    const { width } = page.getSize();
+    const pageNum   = i + 1;
+
+    // Solid opaque navy bar — covers any overflow content beneath it
+    page.drawRectangle({ x: 0, y: 0, width, height: FOOTER_H, color: NAVY });
+
+    // Left: company name + ABN
+    const nameW = fontBold.widthOfTextAtSize(companyName, 8.5);
+    const maxLeft = (width - 200) / 2; // leave room for centred label + right text
+    const safeName = nameW > maxLeft
+      ? companyName.slice(0, Math.floor(companyName.length * maxLeft / nameW) - 1) + '…'
+      : companyName;
+    page.drawText(safeName,         { x: 28, y: 27, size: 8.5, font: fontBold, color: WHITE });
+    page.drawText(`ABN: ${abn}`,    { x: 28, y: 14, size: 8,   font,           color: WHITE_DIM });
+
+    // Centre: Page X of Y
+    const pageLabel = `Page ${pageNum} of ${total}`;
+    const labelW    = fontBold.widthOfTextAtSize(pageLabel, 9);
+    page.drawText(pageLabel, {
+      x: (width - labelW) / 2, y: 18, size: 9, font: fontBold, color: ORANGE,
+    });
+
+    // Right: contact info
+    const contactW = font.widthOfTextAtSize(contactLine, 8);
+    page.drawText(contactLine, {
+      x: Math.max(width / 2 + labelW / 2 + 8, width - 28 - contactW),
+      y: 18, size: 8, font, color: WHITE_DIM,
+    });
+  });
+
+  // Write stamped bytes as base64 to a NEW temp path
+  const stampedBytes = await pdfDoc.save();
+  let out = '';
+  for (let i = 0; i < stampedBytes.length; i += CHUNK) {
+    out += String.fromCharCode(...stampedBytes.subarray(i, i + CHUNK));
+  }
+  const stampedB64  = btoa(out);
+  const stampedPath = `${FileSystem.cacheDirectory}stamped_${Date.now()}.pdf`;
+  await FileSystem.writeAsStringAsync(stampedPath, stampedB64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return stampedPath;
 }
 
 // ─── Supabase Storage upload ────────────────────────────────────────────────────
@@ -522,23 +648,62 @@ export async function generateJobReport(
 
     onProgress?.('building_html');
     const html = minifyHtml(buildReportHtml(data));
+    const htmlHash = hashCode(html);
 
     onProgress?.('generating_pdf');
-    const j            = rawData.job as any;
-    const propertyName = j.property_name as string | null;
+    const jobRecord = rawData.job as any;
+    const propertyName = jobRecord.property_name as string | null;
     const title        = `Service Report — ${propertyName ?? data.reportId}`;
 
-    const pdfUri = await generatePdf(html);
-
-    // Upload to Supabase Storage — non-fatal, sharing works regardless.
-    // Only mark the job completed if it was ALREADY completed before PDF generation.
-    // In-progress "Draft Preview" flows must not bypass the completion gate.
-    onProgress?.('uploading');
-    const jobRecord = rawData.job as any;
     const alreadyCompleted = (jobRecord?.status as string) === 'completed';
-    const reportUrl = await uploadPdfToStorage(jobId, pdfUri, alreadyCompleted);
-    // `completed` is true only when the job was already completed AND the PDF uploaded OK.
-    // Draft previews (in_progress) will have completed=false even if reportUrl is set.
+    const cacheKey = `@report_hash_${jobId}`;
+    const lastHash = await AsyncStorage.getItem(cacheKey);
+
+    let pdfUri: string;
+    let reportUrl: string | null = jobRecord.report_url;
+
+    // Fast path: If the HTML hasn't changed AND we already have a report URL, skip generation and upload!
+    if (lastHash === htmlHash && reportUrl) {
+      console.log('[UMA BUILDING SERVICES] Report HTML unchanged. Skipping PDF generation and upload.');
+      onProgress?.('cached', 'Report is up to date.');
+      // We still need a local PDF in case they click Share
+      const destPath = `${FileSystem.cacheDirectory}preview_${jobId}_${Date.now()}.pdf`;
+      await FileSystem.downloadAsync(reportUrl, destPath);
+      pdfUri = destPath;
+    } else {
+      // Slow path: Generate and upload new PDF
+      pdfUri = await generatePdf(html);
+
+      // Stamp footer onto every real physical page now that pagination is done
+      onProgress?.('generating_pdf', 'Stamping page numbers…');
+      const rawUri = pdfUri;
+      let stampedUri: string | null = null;
+      try {
+        stampedUri = await withTimeout(
+          addFooterToPdf(rawUri, data.company, data.reportId),
+          PDF_STAMP_TIMEOUT_MS,
+          'addFooterToPdf',
+        );
+      } catch (stampErr) {
+        console.warn('[UMA BUILDING SERVICES] PDF stamping failed, using unstamped fallback:', stampErr);
+      }
+
+      if (stampedUri) {
+        pdfUri = stampedUri;
+        // Delete the raw unstamped file only if stamping succeeded and we have a new file
+        FileSystem.deleteAsync(rawUri, { idempotent: true }).catch(() => {});
+      }
+
+      onProgress?.('uploading');
+      reportUrl = await uploadPdfToStorage(jobId, pdfUri, alreadyCompleted);
+      
+      // Cache the new hash only if upload succeeded
+      if (reportUrl) {
+        await AsyncStorage.setItem(cacheKey, htmlHash);
+      }
+    }
+
+    // `completed` is true only when the job was already completed AND the PDF uploaded/exists OK.
     const completed = alreadyCompleted && reportUrl !== null;
 
     return { pdfUri, html, title, reportUrl, completed };

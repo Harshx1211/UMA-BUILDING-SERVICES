@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Eye, EyeOff, ArrowRight, ShieldCheck, BarChart3, Users, Zap, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '@/lib/supabase';
 
 const FEATURES = [
   { icon: BarChart3, title: 'Real-time analytics',   sub: 'Live KPIs and operational dashboards' },
@@ -18,12 +19,25 @@ const STATS = [
 ];
 
 export default function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, user, hydrated } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [platformName, setPlatformName] = useState('SiteTrack');
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('*').eq('id', 'global').single()
+      .then(({ data }) => {
+        if (data?.platform_name) setPlatformName(data.platform_name);
+      });
+  }, []);
+
+  // If already authenticated, skip the login page entirely
+  useEffect(() => {
+    if (hydrated && user) router.replace('/dashboard');
+  }, [hydrated, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +46,7 @@ export default function LoginPage() {
     const error = await signIn(cleanEmail, password);
     setLoading(false);
     if (error) toast.error(error);
-    else { toast.success('Welcome back!'); router.replace('/dashboard'); }
+    else router.replace('/dashboard');
   };
 
   return (
@@ -58,7 +72,7 @@ export default function LoginPage() {
               <Zap size={21} color="#fff" strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-white font-extrabold text-xl leading-none tracking-tight">UMA BUILDING SERVICES</p>
+              <p className="text-white font-extrabold text-xl leading-none tracking-tight">{platformName.toUpperCase()}</p>
               <p className="text-xs font-semibold mt-0.5" style={{ color: 'rgba(255,255,255,0.40)' }}>Admin Portal</p>
             </div>
           </div>
@@ -114,7 +128,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="relative z-10 p-10 pt-6">
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.22)' }}>
-            © 2026 UMA Building Services Pty Ltd · ABN 51 602 019 081
+            © {new Date().getFullYear()} {platformName} Software
           </p>
         </div>
       </div>
@@ -129,7 +143,7 @@ export default function LoginPage() {
               style={{ background: 'linear-gradient(135deg,#ff9a3c,#F97316)' }}>
               <Zap size={17} color="#fff" strokeWidth={2.5} />
             </div>
-            <span className="text-lg font-extrabold" style={{ color: 'var(--primary)', letterSpacing: '-0.02em' }}>UMA BUILDING SERVICES Admin</span>
+            <span className="text-lg font-extrabold" style={{ color: 'var(--primary)', letterSpacing: '-0.02em' }}>{platformName.toUpperCase()} Admin</span>
           </div>
 
           {/* Card */}
@@ -153,7 +167,7 @@ export default function LoginPage() {
                 </label>
                 <input
                   id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  required placeholder="admin@uma-building-services.com.au" autoComplete="email"
+                  required placeholder="admin@example.com" autoComplete="email"
                   className="w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all font-medium"
                   style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
                   onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.background = 'var(--card)'; e.target.style.boxShadow = '0 0 0 3px rgba(27,45,79,0.08)'; }}

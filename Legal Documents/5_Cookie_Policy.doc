@@ -1,0 +1,48 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Cookie Policy - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .clause { font-weight: bold; }
+        ul { margin-bottom: 15px; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>SITETRACK COOKIE POLICY</h1>
+    <p><strong>Last Updated:</strong> [Insert Date]</p>
+
+    <p>This Cookie Policy explains how [Insert Company Name] ("SiteTrack", "we", "us", or "our") uses cookies and similar technologies when you visit our website or use the SiteTrack software platform (the "Service"). This policy should be read in conjunction with our Privacy Policy.</p>
+
+    <h2>1. WHAT ARE COOKIES?</h2>
+    <p>Cookies are small text files placed on your device (computer, smartphone, or tablet) when you visit a website or use a web application. They are widely used to make websites work efficiently, enhance user experience, and provide analytical information to the owners of the site.</p>
+
+    <h2>2. HOW WE USE COOKIES</h2>
+    <p>SiteTrack primarily uses cookies to ensure the core functionality and security of our SaaS platform. We categorize our cookies as follows:</p>
+    <ul>
+        <li><span class="clause">Strictly Necessary Cookies:</span> These cookies are essential for the SiteTrack platform to function. They include authentication cookies (used to keep administrators and technicians securely logged in) and security cookies (used to prevent fraudulent activity). Because these are strictly necessary to provide the Service you have requested, they cannot be disabled.</li>
+        <li><span class="clause">Performance & Analytics Cookies:</span> We use these cookies to understand how users interact with our dashboards and mobile applications. This helps us identify performance bottlenecks, understand feature usage, and improve the overall user experience. This data is aggregated and anonymized.</li>
+        <li><span class="clause">Functionality Cookies:</span> These cookies allow the platform to remember choices you make (such as your preferred language or region) and provide enhanced, more personalized features.</li>
+    </ul>
+
+    <h2>3. THIRD-PARTY COOKIES</h2>
+    <p>In addition to our own cookies, we may use trusted third-party services (such as cloud hosting infrastructure and analytics providers) that may also place cookies on your device. These third parties are bound by strict data processing agreements and are prohibited from using your data for their own independent marketing purposes.</p>
+
+    <h2>4. HOW TO MANAGE YOUR COOKIES</h2>
+    <p>Most web browsers allow you to control cookies through their settings preferences. However, please note that if you choose to disable Strictly Necessary Cookies, you will not be able to log in to or use the SiteTrack platform, as our authentication systems rely on them.</p>
+    <p>To find out more about cookies, including how to see what cookies have been set and how to manage and delete them, visit <strong>www.aboutcookies.org</strong> or <strong>www.allaboutcookies.org</strong>.</p>
+
+    <h2>5. CHANGES TO THIS POLICY</h2>
+    <p>We may update this Cookie Policy from time to time to reflect changes in our technology or legal requirements. We encourage you to review this page periodically for the latest information on our cookie practices.</p>
+
+    <h2>6. CONTACT US</h2>
+    <p>If you have any questions about our use of cookies, please contact us at:</p>
+    <p><strong>Email:</strong> [Insert Legal Contact Email]</p>
+
+</body>
+</html>

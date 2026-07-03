@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 16;
+const CURRENT_SCHEMA_VERSION = 24;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -66,12 +66,36 @@ export function initializeSchema(): void {
       company_id TEXT,
       email      TEXT UNIQUE NOT NULL,
       full_name  TEXT NOT NULL,
-      role       TEXT NOT NULL DEFAULT 'technician',
-      phone      TEXT,
-      avatar_url TEXT,
-      push_token TEXT,
-      is_active  INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      role                 TEXT NOT NULL DEFAULT 'technician',
+      phone                TEXT,
+      avatar_url           TEXT,
+      push_token           TEXT,
+      is_active            INTEGER NOT NULL DEFAULT 1,
+      fpas_number          TEXT,
+      fpas_class           TEXT,
+      fpas_expiry          TEXT,
+      state_license        TEXT,
+      state_license_expiry TEXT,
+      accepted_tos_at      TEXT,
+      accepted_aup_at      TEXT,
+      created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS companies (
+      id                  TEXT PRIMARY KEY NOT NULL,
+      name                TEXT NOT NULL,
+      abn                 TEXT,
+      contact_email       TEXT,
+      phone               TEXT,
+      website              TEXT,
+      address              TEXT,
+      logo_url             TEXT,
+      subscription_status  TEXT NOT NULL DEFAULT 'active',
+      notification_settings TEXT,
+      compliance_standards TEXT,
+      appearance_settings  TEXT,
+      created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS properties (
@@ -179,12 +203,13 @@ export function initializeSchema(): void {
     );
 
     CREATE TABLE IF NOT EXISTS signatures (
-      id             TEXT PRIMARY KEY NOT NULL,
-      company_id     TEXT,
-      job_id         TEXT NOT NULL UNIQUE,
-      signature_url  TEXT NOT NULL,
-      signed_by_name TEXT NOT NULL,
-      signed_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      id                  TEXT PRIMARY KEY NOT NULL,
+      company_id          TEXT,
+      job_id              TEXT NOT NULL UNIQUE,
+      signature_url       TEXT NOT NULL,
+      tech_signature_url  TEXT,
+      signed_by_name      TEXT NOT NULL,
+      signed_at           TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (job_id) REFERENCES jobs(id)
     );
 
@@ -274,7 +299,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS asset_type_definitions (
       id                 TEXT    PRIMARY KEY NOT NULL,
-      value              TEXT    NOT NULL UNIQUE,
+      value              TEXT    NOT NULL,
       label              TEXT    NOT NULL,
       full_label         TEXT    NOT NULL,
       icon               TEXT    NOT NULL DEFAULT 'shield-check-outline',
@@ -289,7 +314,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS defect_codes (
       id          TEXT    PRIMARY KEY NOT NULL,
-      code        TEXT    NOT NULL UNIQUE,
+      code        TEXT    NOT NULL,
       description TEXT    NOT NULL,
       quote_price REAL,
       category    TEXT    NOT NULL DEFAULT 'General',
@@ -722,21 +747,246 @@ export function initializeSchema(): void {
     for (const table of tables) {
       try {
         db.runSync(`DELETE FROM ${table};`);
-      } catch (e) {}
+      } catch {}
     }
-    try { db.runSync(`DELETE FROM sync_queue;`); } catch (e) {}
+    try { db.runSync(`DELETE FROM sync_queue;`); } catch {}
     
     // Second, robustly ensure company_id exists
     for (const table of tables) {
       try {
         db.runSync(`ALTER TABLE ${table} ADD COLUMN company_id TEXT;`);
-      } catch (e) {} // Will fail if column already exists, which is fine
+      } catch {} // Will fail if column already exists, which is fine
     }
     
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 16: Robust wipe and company_id check complete');
     
     currentVersion = 16;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '16')`);
+  }
+
+  // Migration 17: Add company_id to quotes and quote_items tables.
+  // These were missed in migration 15/16 which only targeted tenant-scoped operational tables.
+  // Without this, upsertRecord crashes when the sync pulls quotes/quote_items from Supabase
+  // because the Supabase rows include a company_id column that doesn't exist in local SQLite.
+  if (currentVersion < 17) {
+    const quoteTables = ['quotes', 'quote_items'];
+    for (const table of quoteTables) {
+      try {
+        db.runSync(`ALTER TABLE ${table} ADD COLUMN company_id TEXT;`);
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 17: added ${table}.company_id`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('duplicate column')) {
+          console.error(`[UMA BUILDING SERVICES DB] Migration 17 (${table}) failed:`, msg);
+        }
+      }
+    }
+    currentVersion = 17;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '17')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 17: quotes/quote_items company_id complete');
+  }
+
+  // Migration 18: Add all FPAS/licence columns to users table.
+  // The Supabase users table has 5 compliance columns that were never added to
+  // the local SQLite schema. Without all of them, upsertRecord(users) crashes on
+  // the first unknown column, which cascades into a FOREIGN KEY failure on jobs.
+  // Columns: fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry
+  if (currentVersion < 18) {
+    const userCols = [
+      'fpas_number TEXT',
+      'fpas_class TEXT',
+      'fpas_expiry TEXT',
+      'state_license TEXT',
+      'state_license_expiry TEXT',
+    ];
+    for (const colDef of userCols) {
+      try {
+        db.runSync(`ALTER TABLE users ADD COLUMN ${colDef};`);
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 18: added users.${colDef.split(' ')[0]}`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('duplicate column')) {
+          console.error(`[UMA BUILDING SERVICES DB] Migration 18 (${colDef}) failed:`, msg);
+        }
+      }
+    }
+    currentVersion = 18;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '18')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 18: all FPAS/licence columns added to users');
+  }
+
+  // Migration 19: Add device_info to signatures table.
+  // The signature capture screen stores the device OS info alongside each signature
+  // for the electronic transaction audit trail. Without this column, the field is
+  // skipped by the upsertRecord fallback but never actually persisted.
+  if (currentVersion < 19) {
+    try {
+      db.runSync("ALTER TABLE signatures ADD COLUMN device_info TEXT;");
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 19: added signatures.device_info');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column')) console.error('[UMA BUILDING SERVICES DB] Migration 19 failed:', msg);
+    }
+    currentVersion = 19;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '19')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 19 complete');
+  }
+
+  // Migration 20: Wipe catalogue cache to receive new multi-tenant cloned rows
+  // The multi-tenant catalogue upgrade script generated new IDs for all catalogue items
+  // (cloned per company). To prevent UNIQUE constraint conflicts with the old global rows
+  // currently in the local cache, we wipe the local tables. The next sync will simply
+  // pull down the correct cloned rows for the current company.
+  if (currentVersion < 20) {
+    try {
+      db.runSync(`DELETE FROM asset_type_definitions;`);
+      db.runSync(`DELETE FROM defect_codes;`);
+      db.runSync(`DELETE FROM inventory_items;`);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 20: catalogue caches wiped for multi-tenant upgrade');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[UMA BUILDING SERVICES DB] Migration 20 failed:', msg);
+    }
+    currentVersion = 20;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '20')`);
+  }
+
+  // Migration 21: Remove UNIQUE constraints from catalogue tables
+  // In a multi-tenant environment, the remote DB might have duplicates due to 
+  // admin cloning, or we might receive rows that conflict. We trust the remote
+  // ID and don't want local UNIQUE constraints crashing the sync process.
+  if (currentVersion < 21) {
+    try {
+      db.execSync(`
+        PRAGMA foreign_keys = OFF;
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS asset_type_definitions_v21 (
+          id                 TEXT    PRIMARY KEY NOT NULL,
+          value              TEXT    NOT NULL,
+          label              TEXT    NOT NULL,
+          full_label         TEXT    NOT NULL,
+          icon               TEXT    NOT NULL DEFAULT 'shield-check-outline',
+          color              TEXT    NOT NULL DEFAULT '#6B7280',
+          inspection_routine TEXT    NOT NULL DEFAULT '',
+          variants           TEXT    NOT NULL DEFAULT '[]',
+          is_active          INTEGER NOT NULL DEFAULT 1,
+          sort_order         INTEGER NOT NULL DEFAULT 0,
+          created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+          updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO asset_type_definitions_v21 SELECT * FROM asset_type_definitions;
+        DROP TABLE asset_type_definitions;
+        ALTER TABLE asset_type_definitions_v21 RENAME TO asset_type_definitions;
+
+        CREATE TABLE IF NOT EXISTS defect_codes_v21 (
+          id          TEXT    PRIMARY KEY NOT NULL,
+          code        TEXT    NOT NULL,
+          description TEXT    NOT NULL,
+          quote_price REAL,
+          category    TEXT    NOT NULL DEFAULT 'General',
+          is_active   INTEGER NOT NULL DEFAULT 1,
+          sort_order  INTEGER NOT NULL DEFAULT 0,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO defect_codes_v21 SELECT * FROM defect_codes;
+        DROP TABLE defect_codes;
+        ALTER TABLE defect_codes_v21 RENAME TO defect_codes;
+
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 21: dropped UNIQUE constraints on catalogue tables');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 21 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 21;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '21')`);
+  }
+
+  // Migration 22: Force wipe and recreate tables to ensure UNIQUE constraints are gone.
+  // If Migration 21 failed silently but bumped the version, users will still get the UNIQUE constraint crash.
+  // We can safely wipe these two tables because they are entirely derived from the remote DB and will resync immediately.
+  if (currentVersion < 22) {
+    try {
+      db.execSync(`
+        DROP TABLE IF EXISTS asset_type_definitions;
+        DROP TABLE IF EXISTS defect_codes;
+        
+        CREATE TABLE IF NOT EXISTS asset_type_definitions (
+          id                 TEXT    PRIMARY KEY NOT NULL,
+          value              TEXT    NOT NULL,
+          label              TEXT    NOT NULL,
+          full_label         TEXT    NOT NULL,
+          icon               TEXT    NOT NULL DEFAULT 'shield-check-outline',
+          color              TEXT    NOT NULL DEFAULT '#6B7280',
+          inspection_routine TEXT    NOT NULL DEFAULT '',
+          variants           TEXT    NOT NULL DEFAULT '[]',
+          is_active          INTEGER NOT NULL DEFAULT 1,
+          sort_order         INTEGER NOT NULL DEFAULT 0,
+          created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+          updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS defect_codes (
+          id          TEXT    PRIMARY KEY NOT NULL,
+          code        TEXT    NOT NULL,
+          description TEXT    NOT NULL,
+          quote_price REAL,
+          category    TEXT    NOT NULL DEFAULT 'General',
+          is_active   INTEGER NOT NULL DEFAULT 1,
+          sort_order  INTEGER NOT NULL DEFAULT 0,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 22: force-recreated catalogue tables to strip UNIQUE constraints');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 22 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 22;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '22')`);
+  }
+
+  // Migration 23: tech_signature_url on signatures table (AS1851 technician sign-off)
+  // The CREATE TABLE above already includes this column for fresh installs.
+  // This migration adds it safely to existing devices that already have the table.
+  if (currentVersion < 23) {
+    try {
+      db.runSync('ALTER TABLE signatures ADD COLUMN tech_signature_url TEXT;');
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 23: added signatures.tech_signature_url');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column'))
+        console.error('[UMA BUILDING SERVICES DB] Migration 23 failed:', msg);
+    }
+    currentVersion = 23;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '23')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 23 complete');
+  }
+
+  // Migration 24: Add remaining missing Supabase columns to users and companies
+  // Resolves sync warnings for users (accepted_tos_at, etc) and companies (appearance_settings, etc)
+  if (currentVersion < 24) {
+    const userCols = [
+      'fpas_number TEXT', 'fpas_class TEXT', 'fpas_expiry TEXT',
+      'state_license TEXT', 'state_license_expiry TEXT',
+      'accepted_tos_at TEXT', 'accepted_aup_at TEXT'
+    ];
+    for (const col of userCols) {
+      try { db.runSync(`ALTER TABLE users ADD COLUMN ${col};`); } catch {}
+    }
+
+    const companyCols = [
+      'updated_at TEXT', 'notification_settings TEXT',
+      'compliance_standards TEXT', 'appearance_settings TEXT'
+    ];
+    for (const col of companyCols) {
+      try { db.runSync(`ALTER TABLE companies ADD COLUMN ${col};`); } catch {}
+    }
+
+    currentVersion = 24;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '24')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 24 complete (users/companies columns)');
   }
 
   // Seed inventory from Uptick defect codes on first run
@@ -986,7 +1236,7 @@ export function getActiveTimeLog(jobId: string, userId: string): { id: string; c
       [jobId, userId]
     );
     return row ?? null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -1000,7 +1250,7 @@ export function getJobAssetRecord(jobId: string, assetId: string): { id: string;
       [jobId, assetId]
     );
     return row ?? null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -1198,21 +1448,16 @@ export function incrementSyncRetry(
  * Used by the sync service when pulling data from Supabase.
  */
 export function upsertRecord(table: string, data: RecordData): void {
-  try {
-    const db = openDatabase();
-    const safeTable = _safeColumnName(table);
-    const keys = Object.keys(data).map(_safeColumnName);
+  const _tryUpsert = (db: SQLite.SQLiteDatabase, safeTable: string, d: RecordData): void => {
+    const keys = Object.keys(d).map(_safeColumnName);
     const placeholders = keys.map(() => "?").join(", ");
-    const values = Object.values(data);
-
-    // Build SET clause — exclude 'id' since you cannot update a primary key
+    const values = Object.values(d);
     const setClauses = keys
       .filter((k) => k !== "id")
       .map((k) => `${k} = excluded.${k}`)
       .join(", ");
 
     if (setClauses.length === 0) {
-      // Only column is 'id' — just try to insert, ignore if duplicate
       db.runSync(
         `INSERT OR IGNORE INTO ${safeTable} (${keys.join(", ")}) VALUES (${placeholders})`,
         values as SQLite.SQLiteBindValue[],
@@ -1224,8 +1469,47 @@ export function upsertRecord(table: string, data: RecordData): void {
         values as SQLite.SQLiteBindValue[],
       );
     }
+  };
+
+  try {
+    const db = openDatabase();
+    const safeTable = _safeColumnName(table);
+    _tryUpsert(db, safeTable, data);
   } catch (err) {
-    console.error(`[UMA BUILDING SERVICES DB] upsertRecord(${table}) error:`, err);
+    // Use String(err) not err.message — expo-sqlite wraps native errors, so the
+    // root cause (e.g. 'table X has no column named Y') is in the full string,
+    // not in the top-level .message (which is just 'NativeDatabase.prepareSync rejected').
+    const fullErr = String(err);
+    const msg = err instanceof Error ? err.message : fullErr;
+    const isColumnError = fullErr.includes('no column named') ||
+                          fullErr.includes('has no column') ||
+                          msg.includes('no column named');
+    // Guard: if Supabase has a new column that doesn't exist in local SQLite yet,
+    // retry with only the columns that the local table actually knows about.
+    // This prevents any future remote schema addition from crashing the entire sync.
+    if (isColumnError) {
+      try {
+        const db = openDatabase();
+        const safeTable = _safeColumnName(table);
+        // Get the list of columns that actually exist in this local table
+        const colRows = db.getAllSync<{ name: string }>(`PRAGMA table_info(${safeTable})`);
+        const localCols = new Set(colRows.map(r => r.name));
+        // Filter data down to only known columns
+        const safeData: RecordData = {};
+        for (const [k, v] of Object.entries(data)) {
+          if (localCols.has(k)) safeData[k] = v;
+        }
+        if (__DEV__) {
+          const skipped = Object.keys(data).filter(k => !localCols.has(k));
+          if (skipped.length > 0) console.warn(`[UMA BUILDING SERVICES DB] upsertRecord(${table}): skipping unknown columns [${skipped.join(', ')}] — add a migration to include them`);
+        }
+        _tryUpsert(db, safeTable, safeData);
+      } catch (retryErr) {
+        console.error(`[UMA BUILDING SERVICES DB] upsertRecord(${table}) retry error:`, retryErr);
+      }
+    } else {
+      console.error(`[UMA BUILDING SERVICES DB] upsertRecord(${table}) error:`, err);
+    }
   }
 }
 
@@ -1565,7 +1849,41 @@ export function getUnreadNotificationCount(userId: string): number {
       WHERE user_id = ? AND is_read = 0
     `, [userId]);
     return res?.count || 0;
-  } catch (err) {
+  } catch {
     return 0;
+  }
+}
+
+/**
+ * Robustly wipes all tenant-specific local data from the SQLite database.
+ * Called securely upon signOut to ensure data does not leak between sessions.
+ */
+export function clearDatabase(): void {
+  try {
+    const db = openDatabase();
+    const tables = [
+      'users', 'properties', 'assets', 'jobs', 'job_assets', 
+      'defects', 'inspection_photos', 'signatures', 'time_logs',
+      'quotes', 'quote_items', 'notifications', 'sync_queue'
+    ];
+    
+    // Use WAL checkpointing first to ensure all pending operations commit
+    db.execSync('PRAGMA wal_checkpoint(TRUNCATE);');
+    
+    for (const table of tables) {
+      try {
+        db.runSync(`DELETE FROM ${table};`);
+      } catch (err) {
+        console.warn(`[UMA BUILDING SERVICES DB] Failed to wipe ${table}:`, err);
+      }
+    }
+    
+    // We explicitly leave `asset_type_definitions`, `defect_codes`, `inventory_items`, 
+    // and `deleted_photo_ids` intact because they are global dictionary/tombstone tables 
+    // and redownloading them on every login is inefficient.
+    
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Database wiped successfully for sign-out');
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] clearDatabase fatal error:', err);
   }
 }

@@ -21,12 +21,18 @@ import {
 /** A technician or subcontractor user registered in the system */
 export interface User {
   id: string;           // uuid — references auth.users
+  company_id?: string | null;
   email: string;
   full_name: string;
   role: UserRole;
   phone: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  fpas_number?: string | null;
+  fpas_class?: string | null;
+  fpas_expiry?: string | null;
+  state_license?: string | null;
+  state_license_expiry?: string | null;
   created_at: string;   // ISO 8601 timestamptz
 }
 
@@ -133,11 +139,12 @@ export interface InspectionPhoto {
   uploaded_by: string | null;     // user id — null when captured offline without session
 }
 
-/** Client signature captured at job completion */
+/** Client + technician signatures captured at job completion */
 export interface Signature {
   id: string;
   job_id: string;                 // unique — one signature per job
-  signature_url: string;
+  signature_url: string;          // client signature (base64 PNG or storage URL)
+  tech_signature_url?: string | null; // technician sign-off (AS1851 compliance)
   signed_by_name: string;
   signed_at: string;
 }

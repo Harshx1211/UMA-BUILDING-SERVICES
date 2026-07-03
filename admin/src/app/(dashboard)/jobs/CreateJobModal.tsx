@@ -128,8 +128,8 @@ export default function CreateJobModal({
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto">
-          <form onSubmit={createJob} className="p-6 space-y-5">
+        <form onSubmit={createJob} className="flex flex-col min-h-0 flex-1">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
             {/* Property + Technician */}
             {[
@@ -146,7 +146,7 @@ export default function CreateJobModal({
                   disabled={disabled}
                   className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
                   style={{ borderColor: 'var(--border)', color: 'var(--text)', background: disabled ? 'var(--bg)' : 'var(--card)' }}
-                  onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--primary-light)'; }}
                   onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }}
                 >
                   <option value="">Select {label}…</option>
@@ -195,14 +195,14 @@ export default function CreateJobModal({
                           <div
                             className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
                             style={{
-                              borderColor: isSelected ? '#1B2D4F' : 'var(--border)',
-                              background: isSelected ? '#1B2D4F' : 'transparent',
+                              borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                              background: isSelected ? 'var(--accent)' : 'transparent',
                             }}
                           >
                             {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[var(--card)]" />}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold" style={{ color: isSelected ? '#1B2D4F' : 'var(--text)' }}>
+                            <p className="text-sm font-semibold" style={{ color: isSelected ? 'var(--accent)' : 'var(--text)' }}>
                               {cat.label}
                             </p>
                             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{cat.description}</p>
@@ -241,18 +241,18 @@ export default function CreateJobModal({
                           <div
                             className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
                             style={{
-                              borderColor: isSelected ? '#1B2D4F' : 'var(--border)',
-                              background: isSelected ? '#1B2D4F' : 'transparent',
+                              borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                              background: isSelected ? 'var(--accent)' : 'transparent',
                             }}
                           >
                             {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[var(--card)]" />}
                           </div>
                           <div className="flex items-center justify-between flex-1">
-                            <p className="text-sm font-semibold" style={{ color: isSelected ? '#1B2D4F' : 'var(--text)' }}>
+                            <p className="text-sm font-semibold" style={{ color: isSelected ? 'var(--accent)' : 'var(--text)' }}>
                               {freq.label}
                             </p>
                             <span className="text-xs px-2 py-0.5 rounded-md font-mono"
-                              style={{ background: '#f1f5f9', color: 'var(--text-secondary)' }}>
+                              style={{ background: 'var(--bg)', color: 'var(--text-secondary)' }}>
                               every {freq.months === 60 ? '5 yrs' : freq.months === 12 ? '12 mo' : `${freq.months} mo`}
                             </span>
                           </div>
@@ -266,8 +266,8 @@ export default function CreateJobModal({
               {/* Selected summary pill */}
               {selectedJobType && (
                 <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
-                  style={{ background: 'var(--primary-light)', border: '1px solid #c7d7fd' }}>
-                  <p className="text-xs font-semibold" style={{ color: '#1B2D4F' }}>
+                  style={{ background: 'var(--primary-light)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
                     ✓ {getJobTypeLabel(selectedJobType)}
                   </p>
                   <button type="button"
@@ -289,9 +289,10 @@ export default function CreateJobModal({
                     <button key={p.value} type="button" onClick={() => f('priority', p.value)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs font-semibold transition-all"
                       style={{
-                        borderColor: active ? '#1B2D4F' : 'var(--border)',
-                        background: active ? 'var(--primary-light)' : '#fafafa',
-                        color: active ? '#1B2D4F' : 'var(--text-secondary)',
+                        borderColor: active ? p.dot : 'var(--border)',
+                        background: active ? 'var(--primary-light)' : 'var(--bg)',
+                        color: active ? 'var(--text)' : 'var(--text-tertiary)',
+                        boxShadow: active ? `0 0 0 1px ${p.dot}` : 'none'
                       }}>
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.dot }} />
                       {p.label}
@@ -314,7 +315,7 @@ export default function CreateJobModal({
                   <input type={type} value={(form as any)[field]} onChange={e => f(field, e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
                     style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--card)' }}
-                    onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
+                    onFocus={e => { e.target.style.borderColor = 'var(--primary-light)'; }}
                     onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }} />
                 </div>
               ))}
@@ -327,27 +328,28 @@ export default function CreateJobModal({
                 placeholder="Special instructions or site notes…"
                 className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none resize-none"
                 style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--card)' }}
-                onFocus={e => { e.target.style.borderColor = '#1B2D4F'; }}
+                onFocus={e => { e.target.style.borderColor = 'var(--primary-light)'; }}
                 onBlur={e  => { e.target.style.borderColor = 'var(--border)'; }} />
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-1">
-              <button type="button" onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5 transition-all"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                Cancel
-              </button>
-              <button type="submit" disabled={creating || !selectedJobType}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
-                style={{ background: 'linear-gradient(135deg,#1B2D4F,#243a65)', boxShadow: '0 4px 14px rgba(27,45,79,0.25)' }}>
-                {creating
-                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creating…</>
-                  : <><Plus size={14} />Create Job</>}
-              </button>
-            </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 px-6 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold border hover:bg-white/5 transition-all"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={creating || !selectedJobType}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+              style={{ background: 'linear-gradient(135deg,#1B2D4F,#243a65)', boxShadow: '0 4px 14px rgba(27,45,79,0.25)' }}>
+              {creating
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creating…</>
+                : <><Plus size={14} />Create Job</>}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

@@ -24,15 +24,23 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
   },
   global: {
     fetch: async (url, options) => {
-      if (__DEV__) console.log(`[Supabase Fetch] -> ${url}`);
-      try {
-        const res = await fetch(url, options);
-        if (__DEV__) console.log(`[Supabase Fetch] <- ${res.status} ${url}`);
-        return res;
-      } catch (err) {
-        console.error(`[Supabase Fetch] ERROR for ${url}:`, err);
-        throw err;
+      let attempt = 0;
+      while (attempt < 3) {
+        try {
+          if (__DEV__ && attempt > 0) console.log(`[Supabase Fetch] Retry ${attempt} -> ${url}`);
+          const res = await fetch(url, options);
+          return res;
+        } catch (err) {
+          attempt++;
+          if (attempt >= 3) {
+            console.warn(`[Supabase Fetch] Network error after 3 attempts for ${url}:`, err);
+            throw err;
+          }
+          // Wait 500ms before retrying network blips
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
+      throw new Error('Unreachable');
     }
   }
 });

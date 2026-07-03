@@ -64,10 +64,16 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
     else setFlash('off');
   };
 
-  const getFlashIcon = () => {
-    if (flash === 'on') return 'flash';
-    if (flash === 'auto') return 'flash-auto';
-    return 'flash-off';
+  // Bug #2 fix: clear filled vs outline flash states
+  const getFlashIcon = (): React.ComponentProps<typeof MaterialCommunityIcons>['name'] => {
+    if (flash === 'on')   return 'flash';       // filled = clearly ON
+    if (flash === 'auto') return 'flash-auto';  // filled auto = intermediate
+    return 'flash-off';                          // filled with X = clearly OFF
+  };
+  const getFlashColor = (): string => {
+    if (flash === 'on')   return '#F59E0B';  // amber = active
+    if (flash === 'auto') return '#94A3B8';  // slate = auto/standby
+    return 'rgba(255,255,255,0.4)';           // muted = off
   };
 
   const takePicture = async () => {
@@ -139,8 +145,9 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
       backgroundStyle={{ backgroundColor: C.background }}
     >
       <View style={s.topBar}>
-        <TouchableOpacity style={[s.doneBtn, { backgroundColor: C.backgroundSecondary }]} onPress={() => bottomSheetRef.current?.close()}>
-          <Text style={[s.doneText, { color: C.primary }]}>Done ({photosTaken} taken)</Text>
+        <TouchableOpacity style={[s.doneBtn, { backgroundColor: C.accent + '18', borderWidth: 1, borderColor: C.accent + '40' }]} onPress={() => bottomSheetRef.current?.close()}>
+          <MaterialCommunityIcons name="check" size={16} color={C.accent} />
+          <Text style={[s.doneText, { color: C.accent }]}>Done ({photosTaken} taken)</Text>
         </TouchableOpacity>
       </View>
       <BottomSheetScrollView contentContainerStyle={s.content}>
@@ -158,14 +165,19 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
               <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
                 <MaterialCommunityIcons name="camera-flip" size={24} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={cycleFlash} style={s.camBtn}>
-                <MaterialCommunityIcons name={getFlashIcon()} size={24} color={flash === 'on' ? C.warning : '#FFF'} />
+              <TouchableOpacity onPress={cycleFlash} style={[
+                s.camBtn,
+                flash === 'on' && { backgroundColor: 'rgba(245,158,11,0.3)' },
+              ]}>
+                <MaterialCommunityIcons name={getFlashIcon()} size={24} color={getFlashColor()} />
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          <View style={[s.cameraContainer, { justifyContent: 'center', alignItems: 'center' }]}>
-            <Text>No camera permission</Text>
+          <View style={[s.cameraContainer, { justifyContent: 'center', alignItems: 'center', gap: 16, backgroundColor: C.backgroundSecondary }]}>
+            <MaterialCommunityIcons name="camera-off" size={40} color={C.textTertiary} />
+            <Text style={{ color: C.textSecondary, fontSize: 15, fontWeight: '700' }}>Camera permission required</Text>
+            <Text style={{ color: C.textTertiary, fontSize: 13, textAlign: 'center', paddingHorizontal: 32 }}>Go to Settings and allow camera access to take photos during inspections.</Text>
           </View>
         )}
 
@@ -190,7 +202,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
               style={[
                 s.assetChip,
                 assetId === ''
-                  ? { backgroundColor: C.primary, borderColor: C.primary }
+                  ? { backgroundColor: C.accent, borderColor: C.accent }
                   : { backgroundColor: C.surface, borderColor: C.border },
               ]}
               onPress={() => setAssetId('')}
@@ -214,7 +226,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
                   style={[
                     s.assetChip,
                     isSelected
-                      ? { backgroundColor: C.primary, borderColor: C.primary }
+                      ? { backgroundColor: C.accent, borderColor: C.accent }
                       : { backgroundColor: C.surface, borderColor: C.border },
                   ]}
                   onPress={() => setAssetId(a.id)}
@@ -255,9 +267,9 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 PhotoCaptureSheet.displayName = 'PhotoCaptureSheet';
 
 const s = StyleSheet.create({
-  topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 8 },
-  doneBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16 },
-  doneText: { fontWeight: '700', fontSize: 14 },
+  topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 12 },
+  doneBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20 },
+  doneText: { fontWeight: '800', fontSize: 14 },
   content: { paddingBottom: 64 },
   cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: '#000', overflow: 'hidden' },
   camera: { flex: 1 },

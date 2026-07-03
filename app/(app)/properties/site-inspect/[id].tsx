@@ -24,7 +24,7 @@ import { ScreenHeader, FilterPills, Button } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { InspectionResult, SyncOperation, JobType, JobStatus, Priority, DefectSeverity } from '@/constants/Enums';
 import {
-  getRecord, getAssetsForProperty, insertRecord, addToSyncQueue, updateRecord,
+  getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue,
 } from '@/lib/database';
 import type { Property, Asset } from '@/types';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
@@ -126,7 +126,7 @@ const AssetInspectCard = React.memo(({
               }]}>
                 <MaterialCommunityIcons
                   name={isPassed ? 'check' : isNT ? 'minus' : 'close'}
-                  size={14} color="#FFF"
+                  size={14} color={C.textOnPrimary}
                 />
               </View>
             )}
@@ -151,8 +151,8 @@ const AssetInspectCard = React.memo(({
                         onDefectChange(asset.id, chip);
                       }}
                     >
-                      {active && <MaterialCommunityIcons name="check" size={10} color="#FFF" />}
-                      <Text style={[s.chipTxt, { color: active ? '#FFF' : C.textSecondary }]}>{chip}</Text>
+                      {active && <MaterialCommunityIcons name="check" size={10} color={C.textOnPrimary} />}
+                      <Text style={[s.chipTxt, { color: active ? C.textOnPrimary : C.textSecondary }]}>{chip}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -181,8 +181,8 @@ const AssetInspectCard = React.memo(({
               }}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="check-circle" size={15} color={isPassed ? '#FFF' : C.success} />
-              <Text style={[s.btnTxt, { color: isPassed ? '#FFF' : C.success }]}>Pass</Text>
+              <MaterialCommunityIcons name="check-circle" size={15} color={isPassed ? C.textOnPrimary : C.success} />
+              <Text style={[s.btnTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -196,8 +196,8 @@ const AssetInspectCard = React.memo(({
               }}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="close-circle" size={15} color={isFailed ? '#FFF' : C.error} />
-              <Text style={[s.btnTxt, { color: isFailed ? '#FFF' : C.error }]}>Fail</Text>
+              <MaterialCommunityIcons name="close-circle" size={15} color={isFailed ? C.textOnPrimary : C.error} />
+              <Text style={[s.btnTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -211,8 +211,8 @@ const AssetInspectCard = React.memo(({
               }}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="minus-circle-outline" size={15} color={isNT ? '#FFF' : C.textSecondary} />
-              <Text style={[s.btnTxt, { color: isNT ? '#FFF' : C.textSecondary }]}>N/T</Text>
+              <MaterialCommunityIcons name="minus-circle-outline" size={15} color={isNT ? C.textOnPrimary : C.textSecondary} />
+              <Text style={[s.btnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -356,10 +356,10 @@ export default function SiteInspectScreen() {
         id: jobId, property_id: property.id, assigned_to: user.id,
         job_type: JobType.RoutineService, status: JobStatus.Completed,
         scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
-        notes: 'On-site inspection form submitted via UMA BUILDING SERVICES mobile app.',
+        notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
       };
-      insertRecord('jobs', jobPayload as any);
+      upsertRecord('jobs', jobPayload as any);
       addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as any);
 
       // 2. Save job_assets records
@@ -374,7 +374,7 @@ export default function SiteInspectScreen() {
           defect_reason: r.defectReason || null,
           technician_notes: null, actioned_at: now,
         };
-        insertRecord('job_assets', jaPayload as any);
+        upsertRecord('job_assets', jaPayload as any);
         addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as any);
 
         // 3. Auto-create defect if failed with reason
@@ -385,14 +385,14 @@ export default function SiteInspectScreen() {
             description: r.defectReason.trim(), severity: DefectSeverity.Major,
             status: 'open', photos: '[]', created_at: now,
           };
-          insertRecord('defects', dPayload as any);
+          upsertRecord('defects', dPayload as any);
           addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as any);
         }
       }
 
       // 4. Update property compliance
       const compliance = counts.failed > 0 ? 'non_compliant' : 'compliant';
-      updateRecord('properties', property.id, { compliance_status: compliance, updated_at: now });
+      upsertRecord('properties', { id: property.id, compliance_status: compliance, updated_at: now });
       addToSyncQueue('properties', property.id, SyncOperation.Update,
         { compliance_status: compliance, updated_at: now });
 
@@ -401,7 +401,7 @@ export default function SiteInspectScreen() {
       setIsSaving(false);
       Toast.show({
         type: 'success',
-        text1: 'Inspection Saved ✔',
+        text1: 'Inspection Saved',
         text2: 'Generating your report…',
       });
       router.replace(`/jobs/${jobId}/report` as never);
@@ -435,7 +435,7 @@ export default function SiteInspectScreen() {
   if (isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={false} title="On-Site Form" showBack />
+        <ScreenHeader title="On-Site Form" showBack />
         <View style={{ padding: 16, gap: 12 }}>
           <SkeletonBlock width="100%" height={130} borderRadius={16} />
           <SkeletonBlock width="100%" height={130} borderRadius={16} />
@@ -451,7 +451,7 @@ export default function SiteInspectScreen() {
         <MaterialCommunityIcons name="alert-circle-outline" size={48} color={C.border} />
         <Text style={[s.emptyTitle, { color: C.text }]}>Property Not Found</Text>
         <TouchableOpacity style={[s.backBtn, { backgroundColor: C.primary }]} onPress={() => router.back()}>
-          <Text style={{ color: '#FFF', fontWeight: '700' }}>Go Back</Text>
+          <Text style={{ color: C.textOnPrimary, fontWeight: '700' }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -460,12 +460,12 @@ export default function SiteInspectScreen() {
   // Progress badge in header
   const progressBadge = (
     <View style={[s.progressBadge, {
-      backgroundColor: allDone ? C.success + '30' : 'rgba(255,255,255,0.18)',
+      backgroundColor: allDone ? C.success + '30' : C.backgroundTertiary,
       borderColor: allDone ? C.success : 'transparent',
       borderWidth: allDone ? 1 : 0,
     }]}>
-      <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : '#FFF' }]}>
-        {allDone ? '✓ ' : ''}{counts.inspected}/{counts.total}
+      <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textOnPrimary }]}>
+        {allDone ? 'All Done ' : ''}{counts.inspected}/{counts.total}
       </Text>
     </View>
   );
@@ -475,7 +475,6 @@ export default function SiteInspectScreen() {
 
       {/* ── HEADER ──────────────────────────────────────── */}
       <ScreenHeader
-        curved={false}
         eyebrow="ON-SITE INSPECTION"
         title={property.name}
         subtitle={[property.address, property.suburb].filter(Boolean).join(', ') || 'No address'}
@@ -523,7 +522,7 @@ export default function SiteInspectScreen() {
       {/* ── ASSET LIST / EMPTY STATE ─────────────────────── */}
       {assets.length === 0 ? (
         <View style={s.emptyState}>
-          <Text style={{ fontSize: 52 }}>🔍</Text>
+          <MaterialCommunityIcons name="magnify" size={52} color={C.textTertiary} />
           <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
           <Text style={[s.emptySub, { color: C.textSecondary }]}>
             Tap below to add the first asset you find on-site.
@@ -533,8 +532,8 @@ export default function SiteInspectScreen() {
             onPress={() => setShowAddModal(true)}
             activeOpacity={0.85}
           >
-            <MaterialCommunityIcons name="plus-circle" size={20} color="#FFF" />
-            <Text style={s.addFirstBtnTxt}>Add First Asset</Text>
+            <MaterialCommunityIcons name="plus-circle" size={20} color={C.textOnPrimary} />
+            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add First Asset</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -553,15 +552,15 @@ export default function SiteInspectScreen() {
 
           {/* ── FAB — Add Asset ──────────────────────────── */}
           <TouchableOpacity
-            style={[s.fab, { backgroundColor: C.primary }]}
+            style={[s.fab, { backgroundColor: C.accent }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setShowAddModal(true);
             }}
             activeOpacity={0.85}
           >
-            <MaterialCommunityIcons name="plus" size={22} color="#FFF" />
-            <Text style={s.fabTxt}>Add Asset</Text>
+            <MaterialCommunityIcons name="plus" size={22} color={C.textOnPrimary} />
+            <Text style={[s.fabTxt, { color: C.textOnPrimary }]}>Add Asset</Text>
           </TouchableOpacity>
         </>
       )}
@@ -572,7 +571,7 @@ export default function SiteInspectScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[s.bottomTitle, { color: C.text }]}>
               {allDone
-                ? '✅ All assets inspected'
+                ? 'All assets inspected'
                 : `${counts.remaining} asset${counts.remaining !== 1 ? 's' : ''} remaining`}
             </Text>
             <Text style={[s.bottomSub, { color: C.textSecondary }]}>
@@ -599,15 +598,15 @@ export default function SiteInspectScreen() {
 
       {/* Completion modal */}
       <Modal visible={showComplete} transparent animationType="fade" onRequestClose={() => setShowComplete(false)}>
-        <View style={cm.overlay}>
-          <Animated.View entering={ZoomIn.duration(350)} style={[cm.card, { backgroundColor: C.primary }]}>
+        <View style={[cm.overlay, { backgroundColor: C.overlay }]}>
+          <Animated.View entering={ZoomIn.duration(350)} style={[cm.card, { backgroundColor: C.surface, shadowColor: C.shadow }]}>
             <View style={[cm.circle, { backgroundColor: C.success }]}>
-              <MaterialCommunityIcons name="check-bold" size={40} color="#FFF" />
+              <MaterialCommunityIcons name="check-bold" size={40} color={C.textOnPrimary} />
             </View>
-            <Text style={cm.title}>Inspection Complete!</Text>
-            <Text style={cm.propName}>{property.name}</Text>
+            <Text style={[cm.title, { color: C.textOnPrimary }]}>Inspection Complete!</Text>
+            <Text style={[cm.propName, { color: C.textSecondary }]}>{property.name}</Text>
 
-            <View style={[cm.statsRow, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+            <View style={[cm.statsRow, { backgroundColor: C.backgroundTertiary }]}>
               {[
                 { label: 'Passed', value: counts.passed },
                 { label: 'Failed', value: counts.failed, alert: counts.failed > 0 },
@@ -615,18 +614,18 @@ export default function SiteInspectScreen() {
               ].map((s, i, arr) => (
                 <React.Fragment key={s.label}>
                   <View style={cm.statItem}>
-                    <Text style={[cm.statValue, s.alert ? { color: '#FCA5A5' } : {}]}>{s.value}</Text>
-                    <Text style={cm.statLabel}>{s.label}</Text>
+                    <Text style={[cm.statValue, s.alert ? { color: C.errorLight } : { color: C.textOnPrimary }]}>{s.value}</Text>
+                    <Text style={[cm.statLabel, { color: C.textSecondary }]}>{s.label}</Text>
                   </View>
-                  {i < arr.length - 1 && <View style={cm.statDiv} />}
+                  {i < arr.length - 1 && <View style={[cm.statDiv, { backgroundColor: C.border }]} />}
                 </React.Fragment>
               ))}
             </View>
 
             {counts.failed > 0 && (
-              <View style={cm.alertRow}>
-                <MaterialCommunityIcons name="alert-circle" size={15} color="#FCA5A5" />
-                <Text style={cm.alertTxt}>
+              <View style={[cm.alertRow, { backgroundColor: C.errorLight, borderColor: C.error }]}>
+                <MaterialCommunityIcons name="alert-circle" size={15} color={C.error} />
+                <Text style={[cm.alertTxt, { color: C.errorDark }]}>
                   {counts.failed} defect{counts.failed !== 1 ? 's' : ''} logged — follow up with your office.
                 </Text>
               </View>
@@ -637,14 +636,14 @@ export default function SiteInspectScreen() {
                 style={[cm.btn, { backgroundColor: C.success }]}
                 onPress={() => { setShowComplete(false); router.back(); }}
               >
-                <MaterialCommunityIcons name="arrow-left-circle" size={18} color="#FFF" />
-                <Text style={cm.btnTxt}>Return to Property</Text>
+                <MaterialCommunityIcons name="arrow-left-circle" size={18} color={C.textOnPrimary} />
+                <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Return to Property</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[cm.btn, { backgroundColor: 'rgba(255,255,255,0.14)' }]}
+                style={[cm.btn, { backgroundColor: C.backgroundTertiary }]}
                 onPress={() => { setShowComplete(false); router.dismissAll(); }}
               >
-                <Text style={cm.btnTxt}>Go to Dashboard</Text>
+                <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Go to Dashboard</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -659,85 +658,85 @@ const s = StyleSheet.create({
   screen:   { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
 
-  progressBadge:    { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  progressBadgeTxt: { fontWeight: '800', fontSize: 13 },
+  progressBadge:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 24 },
+  progressBadgeTxt: { fontWeight: '900', fontSize: 13, letterSpacing: 0.5 },
 
-  progressTrack: { height: 5 },
-  progressFill:  { height: 5, borderTopRightRadius: 5, borderBottomRightRadius: 5 },
+  progressTrack: { height: 6 },
+  progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
 
-  statsBar:    { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1 },
-  statItem:    { flex: 1, alignItems: 'center', gap: 2 },
-  statValue:   { fontSize: 16, fontWeight: '800' },
-  statLabel:   { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.2 },
-  statDivider: { width: 1, height: 28, alignSelf: 'center' },
+  statsBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1 },
+  statItem:    { flex: 1, alignItems: 'center', gap: 4 },
+  statValue:   { fontSize: 18, fontWeight: '900' },
+  statLabel:   { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  statDivider: { width: 1, height: 32, alignSelf: 'center' },
 
-  filterRow: { paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1 },
+  filterRow: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1 },
 
   // Asset card
-  cardOuter:    { marginHorizontal: 14, marginBottom: 10 },
-  assetCard:    { flexDirection: 'row', borderRadius: 16, borderWidth: 1.5, overflow: 'hidden' },
-  cardStripe:   { width: 5 },
-  cardBody:     { flex: 1, padding: 14 },
-  cardHeader:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  assetIconWrap:{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  assetType:    { fontSize: 15, fontWeight: '800', marginBottom: 1 },
-  assetLoc:     { fontSize: 12, marginTop: 1 },
-  assetSerial:  { fontSize: 11, fontFamily: 'monospace', marginTop: 2, opacity: 0.7 },
-  resultDot:    { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cardOuter:    { marginHorizontal: 16, marginBottom: 14 },
+  assetCard:    { flexDirection: 'row', borderRadius: 20, borderWidth: 1.5, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
+  cardStripe:   { width: 6 },
+  cardBody:     { flex: 1, padding: 18 },
+  cardHeader:   { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  assetIconWrap:{ width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  assetType:    { fontSize: 16, fontWeight: '900', marginBottom: 2, letterSpacing: -0.2 },
+  assetLoc:     { fontSize: 13, marginTop: 2, fontWeight: '500' },
+  assetSerial:  { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.8, fontWeight: '600' },
+  resultDot:    { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 
   // Defect
-  defectSection: { borderRadius: 12, borderWidth: 1, padding: 12, marginTop: 12 },
-  defectTitle:   { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, marginBottom: 10, textTransform: 'uppercase' },
-  chipRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  chipTxt:       { fontSize: 12, fontWeight: '600' },
-  defectInput:   { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
+  defectSection: { borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 16 },
+  defectTitle:   { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 14 },
+  chipRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  chipTxt:       { fontSize: 13, fontWeight: '800' },
+  defectInput:   { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, fontWeight: '600' },
 
   // Buttons
-  btnRow:    { flexDirection: 'row', gap: 8, marginTop: 12 },
-  resultBtn: { flex: 1, height: 44, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1.5 },
-  btnTxt:    { fontSize: 13, fontWeight: '700' },
+  btnRow:    { flexDirection: 'row', gap: 10, marginTop: 16 },
+  resultBtn: { flex: 1, height: 50, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5 },
+  btnTxt:    { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
 
   // FAB
-  fab:    { position: 'absolute', right: 18, bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 30, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
-  fabTxt: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  fab:    { position: 'absolute', right: 20, bottom: 104, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingVertical: 16, borderRadius: 32, elevation: 12, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14 },
+  fabTxt: { fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
 
   // Empty state
-  emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
-  emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8 },
-  emptySub:      { fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20, marginTop: 16 },
-  addFirstBtnTxt:{ color: '#FFF', fontSize: 15, fontWeight: '800' },
-  backBtn:       { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16 },
+  emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  emptyTitle:    { fontSize: 22, fontWeight: '900', marginTop: 12, letterSpacing: -0.5 },
+  emptySub:      { fontSize: 14, textAlign: 'center', lineHeight: 22, fontWeight: '500' },
+  addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 24, marginTop: 24 },
+  addFirstBtnTxt:{ fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  backBtn:       { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 20 },
 
   // Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 14,
-    borderTopWidth: 1, elevation: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08, shadowRadius: 8,
+    paddingHorizontal: 20, paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    borderTopWidth: 1, elevation: 24,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15, shadowRadius: 16,
   },
-  bottomTitle: { fontSize: 14, fontWeight: '700' },
-  bottomSub:   { fontSize: 12, marginTop: 1 },
+  bottomTitle: { fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },
+  bottomSub:   { fontSize: 13, marginTop: 2, fontWeight: '600' },
 });
 
 // ─── Completion modal styles ──────────────────────────────────
 const cm = StyleSheet.create({
-  overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', padding: 24 },
-  card:     { borderRadius: 28, padding: 28, alignItems: 'center', gap: 14 },
-  circle:   { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
-  title:    { fontSize: 26, fontWeight: '800', color: '#FFF', letterSpacing: -0.5 },
-  propName: { fontSize: 13, color: 'rgba(255,255,255,0.55)' },
-  statsRow: { flexDirection: 'row', width: '100%', borderRadius: 14, padding: 14 },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
-  statDiv:  { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  statValue:{ fontSize: 22, fontWeight: '800', color: '#FFF' },
-  statLabel:{ fontSize: 11, color: 'rgba(255,255,255,0.5)' },
-  alertRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.18)', borderWidth: 1, borderColor: '#FCA5A5', width: '100%' },
-  alertTxt: { fontSize: 12, color: '#FCA5A5', flex: 1, lineHeight: 18 },
-  btn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 50, width: '100%' },
-  btnTxt:   { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  overlay:  { flex: 1, justifyContent: 'center', padding: 24 },
+  card:     { borderRadius: 32, padding: 32, alignItems: 'center', gap: 16, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 },
+  circle:   { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  title:    { fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
+  propName: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  statsRow: { flexDirection: 'row', width: '100%', borderRadius: 16, padding: 16 },
+  statItem: { flex: 1, alignItems: 'center', gap: 6 },
+  statDiv:  { width: 1 },
+  statValue:{ fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  statLabel:{ fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  alertRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, width: '100%' },
+  alertTxt: { fontSize: 13, flex: 1, lineHeight: 20, fontWeight: '600' },
+  btn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 20, height: 56, width: '100%' },
+  btnTxt:   { fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
 });

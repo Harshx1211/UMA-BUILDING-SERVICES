@@ -4,7 +4,7 @@ import { verifySuperAdmin } from '@/lib/supabase-server';
 
 export async function GET(req: NextRequest) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { data, error } = await supabaseAdmin

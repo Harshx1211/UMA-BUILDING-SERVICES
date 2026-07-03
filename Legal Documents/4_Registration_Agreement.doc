@@ -1,0 +1,56 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Tenant Registration Agreement - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .signature-box { border: 2px solid #000; padding: 25px; margin-top: 40px; background-color: #fafafa; }
+        .warning { color: #d9534f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>TENANT REGISTRATION & ASSUMPTION OF LIABILITY AGREEMENT</h1>
+    <p>This Tenant Registration Agreement (the "Agreement") must be explicitly agreed to by the authorized representative of the registering fire safety company ("Customer") before gaining access to the SiteTrack platform ("Service").</p>
+    <p><em>Nothing in this Agreement excludes, restricts, or modifies any consumer guarantee, right, or remedy under the Australian Consumer Law (ACL) that cannot lawfully be excluded.</em></p>
+
+    <h2>1. BINDING DECLARATION OF LEGAL AUTHORITY</h2>
+    <p>By checking the acceptance box during the digital registration process, you formally declare that you possess the full legal authority to bind the Customer entity to this Agreement and the SiteTrack Master Terms of Service.</p>
+
+    <h2>2. EXPLICIT WAIVER OF PLATFORM LIABILITY</h2>
+    <p>You explicitly acknowledge, understand, and agree that:</p>
+    <ul>
+        <li>SiteTrack is exclusively a digital software provider. SiteTrack is <span class="warning">NOT</span> an engineering firm, fire safety certifier, or compliance regulatory body.</li>
+        <li>The Customer is <strong>100% solely and unconditionally responsible</strong> for the physical inspection, maintenance, and compliance of all fire safety systems managed through the platform, in strict accordance with AS 1851-2012.</li>
+        <li><strong>Except to the extent directly caused by SiteTrack's own gross negligence, wilful misconduct, or material software defect</strong>, you waive all rights to hold SiteTrack liable for property damage, personal injury, death, or regulatory fines resulting from fire system failures, missed inspections, or inaccurate data entered by your personnel.</li>
+    </ul>
+
+    <h2>3. CUSTOMER INDEMNIFICATION GUARANTEE</h2>
+    <p><strong>Except to the extent caused by SiteTrack's gross negligence, wilful misconduct, or a material platform defect</strong>, you agree to fully indemnify and pay for all legal defense costs of SiteTrack against any third-party lawsuits (including claims from building owners or government authorities) that arise as a result of the faulty physical fire safety work performed by the Customer or its technicians.</p>
+    <p><em>Note: SiteTrack's total liability under this Agreement is strictly capped in accordance with the Limitation of Liability section of the Master Terms of Service.</em></p>
+
+    <h2>4. ACCEPTANCE OF ALL GOVERNING POLICIES</h2>
+    <p>You confirm that you have read, understood, and unconditionally accept the entirety of the following documents:</p>
+    <ol>
+        <li>The SiteTrack Master Terms of Service</li>
+        <li>The SiteTrack Privacy Policy</li>
+        <li>The SiteTrack Acceptable Use Policy</li>
+    </ol>
+
+    <div class="signature-box">
+        <h2 style="margin-top: 0; text-align: center; border-bottom: none;">AGREEMENT DECLARATION</h2>
+        <p><strong>[   ] I AGREE AND ACCEPT THE TERMS</strong></p>
+        <p><em>By checking the box provided in the digital registration portal, you electronically execute this legally binding contract on behalf of your fire safety company.</em></p>
+        <br><br>
+        <p><strong>Company / Entity Legal Name:</strong> __________________________________________________</p><br>
+        <p><strong>ABN (Australian Business Number):</strong> _______________________________________________</p><br>
+        <p><strong>Printed Name of Authorised Administrator:</strong> _______________________________________</p><br>
+        <p><strong>Signature:</strong> ____________________________________________________________________</p><br>
+        <p><strong>Date:</strong> _________________________________</p>
+    </div>
+
+</body>
+</html>

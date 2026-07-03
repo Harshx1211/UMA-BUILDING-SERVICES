@@ -3,17 +3,13 @@ export interface QuoteReportData {
   defects: any[]; // list of defects with quote_price
   total_amount: number;
   reportId: string;
+  company: {
+    name?: string;
+    abn?: string;
+    contact_email?: string;
+    phone?: string;
+  };
 }
-
-const CompanyConfig = {
-  name: 'UMA Building Services Pty Ltd',
-  addressLine1: 'P.O. Box 357',
-  addressLine2: 'Lidcombe NSW 1825',
-  abn: '51602019081',
-  website: 'www.uma-building-services.com.au',
-  contactPhone: '1300 748 387',
-  contactEmail: 'info@uma-building-services.com.au',
-};
 
 function fmtDateShort(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -133,14 +129,20 @@ body {
 .grand-val { font-weight: 900; font-size: 15px; color: #059669; min-width: 80px; text-align: right; }
 `;
 
-function logoHtml(reportNum: string): string {
+function getInitials(name?: string): string {
+  if (!name) return 'CO';
+  return name.split(' ').slice(0, 3).map(p => p[0]).join('').toUpperCase().substring(0, 3);
+}
+
+function logoHtml(reportNum: string, company: any): string {
+  const init = getInitials(company?.name);
+  const name = company?.name || 'Company Name';
   return `
   <div class="brand-bar">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
+      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">${init}</span></div></div>
       <div class="brand-text">
-        <div class="brand-name"><span>U</span>MA</div>
-        <div class="brand-sub">Building Services</div>
+        <div class="brand-name">${name}</div>
       </div>
     </div>
     <div class="brand-meta">
@@ -150,17 +152,16 @@ function logoHtml(reportNum: string): string {
   </div>`;
 }
 
-function footerHtml(): string {
+function footerHtml(company: any): string {
   return `
   <div class="footer">
     <div class="f-left">
-      <div>${CompanyConfig.name}</div>
-      <div>${CompanyConfig.addressLine1}, ${CompanyConfig.addressLine2} &nbsp;|&nbsp; ABN: ${CompanyConfig.abn}</div>
+      <div>${company?.name || 'Company Name'}</div>
+      <div>ABN: ${company?.abn || 'Not Provided'}</div>
     </div>
     <div class="f-mid">Page <span class="page-num"></span> of <span id="ftotal">…</span></div>
     <div class="f-right">
-      <div>&#127758; ${CompanyConfig.website}</div>
-      <div>&#9742; ${CompanyConfig.contactPhone} &nbsp;|&nbsp; &#64; ${CompanyConfig.contactEmail}</div>
+      <div>&#9742; ${company?.phone || 'Not Provided'} &nbsp;|&nbsp; &#64; ${company?.contact_email || 'Not Provided'}</div>
     </div>
   </div>`;
 }
@@ -178,7 +179,7 @@ function pageCountScript(): string {
 }
 
 export function generateQuoteHtml(data: QuoteReportData): string {
-  const { job, defects, total_amount, reportId } = data;
+  const { job, defects, total_amount, reportId, company } = data;
   
   const propName = job?.property?.name || '—';
   const address = [job?.property?.address, job?.property?.suburb, job?.property?.state, job?.property?.postcode].filter(Boolean).join(', ');
@@ -216,9 +217,9 @@ export function generateQuoteHtml(data: QuoteReportData): string {
   <style>${CSS}</style>
 </head>
 <body>
-  ${footerHtml()}
+  ${footerHtml(company)}
   <div class="page">
-    ${logoHtml(shortId(reportId, 6))}
+    ${logoHtml(shortId(reportId, 6), company)}
 
     <div class="sec-bar first">Quotation Details</div>
     <div class="info-grid">

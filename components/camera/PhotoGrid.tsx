@@ -6,6 +6,7 @@ import { useColors } from '@/hooks/useColors';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { getRecord } from '@/lib/database';
 
 interface Props {
   photos: InspectionPhoto[];
@@ -22,11 +23,19 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
 
   // Grouping logic
   const sectionsObj = photos.reduce((acc, photo) => {
-    // If we had asset name, we'd use it here. 
-    // The prompt says "Sub-grouped by asset name". 
-    // We only have `asset_id` in InspectionPhoto. Let's group by `asset_id` or "Site Photos (General)".
-    // A clean way is just showing "Asset: [id]" for now, since we'd need to join assets to get the real name.
-    const key = photo.asset_id ? `Asset Photos (${photo.asset_id.substring(0,6)})` : 'Site Photos (General)';
+    let key = 'Site Photos (General)';
+    if (photo.asset_id) {
+      try {
+        const asset = getRecord<{ asset_type: string; location_on_site: string }>('assets', photo.asset_id);
+        if (asset) {
+          key = `${asset.asset_type} - ${asset.location_on_site}`;
+        } else {
+          key = `Asset Photos (${photo.asset_id.substring(0, 6)})`;
+        }
+      } catch {
+        key = `Asset Photos (${photo.asset_id.substring(0, 6)})`;
+      }
+    }
     if (!acc[key]) acc[key] = [];
     acc[key].push(photo);
     return acc;

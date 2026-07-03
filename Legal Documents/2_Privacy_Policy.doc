@@ -1,0 +1,60 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Privacy Policy - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .clause { font-weight: bold; }
+        ol { margin-bottom: 15px; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>SITETRACK PRIVACY POLICY</h1>
+    <p><strong>Last Updated:</strong> [Insert Date]</p>
+
+    <p>[Insert Company Name] ABN [Insert ABN] ("SiteTrack", "we", "us", or "our") is committed to protecting your privacy in accordance with the Australian Privacy Principles (APPs) contained in the <i>Privacy Act 1988 (Cth)</i>.</p>
+
+    <h2>1. OUR ROLE IN DATA HANDLING</h2>
+    <p>SiteTrack acts in two different capacities depending on the type of data:</p>
+    <ul>
+        <li><strong>As a Data Processor:</strong> For third-party data entered by our Customers (e.g., building owner contacts, site details), we process this data strictly on the instructions of our B2B Customers.</li>
+        <li><strong>As an APP Entity (Data Controller):</strong> For User Account Information (technicians and administrators), Professional Compliance Information (FPAS numbers), and Operational/Device Data (geolocation, logs), we collect and use this data directly for authentication, platform security, and generating compliance reports.</li>
+    </ul>
+
+    <h2>2. INFORMATION WE COLLECT</h2>
+    <ol>
+        <li><span class="clause">User Account Information:</span> Names, email addresses, and phone numbers of technicians and administrators.</li>
+        <li><span class="clause">Professional Compliance Information:</span> FPAS accreditation numbers, state license details, and expiry dates.</li>
+        <li><span class="clause">Operational Data:</span> Real-time location data (collected when technicians record geolocations for AS 1851-2012 compliance logs), device identifiers, and platform usage statistics.</li>
+    </ol>
+
+    <h2>3. DATA RETENTION SCHEDULE</h2>
+    <p>We retain data only as long as necessary. Our standard retention periods are:</p>
+    <ul>
+        <li><strong>Inspection Records & Geolocation Logs:</strong> Retained for seven (7) years to support our Customers' AS 1851-2012 statutory reporting requirements.</li>
+        <li><strong>Invoices and Billing Data:</strong> Retained for five (5) years as required by Australian taxation law.</li>
+        <li><strong>Account Deletion:</strong> Upon Customer termination and data export, all remaining active data is deleted within 30 days. Immutable backups are retained for a maximum of 90 days before being automatically overwritten.</li>
+    </ul>
+
+    <h2>4. INTERNATIONAL DATA TRANSFERS</h2>
+    <p>To provide high-availability cloud services, SiteTrack utilizes third-party infrastructure providers. By using the Service, you consent to the transfer, storage, and processing of personal information in <strong>[Insert Exact Region, e.g., the United States / Singapore / AWS ap-southeast-2]</strong> (APP 8.2(b) exception). Additionally, we ensure that our infrastructure providers meet stringent global security standards (SOC 2, ISO 27001) in accordance with our APP 8.1 obligations.</p>
+
+    <h2>5. CHILDREN'S PRIVACY</h2>
+    <p>The SiteTrack platform is a professional B2B tool and is <strong>not directed at, nor intended for use by, minors under the age of 18</strong>. We do not knowingly collect personal information from individuals under 18.</p>
+
+    <h2>6. MARKETING COMMUNICATIONS</h2>
+    <p>We may occasionally send you administrative or promotional emails. You can opt-out of promotional communications at any time by clicking the "unsubscribe" link at the bottom of our emails. Administrative emails (e.g., security alerts) cannot be opted out of while you hold an active account.</p>
+
+    <h2>7. ACCESS, CORRECTION, AND TECHNICIAN RIGHTS</h2>
+    <p>All data subjects, including individual technicians whose profiles were created by their employers (our Customers), have the right to request access to or correction of the personal information we hold about them. To exercise these rights, please contact us at:</p>
+    <p><strong>Email:</strong> [Insert Legal Contact Email]<br>
+    <strong>Address:</strong> [Insert Business Address]</p>
+    <p>We will respond to all requests within a reasonable timeframe (usually 30 days) and assist technicians in exercising their rights under the APPs.</p>
+
+</body>
+</html>

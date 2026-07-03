@@ -66,9 +66,9 @@ export default function PropertyAssetsScreen() {
   if (!property) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={false} title="Not Found" showBack={true} />
+        <ScreenHeader title="Not Found" showBack={true} />
         <EmptyState
-          emoji="🏢"
+          icon="office-building-marker-outline"
           title="Property not found"
           subtitle="We couldn't locate the property record."
           actionLabel="Go Back"
@@ -101,7 +101,7 @@ export default function PropertyAssetsScreen() {
 
       {assets.length === 0 ? (
         <View style={s.emptyState}>
-          <Text style={{ fontSize: 52 }}>🔍</Text>
+          <MaterialCommunityIcons name="magnify" size={52} color={C.textTertiary} />
           <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
           <Text style={[s.emptySub, { color: C.textSecondary }]}>
             It looks like there are no fire safety assets on record for this site.
@@ -111,8 +111,8 @@ export default function PropertyAssetsScreen() {
             onPress={() => setShowAddAsset(true)}
             activeOpacity={0.85}
           >
-            <MaterialCommunityIcons name="plus-circle" size={20} color="#FFF" />
-            <Text style={s.addFirstBtnTxt}>Add First Asset</Text>
+            <MaterialCommunityIcons name="plus-circle" size={20} color={C.textOnPrimary} />
+            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add First Asset</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -237,5 +237,5 @@ const s = StyleSheet.create({
   emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8 },
   emptySub:      { fontSize: 13, textAlign: 'center', lineHeight: 20 },
   addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20, marginTop: 16 },
-  addFirstBtnTxt:{ color: '#FFF', fontSize: 15, fontWeight: '800' },
+  addFirstBtnTxt:{ fontSize: 15, fontWeight: '800' },
 });

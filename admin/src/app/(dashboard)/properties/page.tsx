@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { adminApi, adminRead } from '@/lib/admin-api';
+import { adminApi, adminRead, adminReadBatch } from '@/lib/admin-api';
 import Badge from '@/components/ui/Badge';
 import PageHeader from '@/components/ui/PageHeader';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -10,14 +9,46 @@ import { exportToCsv, PROPERTY_CSV_COLUMNS, csvRowToProperty } from '@/lib/csv';
 import { Search, Plus, X, Building2, MapPin, Phone, ArrowUpRight, ShieldCheck, Trash2, Calendar, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import { getCached, setCached } from '@/lib/pageCache';
+import Skeleton from '@/components/ui/Skeleton';
 
-const COMPLIANCE = ['', 'compliant', 'non_compliant', 'overdue', 'pending'];
 const STATES = ['', 'NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
+const CACHE_KEY = 'properties_list';
+
+interface Property {
+  id: string;
+  name: string;
+  address?: string;
+  suburb?: string;
+  state?: string;
+  postcode?: string;
+  site_contact_name?: string;
+  site_contact_phone?: string;
+  access_notes?: string;
+  hazard_notes?: string;
+  site_note?: string;
+  compliance_status?: string;
+  next_inspection_date?: string;
+}
+
+interface Summary {
+  compliant: number;
+  non_compliant: number;
+  overdue: number;
+  pending: number;
+}
+
+interface CachedProps {
+  properties: Property[];
+  total: number;
+  summary: Summary;
+}
 
 export default function PropertiesPage() {
-  const [properties, setProperties] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const cachedProps = getCached<CachedProps>(CACHE_KEY);
+  const [properties, setProperties] = useState<Property[]>(cachedProps?.properties ?? []);
+  const [total, setTotal] = useState(cachedProps?.total ?? 0);
+  const [loading, setLoading] = useState(!cachedProps);
   const [search, setSearch] = useState('');
   const [complianceF, setComplianceF] = useState('');
   const [stateF, setStateF] = useState('');
@@ -25,42 +56,51 @@ export default function PropertiesPage() {
   const [showImport, setShowImport] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', address: '', suburb: '', state: 'NSW', postcode: '', site_contact_name: '', site_contact_phone: '', access_notes: '', hazard_notes: '', site_note: '' });
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
 
   // Compliance summary
-  const [summary, setSummary] = useState({ compliant: 0, non_compliant: 0, overdue: 0, pending: 0 });
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, count } = await adminRead<any>('properties', {
-      select: '*',
-      count: true,
-      filters: {
-        ...(complianceF ? { compliance_status: complianceF } : {}),
-        ...(stateF ? { state: stateF } : {}),
-      },
-      ...(search ? { ilike: { column: 'name', pattern: `%${search}%` } } : {}),
-      order: { column: 'name', ascending: true },
-    });
-    setProperties(data ?? []);
-    setTotal(count ?? 0);
-    setLoading(false);
-  }, [complianceF, stateF, search]);
-
-  useEffect(() => { load(); }, [load]);
+  const [summary, setSummary] = useState<Summary>(cachedProps?.summary ?? { compliant: 0, non_compliant: 0, overdue: 0, pending: 0 });
+  // refresh trigger: increment to re-run the fetch effect
+  const [tick, setTick] = useState(0);
+  const load = useCallback(() => { setTick(t => t + 1); }, []);
 
   useEffect(() => {
-    async function loadSummary() {
-      const [c, nc, o, p] = await Promise.all([
-        adminRead('properties', { count: true, limit: 0, filters: { compliance_status: 'compliant' } }),
-        adminRead('properties', { count: true, limit: 0, filters: { compliance_status: 'non_compliant' } }),
-        adminRead('properties', { count: true, limit: 0, filters: { compliance_status: 'overdue' } }),
-        adminRead('properties', { count: true, limit: 0, filters: { compliance_status: 'pending' } }),
+    let active = true;
+    (async () => {
+      setLoading(true);
+      const results = await adminReadBatch([
+        {
+          table: 'properties',
+          options: {
+            select: '*',
+            count: true,
+            filters: {
+              ...(complianceF ? { compliance_status: complianceF } : {}),
+              ...(stateF ? { state: stateF } : {}),
+            },
+            ...(search ? { ilike: { column: 'name', pattern: `%${search}%` } } : {}),
+            order: { column: 'name', ascending: true },
+          }
+        },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'compliant' } } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'non_compliant' } } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'overdue' } } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'pending' } } },
       ]);
-      setSummary({ compliant: c.count ?? 0, non_compliant: nc.count ?? 0, overdue: o.count ?? 0, pending: p.count ?? 0 });
-    }
-    loadSummary();
-  }, []);
+      const [listResult, c, nc, o, p] = results;
+      if (!active) return;
+      const { data, count } = listResult;
+      const newSummary = { compliant: c.count ?? 0, non_compliant: nc.count ?? 0, overdue: o.count ?? 0, pending: p.count ?? 0 };
+      setProperties(data ?? []);
+      setTotal(count ?? 0);
+      setSummary(newSummary);
+      if (!complianceF && !stateF && !search) {
+        setCached(CACHE_KEY, { properties: data ?? [], total: count ?? 0, summary: newSummary });
+      }
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [complianceF, stateF, search, tick]);
 
   const createProperty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +122,7 @@ export default function PropertiesPage() {
 
   const handleExport = () => {
     if (properties.length === 0) { toast.error('No properties to export'); return; }
-    exportToCsv(`uma_properties_${new Date().toISOString().split('T')[0]}`, properties, PROPERTY_CSV_COLUMNS);
+    exportToCsv(`uma_properties_${new Date().toISOString().split('T')[0]}`, properties as unknown as Record<string, unknown>[], PROPERTY_CSV_COLUMNS);
     toast.success(`Exported ${properties.length} properties`);
   };
 
@@ -103,12 +143,12 @@ export default function PropertiesPage() {
             <button onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'var(--card)' }}>
-              <Download size={14} /> Export CSV
+              <Upload size={14} /> Export CSV
             </button>
             <button onClick={() => setShowImport(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-md active:scale-95 border"
               style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--primary-light)' }}>
-              <Upload size={14} /> Import CSV
+              <Download size={14} /> Import CSV
             </button>
             <button onClick={() => setShowCreate(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:shadow-lg active:scale-95"
@@ -163,7 +203,7 @@ export default function PropertiesPage() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-[var(--card)] rounded-2xl border h-40 animate-shimmer" style={{ borderColor: 'var(--border)' }} />
+            <Skeleton key={i} variant="card" className="h-40 w-full" style={{ animationDelay: `${i * 40}ms` }} />
           ))}
         </div>
       ) : properties.length === 0 ? (
@@ -264,7 +304,7 @@ export default function PropertiesPage() {
               ].map(f => (
                 <div key={f.field}>
                   <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>{f.label}</label>
-                  <input value={(form as any)[f.field]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
+                  <input value={form[f.field as keyof typeof form]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
                     placeholder={f.placeholder}
                     className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none transition-all"
                     style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
@@ -279,7 +319,7 @@ export default function PropertiesPage() {
                 ].map(f => (
                   <div key={f.field} className="col-span-1">
                     <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--text)' }}>{f.label}</label>
-                    <input value={(form as any)[f.field]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
+                    <input value={form[f.field as keyof typeof form]} onChange={e => setForm(p => ({ ...p, [f.field]: e.target.value }))}
                       placeholder={f.placeholder}
                       className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none"
                       style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />

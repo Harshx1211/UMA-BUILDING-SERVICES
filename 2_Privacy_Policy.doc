@@ -1,0 +1,70 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Privacy Policy - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .clause { font-weight: bold; }
+        ol { margin-bottom: 15px; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>SITETRACK PRIVACY POLICY</h1>
+    <p><strong>Last Updated:</strong> [Insert Date]</p>
+
+    <p>[Insert Company Name] ABN [Insert ABN] ("SiteTrack", "we", "us", or "our") is committed to protecting your privacy. This Privacy Policy outlines our practices regarding the collection, use, storage, and disclosure of personal information in accordance with the Australian Privacy Principles (APPs) contained in the <i>Privacy Act 1988 (Cth)</i>.</p>
+
+    <p>This policy applies to individuals who interact with the SiteTrack web dashboard, mobile applications, and associated services (collectively, the "Service").</p>
+
+    <h2>1. INFORMATION WE COLLECT</h2>
+    <p>We only collect personal information that is reasonably necessary for us to provide our SaaS platform to our B2B customers (Fire Safety Companies). This includes:</p>
+    <ol>
+        <li><span class="clause">User Account Information:</span> Names, email addresses, phone numbers, and job titles of administrators and technicians using the Service.</li>
+        <li><span class="clause">Professional Compliance Information:</span> Details regarding professional qualifications, including FPAS accreditation numbers, state license details, and expiry dates.</li>
+        <li><span class="clause">Operational & Device Data:</span> Log data, IP addresses, device identifiers, app usage statistics, and real-time location data (collected strictly when technicians interact with the mobile application to record inspection geolocations).</li>
+        <li><span class="clause">Third-Party Data:</span> Information entered by our Customers into the platform regarding their own clients (e.g., building managers' contact details). SiteTrack acts strictly as a data processor for this information.</li>
+    </ol>
+
+    <h2>2. HOW WE USE YOUR INFORMATION</h2>
+    <p>We use the collected information for the following primary purposes:</p>
+    <ol>
+        <li>To provide, operate, maintain, and secure the SiteTrack platform;</li>
+        <li>To authenticate users and ensure only authorized personnel access the Service;</li>
+        <li>To enable Customers to generate accurate compliance reports (AS 1851-2012) containing the credentials and geolocations of inspecting technicians;</li>
+        <li>To provide customer support and communicate important technical or service updates; and</li>
+        <li>To monitor system performance and improve the functionality of the Service.</li>
+    </ol>
+
+    <h2>3. DATA STORAGE AND SECURITY</h2>
+    <p>We take the security of personal information seriously and implement industry-standard technical and organizational measures to protect data from unauthorized access, modification, disclosure, or misuse. These measures include Row Level Security (RLS) on our databases, data encryption in transit and at rest, and strict access controls.</p>
+
+    <h2>4. INTERNATIONAL DATA TRANSFERS</h2>
+    <p>To provide high-availability cloud services, SiteTrack utilizes third-party infrastructure providers. <strong>By using the Service, you expressly acknowledge and consent that personal information may be transferred to, processed, and stored on servers located outside of Australia (including but not limited to the United States).</strong></p>
+    <p>We take reasonable steps to ensure that any overseas recipient of your personal information does not breach the APPs, typically by ensuring our infrastructure providers adhere to stringent global security standards (e.g., SOC 2, ISO 27001).</p>
+
+    <h2>5. DISCLOSURE OF INFORMATION</h2>
+    <p>We do not sell, rent, or trade your personal information to third parties. We will only disclose personal information:</p>
+    <ol>
+        <li>To our trusted third-party service providers (e.g., hosting providers) who assist us in operating the platform, subject to strict confidentiality obligations;</li>
+        <li>If required by law, subpoena, or court order; or</li>
+        <li>To protect the rights, property, or safety of SiteTrack, our Customers, or the public.</li>
+    </ol>
+
+    <h2>6. NOTIFIABLE DATA BREACHES (NDB)</h2>
+    <p>In the unlikely event of a data breach that is likely to result in serious harm to any individual to whom the information relates, SiteTrack will comply with its obligations under the Notifiable Data Breaches (NDB) scheme. We will promptly assess the breach and, where legally required, notify the Office of the Australian Information Commissioner (OAIC) and affected individuals.</p>
+
+    <h2>7. ACCESS AND CORRECTION</h2>
+    <p>You have the right to request access to the personal information we hold about you and to ask for it to be corrected if you believe it is inaccurate, out of date, or incomplete. To make a request, please contact us at:</p>
+    <p><strong>Email:</strong> [Insert Legal Contact Email]<br>
+    <strong>Address:</strong> [Insert Business Address]</p>
+
+    <h2>8. COMPLAINTS</h2>
+    <p>If you believe we have breached the APPs, you may lodge a complaint by contacting us at the details above. We will investigate your complaint and respond in writing within a reasonable timeframe (usually 30 days). If you are not satisfied with our response, you may refer your complaint to the OAIC (www.oaic.gov.au).</p>
+
+</body>
+</html>

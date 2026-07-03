@@ -9,12 +9,16 @@ import {
   TrendingUp, Clock, CheckCircle2, AlertTriangle, ArrowUpRight,
 } from 'lucide-react';
 
-import { adminRead } from '@/lib/admin-api';
+import { supabase } from '@/lib/supabase';
+import { setCached, getCached } from '@/lib/pageCache';
 import StatCard from '@/components/ui/StatCard';
 import Badge from '@/components/ui/Badge';
-import { formatDate, formatCurrency, timeAgo } from '@/lib/utils';
-import type { Job, Defect } from '@/types';
+import Skeleton from '@/components/ui/Skeleton';
+import { formatDate, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
+
+
+const CACHE_KEY = 'dashboard';
 
 const SEV_COLORS = { minor: '#f59e0b', major: '#f97316', critical: '#ef4444' };
 
@@ -35,92 +39,53 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState({
+  const cached = getCached<any>(CACHE_KEY);
+  const [stats, setStats] = useState(cached?.stats ?? {
     totalJobs: 0, todayJobs: 0, completedJobs: 0, inProgressJobs: 0,
     totalProperties: 0, overdueProperties: 0,
     openDefects: 0, criticalDefects: 0,
     activeTechs: 0, pendingQuotes: 0,
   });
-  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
-  const [recentDefects, setRecentDefects] = useState<Defect[]>([]);
-  const [defectSeverityData, setDefectSeverityData] = useState<{ name: string; value: number }[]>([]);
-  const [weeklyData, setWeeklyData] = useState<{ day: string; completed: number; scheduled: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recentJobs, setRecentJobs] = useState<any[]>(cached?.recentJobs ?? []);
+  const [recentDefects, setRecentDefects] = useState<any[]>(cached?.recentDefects ?? []);
+  const [defectSeverityData, setDefectSeverityData] = useState<{ name: string; value: number }[]>(cached?.defectSeverityData ?? []);
+  const [weeklyData, setWeeklyData] = useState<{ day: string; completed: number; scheduled: number }[]>(cached?.weeklyData ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
     async function load() {
-      const today = new Date().toISOString().split('T')[0];
+      try {
+        // Single round-trip to server — all DB queries run in parallel there
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const res = await fetch('/api/admin/dashboard-stats', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return;
+        const json = await res.json();
 
-      // Parallel counts via service-role key (bypasses RLS = sees ALL data)
-      const [
-        totalJobs, todayJobs, completedJobs, inProgressJobs,
-        totalProperties, overdueProperties, openDefects,
-        criticalDefects, activeTechs, pendingQuotes,
-        jobsResult, defectsResult, allDefectsResult,
-      ] = await Promise.all([
-        adminRead('jobs',       { count: true, limit: 0 }),
-        adminRead('jobs',       { count: true, limit: 0, filters: { scheduled_date: today } }),
-        adminRead('jobs',       { count: true, limit: 0, filters: { status: 'completed' } }),
-        adminRead('jobs',       { count: true, limit: 0, filters: { status: 'in_progress' } }),
-        adminRead('properties', { count: true, limit: 0 }),
-        adminRead('properties', { count: true, limit: 0, filters: { compliance_status: 'overdue' } }),
-        adminRead('defects',    { count: true, limit: 0, filters: { status: 'open' } }),
-        adminRead('defects',    { count: true, limit: 0, filters: { severity: 'critical', status: 'open' } }),
-        adminRead('users',      { count: true, limit: 0, filters: { is_active: true } }),
-        adminRead('quotes',     { count: true, limit: 0, filters: { status: 'draft' } }),
-        adminRead<any>('jobs',    { select: '*, property:properties(name), assigned_user:users(full_name)', order: { column: 'created_at', ascending: false }, limit: 6 }),
-        adminRead<any>('defects', { select: '*, property:properties(name), asset:assets(asset_type)', order: { column: 'created_at', ascending: false }, limit: 5 }),
-        adminRead<any>('defects', { select: 'severity' }),
-      ]);
+        setStats(json.stats);
+        setRecentJobs(json.recentJobs ?? []);
+        setRecentDefects(json.recentDefects ?? []);
+        setDefectSeverityData(json.defectSeverity ?? []);
+        setWeeklyData(json.weeklyData ?? []);
 
-      setStats({
-        totalJobs:          totalJobs.count          ?? 0,
-        todayJobs:          todayJobs.count          ?? 0,
-        completedJobs:      completedJobs.count      ?? 0,
-        inProgressJobs:     inProgressJobs.count     ?? 0,
-        totalProperties:    totalProperties.count    ?? 0,
-        overdueProperties:  overdueProperties.count  ?? 0,
-        openDefects:        openDefects.count        ?? 0,
-        criticalDefects:    criticalDefects.count    ?? 0,
-        activeTechs:        activeTechs.count        ?? 0,
-        pendingQuotes:      pendingQuotes.count       ?? 0,
-      });
-      setRecentJobs((jobsResult.data as Job[]) ?? []);
-      setRecentDefects((defectsResult.data as Defect[]) ?? []);
-
-      const sevCounts: Record<string, number> = { minor: 0, major: 0, critical: 0 };
-      (allDefectsResult.data ?? []).forEach((d: any) => { sevCounts[d.severity] = (sevCounts[d.severity] ?? 0) + 1; });
-      setDefectSeverityData([{ name: 'Minor', value: sevCounts.minor }, { name: 'Major', value: sevCounts.major }, { name: 'Critical', value: sevCounts.critical }]);
-
-      const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d.toISOString().split('T')[0]; });
-      const weekResult = await adminRead<any>('jobs', { select: 'scheduled_date,status', in: { column: 'scheduled_date', values: days } });
-      setWeeklyData(days.map(date => ({
-        day: new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short' }),
-        scheduled: (weekResult.data ?? []).filter((j: any) => j.scheduled_date === date).length,
-        completed: (weekResult.data ?? []).filter((j: any) => j.scheduled_date === date && j.status === 'completed').length,
-      })));
-      setLoading(false);
+        setCached(CACHE_KEY, {
+          stats:            json.stats,
+          recentJobs:       json.recentJobs    ?? [],
+          recentDefects:    json.recentDefects ?? [],
+          defectSeverityData: json.defectSeverity ?? [],
+          weeklyData:       json.weeklyData    ?? [],
+        });
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg,#F97316,#ea6900)', boxShadow: '0 8px 24px rgba(249,115,22,0.35)' }}>
-          <Shield size={22} color="white" strokeWidth={2} />
-        </div>
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map(i => (
-            <div key={i} className="w-2 h-2 rounded-full animate-bounce"
-              style={{ background: 'var(--accent)', animationDelay: `${i * 130}ms` }} />
-          ))}
-        </div>
-        <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Loading dashboard…</p>
-      </div>
-    </div>
-  );
+  // Remove the old full-screen loading return
+  // We now render the skeleton directly in the layout below
 
 
   const completionRate = stats.totalJobs > 0 ? Math.round((stats.completedJobs / stats.totalJobs) * 100) : 0;
@@ -150,7 +115,11 @@ export default function DashboardPage() {
             { label: 'Pending Quotes', value: stats.pendingQuotes },
           ].map(s => (
             <div key={s.label} className="px-4 py-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.07)' }}>
-              <p className="text-white text-2xl font-extrabold leading-none">{s.value}</p>
+              {loading ? (
+                <Skeleton variant="text" className="h-6 w-12 mx-auto mb-1" />
+              ) : (
+                <p className="text-white text-2xl font-extrabold leading-none">{s.value}</p>
+              )}
               <p className="text-white/45 text-xs mt-1 font-medium">{s.label}</p>
             </div>
           ))}
@@ -159,14 +128,14 @@ export default function DashboardPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Jobs" value={stats.totalJobs} icon={Briefcase} color="blue" subtitle={`${stats.todayJobs} scheduled today`} delay={0} />
-        <StatCard label="In Progress" value={stats.inProgressJobs} icon={Clock} color="orange" subtitle="Active right now" delay={60} />
-        <StatCard label="Open Defects" value={stats.openDefects} icon={ShieldAlert} color={stats.criticalDefects > 0 ? 'red' : 'yellow'} subtitle={`${stats.criticalDefects} critical`} delay={120} />
-        <StatCard label="Properties" value={stats.totalProperties} icon={Building2} color="purple" subtitle={`${stats.overdueProperties} overdue`} delay={180} />
-        <StatCard label="Completed" value={stats.completedJobs} icon={CheckCircle2} color="green" subtitle={`${completionRate}% completion rate`} delay={240} />
-        <StatCard label="Technicians" value={stats.activeTechs} icon={Users} color="teal" subtitle="Active field staff" delay={300} />
-        <StatCard label="Pending Quotes" value={stats.pendingQuotes} icon={TrendingUp} color="yellow" subtitle="Awaiting approval" delay={360} />
-        <StatCard label="Overdue Sites" value={stats.overdueProperties} icon={AlertTriangle} color="red" subtitle="Need attention" delay={420} />
+        <StatCard isLoading={loading} label="Total Jobs" value={stats.totalJobs} icon={Briefcase} color="blue" subtitle={`${stats.todayJobs} scheduled today`} delay={0} />
+        <StatCard isLoading={loading} label="In Progress" value={stats.inProgressJobs} icon={Clock} color="orange" subtitle="Active right now" delay={60} />
+        <StatCard isLoading={loading} label="Open Defects" value={stats.openDefects} icon={ShieldAlert} color={stats.criticalDefects > 0 ? 'red' : 'yellow'} subtitle={`${stats.criticalDefects} critical`} delay={120} />
+        <StatCard isLoading={loading} label="Properties" value={stats.totalProperties} icon={Building2} color="purple" subtitle={`${stats.overdueProperties} overdue`} delay={180} />
+        <StatCard isLoading={loading} label="Completed" value={stats.completedJobs} icon={CheckCircle2} color="green" subtitle={`${completionRate}% completion rate`} delay={240} />
+        <StatCard isLoading={loading} label="Technicians" value={stats.activeTechs} icon={Users} color="teal" subtitle="Active field staff" delay={300} />
+        <StatCard isLoading={loading} label="Pending Quotes" value={stats.pendingQuotes} icon={TrendingUp} color="yellow" subtitle="Awaiting approval" delay={360} />
+        <StatCard isLoading={loading} label="Overdue Sites" value={stats.overdueProperties} icon={AlertTriangle} color="red" subtitle="Need attention" delay={420} />
       </div>
 
       {/* ── Charts Row ── */}
@@ -188,16 +157,20 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={190}>
-            <BarChart data={weeklyData} barSize={11} barGap={3}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--primary-light)', radius: 6 }} />
-              <Bar dataKey="scheduled" name="Scheduled" fill="var(--border-strong)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="completed" name="Completed" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <Skeleton variant="card" className="w-full h-[190px]" />
+          ) : (
+            <ResponsiveContainer width="100%" height={190}>
+              <BarChart data={weeklyData} barSize={11} barGap={3}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={22} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--primary-light)', radius: 6 }} />
+                <Bar dataKey="scheduled" name="Scheduled" fill="var(--border-strong)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="completed" name="Completed" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* Pie Chart */}
@@ -205,27 +178,40 @@ export default function DashboardPage() {
           style={{ borderColor: 'var(--border)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animationDelay: '150ms' }}>
           <p className="font-bold text-sm mb-0.5" style={{ color: 'var(--text)' }}>Defects by Severity</p>
           <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>All open defects</p>
-          <ResponsiveContainer width="100%" height={170}>
-            <PieChart>
-              <Pie data={defectSeverityData} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value">
-                {defectSeverityData.map((_, i) => <Cell key={i} fill={Object.values(SEV_COLORS)[i]} />)}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-            </PieChart>
-          </ResponsiveContainer>
-          {/* Summary rows */}
-          <div className="mt-1 space-y-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-            {defectSeverityData.map((d, i) => (
-              <div key={d.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ background: Object.values(SEV_COLORS)[i] }} />
-                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{d.name}</span>
-                </div>
-                <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>{d.value}</span>
+          {defectSeverityData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[170px] mt-4" style={{ color: 'var(--text-tertiary)' }}>
+              <ShieldAlert size={28} className="mb-2 opacity-50" />
+              <p className="text-xs font-medium">No open defects</p>
+            </div>
+          ) : (
+            <>
+              {loading ? (
+                <Skeleton variant="card" className="w-full h-[170px]" />
+              ) : (
+                <ResponsiveContainer width="100%" height={170}>
+                  <PieChart>
+                    <Pie data={defectSeverityData} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value">
+                      {defectSeverityData.map((_, i) => <Cell key={i} fill={Object.values(SEV_COLORS)[i]} />)}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              {/* Summary rows */}
+              <div className="mt-1 space-y-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                {defectSeverityData.map((d, i) => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ background: Object.values(SEV_COLORS)[i] }} />
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{d.name}</span>
+                    </div>
+                    <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>{d.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -245,7 +231,15 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="px-3 pb-3">
-            {recentJobs.length === 0 ? (
+            {loading ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex gap-3 px-3 py-2.5">
+                <Skeleton variant="bg" className="w-8 h-8 flex-shrink-0" />
+                <div className="flex-1 space-y-2 mt-1">
+                  <Skeleton variant="text" className="h-3 w-1/2" />
+                  <Skeleton variant="text" className="h-2 w-1/3" />
+                </div>
+              </div>
+            )) : recentJobs.length === 0 ? (
               <div className="text-center py-8">
                 <Briefcase size={28} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
                 <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>No jobs yet</p>
@@ -287,7 +281,15 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="px-3 pb-3">
-            {recentDefects.length === 0 ? (
+            {loading ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex gap-3 px-3 py-2.5">
+                <Skeleton variant="bg" className="w-8 h-8 flex-shrink-0" />
+                <div className="flex-1 space-y-2 mt-1">
+                  <Skeleton variant="text" className="h-3 w-3/4" />
+                  <Skeleton variant="text" className="h-2 w-1/2" />
+                </div>
+              </div>
+            )) : recentDefects.length === 0 ? (
               <div className="text-center py-8">
                 <ShieldAlert size={28} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
                 <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>No defects recorded</p>

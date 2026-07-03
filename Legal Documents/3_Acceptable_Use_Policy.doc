@@ -1,0 +1,52 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>Acceptable Use Policy - SiteTrack</title>
+    <style>
+        body { font-family: "Arial", sans-serif; font-size: 11pt; line-height: 1.6; padding: 40px; }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 30px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        h2 { font-size: 13pt; margin-top: 25px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        p { margin-bottom: 15px; text-align: justify; }
+        .clause { font-weight: bold; }
+        ul { margin-bottom: 15px; }
+        li { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>SITETRACK ACCEPTABLE USE POLICY (AUP)</h1>
+    <p><strong>Last Updated:</strong> [Insert Date]</p>
+
+    <p>This Acceptable Use Policy ("AUP") sets out the rules that govern the acceptable use of the SiteTrack platform (the "Service") by all customers and their authorized users.</p>
+
+    <h2>1. ZERO TOLERANCE FOR COMPLIANCE FRAUD</h2>
+    <p>Because the Service manages critical fire safety data under AS 1851-2012, absolute data integrity is paramount. Users must <strong>strictly refrain</strong> from:</p>
+    <ul>
+        <li><span class="clause">Falsification of Records:</span> Entering false, misleading, or fraudulent data regarding fire safety inspections.</li>
+        <li><span class="clause">Location Spoofing:</span> Utilizing VPNs, GPS spoofers, or other technologies to falsify the geographical location from which an inspection is recorded.</li>
+        <li><span class="clause">Unauthorised Sign-Off:</span> Approving compliance tasks for which the user is not legally qualified.</li>
+    </ul>
+
+    <h2>2. ACCOUNT SECURITY & INTEGRITY</h2>
+    <ul>
+        <li><span class="clause">No Account Sharing:</span> Every individual must use their own unique login credentials.</li>
+        <li><span class="clause">Reporting:</span> Users must report known security breaches to their administrator and SiteTrack support immediately.</li>
+    </ul>
+
+    <h2>3. TECHNICAL RESTRICTIONS</h2>
+    <ul>
+        <li><span class="clause">Reverse Engineering:</span> Attempting to decompile or extract source code.</li>
+        <li><span class="clause">Malicious Software:</span> Distributing viruses, malware, or trojan horses through the platform.</li>
+        <li><span class="clause">Automated Access:</span> Using scrapers or automated scripts that impose unreasonable infrastructure loads.</li>
+        <li><span class="clause">Unauthorized Security Testing:</span> Conducting vulnerability or penetration testing without explicit prior written authorization. (To request authorization, email <strong>[Insert Security Contact Email]</strong>).</li>
+    </ul>
+
+    <h2>4. ENFORCEMENT AND TIERED PENALTIES</h2>
+    <p>SiteTrack monitors platform usage to ensure compliance with this AUP. We apply a tiered approach to enforcement:</p>
+    <ul>
+        <li><strong>Minor Technical Breaches:</strong> (e.g., accidental automated access overload) will generally result in a formal warning and a cure period to rectify the behaviour.</li>
+        <li><strong>Severe Violations:</strong> (e.g., falsification of AS 1851-2012 records, location spoofing, intentional security attacks) will result in immediate suspension or permanent termination of the user account and/or Customer tenant without liability or refund. We reserve the right to report fraudulent compliance activity to appropriate authorities.</li>
+    </ul>
+
+</body>
+</html>

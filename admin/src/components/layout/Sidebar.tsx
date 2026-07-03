@@ -1,4 +1,5 @@
 'use client';
+// Cache bust
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -47,7 +48,14 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [companyName, setCompanyName] = useState('');
   const { user, signOut } = useAuth();
+
+  useEffect(() => {
+    fetch('/api/admin/company').then(res => res.json()).then(json => {
+      if (json.data?.name) setCompanyName(json.data.name);
+    }).catch(() => {});
+  }, []);
 
   // Close mobile drawer on route change
   useEffect(() => { onMobileClose?.(); }, [pathname]);
@@ -65,7 +73,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         </div>
         {(!collapsed || mobileOpen) && (
           <div className="animate-fade-in overflow-hidden flex-1">
-            <p className="text-white text-sm font-bold leading-none tracking-tight">UMA BUILDING SERVICES</p>
+            <p className="text-white text-sm font-bold leading-none tracking-tight">{companyName ? companyName.toUpperCase() : 'LOADING...'}</p>
             <p className="text-xs mt-0.5 font-medium" style={{ color: 'rgba(255,255,255,0.38)' }}>Admin Portal</p>
           </div>
         )}
@@ -118,32 +126,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         ))}
       </nav>
 
-      {/* User */}
-      <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-        {(!collapsed || mobileOpen) ? (
-          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors group cursor-default">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#FF7A20,#E8650A)' }}>
-              {user?.full_name?.charAt(0).toUpperCase() ?? 'A'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-semibold leading-tight truncate">{user?.full_name ?? 'Admin'}</p>
-              <p className="text-xs truncate leading-tight mt-0.5 capitalize" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                {user?.role ? user.role.replace('_', ' ') : 'Administrator'}
-              </p>
-            </div>
-            <button onClick={signOut} title="Sign out"
-              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
-              <LogOut size={14} style={{ color: 'rgba(255,255,255,0.5)' }} />
-            </button>
-          </div>
-        ) : (
-          <button onClick={signOut} title="Sign out"
-            className="w-full flex justify-center p-2.5 rounded-xl hover:bg-white/10 transition-colors">
-            <LogOut size={16} style={{ color: 'rgba(255,255,255,0.45)' }} />
-          </button>
-        )}
-      </div>
+      {/* Spacer to push nav up if needed, but flex-1 handles it */}
     </>
   );
 

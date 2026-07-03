@@ -76,7 +76,7 @@ export default function CompletionBottomSheet({
           </ScrollView>
 
           <View style={s.actionRow}>
-            <Button variant="outline" title="Review" onPress={onClose} style={{ flex: 1 }} />
+            <Button variant="secondary" title="Review" onPress={onClose} style={{ flex: 1 }} />
             <Button 
               title={hasSignature ? "Finalize Job" : "Need Signature"} 
               onPress={hasSignature ? onConfirm : () => onNeedSignature?.()} 

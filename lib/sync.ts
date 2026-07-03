@@ -12,6 +12,7 @@ import {
   getFailedSyncItems,
   getRecord,
 } from '@/lib/database';
+import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
@@ -68,7 +69,7 @@ export function clearSyncListeners(): void {
 /** Called internally after every successful sync to notify subscribers */
 function _emitSyncComplete(): void {
   _syncListeners.forEach((fn) => {
-    try { fn(); } catch (e) { console.warn('[UMA BUILDING SERVICES Sync] listener error:', e); }
+    try { fn(); } catch (e) { console.warn('[SiteTrack Sync] listener error:', e); }
   });
 }
 
@@ -86,11 +87,11 @@ export function startSync(userId?: string): void {
 
   if (_syncInterval) {
     // Already running — just trigger an immediate sync with the updated userId
-    if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Already running — triggering immediate sync');
+    if (__DEV__) console.log('[SiteTrack Sync] Already running — triggering immediate sync');
     void runSync(userId);
     return;
   }
-  if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Starting sync interval (${SYNC_INTERVAL_MS / 1000}s)`);
+  if (__DEV__) console.log(`[SiteTrack Sync] Starting sync interval (${SYNC_INTERVAL_MS / 1000}s)`);
   // Run immediately on start, then repeat on interval
   void runSync(userId);
   _syncInterval = setInterval(() => {
@@ -104,7 +105,7 @@ export function stopSync(): void {
   if (_syncInterval) {
     clearInterval(_syncInterval);
     _syncInterval = null;
-    if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Sync stopped');
+    if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
   _cachedUserId = null;
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
@@ -147,7 +148,7 @@ export async function getSyncStatus(): Promise<SyncStatus> {
  */
 export async function runSync(userId?: string): Promise<boolean> {
   if (_isSyncing) {
-    if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Already in progress — skipping');
+    if (__DEV__) console.log('[SiteTrack Sync] Already in progress — skipping');
     return false;
   }
 
@@ -160,12 +161,12 @@ export async function runSync(userId?: string): Promise<boolean> {
     netState.isConnected === true && netState.isInternetReachable !== false;
 
   if (!isOnline) {
-    if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Offline — skipping sync');
+    if (__DEV__) console.log('[SiteTrack Sync] Offline — skipping sync');
     return false;
   }
 
   _isSyncing = true;
-  if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] Starting sync run...');
+  if (__DEV__) console.log('[SiteTrack Sync] Starting sync run...');
 
   try {
     let resolvedUserId = userId ?? _cachedUserId;
@@ -173,7 +174,7 @@ export async function runSync(userId?: string): Promise<boolean> {
       const user = await getCurrentUser();
       if (_shouldStop) return false;
       if (!user) {
-        if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] No authenticated user — skipping');
+        if (__DEV__) console.log('[SiteTrack Sync] No authenticated user — skipping');
         return false;
       }
       resolvedUserId = user.id;
@@ -181,7 +182,24 @@ export async function runSync(userId?: string): Promise<boolean> {
     }
 
     if (_shouldStop) return false;
-    if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Syncing for user: ${resolvedUserId}`);
+    if (__DEV__) console.log(`[SiteTrack Sync] Syncing for user: ${resolvedUserId}`);
+
+    // --- REALTIME REVOCATION CHECK ---
+    const { data: profile } = await supabase.from('users').select('is_active, company_id').eq('id', resolvedUserId).single();
+    if (profile?.is_active === false) {
+      console.warn('[SiteTrack Sync] Access revoked (User inactive). Forcing sign out.');
+      useAuthStore.getState().forceFinalSyncAndSignOut();
+      return false;
+    }
+    if (profile?.company_id) {
+      const { data: company } = await supabase.from('companies').select('subscription_status').eq('id', profile.company_id).single();
+      if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
+        console.warn('[SiteTrack Sync] Access revoked (Company suspended/cancelled). Forcing sign out.');
+        useAuthStore.getState().forceFinalSyncAndSignOut();
+        return false;
+      }
+    }
+    // ---------------------------------
 
     // ── 2. PUSH — upload photo binaries then flush sync queue ────
     await processPhotoQueue(resolvedUserId);
@@ -198,13 +216,13 @@ export async function runSync(userId?: string): Promise<boolean> {
     // ── 4. Timestamp ──────────────────────────────────────────────
     const now = new Date().toISOString();
     await AsyncStorage.setItem(LAST_SYNCED_KEY, now);
-    if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] Sync complete at ${now}`);
+    if (__DEV__) console.log(`[SiteTrack Sync] Sync complete at ${now}`);
 
     // ── 5. Warn about permanently-failed items ────────────────────
     const failedItems = getFailedSyncItems();
     if (failedItems.length > 0) {
       console.warn(
-        `[UMA BUILDING SERVICES Sync] ${failedItems.length} item(s) permanently failed. ` +
+        `[SiteTrack Sync] ${failedItems.length} item(s) permanently failed. ` +
         `Tables: ${[...new Set(failedItems.map(i => i.table_name))].join(', ')}`
       );
     }
@@ -213,7 +231,7 @@ export async function runSync(userId?: string): Promise<boolean> {
     _emitSyncComplete();
     return true;
   } catch (err) {
-    console.error('[UMA BUILDING SERVICES Sync] Unexpected error during sync:', err);
+    console.error('[SiteTrack Sync] Unexpected error during sync:', err);
     return false;
   } finally {
     _isSyncing = false;
@@ -249,6 +267,23 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   // Preemptively fetch and upsert the current user to satisfy job's assigned_to FK
   const { data: techUser } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
   if (techUser) {
+    if (techUser.is_active === false) {
+      console.warn('[UMA BUILDING SERVICES Sync] User deactivated. Forcing logout.');
+      import('@/store/authStore').then((m) => m.useAuthStore.getState().signOut());
+      return;
+    }
+    if (techUser.company_id) {
+      const { data: company } = await supabase.from('companies').select('*').eq('id', techUser.company_id).maybeSingle();
+      if (company) {
+        if (company.subscription_status !== 'active') {
+          console.warn('[UMA BUILDING SERVICES Sync] Company suspended. Forcing logout.');
+          import('@/store/authStore').then((m) => m.useAuthStore.getState().signOut());
+          return;
+        }
+        // Save company locally so PDFs have proper headers (name, ABN, etc.)
+        upsertRecord('companies', company as Record<string, string | number | boolean | null>);
+      }
+    }
     upsertRecord('users', techUser as Record<string, string | number | boolean | null>);
   }
 

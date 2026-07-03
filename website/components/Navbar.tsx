@@ -23,7 +23,12 @@ export default function Navbar({ platformName = 'SiteTrack' }: { platformName?: 
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  useEffect(() => { setOpen(false); }, [pathname]);
+  const [prevPath, setPrevPath] = useState(pathname);
+
+  if (pathname !== prevPath) {
+    setPrevPath(pathname);
+    setOpen(false);
+  }
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);

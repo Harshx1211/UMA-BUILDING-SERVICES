@@ -1,12 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @next/next/no-img-element */
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { adminApi, adminRead } from '@/lib/admin-api';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { adminApi, adminReadBatch } from '@/lib/admin-api';
+import { formatDate, formatDateTime, formatTime } from '@/lib/utils';
 import { getJobTypeLabel } from '@/constants/jobTypes';
 import Badge from '@/components/ui/Badge';
-import { ArrowLeft, CheckCircle2, XCircle, Edit3, FileText, Download, Clock } from 'lucide-react';
+import { ArrowLeft, XCircle, Edit3, FileText, Download, Clock, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TABS = ['overview','assets','defects','photos','signature','report'];
@@ -27,17 +28,26 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: j },{ data: d },{ data: ph },{ data: sig },{ data: tl },{ data: ja }] = await Promise.all([
-        supabase.from('jobs').select('*, property:properties(*), assigned_user:users(*)').eq('id',id).single(),
-        supabase.from('defects').select('*, asset:assets(asset_type,variant)').eq('job_id',id),
-        supabase.from('inspection_photos').select('*').eq('job_id',id),
-        supabase.from('signatures').select('*').eq('job_id',id).maybeSingle(),
-        supabase.from('time_logs').select('*').eq('job_id',id),
-        supabase.from('job_assets').select('*, asset:assets(asset_type,variant,location_on_site,asset_ref)').eq('job_id',id),
+      const results = await adminReadBatch([
+        { table: 'jobs', options: { select: '*, property:properties(*), assigned_user:users(*)', filters: { id } } },
+        { table: 'defects', options: { select: '*, asset:assets(asset_type,variant)', filters: { job_id: id } } },
+        { table: 'inspection_photos', options: { filters: { job_id: id } } },
+        { table: 'signatures', options: { filters: { job_id: id } } },
+        { table: 'time_logs', options: { filters: { job_id: id } } },
+        { table: 'job_assets', options: { select: '*, asset:assets(asset_type,variant,location_on_site,asset_ref)', filters: { job_id: id } } },
       ]);
-      setJob(j); setNotes(j?.notes??'');
-      setDefects(d??[]); setPhotos(ph??[]);
-      setSignature(sig); setTimeLogs(tl??[]); setJobAssets(ja??[]);
+      const [
+        { data: jData },
+        { data: dData },
+        { data: phData },
+        { data: sigData },
+        { data: tlData },
+        { data: jaData }
+      ] = results;
+      const j = jData?.[0] ?? null;
+      setJob(j); setNotes(String(j?.notes ?? ''));
+      setDefects(dData??[]); setPhotos(phData??[]);
+      setSignature(sigData?.[0] ?? null); setTimeLogs(tlData??[]); setJobAssets(jaData??[]);
       setLoading(false);
     }
     load();
@@ -57,7 +67,7 @@ export default function JobDetailPage() {
   };
 
   // ── Report download ──────────────────────────────────────────────────────────
-  function ReportButton() {
+  function renderReportButton() {
     if (job?.status !== 'completed') {
       return (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border"
@@ -88,11 +98,27 @@ export default function JobDetailPage() {
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor:'var(--accent)' }} />
+    <div className="animate-fade-in max-w-5xl space-y-4">
+      <div className="h-5 w-24 rounded-lg animate-pulse" style={{ background: 'var(--card)' }} />
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <div className="h-8 w-64 rounded-xl animate-pulse" style={{ background: 'var(--card)' }} />
+          <div className="h-4 w-48 rounded-lg animate-pulse" style={{ background: 'var(--card)', animationDelay: '60ms' }} />
+        </div>
+        <div className="flex gap-2">
+          {[1,2].map(i => <div key={i} className="h-8 w-20 rounded-lg animate-pulse" style={{ background: 'var(--card)', animationDelay: `${i*60}ms` }} />)}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {[1,2,3,4,5,6].map(i => <div key={i} className="h-10 w-24 rounded-xl animate-pulse" style={{ background: 'var(--card)', animationDelay: `${i*40}ms` }} />)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl h-48 animate-pulse" style={{ background: 'var(--card)' }} />
+        <div className="rounded-2xl h-48 animate-pulse" style={{ background: 'var(--card)', animationDelay: '80ms' }} />
+      </div>
     </div>
   );
-  if (!job) return <p className="text-center py-16" style={{ color:'var(--text-secondary)' }}>Job not found.</p>;
+  if (!job) return <p className="text-center py-16" style={{ color: 'var(--text-secondary)' }}>Job not found.</p>;
 
   return (
     <div className="animate-fade-in max-w-5xl">
@@ -106,15 +132,22 @@ export default function JobDetailPage() {
             {job.property?.name ?? 'Unknown Property'}
           </h1>
           <p className="text-sm font-medium flex items-center gap-2 mt-1" style={{ color: 'var(--text-secondary)' }}>
-            <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{ background: '#f1f5f9', color: 'var(--text)' }}>
+            <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{ background: 'var(--bg)', color: 'var(--text-secondary)' }}>
               {job.id.split('-')[0].toUpperCase()}
             </span>
-            {getJobTypeLabel(job.job_type)} · {formatDate(job.scheduled_date)}
+            {getJobTypeLabel(job.job_type)} · Scheduled {formatDate(job.scheduled_date)}
+            {(job.status === 'completed' || job.status === 'in_progress') && job.updated_at ? (
+              <span style={{ color: job.status === 'completed' ? '#16a34a' : 'var(--primary)' }}>
+                {' '}· {job.status === 'completed' ? 'Completed' : 'Started'} {formatDate(job.updated_at as string)}
+              </span>
+            ) : job.scheduled_time ? (
+              ` at ${formatTime(job.scheduled_time)}`
+            ) : null}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <div className="flex gap-2"><Badge value={job.priority}/><Badge value={job.status}/></div>
-          <ReportButton />
+          {renderReportButton()}
         </div>
       </div>
 
@@ -189,7 +222,7 @@ export default function JobDetailPage() {
       {tab==='assets' && (
         <div className="bg-[var(--card)] rounded-2xl border overflow-hidden" style={{ borderColor:'var(--border)' }}>
           {jobAssets.length===0?<p className="text-center py-12 text-sm" style={{ color:'var(--text-tertiary)' }}>No assets inspected</p>:(
-            <table><thead><tr style={{ borderBottom:'1px solid var(--border)', background:'#fafafa' }}>
+            <table><thead><tr style={{ borderBottom:'1px solid var(--border)', background:'var(--bg)' }}>
               {['Ref','Type','Location','Result','Compliant'].map(h=><th key={h} className="px-4 py-3 text-xs font-semibold text-left" style={{ color:'var(--text-secondary)' }}>{h}</th>)}
             </tr></thead><tbody>
               {jobAssets.map((ja:any,i:number)=>(
@@ -209,18 +242,27 @@ export default function JobDetailPage() {
       {tab==='defects' && (
         <div className="space-y-3">
           {defects.length===0?<div className="bg-[var(--card)] rounded-2xl border p-12 text-center" style={{ borderColor:'var(--border)' }}><p className="text-sm" style={{ color:'var(--text-tertiary)' }}>No defects recorded</p></div>
-          :defects.map((d:any)=>(
-            <div key={d.id} className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <p className="font-medium text-sm" style={{ color:'var(--text)' }}>{d.description}</p>
-                <div className="flex gap-2 flex-shrink-0"><Badge value={d.severity}/><Badge value={d.status}/></div>
+          :defects.map((d:any)=>{
+            const defectPhotos = photos.filter((p:any) => p.defect_id === d.id);
+            return (
+              <div key={d.id} className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <p className="font-medium text-sm" style={{ color:'var(--text)' }}>{d.description}</p>
+                  <div className="flex gap-2 flex-shrink-0"><Badge value={d.severity}/><Badge value={d.status}/></div>
+                </div>
+                <p className="text-xs mb-3" style={{ color:'var(--text-secondary)' }}>{d.asset?.asset_type}</p>
+                {defectPhotos.length>0&&<div className="flex gap-2 flex-wrap">{defectPhotos.slice(0,6).map((p:any,i:number)=>{
+                  const isPending = p.photo_url.startsWith('file://') || p.photo_url.startsWith('content://');
+                  if (isPending) return null;
+                  return (
+                    <a key={i} href={p.photo_url} target="_blank" rel="noreferrer">
+                      <img src={p.photo_url} alt="" className="w-16 h-16 object-cover rounded-lg border hover:opacity-90 transition-opacity" style={{ borderColor:'var(--border)' }}/>
+                    </a>
+                  );
+                })}</div>}
               </div>
-              <p className="text-xs mb-3" style={{ color:'var(--text-secondary)' }}>{d.asset?.asset_type}</p>
-              {d.photos?.length>0&&<div className="flex gap-2 flex-wrap">{d.photos.slice(0,6).map((url:string,i:number)=>(
-                <img key={i} src={url} alt="" className="w-16 h-16 object-cover rounded-lg border" style={{ borderColor:'var(--border)' }}/>
-              ))}</div>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -228,9 +270,19 @@ export default function JobDetailPage() {
         <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor:'var(--border)' }}>
           {photos.length===0?<p className="text-center py-12 text-sm" style={{ color:'var(--text-tertiary)' }}>No photos</p>
           :<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {photos.map((p:any)=><a key={p.id} href={p.photo_url} target="_blank" rel="noreferrer">
-              <img src={p.photo_url} alt="" className="w-full h-32 object-cover rounded-xl border hover:opacity-90 transition-opacity" style={{ borderColor:'var(--border)' }}/>
-            </a>)}
+            {photos.map((p:any)=>{
+              const isPending = p.photo_url.startsWith('file://') || p.photo_url.startsWith('content://');
+              return isPending ? (
+                <div key={p.id} className="w-full h-32 flex flex-col items-center justify-center rounded-xl border border-dashed bg-white/5" style={{ borderColor:'var(--border)' }}>
+                  <ImageIcon size={24} style={{ color:'var(--text-tertiary)' }} />
+                  <p className="text-[10px] mt-2 font-medium" style={{ color:'var(--text-secondary)' }}>Pending Sync</p>
+                </div>
+              ) : (
+                <a key={p.id} href={p.photo_url} target="_blank" rel="noreferrer">
+                  <img src={p.photo_url} alt="" className="w-full h-32 object-cover rounded-xl border hover:opacity-90 transition-opacity" style={{ borderColor:'var(--border)' }}/>
+                </a>
+              );
+            })}
           </div>}
         </div>
       )}
@@ -238,43 +290,40 @@ export default function JobDetailPage() {
       {tab==='signature' && (
         <div className="bg-[var(--card)] rounded-2xl border p-5 max-w-md" style={{ borderColor:'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color:'var(--text)' }}>Client Signature</p>
-          {signature?(<div className="space-y-3">
-            <img src={signature.signature_url} alt="Signature" className="w-full border rounded-xl p-4 bg-white/5" style={{ borderColor:'var(--border)' }}/>
-            <p className="text-sm"><span style={{ color:'var(--text-tertiary)' }}>Signed by: </span><strong style={{ color:'var(--text)' }}>{signature.signed_by_name}</strong></p>
-            <p className="text-sm" style={{ color:'var(--text-secondary)' }}>{formatDateTime(signature.signed_at)}</p>
-          </div>):<p className="text-sm text-center py-8" style={{ color:'var(--text-tertiary)' }}>No signature captured</p>}
+          {signature?(()=>{
+            const isPending = signature.signature_url?.startsWith('file://') || signature.signature_url?.startsWith('content://');
+            if (isPending) return (
+              <div className="w-full h-32 flex flex-col items-center justify-center rounded-xl border border-dashed bg-white/5" style={{ borderColor:'var(--border)' }}>
+                <ImageIcon size={24} style={{ color:'var(--text-tertiary)' }} />
+                <p className="text-[10px] mt-2 font-medium" style={{ color:'var(--text-secondary)' }}>Signature Pending Sync</p>
+              </div>
+            );
+            return (
+              <div className="space-y-3">
+                <img src={signature.signature_url} alt="Signature" className="w-full border rounded-xl p-4 bg-white/5" style={{ borderColor:'var(--border)' }}/>
+                <p className="text-sm"><span style={{ color:'var(--text-tertiary)' }}>Signed by: </span><strong style={{ color:'var(--text)' }}>{signature.signed_by_name}</strong></p>
+                <p className="text-sm" style={{ color:'var(--text-secondary)' }}>{formatDateTime(signature.signed_at)}</p>
+              </div>
+            );
+          })():<p className="text-sm text-center py-8" style={{ color:'var(--text-tertiary)' }}>No signature captured</p>}
         </div>
       )}
 
       {tab==='report' && (
         <div className="space-y-4">
-          {job.status !== 'completed' ? (
-            // Job not yet complete
-            <div className="bg-[var(--card)] rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'var(--bg)' }}>
-                <FileText size={28} style={{ color:'var(--text-tertiary)' }}/>
-              </div>
-              <div className="text-center">
-                <p className="font-semibold text-base" style={{ color:'var(--text)' }}>Report Not Available Yet</p>
-                <p className="text-sm mt-1.5" style={{ color:'var(--text-secondary)' }}>
-                  The inspection report will appear here once the technician completes the job and generates the PDF on their device.
-                </p>
-              </div>
-              <div className="px-4 py-2 rounded-xl text-sm font-medium border" style={{ borderColor:'var(--border)', color:'var(--text-tertiary)', background:'var(--bg)' }}>
-                Current status: <strong>{job.status.replace(/_/g,' ')}</strong>
-              </div>
-            </div>
-          ) : job.report_url ? (
-            // Job complete and report uploaded — show inline viewer
+          {job.report_url ? (
+            // Report uploaded — show inline viewer (whether draft or final)
             <div className="space-y-3">
               {/* Action bar */}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold" style={{ color:'var(--text)' }}>Inspection Report</p>
+                  <p className="font-semibold" style={{ color:'var(--text)' }}>
+                    {job.status === 'completed' ? 'Inspection Report' : 'Draft Inspection Report'}
+                  </p>
                   <p className="text-xs mt-0.5" style={{ color:'var(--text-secondary)' }}>Generated by technician · Tap Download to save or share</p>
                 </div>
                 <a
-                  href={job.report_url}
+                  href={`${job.report_url}#t=${new Date(job.updated_at).getTime()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   download
@@ -285,12 +334,46 @@ export default function JobDetailPage() {
                 </a>
               </div>
               {/* Inline PDF viewer — loads the exact file the technician uploaded */}
-              <div className="bg-gray-100 rounded-2xl overflow-hidden border" style={{ height:'75vh', borderColor:'var(--border)' }}>
-                <iframe
-                  src={job.report_url}
+              <div className="rounded-2xl overflow-hidden border relative" style={{ height:'75vh', borderColor:'var(--border)', background:'var(--bg)', boxShadow:'0 4px 20px rgba(0,0,0,0.1)' }}>
+                <object
+                  data={`${job.report_url}#t=${new Date(job.updated_at).getTime()}`}
+                  type="application/pdf"
                   className="w-full h-full border-0"
-                  title="Inspection Report PDF"
-                />
+                >
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center" style={{ background: 'var(--card)' }}>
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background:'rgba(249,115,22,0.15)' }}>
+                      <FileText size={28} style={{ color:'#f97316' }}/>
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                      Your browser does not support inline PDFs.
+                    </p>
+                    <a
+                      href={job.report_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-5 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
+                      style={{ background:'linear-gradient(135deg,#F97316,#ea580c)', boxShadow:'0 4px 14px rgba(249,115,22,0.3)' }}
+                    >
+                      <Download size={14}/> Download PDF
+                    </a>
+                  </div>
+                </object>
+              </div>
+            </div>
+          ) : job.status !== 'completed' ? (
+            // Job not yet complete and no draft report
+            <div className="bg-[var(--card)] rounded-2xl border p-12 flex flex-col items-center gap-4" style={{ borderColor:'var(--border)' }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'var(--bg)' }}>
+                <FileText size={28} style={{ color:'var(--text-tertiary)' }}/>
+              </div>
+              <div className="text-center">
+                <p className="font-semibold text-base" style={{ color:'var(--text)' }}>Report Not Available Yet</p>
+                <p className="text-sm mt-1.5" style={{ color:'var(--text-secondary)' }}>
+                  The inspection report will appear here once the technician generates the PDF on their device.
+                </p>
+              </div>
+              <div className="px-4 py-2 rounded-xl text-sm font-medium border" style={{ borderColor:'var(--border)', color:'var(--text-tertiary)', background:'var(--bg)' }}>
+                Current status: <strong>{job.status.replace(/_/g,' ')}</strong>
               </div>
             </div>
           ) : (
@@ -302,7 +385,7 @@ export default function JobDetailPage() {
               <div className="text-center">
                 <p className="font-semibold text-base" style={{ color:'var(--text)' }}>Report Not Uploaded</p>
                 <p className="text-sm mt-1.5" style={{ color:'var(--text-secondary)' }}>
-                  Job is marked complete but the PDF has not been uploaded from the technician's device yet. Ask the technician to open the job and tap &quot;View Report&quot;.
+                  Job is marked complete but the PDF has not been uploaded from the technician&apos;s device yet. Ask the technician to open the job and tap &quot;View Report&quot;.
                 </p>
               </div>
             </div>

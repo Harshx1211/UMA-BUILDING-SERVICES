@@ -89,9 +89,9 @@ export default function AssetDetailScreen() {
   if (!asset) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={false} title="Not Found" showBack={true} />
+        <ScreenHeader title="Not Found" showBack={true} />
         <EmptyState 
-          emoji="⚠️" 
+          icon="alert" 
           title="Asset not found" 
           subtitle="We couldn't locate the asset record you're looking for." 
           actionLabel="Go Back" 
@@ -115,9 +115,9 @@ export default function AssetDetailScreen() {
           subtitle={asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No barcode'}
           showBack={true}
           rightComponent={
-            <View style={[s.statusBadge, { backgroundColor: isActive ? 'rgba(110,231,183,0.15)' : 'rgba(255,255,255,0.1)' }]}>
-              <Text style={[s.statusBadgeText, { color: isActive ? '#6EE7B7' : 'rgba(255,255,255,0.6)' }]}>
-                {isActive ? '✅ ACTIVE' : '❌ INACTIVE'}
+            <View style={[s.statusBadge, { backgroundColor: isActive ? C.success + '26' : C.backgroundTertiary }]}>
+              <Text style={[s.statusBadgeText, { color: isActive ? C.success : C.textSecondary }]}>
+                {isActive ? 'ACTIVE' : 'INACTIVE'}
               </Text>
             </View>
           }
@@ -184,7 +184,10 @@ export default function AssetDetailScreen() {
                 return (
                   <View key={rec.id} style={[s.histRow, i < serviceHistory.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.histDate, { color: C.text }]}>{rec.scheduled_date ?? '—'}</Text>
+                      <Text style={[s.histDate, { color: C.text }]}>
+                        {rec.scheduled_date ?? '—'}
+                        {rec.actioned_at ? ` → ${rec.actioned_at.substring(0, 10)}` : ''}
+                      </Text>
                       {rec.technician_name ? (
                         <Text style={[s.histTech, { color: C.textSecondary }]}>{rec.technician_name}</Text>
                       ) : null}
@@ -214,14 +217,14 @@ export default function AssetDetailScreen() {
             {defects.length === 0 ? (
               <View style={s.emptyInCard}>
                 <MaterialCommunityIcons name="shield-check-outline" size={32} color={C.successDark || C.success} />
-                <Text style={[s.emptyText, { color: C.successDark || C.success }]}>No defects recorded ✓</Text>
+                <Text style={[s.emptyText, { color: C.successDark || C.success }]}>No defects recorded</Text>
               </View>
             ) : (
               defects.map((d, i) => {
                 const sc = getSeverityConfig(C)[d.severity as DefectSeverity];
                 return (
                   <View key={d.id} style={[s.defectRow, i < defects.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
-                    <View style={[s.severityBar, { backgroundColor: sc?.color ?? '#ccc' }]} />
+                    <View style={[s.severityBar, { backgroundColor: sc?.color ?? C.border }]} />
                     <View style={{ flex: 1 }}>
                       <Text style={[s.defectDesc, { color: C.text }]}>{d.description}</Text>
                       <Text style={[s.defectMeta, { color: C.textTertiary }]}>
@@ -252,9 +255,9 @@ const s = StyleSheet.create({
   overdueText: { fontSize: 12, fontWeight: '600', flex: 1 },
 
   section:      { paddingHorizontal: 16, paddingTop: 16 },
-  sectionTitle: { fontSize: 11, fontWeight: '800', color: '#8896A8', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8 },
+  sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8 },
 
-  card: { borderRadius: 16, padding: 16, gap: 12, shadowColor: '#0F1E3C', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
+  card: { borderRadius: 16, padding: 16, gap: 12, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
 
   infoRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 4 },
   infoIcon:  { fontSize: 16, width: 24, textAlign: 'center', marginTop: 2 },

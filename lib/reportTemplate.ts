@@ -18,7 +18,7 @@
  *   - Broken images hidden via onerror handler
  */
 
-import { CompanyConfig } from '@/constants/Company';
+
 import {
   Defect,
   InspectionPhoto,
@@ -68,6 +68,7 @@ export interface ReportData {
   approvedQuote?: Quote;
   quoteItems?: QuoteItem[];
   inventory?: InventoryItem[];
+  company: any; // Dynamic tenant company data
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,6 +100,18 @@ function fmtDateTimeFull(iso: string | null | undefined): string {
   } catch { return iso; }
 }
 
+function fmtTimeOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ap}`;
+  } catch { return iso; }
+}
+
 function shortId(id: string, len = 5): string {
   return id.replace(/-/g, '').substring(0, len).toUpperCase();
 }
@@ -114,14 +127,16 @@ function fmtJobType(raw: string | null | undefined): string {
 }
 
 /**
- * Only data: URIs are guaranteed to render inside expo-print's sandboxed WKWebView.
- * http/https URIs fail silently in offline/sandboxed contexts.
- * We accept data: only — pdfGenerator.ts encodes all images before calling us.
+ * Strict filter to prevent broken images in PDF.
+ * Expo Print sandboxing is highly unreliable with network images, so we strictly
+ * enforce that only base64 data: URIs are injected into the HTML.
  */
 function isSafe(src: string | null | undefined): src is string {
   if (!src) return false;
   return src.startsWith('data:');
 }
+
+
 
 function assetRefCode(asset: AssetWithResult, index: number): string {
   // 1. Use the dedicated asset_ref field first (e.g. '001', '040')
@@ -141,47 +156,30 @@ const CSS = `
 @page { margin: 0; size: A4 }
 /* Explicit reset for html AND body prevents WKWebView injecting a blank page
    before the first .page div due to default user-agent margins. */
-html { margin: 0; padding: 0; }
+html { margin: 0; padding: 0; width: 794px; }
 body {
-  margin: 0; padding: 0;
-  font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+  margin: 0; padding: 0; width: 794px;
+  font-family: 'Inter', Helvetica Neue, Helvetica, Arial, sans-serif;
   color: #1E293B;
   line-height: 1.5;
   font-size: 11px;
   background: #fff;
 }
 *, *::before, *::after { box-sizing: border-box; }
+p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
 .nb { page-break-inside: avoid; break-inside: avoid; }
 
-/* ── Per-page footer (embedded inside each .page div) ── */
-/* Using an embedded footer per page is the only reliable way to get correct
-   page numbers in expo-print / WKWebView. CSS counter(page) and JS scrollHeight
-   hacks both fail because they run in a screen rendering context, not print. */
-.page-footer {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 44px;
-  background: #1C3048;
-  padding: 0 28px;
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 8.5px; color: rgba(255,255,255,0.65);
-}
-.pf-left  { line-height: 1.6; }
-.pf-mid   { font-size: 9px; font-weight: 700; color: #E97316; text-align: center; white-space: nowrap; }
-.pf-right { text-align: right; line-height: 1.6; }
-
-/* A4 at 96dpi = 1122.52px — exact value prevents sub-pixel rounding that
-   causes expo-print to insert a spurious blank page between sections. */
-.page {
-  padding: 28px 32px 60px 32px;
-  position: relative;
-  min-height: 1122.52px;
-  page-break-after: always;
-  break-after: page;
+.section {
+  padding: 28px 32px 70px 32px;
+  page-break-before: always;
+  break-before: page;
   box-sizing: border-box;
 }
-/* Last page must NOT force a trailing blank page */
-.page:last-child { page-break-after: auto; break-after: auto; }
+.section.first { page-break-before: auto; break-before: auto; }
+
+
+
+
 
 /* ── Brand header ── */
 .brand-bar {
@@ -221,6 +219,8 @@ body {
   border-radius: 4px 4px 0 0;
   border-left: 4px solid #E97316;
   margin-top: 18px;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 .sec-bar.first { margin-top: 0; }
 .sec-bar-light {
@@ -517,14 +517,15 @@ body {
 }
 .sig-block:last-child { border-right: none; }
 .sig-pad {
-  border-bottom: 2px solid #CBD5E1;
-  min-height: 64px;
-  display: flex; align-items: flex-end;
-  padding-bottom: 6px; margin-bottom: 8px;
-  background: #ffffff;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 4px;
+  min-height: 70px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 8px; margin-bottom: 8px;
+  background: #F0F4F8;
 }
-.sig-typed { font-family: Times New Roman, serif; font-size: 22px; font-style: italic; color: #1C3048; }
-.sig-img   { max-width: 100%; max-height: 64px; object-fit: contain; background: #ffffff; }
+.sig-typed { font-family: 'Brush Script MT', 'Dancing Script', 'Cedarville Cursive', cursive; font-size: 26px; font-style: italic; color: #1C3048; padding-bottom: 4px; }
+.sig-img   { max-width: 100%; max-height: 70px; object-fit: contain; display: block; }
 .sig-empty { font-size: 10.5px; color: #CBD5E1; }
 .sig-lbl   { font-size: 8.5px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
 
@@ -540,45 +541,29 @@ body {
 
 // ─── Logo wordmark ─────────────────────────────────────────────────────────────
 
-function logoHtml(reportNum: string, reportLabel = 'Service Report'): string {
+function logoHtml(reportNum: string, company: any, reportLabel = 'Service Report'): string {
+  const name = company?.name || 'Company Name';
   return `
-  <div class="brand-bar">
+  <div class="brand-bar" style="border-bottom: 2px solid #E2E8F0; padding-bottom: 16px;">
     <div class="brand-logo">
-      <div class="brand-diamond"><div class="brand-diamond-inner"><span class="brand-init">UMA</span></div></div>
+      <div style="width: 4px; height: 32px; background: #E97316; margin-right: 12px; border-radius: 2px;"></div>
       <div class="brand-text">
-        <div class="brand-name"><span>U</span>MA</div>
-        <div class="brand-sub">Building Services</div>
+        <div class="brand-name" style="font-size: 15px;">${name}</div>
+        <div class="brand-sub" style="font-size: 8px;">Facility Management & Maintenance</div>
       </div>
     </div>
     <div class="brand-meta">
-      <div class="brand-reportnum">${reportLabel} ${reportNum}</div>
+      <div class="brand-reportnum" style="font-size: 14px; color: #1C3048;">
+        <span style="color: #94A3B8; font-weight: 600;">${reportLabel}</span> ${reportNum}
+      </div>
       <div class="brand-reportlbl">Official Service Document</div>
-    </div>
-  </div>`;
-}
-
-// ─── Per-page footer (embedded inside each .page div) ───────────────────────────
-// We pass pageNum (1-based) and totalPages (known at build time) so the numbers
-// are always correct — no JS hacks, no CSS counter() tricks needed.
-
-function pageFooterHtml(pageNum: number, totalPages: number): string {
-  return `
-  <div class="page-footer">
-    <div class="pf-left">
-      <div>${CompanyConfig.name}</div>
-      <div>${CompanyConfig.addressLine1}, ${CompanyConfig.addressLine2} | ABN: ${CompanyConfig.abn}</div>
-    </div>
-    <div class="pf-mid">Page ${pageNum} of ${totalPages}</div>
-    <div class="pf-right">
-      <div>www.${CompanyConfig.website}</div>
-      <div>Ph: ${CompanyConfig.contactPhone} | ${CompanyConfig.contactEmail}</div>
     </div>
   </div>`;
 }
 
 // ─── Page 1 — Cover / Summary ──────────────────────────────────────────────────
 
-function buildPage1(data: ReportData, pageNum: number, totalPages: number): string {
+function buildPage1(data: ReportData): string {
   const { job, assets, defects, techName, reportId } = data;
   const j = job as any;
 
@@ -589,6 +574,25 @@ function buildPage1(data: ReportData, pageNum: number, totalPages: number): stri
   const perfDate    = fmtDateShort(j.updated_at ?? job.scheduled_date);
   const jobType     = fmtJobType(job.job_type);
   const refNum      = shortId(job.id, 6);
+
+  let timeStr = '';
+  if (data.timeLogs && data.timeLogs.length > 0) {
+    const sortedLogs = [...data.timeLogs].sort((a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime());
+    const firstIn = sortedLogs[0].clock_in;
+    
+    let lastOut: string | null = null;
+    for (const log of sortedLogs) {
+      if (!log.clock_out) { lastOut = null; break; }
+      if (!lastOut || new Date(log.clock_out) > new Date(lastOut)) lastOut = log.clock_out;
+    }
+    
+    const startStr = fmtTimeOnly(firstIn);
+    const endStr = lastOut ? fmtTimeOnly(lastOut) : 'Active';
+    timeStr = `
+        <div class="info-label" style="margin-top:9px">Time on Site</div>
+        <div class="info-val" style="font-size:10px">${startStr} &rarr; ${endStr}</div>
+    `;
+  }
 
   const cntCrit = defects.filter(d => d.severity === 'critical').length;
   const cntMaj  = defects.filter(d => d.severity === 'major').length;
@@ -619,8 +623,8 @@ function buildPage1(data: ReportData, pageNum: number, totalPages: number): stri
         </div>`).join('');
 
   return `
-  <div class="page">
-    ${logoHtml(`R-${shortId(reportId, 5)}`)}
+  <div class="section first">
+    ${logoHtml(`R-${shortId(reportId, 5)}`, data.company)}
 
     <div class="sec-bar first">Site / Property Information</div>
     <div class="info-grid">
@@ -642,65 +646,71 @@ function buildPage1(data: ReportData, pageNum: number, totalPages: number): stri
       <div class="info-cell accent">
         <div class="info-label">Date Completed</div>
         <div class="info-val">${perfDate}</div>
+        ${timeStr}
       </div>
     </div>
 
     ${siteNote ? `
-    <div class="sec-bar" style="background:#166534;border-left-color:#4ADE80">📝 Site Note</div>
-    <div class="scope-wrap" style="background:#F0FDF4;border:1px solid #BBF7D0;border-top:none;border-radius:0 0 6px 6px">
-      <p style="font-size:11px;color:#166534;line-height:1.7">${siteNote}</p>
+    <div class="sec-bar" style="background:#F1F5F9; color:#1C3048; border-left-color:#E97316;">📝 Site Note</div>
+    <div class="scope-wrap" style="background:#F8FAFC; border:1px solid #E2E8F0; border-top:none; border-radius:0 0 6px 6px">
+      <p style="font-size:11px; color:#475569; line-height:1.7">${siteNote}</p>
     </div>` : ''}
 
-    <div class="sec-bar">Scope of Works</div>
-    <div class="scope-wrap">
-      <ul class="scope-list">${scopeItems}</ul>
-    </div>
-
-    <div class="sec-bar">Defect Summary</div>
-    <div class="legend">
-      <div class="legend-row">
-        <div class="lg-cnt lc-crit">${cntCrit}</div>
-        <div class="lg-ttl lc-crit">Critical Defects</div>
-        <div class="lg-desc">A defect that renders a system inoperative.</div>
-      </div>
-      <div class="legend-row">
-        <div class="lg-cnt lc-maj">${cntMaj}</div>
-        <div class="lg-ttl lc-maj">Non-critical Defects</div>
-        <div class="lg-desc">A system impairment not likely to critically affect the operation.</div>
-      </div>
-      <div class="legend-row">
-        <div class="lg-cnt lc-min">${cntMin}</div>
-        <div class="lg-ttl lc-min">Non-conformances</div>
-        <div class="lg-desc">Missing information or incorrect feature — does not affect system operation.</div>
-      </div>
-      <div class="legend-row">
-        <div class="lg-cnt lc-rec">0</div>
-        <div class="lg-ttl lc-rec">Recommendations</div>
-        <div class="lg-desc">A modification suggested to improve system performance.</div>
-      </div>
-      <div class="legend-row">
-        <div class="lg-cnt lc-inf">0</div>
-        <div class="lg-ttl lc-inf">Informational Notes</div>
-        <div class="lg-desc">Detailed advice or general comment.</div>
+    <div class="nb">
+      <div class="sec-bar">Scope of Works</div>
+      <div class="scope-wrap">
+        <ul class="scope-list">${scopeItems}</ul>
       </div>
     </div>
 
-    <div class="sec-bar">Servicing Summary</div>
-    <div class="tbl-wrap">
-      <div class="t-hdr">
-        <div class="c-num">#</div>
-        <div class="c-svc">Service</div>
-        <div class="c-ast">Asset Type</div>
-        <div class="c-qty">Qty</div>
+    <div class="nb">
+      <div class="sec-bar">Defect Summary</div>
+      <div class="legend">
+        <div class="legend-row">
+          <div class="lg-cnt lc-crit">${cntCrit}</div>
+          <div class="lg-ttl lc-crit">Critical Defects</div>
+          <div class="lg-desc">A defect that renders a system inoperative.</div>
+        </div>
+        <div class="legend-row">
+          <div class="lg-cnt lc-maj">${cntMaj}</div>
+          <div class="lg-ttl lc-maj">Non-critical Defects</div>
+          <div class="lg-desc">A system impairment not likely to critically affect the operation.</div>
+        </div>
+        <div class="legend-row">
+          <div class="lg-cnt lc-min">${cntMin}</div>
+          <div class="lg-ttl lc-min">Non-conformances</div>
+          <div class="lg-desc">Missing information or incorrect feature — does not affect system operation.</div>
+        </div>
+        <div class="legend-row">
+          <div class="lg-cnt lc-rec">0</div>
+          <div class="lg-ttl lc-rec">Recommendations</div>
+          <div class="lg-desc">A modification suggested to improve system performance.</div>
+        </div>
+        <div class="legend-row">
+          <div class="lg-cnt lc-inf">0</div>
+          <div class="lg-ttl lc-inf">Informational Notes</div>
+          <div class="lg-desc">Detailed advice or general comment.</div>
+        </div>
       </div>
-      ${summaryRows}
+    </div>
+
+    <div class="nb">
+      <div class="sec-bar">Servicing Summary</div>
+      <div class="tbl-wrap">
+        <div class="t-hdr">
+          <div class="c-num">#</div>
+          <div class="c-svc">Service</div>
+          <div class="c-ast">Asset Type</div>
+          <div class="c-qty">Qty</div>
+        </div>
+        ${summaryRows}
+      </div>
     </div>
 
     <div class="prepby">
       <span class="prepby-lbl">Report prepared by:</span>
       <span class="prepby-name">${techName}</span>
     </div>
-    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
@@ -901,21 +911,20 @@ function buildAssetRow(
 
 // ─── Maintenance page ──────────────────────────────────────────────────────────
 
-function buildMaintPage(data: ReportData, pageNum: number, totalPages: number): string {
+function buildMaintPage(data: ReportData): string {
   const { assets, defects, photos, signature, techName, reportId } = data;
 
   const sigHtml = buildSig(signature, techName);
 
   if (assets.length === 0) {
     return `
-    <div class="page">
-      ${logoHtml(`R-${shortId(reportId, 5)}`)}
+    <div class="section">
+      ${logoHtml(`R-${shortId(reportId, 5)}`, data.company)}
       <div class="sec-bar first">Asset Maintenance Log</div>
       <div style="padding:18px 14px;color:#94A3B8;font-size:11px;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px">
         No maintenance records for this job.
       </div>
       ${sigHtml}
-      ${pageFooterHtml(pageNum, totalPages)}
     </div>`;
   }
 
@@ -941,19 +950,24 @@ function buildMaintPage(data: ReportData, pageNum: number, totalPages: number): 
   }
 
   return `
-  <div class="page">
-    ${logoHtml(`R-${shortId(reportId, 5)}`)}
+  <div class="section">
+    ${logoHtml(`R-${shortId(reportId, 5)}`, data.company)}
     <div class="sec-bar first">Asset Maintenance Log</div>
     ${body}
     ${sigHtml}
-    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
 function buildSig(signature: Signature | null, techName: string): string {
+  // Client signature
   const clientSigHtml = signature?.signature_url && isSafe(signature.signature_url)
     ? `<img src="${signature.signature_url}" class="sig-img" alt="Client Signature" onerror="this.style.display='none'"/>`
     : `<span class="sig-empty">${signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
+
+  // Technician signature — real captured PNG preferred (AS1851); falls back to typed name
+  const techSigHtml = signature?.tech_signature_url && isSafe(signature.tech_signature_url)
+    ? `<img src="${signature.tech_signature_url}" class="sig-img" alt="Inspector Signature" onerror="this.style.display='none'"/>`
+    : `<span class="sig-typed">${techName}</span>`;
 
   const signerName = signature?.signed_by_name ?? '';
 
@@ -962,7 +976,7 @@ function buildSig(signature: Signature | null, techName: string): string {
     <div class="sig-section-hdr">Signatures</div>
     <div class="sig-grid">
       <div class="sig-block">
-        <div class="sig-pad"><span class="sig-typed">${techName}</span></div>
+        <div class="sig-pad">${techSigHtml}</div>
         <div class="sig-lbl">Inspector Signature</div>
       </div>
       <div class="sig-block">
@@ -980,8 +994,7 @@ function buildQuotePage(
   items: QuoteItem[],
   inventory: InventoryItem[],
   reportId: string,
-  pageNum: number,
-  totalPages: number,
+  company: any
 ): string {
   if (!items.length) return '';
 
@@ -1004,8 +1017,8 @@ function buildQuotePage(
   const exGst    = total - gst;
 
   return `
-  <div class="page">
-    ${logoHtml(`Q-${shortId(quote.id, 5)}`, 'Estimate & Quote')}
+  <div class="section">
+    ${logoHtml(`Q-${shortId(quote.id, 5)}`, company, 'Estimate & Quote')}
     <div class="sec-bar first">Approved Estimate</div>
     <div class="tbl-wrap">
       <div class="t-hdr">
@@ -1029,7 +1042,6 @@ function buildQuotePage(
         <div class="grand-val">${fmtCurrency(total)}</div>
       </div>
     </div>
-    ${pageFooterHtml(pageNum, totalPages)}
   </div>`;
 }
 
@@ -1040,22 +1052,18 @@ export function buildReportHtml(data: ReportData): string {
   const j            = job as any;
   const propertyName = j.property_name ?? reportId;
 
-  // Only count quote page if it will genuinely render (has line items)
-  const hasQuote   = Boolean(approvedQuote && quoteItems?.length && inventory);
-  const quotePg    = hasQuote
-    ? buildQuotePage(approvedQuote!, quoteItems!, inventory!, reportId, 3, 3)
+  const hasQuote = Boolean(approvedQuote && quoteItems?.length && inventory);
+  const quotePg  = hasQuote
+    ? buildQuotePage(approvedQuote!, quoteItems!, inventory!, reportId, data.company)
     : '';
-  const totalPages = hasQuote ? 3 : 2;
 
-  const page1   = buildPage1(data, 1, totalPages);
-  const maintPg = buildMaintPage(data, 2, totalPages);
-
-  // IMPORTANT: No whitespace/newlines between <body> and the first .page div —
+  const page1   = buildPage1(data);
+  const maintPg = buildMaintPage(data);
   // WKWebView (expo-print) renders any leading whitespace as blank page content.
   return `<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=794"/>
   <title>Service Report — ${propertyName}</title>
   <style>${CSS}</style>
 </head><body>${page1}${maintPg}${quotePg}</body></html>`;

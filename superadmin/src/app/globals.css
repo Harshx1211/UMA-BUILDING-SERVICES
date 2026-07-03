@@ -74,7 +74,7 @@
   /* Sidebar */
   --sidebar-bg:         #0F1E3C;
   --sidebar-active:     rgba(249,115,22,0.14);
-  --sidebar-active-border: #F97316;
+  --sidebar-active-border: var(--accent);
 
   /* Surface */
   --bg:                 #0B162C;
@@ -540,7 +540,7 @@ th    { text-align: left; white-space: nowrap; }
 
 /* ─── Severity Left Border ───────────────────────────────────────────────────── */
 .severity-critical { border-left: 4px solid #ef4444; }
-.severity-major    { border-left: 4px solid #f97316; }
+.severity-major    { border-left: 4px solid var(--accent); }
 .severity-minor    { border-left: 4px solid #f59e0b; }
 
 /* ─── Scrollable X ───────────────────────────────────────────────────────────── */

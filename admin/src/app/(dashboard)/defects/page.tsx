@@ -7,6 +7,10 @@ import EmptyState from '@/components/ui/EmptyState';
 import { timeAgo } from '@/lib/utils';
 import { ShieldAlert, Building2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { getCached, setCached } from '@/lib/pageCache';
+import Skeleton from '@/components/ui/Skeleton';
+
+const CACHE_KEY = 'defects_groups';
 
 interface DefectData {
   id: string;
@@ -31,8 +35,9 @@ const SEV_COLORS = { minor: '#f59e0b', major: '#f97316', critical: '#ef4444' };
 const SEV_BG = { minor: 'var(--warning-dark)', major: 'var(--warning-dark)', critical: 'var(--error-dark)' };
 
 export default function DefectsPage() {
-  const [siteGroups, setSiteGroups] = useState<SiteGroup[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const cached = getCached<SiteGroup[]>(CACHE_KEY);
+  const [siteGroups, setSiteGroups] = useState<SiteGroup[]>(cached ?? []);
+  const [loading, setLoading]       = useState(!cached);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -75,6 +80,7 @@ export default function DefectsPage() {
       });
 
       setSiteGroups(sortedGroups);
+      setCached(CACHE_KEY, sortedGroups);
     }
     setLoading(false);
   }, []);
@@ -91,8 +97,19 @@ export default function DefectsPage() {
       />
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-6 h-6 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} />
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-[var(--card)] rounded-2xl border p-5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-4">
+                <Skeleton variant="bg" className="w-12 h-12" />
+                <div className="space-y-2">
+                  <Skeleton variant="text" className="h-4 w-48" />
+                  <Skeleton variant="text" className="h-3 w-32" />
+                </div>
+              </div>
+              <Skeleton variant="bg" className="w-24 h-6" />
+            </div>
+          ))}
         </div>
       ) : siteGroups.length === 0 ? (
         <EmptyState 
@@ -170,7 +187,7 @@ export default function DefectsPage() {
                   <div className="border-t animate-slide-down" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                     
                     {/* Action Bar */}
-                    <div className="px-5 py-3 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)', background: '#fafafa' }}>
+                    <div className="px-5 py-3 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
                       <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>
                         {group.defects.length} Defect{group.defects.length !== 1 ? 's' : ''} Logged
                       </span>

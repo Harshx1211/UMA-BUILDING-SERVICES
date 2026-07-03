@@ -1,55 +1,73 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { adminRead, adminReadBatch } from '@/lib/admin-api';
 import { formatDate, timeAgo } from '@/lib/utils';
 import Badge from '@/components/ui/Badge';
 import PageHeader from '@/components/ui/PageHeader';
-import { ClipboardList, Download, FileText, Building2, ShieldAlert, TrendingUp, CheckCircle2 } from 'lucide-react';
+import Skeleton from '@/components/ui/Skeleton';
+import { ClipboardList, Download, Building2, ShieldAlert, TrendingUp, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getCached, setCached } from '@/lib/pageCache';
+
+const CACHE_KEY = 'reports_data';
 
 export default function ReportsPage() {
-  const [stats, setStats] = useState({ properties: 0, compliant: 0, nonCompliant: 0, overdue: 0 });
-  const [overdueProperties, setOverdueProperties] = useState<any[]>([]);
-  const [openDefects, setOpenDefects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = getCached<Record<string, unknown>>(CACHE_KEY);
+  const [stats, setStats] = useState((cached?.stats as { properties: number, compliant: number, nonCompliant: number, overdue: number }) ?? { properties: 0, compliant: 0, nonCompliant: 0, overdue: 0 });
+  const [overdueProperties, setOverdueProperties] = useState<Record<string, unknown>[]>((cached?.overdueProperties as Record<string, unknown>[]) ?? []);
+  const [openDefects, setOpenDefects] = useState<Record<string, unknown>[]>((cached?.openDefects as Record<string, unknown>[]) ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
     async function load() {
       const today = new Date().toISOString().split('T')[0];
+      const results = await adminReadBatch([
+        { table: 'properties', options: { count: true, limit: 0 } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'compliant' } } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'non_compliant' } } },
+        { table: 'properties', options: { count: true, limit: 0, filters: { compliance_status: 'overdue' } } },
+        { table: 'properties', options: { select: '*', filters: {}, order: { column: 'next_inspection_date', ascending: true }, limit: 10 } },
+        { table: 'defects', options: { select: '*, property:properties(name), asset:assets(asset_type)', filters: { status: 'open', severity: 'critical' }, order: { column: 'created_at', ascending: false }, limit: 10 } },
+      ]);
       const [
         { count: total }, { count: compliant }, { count: nonCompliant }, { count: overdue },
         { data: assets }, { data: defects },
-      ] = await Promise.all([
-        supabase.from('properties').select('*', { count: 'exact', head: true }),
-        supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'compliant'),
-        supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'non_compliant'),
-        supabase.from('properties').select('*', { count: 'exact', head: true }).eq('compliance_status', 'overdue'),
-        supabase.from('properties').select('*').lt('next_inspection_date', today).order('next_inspection_date').limit(10),
-        supabase.from('defects').select('*, property:properties(name), asset:assets(asset_type)').eq('status', 'open').eq('severity', 'critical').order('created_at', { ascending: false }).limit(10),
-      ]);
-      setStats({ properties: total ?? 0, compliant: compliant ?? 0, nonCompliant: nonCompliant ?? 0, overdue: overdue ?? 0 });
-      setOverdueProperties(assets ?? []);
+      ] = results;
+      const newStats = { properties: total ?? 0, compliant: compliant ?? 0, nonCompliant: nonCompliant ?? 0, overdue: overdue ?? 0 };
+      const newOverdue = (assets ?? []).filter((p: Record<string, string>) => p.next_inspection_date && p.next_inspection_date < today);
+      setStats(newStats);
+      setOverdueProperties(newOverdue);
       setOpenDefects(defects ?? []);
+      setCached(CACHE_KEY, { stats: newStats, overdueProperties: newOverdue, openDefects: defects ?? [] });
       setLoading(false);
     }
     load();
   }, []);
 
   const exportCSV = async (type: string) => {
-    let data: any[] = [];
+    let rows: Record<string, unknown>[] = [];
     if (type === 'properties') {
-      const { data: d } = await supabase.from('properties').select('name,address,suburb,state,postcode,compliance_status,created_at').order('name');
-      data = d ?? [];
+      const { data } = await adminRead<Record<string, unknown>>('properties', {
+        select: 'name,address,suburb,state,postcode,compliance_status,created_at',
+        order: { column: 'name', ascending: true },
+      });
+      rows = data ?? [];
     } else if (type === 'assets') {
-      const { data: d } = await supabase.from('assets').select('asset_type,variant,asset_ref,serial_number,location_on_site,last_service_date,next_service_date,status,property:properties(name)').order('asset_type');
-      data = (d ?? []).map((a: any) => ({ ...a, property_name: a.property?.name }));
+      const { data } = await adminRead<Record<string, unknown>>('assets', {
+        select: 'asset_type,variant,asset_ref,serial_number,location_on_site,last_service_date,next_service_date,status,property:properties(name)',
+        order: { column: 'asset_type', ascending: true },
+      });
+      rows = (data ?? []).map(a => ({ ...a, property_name: (a.property as Record<string, unknown>)?.name }));
     } else if (type === 'defects') {
-      const { data: d } = await supabase.from('defects').select('description,severity,status,created_at,property:properties(name),asset:assets(asset_type)').order('created_at', { ascending: false });
-      data = (d ?? []).map((d: any) => ({ ...d, property_name: d.property?.name, asset_type: d.asset?.asset_type }));
+      const { data } = await adminRead<Record<string, unknown>>('defects', {
+        select: 'description,severity,status,created_at,property:properties(name),asset:assets(asset_type)',
+        order: { column: 'created_at', ascending: false },
+      });
+      rows = (data ?? []).map(d => ({ ...d, property_name: (d.property as Record<string, unknown>)?.name, asset_type: (d.asset as Record<string, unknown>)?.asset_type }));
     }
-    if (!data.length) { toast.error('No data to export'); return; }
-    const keys = Object.keys(data[0]).filter(k => typeof data[0][k] !== 'object');
-    const csv = [keys.join(','), ...data.map(row => keys.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
+    if (!rows.length) { toast.error('No data to export'); return; }
+    const keys = Object.keys(rows[0]).filter(k => typeof rows[0][k] !== 'object');
+    const csv = [keys.join(','), ...rows.map(row => keys.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `uma-building-services-${type}-${new Date().toISOString().split('T')[0]}.csv`;
@@ -113,33 +131,45 @@ export default function ReportsPage() {
         {/* Overdue Properties */}
         <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>⚠️ Overdue for Inspection</p>
-          {loading ? <div className="h-32 flex items-center justify-center"><div className="w-5 h-5 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
-          : overdueProperties.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No overdue properties 🎉</p>
-          : overdueProperties.map((p: any) => (
-            <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
-              <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{p.name}</p>
-                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{[p.suburb, p.state].filter(Boolean).join(', ') || 'Location unknown'}</p>
-              </div>
-              <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>{formatDate(p.next_inspection_date)}</span>
+          {loading ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <Skeleton key={i} variant="text" className="h-10 w-full" />)}
             </div>
-          ))}
+          ) : overdueProperties.length === 0 ? (
+            <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No overdue properties 🎉</p>
+          ) : (
+            overdueProperties.map((p) => (
+              <div key={p.id as string} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+                <div>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{p.name as string}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{[p.suburb as string, p.state as string].filter(Boolean).join(', ') || 'Location unknown'}</p>
+                </div>
+                <span className="text-xs font-semibold" style={{ color: '#ef4444' }}>{formatDate(p.next_inspection_date as string)}</span>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Critical Open Defects */}
         <div className="bg-[var(--card)] rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
           <p className="font-semibold mb-4" style={{ color: 'var(--text)' }}>🔴 Critical Open Defects</p>
-          {loading ? <div className="h-32 flex items-center justify-center"><div className="w-5 h-5 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent)' }} /></div>
-          : openDefects.length === 0 ? <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No critical defects open 🎉</p>
-          : openDefects.map((d: any) => (
-            <div key={d.id} className="flex items-start justify-between py-2.5 border-b last:border-0 gap-2" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{d.description}</p>
-                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{d.property?.name} · {d.asset?.asset_type} · {timeAgo(d.created_at)}</p>
-              </div>
-              <Badge value="critical" />
+          {loading ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <Skeleton key={i} variant="text" className="h-10 w-full" />)}
             </div>
-          ))}
+          ) : openDefects.length === 0 ? (
+            <p className="text-center py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>No critical defects open 🎉</p>
+          ) : (
+            openDefects.map((d: Record<string, unknown>) => (
+              <div key={d.id as string} className="flex items-start justify-between py-2.5 border-b last:border-0 gap-2" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{d.description as string}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(d.property as Record<string,unknown>)?.name as string} · {(d.asset as Record<string,unknown>)?.asset_type as string} · {timeAgo(d.created_at as string)}</p>
+                </div>
+                <Badge value="critical" />
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

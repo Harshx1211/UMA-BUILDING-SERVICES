@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "UMA BUILDING SERVICES",
-    "slug": "uma-building-services",
+    "name": "SiteTrack",
+    "slug": "sitetrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "uma-building-services",
+    "scheme": "sitetrack",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.uma-building-services.app"
+      "bundleIdentifier": "com.sitetrack.app"
     },
     "android": {
-      "package": "com.uma_building_services.app",
+      "package": "com.sitetrack.app",
       "adaptiveIcon": {
         "backgroundColor": "#1B2D4F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -63,13 +63,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "UMA BUILDING SERVICES needs camera access to photograph fire safety assets and defects."
+          "cameraPermission": "SiteTrack needs camera access to photograph fire safety assets and defects."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "UMA BUILDING SERVICES uses your location to record GPS coordinates when you clock in and out of jobs."
+          "locationAlwaysAndWhenInUsePermission": "SiteTrack uses your location to record GPS coordinates when you clock in and out of jobs."
         }
       ],
       [

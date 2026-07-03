@@ -141,8 +141,8 @@ body {
 
 /* ─── Selection ─────────────────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(249,115,22,0.18);
-  color: var(--primary);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 /* ─── Focus ─────────────────────────────────────────────────────────────────── */
@@ -200,7 +200,7 @@ body {
 .animate-pulse-dot    { animation: pulseDot 1.8s ease-in-out infinite; }
 .animate-spin-ring    { animation: spinRing 0.9s linear infinite; }
 .animate-shimmer {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s linear infinite;
 }
@@ -468,7 +468,7 @@ th    { text-align: left; white-space: nowrap; }
 /* ─── Skeleton Loader ────────────────────────────────────────────────────────── */
 .skeleton {
   border-radius: var(--radius-md);
-  background: linear-gradient(90deg, #f1f5f9 25%, #e8eef5 50%, #f1f5f9 75%);
+  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
 }
@@ -502,13 +502,13 @@ th    { text-align: left; white-space: nowrap; }
   width: 40px;
   height: 22px;
   border-radius: 99px;
-  background: #cbd5e1;
+  background: rgba(255,255,255,0.1);
   transition: background var(--transition-fast);
   cursor: pointer;
-  border: none;
+  border: 1px solid rgba(255,255,255,0.05);
   flex-shrink: 0;
 }
-.toggle.on { background: var(--primary); }
+.toggle.on { background: var(--accent); border-color: var(--accent); }
 .toggle::after {
   content: '';
   position: absolute;
@@ -516,12 +516,12 @@ th    { text-align: left; white-space: nowrap; }
   height: 16px;
   background: #fff;
   border-radius: 50%;
-  top: 3px;
-  left: 3px;
+  top: 2px;
+  left: 2px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-  transition: left var(--transition-fast);
+  transition: left var(--transition-fast), transform var(--transition-fast);
 }
-.toggle.on::after { left: 21px; }
+.toggle.on::after { left: calc(100% - 18px); }
 
 /* ─── Tooltip ────────────────────────────────────────────────────────────────── */
 .tooltip-content {

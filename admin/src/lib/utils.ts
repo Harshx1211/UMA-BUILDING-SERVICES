@@ -16,6 +16,16 @@ export function formatDateTime(dateStr: string | null | undefined): string {
   try { return format(parseISO(dateStr), 'dd MMM yyyy, h:mm a'); } catch { return dateStr; }
 }
 
+export function formatTime(timeStr: string | null | undefined): string {
+  if (!timeStr) return '—';
+  try {
+    // timeStr is usually "HH:mm:ss" or "HH:mm". Prefix an arbitrary date to parse it safely.
+    return format(parseISO(`2000-01-01T${timeStr}`), 'h:mm a');
+  } catch {
+    return timeStr;
+  }
+}
+
 export function timeAgo(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try { return formatDistanceToNow(parseISO(dateStr), { addSuffix: true }); } catch { return dateStr; }

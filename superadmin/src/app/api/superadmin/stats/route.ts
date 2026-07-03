@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { verifySuperAdmin } from '@/lib/supabase-server';
 
+export const revalidate = 60;
+
 export async function GET(req: NextRequest) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const [companiesRes, usersRes, jobsRes] = await Promise.all([

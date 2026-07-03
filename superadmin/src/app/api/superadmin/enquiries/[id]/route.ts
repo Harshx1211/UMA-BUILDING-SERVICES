@@ -4,7 +4,7 @@ import { verifySuperAdmin } from '@/lib/supabase-server';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
@@ -23,7 +23,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const isSuper = await verifySuperAdmin();
+    const isSuper = await verifySuperAdmin(req);
     if (!isSuper) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;

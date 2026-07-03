@@ -4,13 +4,15 @@ import type { Session } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, signOut as supabaseSignOut } from '@/lib/supabase';
 import { stopSync } from '@/lib/sync';
+import { clearDatabase, getPendingSyncItems } from '@/lib/database';
 import { SESSION_KEY } from '@/constants/Config';
 import type { User } from '@/types';
 import { UserRole } from '@/constants/Enums';
 
 
-const REMEMBER_ME_KEY    = '@uma-building-services/remember_me';
-const USER_PROFILE_KEY   = '@uma-building-services/user_profile'; // FLOW-11: offline session cache
+const REMEMBER_ME_KEY    = '@sitetrack/remember_me';
+const USER_PROFILE_KEY   = '@sitetrack/user_profile'; // FLOW-11: offline session cache
+const COMPANY_CACHE_KEY  = '@sitetrack/company_profile';
 
 // ---------------------------------------------
 // Types
@@ -18,8 +20,10 @@ const USER_PROFILE_KEY   = '@uma-building-services/user_profile'; // FLOW-11: of
 
 interface AuthState {
   user: User | null;
+  company: any | null;
   session: Session | null;
   isLoading: boolean;
+  isForceSyncing: boolean;
   isAuthenticated: boolean;
   error: string | null;
 }
@@ -27,6 +31,7 @@ interface AuthState {
 interface AuthActions {
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
+  forceFinalSyncAndSignOut: () => Promise<void>;
   restoreSession: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   clearError: () => void;
@@ -44,8 +49,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 
 export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   user: null,
+  company: null,
   session: null,
   isLoading: true,
+  isForceSyncing: false,
   isAuthenticated: false,
   error: null,
 
@@ -95,7 +102,33 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         };
         if (rememberMe) await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
         await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(fallback));
-        set({ user: fallback, session: data.session, isAuthenticated: true, isLoading: false, error: null });
+        set({ user: fallback, company: null, session: data.session, isAuthenticated: true, isLoading: false, error: null });
+        return;
+      }
+
+      let fetchedCompany = null;
+      // SaaS Subscription Lockout: check if the company is suspended
+      if (profile.company_id) {
+        const { data: companyRes } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', profile.company_id)
+          .maybeSingle();
+          
+        if (companyRes) {
+          fetchedCompany = companyRes;
+          if (companyRes.subscription_status !== 'active') {
+            await supabase.auth.signOut();
+            set({ error: 'Your company account has been suspended. Please contact platform support.', isLoading: false });
+            return;
+          }
+        }
+      }
+
+      // User Active Check: check if the technician was disabled by an admin
+      if (profile.is_active === false) {
+        await supabase.auth.signOut();
+        set({ error: 'Your account has been deactivated. Please contact your company administrator.', isLoading: false });
         return;
       }
 
@@ -104,9 +137,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       }
       // FLOW-11: Cache profile so offline restoreSession can succeed without network
       await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+      if (fetchedCompany) await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(fetchedCompany));
 
       set({
         user: profile as User,
+        company: fetchedCompany,
         session: data.session,
         isAuthenticated: true,
         isLoading: false,
@@ -130,7 +165,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // Security: clear ALL session data including cached profile.
       // Without USER_PROFILE_KEY removal, signing in as a different user
       // via biometrics would restore the previous user's profile.
-      await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY]);
+      await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY, COMPANY_CACHE_KEY]);
+      clearDatabase();
     } catch (err) {
       console.error('[AuthStore] signOut error:', err);
     } finally {
@@ -139,8 +175,53 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         session: null,
         isAuthenticated: false,
         isLoading: false,
+        isForceSyncing: false,
         error: null,
       });
+    }
+  },
+
+  // Graceful exit for deactivated users — flushes offline data before wiping
+  forceFinalSyncAndSignOut: async () => {
+    // Prevent multiple parallel calls
+    if (get().isForceSyncing) return;
+    
+    set({ isForceSyncing: true });
+    try {
+      let pending = getPendingSyncItems();
+      if (pending.length > 0) {
+        console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
+        const { runSync } = await import('@/lib/sync');
+        // Give it up to 5 strong attempts to push data
+        for (let i = 0; i < 5; i++) {
+          await runSync();
+          pending = getPendingSyncItems();
+          if (pending.length === 0) break;
+          // backoff
+          await new Promise(r => setTimeout(r, 3000));
+        }
+        
+        // Critical Data Loss Prevention:
+        // If we still have pending items (e.g. poor connection), DO NOT log out and wipe the DB.
+        if (pending.length > 0) {
+          console.warn(`[AuthStore] Final sync failed. ${pending.length} items remain. Aborting logout to prevent data loss.`);
+          set({ isForceSyncing: false });
+          import('react-native').then(rn => {
+            rn.Alert.alert(
+              'Final Sync Failed',
+              'Your account was deactivated, but we could not upload your final offline work. Please connect to a strong Wi-Fi network so your work is not lost.',
+              [{ text: 'OK' }]
+            );
+          });
+          return; // Abort signOut()
+        }
+      }
+      
+      // If queue is empty (or was empty to begin with), safely wipe and logout
+      await get().signOut();
+    } catch (err) {
+      console.error('[AuthStore] forceFinalSyncAndSignOut error:', err);
+      set({ isForceSyncing: false });
     }
   },
 
@@ -153,8 +234,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // C1 FIX: Check AsyncStorage cache first — instant auth for returning users / offline
       // This is especially important for biometric login where we call restoreSession
       // directly and can't afford a 5-second network timeout blocking the UX.
-      const [cachedProfileStr, sessionResult] = await Promise.all([
+      const [cachedProfileStr, cachedCompanyStr, sessionResult] = await Promise.all([
         AsyncStorage.getItem(USER_PROFILE_KEY).catch(() => null),
+        AsyncStorage.getItem(COMPANY_CACHE_KEY).catch(() => null),
         withTimeout(supabase.auth.getSession(), 5000),
       ]);
 
@@ -170,13 +252,39 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       if (cachedProfileStr) {
         try {
           const cached = JSON.parse(cachedProfileStr) as User;
-          set({ user: cached, session, isAuthenticated: true, isLoading: false, error: null });
+          const cachedCompany = cachedCompanyStr ? JSON.parse(cachedCompanyStr) : null;
+          set({ user: cached, company: cachedCompany, session, isAuthenticated: true, isLoading: false, error: null });
           // Refresh cache in the background (non-blocking) so it stays fresh
-          void Promise.resolve(
-            supabase.from('users').select('*').eq('id', session.user.id).maybeSingle()
-          ).then(({ data }) => {
-            if (data) void AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(data)).catch(() => null);
-          }).catch(() => null);
+          // Also verify the company hasn't been suspended while the app was closed
+          void Promise.resolve().then(async () => {
+            const { data: profile } = await supabase.from('users').select('*').eq('id', session.user.id).maybeSingle();
+            if (profile) {
+              await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile)).catch(() => null);
+              
+              if (profile.company_id) {
+                const { data: companyRes } = await supabase
+                  .from('companies')
+                  .select('*')
+                  .eq('id', profile.company_id)
+                  .maybeSingle();
+                
+                if (companyRes) {
+                  await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(companyRes)).catch(() => null);
+                  useAuthStore.setState({ company: companyRes });
+                  if (companyRes.subscription_status !== 'active') {
+                    console.warn('[AuthStore] Company suspended during background check. Forcing graceful logout.');
+                    get().forceFinalSyncAndSignOut();
+                  }
+                } else if (profile.is_active === false) {
+                  console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
+                  get().forceFinalSyncAndSignOut();
+                }
+              } else if (profile.is_active === false) {
+                console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
+                get().forceFinalSyncAndSignOut();
+              }
+            }
+          });
           return;
         } catch { /* corrupt cache — fall through to network fetch */ }
       }
@@ -205,14 +313,44 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           is_active: true,
           created_at: su.created_at ?? new Date().toISOString(),
         };
-        set({ user: fallback, session, isAuthenticated: true, isLoading: false });
+        set({ user: fallback, company: null, session, isAuthenticated: true, isLoading: false });
         return;
       }
 
       // Save fresh profile to cache for future fast restores
-      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileResult.data));
+      const profileData = profileResult.data as User;
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileData));
+      
+      let fetchedCompany = null;
+      // If we did a network fetch, check subscription status before allowing them in
+      if (profileData.company_id) {
+        const { data: companyRes } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', profileData.company_id)
+          .maybeSingle();
+          
+        if (companyRes) {
+          fetchedCompany = companyRes;
+          await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(companyRes));
+          
+          if (companyRes.subscription_status !== 'active') {
+            console.warn('[AuthStore] Company suspended during network restore. Forcing graceful logout.');
+            get().forceFinalSyncAndSignOut();
+            return;
+          }
+        }
+      }
+
+      if (profileData.is_active === false) {
+        console.warn('[AuthStore] User deactivated during network restore. Forcing graceful logout.');
+        get().forceFinalSyncAndSignOut();
+        return;
+      }
+
       set({
-        user: profileResult.data as User,
+        user: profileData,
+        company: fetchedCompany,
         session,
         isAuthenticated: true,
         isLoading: false,
@@ -244,6 +382,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || !session) {
     useAuthStore.setState({
       user: null,
+      company: null,
       session: null,
       isAuthenticated: false,
       isLoading: false,

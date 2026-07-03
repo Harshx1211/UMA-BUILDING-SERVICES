@@ -58,7 +58,7 @@ export default function PhotosScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={true} title="Job Photos" showBack={true} />
+        <ScreenHeader title="Job Photos" showBack={true} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.accent} />
         </View>
@@ -69,9 +69,9 @@ export default function PhotosScreen() {
   if (store.error) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={true} title="Job Photos" showBack={true} />
+        <ScreenHeader title="Job Photos" showBack={true} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
-          <Text style={{ fontSize: 40 }}>⚠️</Text>
+          <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
           <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
             {store.error}
           </Text>
@@ -84,13 +84,12 @@ export default function PhotosScreen() {
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader 
-        curved={true} 
         title="Job Photos" 
         showBack={true} 
         rightComponent={
           store.photos.length > 0 ? (
-            <View style={[s.countBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Text style={s.countText}>{store.photos.length} photo{store.photos.length !== 1 ? 's' : ''}</Text>
+            <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>
+              <Text style={[s.countText, { color: C.textSecondary }]}>{store.photos.length} photo{store.photos.length !== 1 ? 's' : ''}</Text>
             </View>
           ) : null
         } 
@@ -102,7 +101,7 @@ export default function PhotosScreen() {
           Adding photos afterwards creates a silent data gap in the submitted report. */}
       {jobStatus !== 'completed' && (
         <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
-          <MaterialCommunityIcons name="camera" size={28} color="#FFFFFF" />
+          <MaterialCommunityIcons name="camera" size={28} color={C.textOnPrimary} />
         </TouchableOpacity>
       )}
 
@@ -114,7 +113,7 @@ export default function PhotosScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  countText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  countText: { fontSize: 11, fontWeight: '700' },
   fab: { 
     position: 'absolute', 
     bottom: Platform.OS === 'ios' ? 40 : 28, 

@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { ChecklistItem } from '@/constants/Checklists';
+import { Card, Button } from '@/components/ui';
 
 interface ChecklistModalProps {
   visible: boolean;
@@ -77,9 +78,9 @@ export default function ChecklistModal({
       <View style={[s.container, { backgroundColor: C.background }]}>
 
         {/* ── HEADER ──────────────────────────────────────── */}
-        <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16) }]}>
-          <TouchableOpacity onPress={onCancel} style={s.headerIconBtn} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={24} color={C.textSecondary} />
+        <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomColor: C.border, borderBottomWidth: 1 }]}>
+          <TouchableOpacity onPress={onCancel} style={[s.headerIconBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border, borderWidth: 1 }]} hitSlop={12}>
+            <MaterialCommunityIcons name="close" size={22} color={C.text} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[s.headerTitle, { color: C.text }]}>Inspection Checklist</Text>
@@ -119,13 +120,7 @@ export default function ChecklistModal({
           </View>
         </View>
 
-        {/* ── COMPLIANCE DISCLAIMER ───────────────────────── */}
-        <View style={[s.disclaimer, { backgroundColor: C.infoLight, borderColor: C.infoDark }]}>
-          <MaterialCommunityIcons name="information-outline" size={14} color={C.infoDark} />
-          <Text style={[s.disclaimerTxt, { color: C.infoDark }]}>
-            All items marked <Text style={{ fontWeight: '800' }}>Required</Text> must pass for the asset to be marked compliant. Toggle for YES / OFF for NO.
-          </Text>
-        </View>
+
 
         {/* ── CHECKLIST ITEMS ─────────────────────────────── */}
         <ScrollView
@@ -133,6 +128,14 @@ export default function ChecklistModal({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ── COMPLIANCE DISCLAIMER ───────────────────────── */}
+          <Card variant="info" style={s.disclaimer}>
+            <MaterialCommunityIcons name="information-outline" size={16} color={C.info} />
+            <Text style={[s.disclaimerTxt, { color: C.text }]}>
+              All items marked <Text style={{ fontWeight: '800', color: C.info }}>Required</Text> must pass for the asset to be marked compliant. Toggle for YES / OFF for NO.
+            </Text>
+          </Card>
+
           {items.map((item, idx) => {
             const answered_val = answers[item.id];
             const isPassed  = answered_val === true;
@@ -140,26 +143,19 @@ export default function ChecklistModal({
             const isAnswered = answered_val !== undefined;
 
             return (
-              <TouchableOpacity
+              <Card
                 key={item.id}
                 style={[
                   s.questionCard,
                   {
-                    backgroundColor: isPassed
-                      ? C.successLight
-                      : isFailed
-                      ? C.errorLight
-                      : C.surface,
-                    borderColor: isPassed
-                      ? C.success + '40'
-                      : isFailed
-                      ? C.error + '40'
-                      : C.border,
+                    backgroundColor: isPassed ? C.successLight : isFailed ? C.errorLight : C.surface,
+                    borderColor: isPassed ? C.success + '40' : isFailed ? C.error + '40' : C.border,
                   },
                 ]}
                 onPress={() => handleToggle(item.id, answered_val)}
-                activeOpacity={0.75}
+                padding={12}
               >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {/* Index bubble */}
                 <View style={[s.questionNum, {
                   backgroundColor: isPassed ? C.success : isFailed ? C.error : C.backgroundTertiary,
@@ -202,7 +198,8 @@ export default function ChecklistModal({
                     color={isAnswered ? '#FFF' : C.textTertiary}
                   />
                 </View>
-              </TouchableOpacity>
+                </View>
+              </Card>
             );
           })}
 
@@ -212,20 +209,13 @@ export default function ChecklistModal({
 
         {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
         <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-          <TouchableOpacity
-            style={[s.bottomBtn, { backgroundColor: allAnswered ? C.primary : C.backgroundTertiary }]}
+          <Button
+            variant="primary"
+            disabled={!allAnswered}
             onPress={handleSave}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="clipboard-check"
-              size={20}
-              color={allAnswered ? '#FFF' : C.textSecondary}
-            />
-            <Text style={[s.bottomBtnTxt, { color: allAnswered ? '#FFF' : C.textSecondary }]}>
-              {allAnswered ? 'Submit Checklist' : `Answer ${required.length - answered.length} More Required`}
-            </Text>
-          </TouchableOpacity>
+            icon="clipboard-check"
+            title={allAnswered ? 'Submit Checklist' : `Answer ${required.length - answered.length} More Required`}
+          />
         </View>
       </View>
     </Modal>
@@ -238,12 +228,12 @@ const s = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 18,
   },
-  headerIconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:   { fontSize: 16, fontWeight: '800' },
-  headerSub:     { fontSize: 12, marginTop: 2, fontWeight: '500' },
+  headerIconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:   { fontSize: 18, fontWeight: '900', letterSpacing: -0.2 },
+  headerSub:     { fontSize: 12, marginTop: 2, fontWeight: '600' },
 
   // Progress
   progressTrack: { height: 6, width: '100%' },
@@ -262,34 +252,30 @@ const s = StyleSheet.create({
 
   // Disclaimer
   disclaimer: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    marginHorizontal: 16, marginTop: 16, marginBottom: 6,
-    padding: 14, borderRadius: 12, borderWidth: 1,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    marginBottom: 4,
   },
   disclaimerTxt: { fontSize: 13, lineHeight: 19, flex: 1 },
 
-  scrollContent: { padding: 16, paddingBottom: 120, gap: 12 },
+  scrollContent: { padding: 16, paddingBottom: 120, gap: 8 },
 
   // Question card
   questionCard: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 14, borderRadius: 16, borderWidth: 1,
+    // Card handles padding/border/radius/shadow
   },
-  questionNum:    { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  questionNum:    { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   questionNumTxt: { fontSize: 12, fontWeight: '800' },
-  questionText:   { fontSize: 15, fontWeight: '600', lineHeight: 22 },
-  requiredRow:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
-  requiredTxt:    { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  toggleWrap:     { width: 40, height: 40, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  questionText:   { fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  requiredRow:    { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
+  requiredTxt:    { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+  toggleWrap:     { width: 34, height: 34, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Bottom action bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 16, paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+    padding: 20, paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
-  bottomBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, height: 54 },
-  bottomBtnTxt: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
 });

@@ -1,4 +1,6 @@
 // components/ui/ScreenHeader.tsx
+// Clean, flat, professional header — matches the home/schedule/profile tab bar style.
+// No curves, no decorative circles. Just crisp typography and clean layout.
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -12,42 +14,62 @@ interface Props {
   subtitle?: string;
   rightComponent?: React.ReactNode;
   showBack?: boolean;
+  /** @deprecated — kept for API compatibility, no longer renders curves */
   curved?: boolean;
   eyebrow?: string;
 }
 
-export function ScreenHeader({ title, subtitle, rightComponent, showBack = false, curved = true, eyebrow = 'UMA BUILDING SERVICES' }: Props) {
+export function ScreenHeader({
+  title,
+  subtitle,
+  rightComponent,
+  showBack = false,
+  eyebrow,
+}: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[
-      styles.header,
-      { backgroundColor: C.primary, paddingTop: Math.max(insets.top, 14) + 10 },
-      !curved && styles.headerNoCurve,
-    ]}>
-      {/* Decorative circles — same size as main nav screens */}
-      <View style={[styles.decor1, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
-      <View style={[styles.decor2, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
-
+    <View
+      style={[
+        styles.header,
+        {
+          backgroundColor: C.surface,
+          paddingTop: Math.max(insets.top, 14),
+          borderBottomColor: C.border,
+        },
+      ]}
+    >
       <View style={styles.row}>
         {showBack && (
           <TouchableOpacity
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)' as never)}
-            style={styles.backBtn}
+            onPress={() =>
+              router.canGoBack() ? router.back() : router.replace('/(app)' as never)
+            }
+            style={[styles.backBtn, { backgroundColor: C.backgroundTertiary }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons name="arrow-left" size={22} color="#FFFFFF" />
+            <MaterialCommunityIcons name="arrow-left" size={20} color={C.text} />
           </TouchableOpacity>
         )}
+
         <View style={styles.titleBlock}>
-          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          {eyebrow ? (
+            <Text style={[styles.eyebrow, { color: C.textTertiary }]}>{eyebrow}</Text>
+          ) : null}
+          <Text style={[styles.title, { color: C.text }]} numberOfLines={1}>
+            {title}
+          </Text>
           {subtitle ? (
-            <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+            <Text style={[styles.subtitle, { color: C.textSecondary }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
           ) : null}
         </View>
-        {rightComponent ? <View style={styles.right}>{rightComponent}</View> : null}
+
+        {rightComponent ? (
+          <View style={styles.right}>{rightComponent}</View>
+        ) : null}
       </View>
     </View>
   );
@@ -55,73 +77,48 @@ export function ScreenHeader({ title, subtitle, rightComponent, showBack = false
 
 const styles = StyleSheet.create({
   header: {
-    paddingBottom: 20,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    shadowColor: '#0D1526',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 10,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  headerNoCurve: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
     paddingBottom: 16,
-  },
-  decor1: {
-    position: 'absolute',
-    width: 260, height: 260, borderRadius: 130,
-    top: -100, right: -90,
-  },
-  decor2: {
-    position: 'absolute',
-    width: 180, height: 180, borderRadius: 90,
-    bottom: -70, left: -50,
+    borderBottomWidth: 1,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 8,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    flexShrink: 0,
   },
   titleBlock: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   eyebrow: {
     fontSize: 10,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 2.5,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
     marginBottom: 2,
   },
   title: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '400',
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 3,
+    marginTop: 1,
   },
   right: {
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
 });

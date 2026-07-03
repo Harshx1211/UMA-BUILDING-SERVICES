@@ -4,8 +4,8 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
-  title: { default: 'UMA BUILDING SERVICES Admin', template: '%s | UMA BUILDING SERVICES Admin' },
-  description: 'UMA BUILDING SERVICES Admin Portal — Field Service Management',
+  title: { default: 'SiteTrack Superadmin', template: '%s | SiteTrack Superadmin' },
+  description: 'SiteTrack Superadmin Portal — Field Service Management',
   robots: 'noindex, nofollow',
 };
 

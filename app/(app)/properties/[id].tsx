@@ -19,9 +19,9 @@ import { ScreenHeader, EmptyState } from '@/components/ui';
 const getComplianceConfig = (C: any): Record<ComplianceStatus, {
   bg: string; border: string; text: string; subtext: string; icon: string; label: string; badge: string;
 }> => ({
-  [ComplianceStatus.Compliant]:    { bg: C.successLight, border: C.success, text: C.successDark, subtext: C.success, icon: 'check-decagram', label: 'Compliant', badge: '#15803D' },
-  [ComplianceStatus.NonCompliant]: { bg: C.errorLight,   border: C.error,   text: C.errorDark,   subtext: C.error,   icon: 'close-circle',  label: 'Non-Compliant', badge: '#B91C1C' },
-  [ComplianceStatus.Overdue]:      { bg: '#FFF3CD',      border: '#F59E0B', text: '#92400E',      subtext: '#D97706', icon: 'alert-decagram', label: 'Overdue', badge: '#92400E' },
+  [ComplianceStatus.Compliant]:    { bg: C.successLight, border: C.success, text: C.successDark, subtext: C.success, icon: 'check-decagram', label: 'Compliant', badge: C.success },
+  [ComplianceStatus.NonCompliant]: { bg: C.errorLight,   border: C.error,   text: C.errorDark,   subtext: C.error,   icon: 'close-circle',  label: 'Non-Compliant', badge: C.errorDark },
+  [ComplianceStatus.Overdue]:      { bg: C.warningLight, border: C.warning, text: C.warningDark, subtext: C.warning, icon: 'alert-decagram', label: 'Overdue', badge: C.warningDark },
   [ComplianceStatus.Pending]:      { bg: C.backgroundTertiary, border: C.border, text: C.textSecondary, subtext: C.textTertiary, icon: 'clock-outline', label: 'Pending Review', badge: C.textSecondary },
 });
 
@@ -163,9 +163,9 @@ export default function PropertyDetailScreen() {
   if (!property) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={false} title="Not Found" showBack={true} />
+        <ScreenHeader title="Not Found" showBack={true} />
         <EmptyState
-          emoji="🏢"
+          icon="office-building-marker-outline"
           title="Property not found"
           subtitle="We couldn't locate the property record."
           actionLabel="Go Back"
@@ -295,10 +295,10 @@ export default function PropertyDetailScreen() {
             {property.hazard_notes && (
               <View style={[s.alertCard, { backgroundColor: C.errorLight, borderColor: C.error }]}>
                 <View style={[s.alertIconWrap, { backgroundColor: C.error }]}>
-                  <MaterialCommunityIcons name="alert" size={16} color="#FFF" />
+                  <MaterialCommunityIcons name="alert" size={16} color={C.textOnPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.errorDark }]}>⚠️ Site Hazard Warning</Text>
+                  <Text style={[s.alertTitle, { color: C.errorDark }]}>Site Hazard Warning</Text>
                   <Text style={[s.alertBody, { color: C.error }]}>{property.hazard_notes}</Text>
                 </View>
               </View>
@@ -306,10 +306,10 @@ export default function PropertyDetailScreen() {
             {property.access_notes && (
               <View style={[s.alertCard, { backgroundColor: C.infoLight, borderColor: C.infoDark }]}>
                 <View style={[s.alertIconWrap, { backgroundColor: C.infoDark }]}>
-                  <MaterialCommunityIcons name="key-variant" size={16} color="#FFF" />
+                  <MaterialCommunityIcons name="key-variant" size={16} color={C.textOnPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.infoDark }]}>🔑 Access Instructions</Text>
+                  <Text style={[s.alertTitle, { color: C.infoDark }]}>Access Instructions</Text>
                   <Text style={[s.alertBody, { color: C.infoDark }]}>{property.access_notes}</Text>
                 </View>
               </View>
@@ -317,10 +317,10 @@ export default function PropertyDetailScreen() {
             {property.site_note && (
               <View style={[s.alertCard, { backgroundColor: C.successLight, borderColor: C.success }]}>
                 <View style={[s.alertIconWrap, { backgroundColor: C.success }]}>
-                  <MaterialCommunityIcons name="note-text-outline" size={16} color="#FFF" />
+                  <MaterialCommunityIcons name="note-text-outline" size={16} color={C.textOnPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.successDark }]}>📝 Site Note</Text>
+                  <Text style={[s.alertTitle, { color: C.successDark }]}>Site Note</Text>
                   <Text style={[s.alertBody, { color: C.successDark }]}>{property.site_note}</Text>
                 </View>
               </View>
@@ -432,7 +432,12 @@ export default function PropertyDetailScreen() {
                       <MaterialCommunityIcons name="clipboard-check-outline" size={18} color={C.textSecondary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.historyDate, { color: C.text }]}>{job.scheduled_date}</Text>
+                      <Text style={[s.historyDate, { color: C.text }]}>
+                        {job.scheduled_date}
+                        {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at 
+                          ? ` → ${job.updated_at.substring(0, 10)}` 
+                          : ''}
+                      </Text>
                       <JobTypeBadge jobType={job.job_type as JobType} />
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -485,8 +490,8 @@ const s = StyleSheet.create({
     shadowOpacity: 0.28, shadowRadius: 12, elevation: 8,
   },
   inspectCtaLeft: { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  inspectCtaTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.1, marginBottom: 3 },
-  inspectCtaSub:   { color: 'rgba(255,255,255,0.75)', fontSize: 12, lineHeight: 17 },
+  inspectCtaTitle: { fontSize: 16, fontWeight: '800', letterSpacing: 0.1, marginBottom: 3 },
+  inspectCtaSub:   { fontSize: 12, lineHeight: 17 },
 
   // Quick action buttons
   actionRowWrap: { flexDirection: 'row', marginHorizontal: 16, marginTop: 14, gap: 10 },
@@ -502,7 +507,7 @@ const s = StyleSheet.create({
 
   // Cards
   card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden',
-          shadowColor: '#0D1526', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+          shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
   divider: { height: 1, marginHorizontal: -16 },
 
   // Asset rows

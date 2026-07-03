@@ -56,7 +56,7 @@ export default function DefectsScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader curved={true} title="Defects" showBack={true} />
+        <ScreenHeader title="Defects" showBack={true} />
         <View style={{ paddingTop: 24, gap: 12 }}>
           <SkeletonCard />
           <SkeletonCard />
@@ -72,13 +72,12 @@ export default function DefectsScreen() {
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
-        curved={true}
         title="Defects"
         showBack={true}
         rightComponent={
           store.defects.length > 0 ? (
-            <View style={[s.countBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Text style={s.countText}>{store.defects.length} defect{store.defects.length !== 1 ? 's' : ''}</Text>
+            <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>
+              <Text style={[s.countText, { color: C.textSecondary }]}>{store.defects.length} defect{store.defects.length !== 1 ? 's' : ''}</Text>
             </View>
           ) : null
         }
@@ -96,7 +95,7 @@ export default function DefectsScreen() {
       {/* BUG 15 FIX: check filteredDefects.length so empty state also shows when a filter matches nothing */}
       {filteredDefects.length === 0 ? (
         <EmptyState
-          emoji={store.defects.length === 0 ? '🎉' : '🔍'}
+          icon={store.defects.length === 0 ? 'check-circle-outline' : 'magnify'}
           title={store.defects.length === 0 ? 'No defects found' : 'No matches'}
           subtitle={
             store.defects.length === 0
@@ -126,7 +125,7 @@ export default function DefectsScreen() {
           Adding defects to a Completed/Cancelled job corrupts the already-generated report. */}
       {jobStatus === 'in_progress' && (
         <TouchableOpacity style={[s.fab, { backgroundColor: C.accent }, cardShadow]} activeOpacity={0.9} onPress={() => sheetRef.current?.open()}>
-          <MaterialCommunityIcons name="plus" size={28} color="#FFFFFF" />
+          <MaterialCommunityIcons name="plus" size={28} color={C.textOnPrimary} />
         </TouchableOpacity>
       )}
 
@@ -138,7 +137,7 @@ export default function DefectsScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  countText:  { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  countText:  { fontSize: 11, fontWeight: '700' },
   filterRow:  { marginVertical: 8, paddingHorizontal: 16 },
   fab: {
     position: 'absolute',
@@ -151,4 +150,3 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
 });
-

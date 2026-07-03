@@ -1,10 +1,16 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
 import { stopSync } from '@/lib/sync';
-import { C } from '@/constants/Config';
+import { supabase } from '@/lib/supabase';
+import { T } from '@/constants/Colors';
+import { useColors } from '@/hooks/useColors';
+import { ScreenHeader, Badge } from '@/components/ui';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { cardShadow } from '@/components/ui/Card';
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -18,7 +24,14 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { logout } = useAuthStore();
+  const { signOut, company, updateUser } = useAuthStore();
+  const C = useColors();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    phone: user?.phone || '',
+  });
 
   function _confirmLogout() {
     Alert.alert(
@@ -31,7 +44,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             stopSync();
-            await logout();
+            await signOut();
             router.replace('/(auth)/login');
           },
         },
@@ -44,36 +57,64 @@ export default function ProfileScreen() {
     ? Math.ceil((fpasExpiry.getTime() - Date.now()) / 86400000)
     : null;
 
+  const handleSave = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    const { data, error } = await supabase
+      .from('users')
+      .update({ phone: editForm.phone })
+      .eq('id', user.id)
+      .select()
+      .single();
+    
+    setIsSaving(false);
+    if (error) {
+      Alert.alert('Error', 'Failed to update profile.');
+    } else {
+      updateUser(data);
+      setIsEditing(false);
+    }
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>My Profile</Text>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader
+        title="My Profile"
+        rightComponent={
+          <TouchableOpacity onPress={() => isEditing ? handleSave() : setIsEditing(true)}>
+            {isSaving ? <ActivityIndicator size="small" color={C.accent} /> : 
+              <Text style={{ color: C.accent, fontWeight: '700', fontSize: 16 }}>{isEditing ? 'Save' : 'Edit'}</Text>}
+          </TouchableOpacity>
+        }
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Avatar card */}
         <View style={styles.avatarCard}>
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarInitials}>
+            <Text style={[styles.avatarInitials, { color: C.textOnPrimary }]}>
               {user?.full_name?.split(' ').map((w: string) => w[0]).slice(0, 2).join('') ?? 'T'}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.userName}>{user?.full_name ?? 'Technician'}</Text>
             <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{(user?.role ?? 'technician').toUpperCase()}</Text>
-            </View>
+            <Badge status="active" label={(user?.role ?? 'Technician').replace(/\b\w/g, c => c.toUpperCase())} />
           </View>
         </View>
 
         {/* FPAS expiry warning */}
         {daysToFpasExpiry !== null && daysToFpasExpiry <= 60 && (
           <View style={[styles.warningBanner, daysToFpasExpiry <= 0 && styles.dangerBanner]}>
-            <Text style={styles.warningText}>
+            <MaterialCommunityIcons
+              name={daysToFpasExpiry <= 0 ? 'alert-circle' : 'alert'}
+              size={16}
+              color={daysToFpasExpiry <= 0 ? T.danger : T.warning}
+            />
+            <Text style={[styles.warningText, daysToFpasExpiry <= 0 && { color: T.danger }]}>
               {daysToFpasExpiry <= 0
-                ? `⚠️  FPAS accreditation EXPIRED — contact your office immediately`
-                : `⚠️  FPAS accreditation expires in ${daysToFpasExpiry} days`}
+                ? `FPAS accreditation EXPIRED — contact your office immediately`
+                : `FPAS accreditation expires in ${daysToFpasExpiry} days`}
             </Text>
           </View>
         )}
@@ -81,11 +122,25 @@ export default function ProfileScreen() {
         {/* Contact details */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact</Text>
-          <InfoRow label="Phone" value={user?.phone} />
+          {isEditing ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Phone</Text>
+              <TextInput 
+                style={styles.input} 
+                value={editForm.phone} 
+                onChangeText={t => setEditForm(f => ({ ...f, phone: t }))} 
+                placeholder="Phone number" 
+                placeholderTextColor={C.textTertiary}
+                keyboardType="phone-pad"
+                maxLength={15}
+              />
+            </View>
+          ) : (
+            <InfoRow label="Phone" value={user?.phone} />
+          )}
           <InfoRow label="Email" value={user?.email} />
         </View>
 
-        {/* FPAS accreditation */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>FPAS Accreditation</Text>
           <InfoRow label="FPAS Number" value={user?.fpas_number} />
@@ -107,61 +162,64 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>SiteTrack v2.0  •  UMA Building Services</Text>
+        <Text style={styles.version}>SiteTrack v2.0  •  {company?.name || 'Company'}</Text>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: C.primary },
+  container:      { flex: 1, backgroundColor: T.background },
   header:         {
-    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: C.surface,
-    borderBottomWidth: 1, borderBottomColor: C.border,
+    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: T.surface,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  title:          { color: C.textLight, fontSize: 22, fontWeight: '800' },
+  title:          { color: T.textPrimary, fontSize: 22, fontWeight: '800' },
   scroll:         { padding: 16, paddingBottom: 40 },
   avatarCard:     {
-    backgroundColor: C.surface, borderRadius: 20, borderWidth: 1, borderColor: C.border,
+    backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border,
     flexDirection: 'row', alignItems: 'center', padding: 20, marginBottom: 16, gap: 16,
+    ...cardShadow,
   },
   avatarCircle:   {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: C.accent,
+    width: 64, height: 64, borderRadius: 32, backgroundColor: T.primary,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarInitials: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  userName:       { color: C.textLight, fontSize: 18, fontWeight: '700' },
-  userEmail:      { color: C.textMuted, fontSize: 13, marginTop: 2 },
-  roleBadge:      {
-    marginTop: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(37,99,235,0.15)',
-    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
-  },
-  roleBadgeText:  { color: C.info, fontSize: 10, fontWeight: '700' },
+  avatarInitials: { fontSize: 22, fontWeight: '800' },
+  userName:       { color: T.textPrimary, fontSize: 18, fontWeight: '700' },
+  userEmail:      { color: T.textMuted, fontSize: 13, marginTop: 2 },
   warningBanner:  {
-    backgroundColor: 'rgba(217,119,6,0.15)', borderLeftWidth: 3, borderLeftColor: C.warning,
-    borderRadius: 10, padding: 14, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: T.warningBg, borderLeftWidth: 3, borderLeftColor: T.warning,
+    borderRadius: T.radiusButton, padding: 14, marginBottom: 16,
   },
-  dangerBanner:   { backgroundColor: 'rgba(220,38,38,0.15)', borderLeftColor: C.danger },
-  warningText:    { color: '#FCD34D', fontSize: 13, lineHeight: 18 },
+  dangerBanner:   { backgroundColor: T.dangerBg, borderLeftColor: T.danger },
+  warningText:    { color: T.warning, fontSize: 13, lineHeight: 18, flex: 1 },
   section:        {
-    backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border,
+    backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border,
     marginBottom: 16, overflow: 'hidden',
+    ...cardShadow,
   },
   sectionTitle:   {
-    color: C.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1,
+    color: T.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    borderBottomColor: T.border,
   },
   infoRow:        {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border,
+    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  infoLabel:      { color: C.textMuted, fontSize: 13 },
-  infoValue:      { color: C.textLight, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
+  infoLabel:      { color: T.textMuted, fontSize: 13 },
+  infoValue:      { color: T.textPrimary, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
   signOutBtn:     {
-    backgroundColor: 'rgba(220,38,38,0.12)', borderRadius: 14, borderWidth: 1,
-    borderColor: C.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 20,
+    backgroundColor: T.dangerBg, borderRadius: T.radiusCard, borderWidth: 1,
+    borderColor: T.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 20,
   },
-  signOutText:    { color: C.danger, fontSize: 15, fontWeight: '700' },
-  version:        { color: C.textMuted, fontSize: 11, textAlign: 'center' },
+  signOutText:    { color: T.danger, fontSize: 15, fontWeight: '700' },
+  version:        { color: T.textMuted, fontSize: 11, textAlign: 'center' },
+  input:          {
+    color: T.textPrimary, fontSize: 13, fontWeight: '500',
+    minWidth: 150, textAlign: 'right', paddingVertical: 4, paddingHorizontal: 10,
+    backgroundColor: T.surfaceInput, borderRadius: T.radiusButton, borderWidth: 1, borderColor: T.primary,
+  },
 });

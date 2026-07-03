@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Duplicate email check
-    const { data: existing, error: selectError } = await supabase
+    const { data: existing } = await supabase
       .from('enquiries')
       .select('id')
       .eq('email', email)
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       email,
       phone,
       service: service_type || 'Platform Demo Request',
-      message: `${company ? `Company: ${company}\n` : ''}${property_address ? `Property: ${property_address}\n` : ''}Message: ${message}`,
+      message: `${company ? `Company: ${company}\n` : ''}${property_address ? `Technicians: ${property_address}\n` : ''}Message: ${message}`,
       status: 'new',
     }]);
 
