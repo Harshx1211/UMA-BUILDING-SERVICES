@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Tenants',       href: '/companies',    icon: Building2 },
       { label: 'Platform Settings', href: '/settings', icon: Settings },
+      { label: 'Audit Logs',    href: '/audit',        icon: FileText },
     ],
   },
 ];
