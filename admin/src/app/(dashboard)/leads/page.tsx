@@ -14,8 +14,15 @@ export default function LeadsPage() {
     // Check access & load leads
     const load = async () => {
       try {
-        const compRes = await fetch('/api/admin/company');
-        const compJson = await compRes.json();
+        const [compRes, leadsRes] = await Promise.all([
+          fetch('/api/admin/company'),
+          fetch('/api/admin/leads')
+        ]);
+        
+        const [compJson, leadsJson] = await Promise.all([
+          compRes.json(),
+          leadsRes.json()
+        ]);
         
         // If the Superadmin hasn't explicitly enabled this page for this tenant, block access.
         if (compJson.data?.custom_sidebar_url !== '/leads') {
@@ -24,11 +31,10 @@ export default function LeadsPage() {
           return;
         }
 
-        const leadsRes = await adminRead('enquiries', { filters: { company_id: compJson.data.id } });
-        if (!leadsRes.error) {
-          setLeads(leadsRes.data || []);
+        if (leadsRes.ok) {
+          setLeads(leadsJson.data || []);
         } else {
-          toast.error(leadsRes.error || 'Failed to fetch leads');
+          toast.error(leadsJson.error || 'Failed to fetch leads');
         }
       } catch (err) {
         console.error(err);
