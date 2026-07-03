@@ -4,11 +4,15 @@ import { adminRead } from '@/lib/admin-api';
 import { MessageSquare, ShieldAlert, Mail, Phone, Calendar, Search } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { getCached, setCached } from '@/lib/pageCache';
+
+const CACHE_KEY = 'leads-dashboard';
 
 export default function LeadsPage() {
-  const [loading, setLoading] = useState(true);
-  const [accessDenied, setAccessDenied] = useState(false);
-  const [leads, setLeads] = useState<any[]>([]);
+  const cached = getCached<{ leads: any[], accessDenied: boolean }>(CACHE_KEY);
+  const [loading, setLoading] = useState(!cached);
+  const [accessDenied, setAccessDenied] = useState(cached?.accessDenied ?? false);
+  const [leads, setLeads] = useState<any[]>(cached?.leads ?? []);
 
   useEffect(() => {
     // Check access & load leads
@@ -25,14 +29,18 @@ export default function LeadsPage() {
         ]);
         
         // If the Superadmin hasn't explicitly enabled this page for this tenant, block access.
-        if (compJson.data?.custom_sidebar_url !== '/leads') {
+        const isDenied = compJson.data?.custom_sidebar_url !== '/leads';
+        if (isDenied) {
           setAccessDenied(true);
+          setCached(CACHE_KEY, { leads: [], accessDenied: true });
           setLoading(false);
           return;
         }
 
         if (leadsRes.ok) {
-          setLeads(leadsJson.data || []);
+          const freshLeads = leadsJson.data || [];
+          setLeads(freshLeads);
+          setCached(CACHE_KEY, { leads: freshLeads, accessDenied: false });
         } else {
           toast.error(leadsJson.error || 'Failed to fetch leads');
         }
