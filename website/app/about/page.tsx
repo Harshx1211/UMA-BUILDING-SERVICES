@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Shield, FileText, Smartphone, ArrowRight, CheckCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export const metadata: Metadata = {
   title: 'About Us | SiteTrack',
@@ -33,33 +34,30 @@ const CONTRAST = [
   { old: 'Paper compliance records, hard to retrieve',  uma: 'All records stored digitally, multi-tenant secure, and accessible instantly' },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const { data } = await supabase.from('platform_settings').select('*').eq('id', 'global').single();
+  const platformName = data?.platform_name || 'SiteTrack';
+
   return (
     <>
       {/* ── Hero ─────────────────────────────────────── */}
-      <section style={{ paddingTop: 110, paddingBottom: 60, position: 'relative', overflow: 'hidden' }}>
+      <section style={{ padding: 'var(--space-32) 0 var(--space-16)', position: 'relative', overflow: 'hidden' }}>
         {/* Background Glow */}
         <div style={{
           position: 'absolute', width: 600, height: 600, borderRadius: '50%',
-          background: 'rgba(249,115,22,0.07)', filter: 'blur(100px)',
+          background: 'rgba(var(--orange-rgb), 0.07)', filter: 'blur(100px)',
           top: '-200px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none',
         }} />
 
         <div className="container" style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
-            background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
-            borderRadius: 999, marginBottom: 24
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#fdba74', letterSpacing: '0.04em' }}>
-              About SiteTrack
-            </span>
+          <div className="badge badge-orange" style={{ marginBottom: 'var(--space-6)' }}>
+            About {platformName}
           </div>
-          <h1 className="heading-xl mx-auto" style={{ color: 'white', marginBottom: 24 }}>
-            A Platform Built Around<br />the <span style={{ color: '#F97316' }}>Paper Problem.</span>
+          <h1 className="heading-xl mx-auto" style={{ color: 'white', marginBottom: 'var(--space-6)' }}>
+            A Platform Built Around<br />the <span style={{ color: 'var(--orange)' }}>Paper Problem.</span>
           </h1>
           <p className="hero-sub mx-auto">
-            SiteTrack is the operating system for fire safety inspection and defect repair companies operating across commercial and industrial properties.
+            {platformName} is the operating system for fire safety inspection and defect repair companies operating across commercial and industrial properties.
           </p>
           <div className="cta-group" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             <Link href="/contact" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: 16 }}>
@@ -75,14 +73,14 @@ export default function AboutPage() {
           <div className="about-story-grid">
             <div>
               <p className="section-eyebrow">Our Story</p>
-              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 24 }}>
-                Why SiteTrack Exists
+              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-6)' }}>
+                Why {platformName} Exists
               </h2>
-              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 18 }}>
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 'var(--space-4)' }}>
                 The building services industry has long relied on paper-based processes — forms filled out by hand, reports written up after the fact, compliance records that are difficult to retrieve and impossible to verify quickly.
               </p>
-              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 18 }}>
-                We built SiteTrack because we believed there was a better standard for this work. Rather than adapting generic form tools, we built our own platform from the ground up — designed specifically around how fire safety inspections and AS1851 compliance work is actually carried out in the field.
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85, marginBottom: 'var(--space-4)' }}>
+                We built {platformName} because we believed there was a better standard for this work. Rather than adapting generic form tools, we built our own platform from the ground up — designed specifically around how fire safety inspections and AS1851 compliance work is actually carried out in the field.
               </p>
               <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.85 }}>
                 The result is a platform that lets any fire safety business operate with the structure and documentation discipline of a massive enterprise.
@@ -91,7 +89,7 @@ export default function AboutPage() {
 
             {/* Right: clean checklist card */}
             <div className="about-checklist-card" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 'var(--space-6)' }}>
                 Platform Capabilities
               </p>
               {[
@@ -108,7 +106,7 @@ export default function AboutPage() {
                   marginBottom: i < arr.length - 1 ? 14 : 0,
                   borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                 }}>
-                  <CheckCircle size={15} color="#F97316" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 3 }} />
+                  <CheckCircle size={15} color="var(--orange)" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 3 }} />
                   <span style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{item}</span>
                 </div>
               ))}
@@ -117,13 +115,13 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Traditional vs SiteTrack ───────────────────────── */}
+      {/* ── Traditional vs Platform ───────────────────────── */}
       <section className="section">
         <div className="container">
-          <div style={{ maxWidth: 520, marginBottom: 48 }}>
+          <div style={{ maxWidth: 520, marginBottom: 'var(--space-12)' }}>
             <p className="section-eyebrow">A Different Approach</p>
-            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
-              How SiteTrack Operates Differently
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-4)' }}>
+              How {platformName} Operates Differently
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
               Most software still operates like digital paper. Here is the difference.
@@ -136,7 +134,7 @@ export default function AboutPage() {
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Traditional Software</span>
             </div>
             <div style={{ padding: '14px 24px', background: 'rgba(255,255,255,0.05)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#F97316' }}>SiteTrack App</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--orange)' }}>{platformName} App</span>
             </div>
           </div>
 
@@ -149,7 +147,7 @@ export default function AboutPage() {
                   <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', lineHeight: 1.65 }}>{row.old}</span>
                 </div>
                 <div className="cmp-cell-new">
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316', flexShrink: 0, marginTop: 8 }} />
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--orange)', flexShrink: 0, marginTop: 8 }} />
                   <span style={{ fontSize: 14, color: 'white', fontWeight: 500, lineHeight: 1.65 }}>{row.uma}</span>
                 </div>
               </div>
@@ -161,9 +159,9 @@ export default function AboutPage() {
       {/* ── Values ───────────────────────────────────── */}
       <section className="section">
         <div className="container">
-          <div style={{ textAlign: 'center', maxWidth: 500, margin: '0 auto 52px' }}>
+          <div style={{ textAlign: 'center', maxWidth: 500, margin: '0 auto var(--space-12)' }}>
             <p className="section-eyebrow" style={{ textAlign: 'center' }}>What We Stand For</p>
-            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-4)' }}>
               The Principles Behind The Platform
             </h2>
           </div>
@@ -171,18 +169,15 @@ export default function AboutPage() {
             {VALUES.map(v => {
               const Icon = v.icon;
               return (
-                <div key={v.title} style={{
-                  border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '32px 28px',
-                  background: 'rgba(255,255,255,0.02)', boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
-                }}>
+                <div key={v.title} className="card-glass" style={{ padding: '32px 28px' }}>
                   <div style={{
                     width: 44, height: 44, borderRadius: 10,
-                    background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
+                    background: 'rgba(var(--orange-rgb), 0.1)', border: '1px solid rgba(var(--orange-rgb), 0.2)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
                   }}>
-                    <Icon size={20} color="#F97316" strokeWidth={1.8} />
+                    <Icon size={20} color="var(--orange)" strokeWidth={1.8} />
                   </div>
-                  <h3 style={{ fontSize: 17, fontWeight: 700, color: 'white', marginBottom: 12, letterSpacing: '-0.015em' }}>{v.title}</h3>
+                  <h3 className="heading-sm" style={{ color: 'white', marginBottom: 'var(--space-3)' }}>{v.title}</h3>
                   <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>{v.body}</p>
                 </div>
               );
@@ -192,12 +187,12 @@ export default function AboutPage() {
       </section>
 
       {/* ── CTA ──────────────────────────────────────── */}
-      <section style={{ padding: '88px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <section style={{ padding: 'var(--space-20) 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="container" style={{ textAlign: 'center' }}>
-          <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', lineHeight: 1.1, maxWidth: 480, margin: '0 auto 20px' }}>
+          <h2 className="heading-lg" style={{ color: 'white', maxWidth: 480, margin: '0 auto var(--space-5)' }}>
             Ready to scale your business?
           </h2>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 380, margin: '0 auto 36px', lineHeight: 1.75 }}>
+          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 380, margin: '0 auto var(--space-8)', lineHeight: 1.75 }}>
             Send us your details and start your free trial today.
           </p>
           <div className="cta-group" style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -213,7 +208,7 @@ export default function AboutPage() {
         .about-story-grid {
           display: grid;
           grid-template-columns: 1fr 380px;
-          gap: 64px;
+          gap: var(--space-16);
           align-items: start;
         }
         .about-checklist-card {
@@ -226,7 +221,7 @@ export default function AboutPage() {
         .about-values-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+          gap: var(--space-5);
         }
         /* ── Comparison table ── */
         .cmp-row {
@@ -235,7 +230,7 @@ export default function AboutPage() {
         }
         .cmp-cell-old {
           padding: 18px 24px;
-          border-right: 1px solid #F3F4F6;
+          border-right: 1px solid rgba(255,255,255,0.04);
           display: flex; align-items: flex-start; gap: 10px;
         }
         .cmp-cell-new {
@@ -244,7 +239,7 @@ export default function AboutPage() {
         }
         /* ── Responsive ── */
         @media (max-width: 960px) {
-          .about-story-grid { grid-template-columns: 1fr; gap: 36px; }
+          .about-story-grid { grid-template-columns: 1fr; gap: var(--space-10); }
         }
         @media (max-width: 780px) {
           .about-values-grid { grid-template-columns: 1fr 1fr; gap: 14px; }

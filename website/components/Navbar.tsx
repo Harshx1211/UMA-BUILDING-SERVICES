@@ -11,7 +11,7 @@ const NAV_LINKS = [
   { href: '/about',    label: 'About' },
 ];
 
-export default function Navbar() {
+export default function Navbar({ platformName = 'SiteTrack' }: { platformName?: string }) {
   const [open, setOpen]         = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname                = usePathname();
@@ -43,7 +43,7 @@ export default function Navbar() {
             </div>
             <div>
               <div className={scrolled ? 'navbar-logo-name scrolled' : 'navbar-logo-name'}>
-                SiteTrack
+                {platformName}
               </div>
               <div className="navbar-logo-sub">Platform</div>
             </div>

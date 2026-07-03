@@ -9,7 +9,7 @@ const TRUST = [
   { short: 'Multi-Tenant',         full: 'Enterprise-Grade Security' },
 ];
 
-export default function HeroSection() {
+export default function HeroSection({ platformName = 'SiteTrack' }: { platformName?: string }) {
   return (
     <section
       id="hero"
@@ -51,7 +51,7 @@ export default function HeroSection() {
           }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F97316', boxShadow: '0 0 10px #F97316' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#fdba74', letterSpacing: '0.04em' }}>
-              SiteTrack Platform 2.0 is Live
+              {platformName} Platform 2.0 is Live
             </span>
           </div>
         </div>
@@ -104,9 +104,9 @@ export default function HeroSection() {
                 {/* Logo skeleton */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, paddingLeft: 4 }}>
                   <div style={{ width: 24, height: 24, borderRadius: 6, background: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 900, color: 'white' }}>S</span>
+                    <span style={{ fontSize: 12, fontWeight: 900, color: 'white' }}>{platformName.charAt(0)}</span>
                   </div>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '-0.02em' }}>SiteTrack</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '-0.02em' }}>{platformName}</span>
                 </div>
                 {/* Nav Items */}
                 {[

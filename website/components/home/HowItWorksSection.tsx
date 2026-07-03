@@ -1,25 +1,25 @@
 'use client';
 import { useEffect, useRef } from 'react';
 
-const STEPS = [
-  {
-    num: '01',
-    title: 'Provision Your Tenant',
-    description: "Contact our sales team. We instantly provision your dedicated PostgreSQL tenant, completely isolated and secure.",
-  },
-  {
-    num: '02',
-    title: 'Invite Your Technicians',
-    description: 'Add your staff to the platform. They simply download the SiteTrack app, log in, and all their scheduled jobs appear automatically.',
-  },
-  {
-    num: '03',
-    title: 'Automate Compliance',
-    description: 'Technicians execute inspections offline. As soon as they hit complete, SiteTrack generates an AS1851 PDF and logs the compliance history.',
-  },
-];
+export default function HowItWorksSection({ platformName = 'SiteTrack' }: { platformName?: string }) {
+  const STEPS = [
+    {
+      num: '01',
+      title: 'Provision Your Tenant',
+      description: "Contact our sales team. We instantly provision your dedicated PostgreSQL tenant, completely isolated and secure.",
+    },
+    {
+      num: '02',
+      title: 'Invite Your Technicians',
+      description: `Add your staff to the platform. They simply download the ${platformName} app, log in, and all their scheduled jobs appear automatically.`,
+    },
+    {
+      num: '03',
+      title: 'Automate Compliance',
+      description: `Technicians execute inspections offline. As soon as they hit complete, ${platformName} generates an AS1851 PDF and logs the compliance history.`,
+    },
+  ];
 
-export default function HowItWorksSection() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function HowItWorksSection() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 64 }}>
-          <p className="section-eyebrow" style={{ textAlign: 'center', color: '#10b981' }}>How It Works</p>
+          <p className="section-eyebrow" style={{ textAlign: 'center', color: 'var(--success)' }}>How It Works</p>
           <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
             Onboard in minutes.
           </h2>
@@ -72,7 +72,7 @@ export default function HowItWorksSection() {
               </p>
 
               {/* Cyan rule */}
-              <div style={{ width: 28, height: 2, background: '#06b6d4', borderRadius: 2, marginBottom: 22 }} />
+              <div style={{ width: 28, height: 2, background: 'var(--cyan)', borderRadius: 2, marginBottom: 22 }} />
 
               {/* Text */}
               <h3 style={{ fontSize: 19, fontWeight: 700, color: 'white', marginBottom: 12, letterSpacing: '-0.02em', lineHeight: 1.3 }}>
@@ -96,7 +96,7 @@ export default function HowItWorksSection() {
           overflow: hidden;
         }
         .step-item {
-          padding: 48px 40px;
+          padding: var(--space-12) var(--space-10);
           border-right: 1px solid rgba(255,255,255,0.08);
           background: rgba(255,255,255,0.02);
           backdrop-filter: blur(12px);

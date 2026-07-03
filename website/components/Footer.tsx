@@ -1,5 +1,4 @@
 'use client';
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Shield, Mail, MapPin, Clock } from 'lucide-react';
 
@@ -10,9 +9,14 @@ const NAV_LINKS = [
   { href: '/contact', label: 'Contact' },
 ];
 
-export default function Footer() {
-  const [year, setYear] = useState(2026);
-  useEffect(() => setYear(new Date().getFullYear()), []);
+export default function Footer({ platformName = 'SiteTrack', supportEmail = 'hello@sitetrack.app' }: { platformName?: string, supportEmail?: string }) {
+  // Was: useState(2026) + a useEffect to correct it after mount — a pattern
+  // meant to dodge SSR/hydration mismatches, but it also meant the site
+  // would silently ship a hardcoded "2026" in its initial HTML forever,
+  // one frame before the effect corrects it. Computing it directly avoids
+  // both the stale hardcode and the unnecessary effect — year granularity
+  // essentially never disagrees between server and client render.
+  const year = new Date().getFullYear();
 
   return (
     <>
@@ -28,10 +32,10 @@ export default function Footer() {
             <div className="footer-col">
               <Link href="/" className="footer-logo">
                 <div className="footer-logo-icon">
-                  <Shield size={17} color="white" strokeWidth={2.5} />
+                  <Shield size={17} color="white" strokeWidth={2.5} aria-hidden="true" />
                 </div>
                 <div>
-                  <div className="footer-logo-name">SiteTrack</div>
+                  <div className="footer-logo-name">{platformName}</div>
                   <div className="footer-logo-sub">Platform</div>
                 </div>
               </Link>
@@ -45,7 +49,7 @@ export default function Footer() {
             </div>
 
             {/* Col 2 — Quick Links */}
-            <div className="footer-col" style={{ paddingTop: 8 }}>
+            <div className="footer-col footer-col-shifted">
               <p className="footer-col-heading">Quick Links</p>
               <nav className="footer-link-list">
                 {NAV_LINKS.map(l => (
@@ -57,21 +61,21 @@ export default function Footer() {
             </div>
 
             {/* Col 3 — Contact */}
-            <div className="footer-col" style={{ paddingTop: 8 }}>
+            <div className="footer-col footer-col-shifted">
               <p className="footer-col-heading">Contact</p>
               <div className="footer-contact-list">
                 <div className="footer-contact-row">
-                  <Mail size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" />
-                  <a href="mailto:hello@sitetrack.app" className="footer-link">
-                    hello@sitetrack.app
+                  <Mail size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" aria-hidden="true" />
+                  <a href={`mailto:${supportEmail}`} className="footer-link">
+                    {supportEmail}
                   </a>
                 </div>
                 <div className="footer-contact-row">
-                  <MapPin size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" />
+                  <MapPin size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" aria-hidden="true" />
                   <span className="footer-contact-text">Sydney, Australia</span>
                 </div>
                 <div className="footer-contact-row">
-                  <Clock size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" />
+                  <Clock size={16} color="rgba(255,255,255,0.4)" className="footer-contact-icon" aria-hidden="true" />
                   <span className="footer-contact-text">Mon – Fri, 9:00 AM – 5:00 PM AEST</span>
                 </div>
               </div>
@@ -84,7 +88,7 @@ export default function Footer() {
           {/* ── Bottom bar ── */}
           <div className="footer-bottom">
             <span className="footer-copyright">
-              © {year} SiteTrack Software. All rights reserved.
+              © {year} {platformName} Software. All rights reserved.
             </span>
             <span className="footer-powered">
               Built for <span className="footer-powered-accent">Fire Maintenance Companies</span>
@@ -96,7 +100,7 @@ export default function Footer() {
       <style>{`
         .footer-wrapper {
           position: relative;
-          background-color: #060f1e;
+          background-color: var(--off-white);
           border-top: 1px solid rgba(255,255,255,0.06);
           color: rgba(255,255,255,0.6);
           margin-top: auto;
@@ -111,7 +115,7 @@ export default function Footer() {
           transform: translateX(-50%);
           width: 600px;
           height: 200px;
-          background: rgba(249,115,22,0.06);
+          background: rgba(var(--orange-rgb), 0.06);
           filter: blur(80px);
           pointer-events: none;
         }
@@ -119,42 +123,52 @@ export default function Footer() {
         .footer-container {
           position: relative;
           z-index: 1;
-          padding: 72px 24px 32px;
+          padding: var(--space-16) var(--space-6) var(--space-8);
         }
 
         .footer-grid {
           display: grid;
           grid-template-columns: 2fr 1fr 1.5fr;
           gap: 60px;
-          margin-bottom: 56px;
+          margin-bottom: var(--space-12);
         }
-        
+
         .footer-col {
           display: flex;
           flex-direction: column;
-          gap: 18px;
+          gap: var(--space-4);
         }
-        
+        /* Was an inline style={{ paddingTop: 8 }} + a \`.footer-col[style]\`
+           attribute-selector hack to reset it on mobile. Attribute selectors
+           on \`style\` match ANY inline style, not just this one — a real
+           landmine if column 1 ever gets its own inline style later. A
+           named class is the same behavior with none of the fragility. */
+        .footer-col-shifted { padding-top: 8px; }
+        @media (max-width: 768px) {
+          .footer-col-shifted { padding-top: 0; }
+        }
+
         /* Logo */
         .footer-logo {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: var(--space-3);
           text-decoration: none;
           margin-bottom: 4px;
         }
         .footer-logo-icon {
           width: 34px; height: 34px; border-radius: 8px;
-          background: #F97316;
+          background: var(--orange);
           display: flex; align-items: center; justify-content: center;
-          box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15), 0 4px 12px rgba(249,115,22,0.2);
+          box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15), 0 4px 12px rgba(var(--orange-rgb), 0.2);
         }
         .footer-logo-name {
-          font-size: 16px; font-weight: 800; color: white;
+          font-family: var(--font-display);
+          font-size: 16px; font-weight: 700; color: white;
           letter-spacing: -0.02em; line-height: 1; margin-bottom: 3px;
         }
         .footer-logo-sub {
-          font-size: 10px; font-weight: 800; color: #F97316;
+          font-size: 10px; font-weight: 800; color: var(--orange);
           text-transform: uppercase; letter-spacing: 0.1em; line-height: 1;
         }
 
@@ -169,21 +183,21 @@ export default function Footer() {
         .footer-badge {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          background: rgba(249,115,22,0.08);
-          border: 1px solid rgba(249,115,22,0.2);
+          gap: var(--space-2);
+          background: rgba(var(--orange-rgb), 0.08);
+          border: 1px solid rgba(var(--orange-rgb), 0.2);
           border-radius: 20px;
-          padding: 6px 14px;
+          padding: 6px var(--space-4);
           font-size: 11px;
           font-weight: 700;
-          color: #fdba74;
+          color: var(--orange-tint);
           align-self: flex-start;
           margin-top: 4px;
         }
         .footer-badge-dot {
           width: 6px; height: 6px; border-radius: 50%;
-          background-color: #F97316;
-          box-shadow: 0 0 8px #F97316;
+          background-color: var(--orange);
+          box-shadow: 0 0 8px var(--orange);
         }
 
         .footer-col-heading {
@@ -198,7 +212,7 @@ export default function Footer() {
         .footer-link-list {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: var(--space-4);
         }
         .footer-link {
           color: rgba(255,255,255,0.5);
@@ -216,12 +230,12 @@ export default function Footer() {
         .footer-contact-list {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: var(--space-4);
         }
         .footer-contact-row {
           display: flex;
           align-items: flex-start;
-          gap: 12px;
+          gap: var(--space-3);
         }
         .footer-contact-icon {
           flex-shrink: 0;
@@ -236,7 +250,7 @@ export default function Footer() {
         .footer-divider {
           height: 1px;
           background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.08), rgba(255,255,255,0.02));
-          margin-bottom: 24px;
+          margin-bottom: var(--space-6);
         }
 
         .footer-bottom {
@@ -244,7 +258,7 @@ export default function Footer() {
           justify-content: space-between;
           align-items: center;
           flex-wrap: wrap;
-          gap: 16px;
+          gap: var(--space-4);
         }
         .footer-copyright {
           font-size: 13px;
@@ -261,22 +275,19 @@ export default function Footer() {
 
         @media (max-width: 768px) {
           .footer-container {
-            padding: 56px 20px 32px;
+            padding: 56px var(--space-5) var(--space-8);
           }
           .footer-grid {
             grid-template-columns: 1fr;
-            gap: 48px;
-            margin-bottom: 40px;
+            gap: var(--space-12);
+            margin-bottom: var(--space-10);
           }
           .footer-col {
-            gap: 14px;
+            gap: var(--space-3);
             align-items: center;
             text-align: center;
           }
-          .footer-col[style] {
-            padding-top: 0 !important;
-          }
-          
+
           /* Center everything inside the columns */
           .footer-logo { justify-content: center; }
           .footer-tagline { text-align: center; margin: 0 auto; }
@@ -285,13 +296,13 @@ export default function Footer() {
           .footer-link { transform-origin: center; }
           .footer-contact-list { align-items: center; }
           .footer-contact-row { justify-content: center; }
-          
+
           .footer-bottom {
             flex-direction: column;
             align-items: center;
             text-align: center;
             justify-content: center;
-            gap: 12px;
+            gap: var(--space-3);
           }
         }
       `}</style>

@@ -9,7 +9,7 @@ const FEATURES = [
   { icon: MapPin,        title: 'Multi-Tenant Architecture',  description: 'Enterprise-grade security using advanced Row-Level Security ensuring your data is completely isolated.' },
 ];
 
-export default function WhyUsSection() {
+export default function WhyUsSection({ platformName = 'SiteTrack' }: { platformName?: string }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,12 +36,12 @@ export default function WhyUsSection() {
 
           {/* Left: copy */}
           <div>
-            <p className="section-eyebrow" style={{ color: '#F97316' }}>Why SiteTrack</p>
+            <p className="section-eyebrow" style={{ color: 'var(--orange)' }}>Why {platformName}</p>
             <h2 className="heading-lg" style={{ color: 'white', marginBottom: 24 }}>
               Built for<br />Modern Businesses
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, marginBottom: 18 }}>
-              Unlike generic field service software, SiteTrack is built specifically for the Fire Safety industry. We know that compliance is everything, and paperwork is the enemy.
+              Unlike generic field service software, {platformName} is built specifically for the Fire Safety industry. We know that compliance is everything, and paperwork is the enemy.
             </p>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>
               Equip your technicians with the tools they need to complete AS1851 inspections accurately and efficiently, while giving your admin team the oversight they need to scale the business.
@@ -66,11 +66,11 @@ export default function WhyUsSection() {
                 >
                   <div style={{
                     width: 40, height: 40, borderRadius: 10,
-                    background: 'rgba(249,115,22,0.15)',
+                    background: 'rgba(var(--orange-rgb), 0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     marginBottom: 14,
                   }}>
-                    <Icon size={18} color="#F97316" strokeWidth={1.8} />
+                    <Icon size={18} color="var(--orange)" strokeWidth={1.8} />
                   </div>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: 'white', marginBottom: 7, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
                     {f.title}

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Use server-side Supabase with anon key — enquiries table is public insert
+// Try to use service role key for backend queries to bypass RLS for duplicate checking, otherwise fallback to anon
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 export async function POST(req: NextRequest) {
@@ -22,6 +22,17 @@ export async function POST(req: NextRequest) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json({ error: 'Invalid email address.' }, { status: 400 });
+    }
+
+    // Duplicate email check
+    const { data: existing, error: selectError } = await supabase
+      .from('enquiries')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ error: 'We have already received an enquiry from this email address. Our team will be in touch shortly.' }, { status: 400 });
     }
 
     // Insert into the database as a platform-level lead (company_id is null)

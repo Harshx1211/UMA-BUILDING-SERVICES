@@ -4,17 +4,18 @@ import ServicesSection from '@/components/home/ServicesSection';
 import HowItWorksSection from '@/components/home/HowItWorksSection';
 import WhyUsSection from '@/components/home/WhyUsSection';
 
-export const metadata: Metadata = {
-  title: 'SiteTrack | Fire Safety & Building Compliance Platform',
-};
+import { getGlobalSettings } from '@/lib/settings';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const data = await getGlobalSettings();
+  const platformName = data?.platform_name || 'SiteTrack';
+
   return (
     <>
-      <HeroSection />
-      <ServicesSection />
-      <HowItWorksSection />
-      <WhyUsSection />
+      <HeroSection platformName={platformName} />
+      <ServicesSection platformName={platformName} />
+      <HowItWorksSection platformName={platformName} />
+      <WhyUsSection platformName={platformName} />
     </>
   );
 }

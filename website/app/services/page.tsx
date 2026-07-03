@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, CalendarClock, ClipboardList, Camera, FileText, PenLine, CheckCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export const metadata: Metadata = {
   title: 'Platform Features | SiteTrack',
@@ -33,31 +34,27 @@ const REPORT_ITEMS = [
   'Job reference number for your records',
 ];
 
-export default function ServicesPage() {
+export default async function ServicesPage() {
+  const { data } = await supabase.from('platform_settings').select('*').eq('id', 'global').single();
+  const platformName = data?.platform_name || 'SiteTrack';
+
   return (
     <>
       {/* Hero */}
-      {/* Hero */}
-      <section style={{ paddingTop: 110, paddingBottom: 60, position: 'relative', overflow: 'hidden' }}>
+      <section style={{ padding: 'var(--space-32) 0 var(--space-16)', position: 'relative', overflow: 'hidden' }}>
         {/* Background Glow */}
         <div style={{
           position: 'absolute', width: 600, height: 600, borderRadius: '50%',
-          background: 'rgba(249,115,22,0.07)', filter: 'blur(100px)',
+          background: 'rgba(var(--orange-rgb), 0.07)', filter: 'blur(100px)',
           top: '-200px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none',
         }} />
 
         <div className="container" style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
-            background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
-            borderRadius: 999, marginBottom: 24
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#fdba74', letterSpacing: '0.04em' }}>
-              Features
-            </span>
+          <div className="badge badge-orange" style={{ marginBottom: 'var(--space-6)' }}>
+            Features
           </div>
-          <h1 className="heading-xl mx-auto" style={{ maxWidth: 800, color: 'white', marginBottom: 24 }}>
-            What Happens on <br /><span style={{ color: '#F97316' }}>Every Mobile Job.</span>
+          <h1 className="heading-xl mx-auto" style={{ maxWidth: 800, color: 'white', marginBottom: 'var(--space-6)' }}>
+            What Happens on <br /><span style={{ color: 'var(--orange)' }}>Every Mobile Job.</span>
           </h1>
           <p className="hero-sub mx-auto">
             Every inspection your technicians carry out follows a rigorous digital structure — resulting in perfect compliance records, every time.
@@ -73,13 +70,13 @@ export default function ServicesPage() {
       {/* What happens on a visit */}
       <section className="section">
         <div className="container">
-          <div style={{ maxWidth: 560, marginBottom: 48 }}>
+          <div style={{ maxWidth: 560, marginBottom: 'var(--space-12)' }}>
             <p className="section-eyebrow">The Mobile Process</p>
-            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-4)' }}>
               What Your Technician Does on Site
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
-              Every inspection is logged through the SiteTrack mobile app in real time. The record is created as the job is carried out — not typed up afterward.
+              Every inspection is logged through the {platformName} mobile app in real time. The record is created as the job is carried out — not typed up afterward.
             </p>
           </div>
 
@@ -90,12 +87,12 @@ export default function ServicesPage() {
                 <div key={step.title} className="visit-step-row" style={{ borderBottom: i < VISIT_STEPS.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: 'transparent' }}>
                   <div className="visit-step-left">
                     <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.04em', minWidth: 22 }}>0{i + 1}</span>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Icon size={18} color="#F97316" strokeWidth={1.8} />
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(var(--orange-rgb), 0.1)', border: '1px solid rgba(var(--orange-rgb), 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon size={18} color="var(--orange)" strokeWidth={1.8} />
                     </div>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 700, color: 'white', marginBottom: 6, letterSpacing: '-0.01em' }}>{step.title}</h3>
+                    <h3 className="heading-sm" style={{ color: 'white', marginBottom: 6 }}>{step.title}</h3>
                     <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>{step.description}</p>
                   </div>
                 </div>
@@ -111,21 +108,21 @@ export default function ServicesPage() {
           <div className="svc-report-grid">
             <div>
               <p className="section-eyebrow">The PDF Output</p>
-              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 20 }}>
+              <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-5)' }}>
                 What Your Generated PDF Report Includes
               </h2>
-              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, marginBottom: 16 }}>
+              <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, marginBottom: 'var(--space-4)' }}>
                 A PDF service report is generated automatically by the platform at the completion of every job. It is a structured document built from the data logged by your technician on site.
               </p>
               <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>
                 Reports are stored digitally and can be instantly emailed to building owners, property managers, or compliance auditors as required.
               </p>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '32px 28px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+            <div className="card-glass" style={{ padding: '32px 28px' }}>
               <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 22 }}>Report Contents</p>
               {REPORT_ITEMS.map((item, i, arr) => (
                 <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: i < arr.length - 1 ? 14 : 0, marginBottom: i < arr.length - 1 ? 14 : 0, borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <CheckCircle size={15} color="#F97316" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <CheckCircle size={15} color="var(--orange)" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 2 }} />
                   <span style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{item}</span>
                 </div>
               ))}
@@ -137,23 +134,23 @@ export default function ServicesPage() {
       {/* Service frequencies detail */}
       <section className="section">
         <div className="container">
-          <div style={{ maxWidth: 560, marginBottom: 48 }}>
+          <div style={{ maxWidth: 560, marginBottom: 'var(--space-12)' }}>
             <p className="section-eyebrow">Service Frequencies</p>
-            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 16 }}>
+            <h2 className="heading-lg" style={{ color: 'white', marginBottom: 'var(--space-4)' }}>
               Support For Every Compliance Cycle
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>
-              Under AS1851, different fire safety asset classes require inspection at different intervals. SiteTrack supports scheduling for every frequency — from monthly through to 5-yearly.
+              Under AS1851, different fire safety asset classes require inspection at different intervals. {platformName} supports scheduling for every frequency — from monthly through to 5-yearly.
             </p>
           </div>
           <div className="services-grid">
             {FREQUENCIES.map(f => (
-              <div key={f.schedule} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '24px 22px' }}>
+              <div key={f.schedule} className="card-glass" style={{ padding: '24px 22px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-                  <CalendarClock size={15} color="#9CA3AF" strokeWidth={1.8} />
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#9CA3AF' }}>{f.schedule}</span>
+                  <CalendarClock size={15} color="var(--slate-400)" strokeWidth={1.8} />
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--slate-400)' }}>{f.schedule}</span>
                 </div>
-                <h3 style={{ fontSize: 15.5, fontWeight: 700, color: 'white', marginBottom: 8, letterSpacing: '-0.01em' }}>{f.heading}</h3>
+                <h3 className="heading-sm" style={{ color: 'white', marginBottom: 8 }}>{f.heading}</h3>
                 <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75 }}>{f.body}</p>
               </div>
             ))}
@@ -162,12 +159,12 @@ export default function ServicesPage() {
       </section>
 
       {/* CTA */}
-      <section style={{ padding: '88px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <section style={{ padding: 'var(--space-20) 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="container" style={{ textAlign: 'center' }}>
-          <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', lineHeight: 1.1, maxWidth: 520, margin: '0 auto 20px' }}>
+          <h2 className="heading-lg" style={{ color: 'white', maxWidth: 520, margin: '0 auto var(--space-5)' }}>
             Ready to upgrade your system?
           </h2>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 400, margin: '0 auto 36px', lineHeight: 1.75 }}>
+          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', maxWidth: 400, margin: '0 auto var(--space-8)', lineHeight: 1.75 }}>
             Create an account and start managing properties today.
           </p>
           <div className="cta-group" style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -190,11 +187,11 @@ export default function ServicesPage() {
         .svc-report-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 64px;
+          gap: var(--space-16);
           align-items: start;
         }
         @media (max-width: 900px) {
-          .svc-report-grid { grid-template-columns: 1fr; gap: 36px; }
+          .svc-report-grid { grid-template-columns: 1fr; gap: var(--space-10); }
         }
         @media (max-width: 640px) {
           .visit-step-row { padding: 18px 16px; gap: 14px; }
