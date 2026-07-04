@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Linking,
+  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import {
   getDefectsForJob,
   getSignatureForJob,
   getRecord,
+  getPendingSyncItems,
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, SectionTitle, Card } from '@/components/ui';
@@ -207,6 +209,7 @@ export default function ReportSummaryScreen() {
   const [assets, setAssets]       = useState<ReportAsset[]>([]);
   const [defects, setDefects]     = useState<ExtendedDefect[]>([]);
   const [signature, setSignature] = useState<Signature | null>(null);
+  const [hasPendingSync, setHasPendingSync] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -221,6 +224,13 @@ export default function ReportSummaryScreen() {
       setAssets(a);
       setDefects(getDefectsForJob<ExtendedDefect>(jobId));
       setSignature(getSignatureForJob(jobId));
+
+      const pendingSyncs = getPendingSyncItems();
+      const hasPending = pendingSyncs.some(item => 
+        item.payload.includes(`"${jobId}"`) || 
+        item.payload.includes(`"${j.property_id}"`)
+      );
+      setHasPendingSync(hasPending);
     } catch (e) {
       console.error('[ReportSummary] load error:', e);
     } finally {
@@ -328,6 +338,23 @@ export default function ReportSummaryScreen() {
             </View>
           </Card>
         </Animated.View>
+
+        {/* ── Pending Sync Warning Banner ── */}
+        {hasPendingSync && (
+          <Animated.View entering={FadeInDown.delay(60).duration(340)}>
+            <View style={[s.warningBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
+              <MaterialCommunityIcons name="cloud-sync-outline" size={24} color={C.warningDark} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: C.warningDark, marginBottom: 2 }}>
+                  Pending Offline Changes
+                </Text>
+                <Text style={{ fontSize: 12, color: C.warningDark, lineHeight: 16 }}>
+                  You have unsynced local changes. Please regenerate the PDF report to ensure it includes the latest data.
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        )}
 
         {/* ── Warning if completed job lacks signature (data corruption edge case) ── */}
         {isCompleted && !hasSignature && (
@@ -491,14 +518,29 @@ export default function ReportSummaryScreen() {
             <Button
               title="Download PDF"
               icon="file-download-outline"
-              variant="primary"
-              onPress={() => Linking.openURL(`${job.report_url}?t=${Date.now()}`)}
+              variant={hasPendingSync ? "secondary" : "primary"}
+              onPress={() => {
+                if (hasPendingSync) {
+                  Alert.alert(
+                    'Unsynced Changes',
+                    'You have local changes that have not been synced to the PDF yet. Please hit "Regenerate" first.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Regenerate', onPress: () => router.push(`/jobs/${jobId}/preview` as never) }
+                    ]
+                  );
+                } else if (job.report_url) {
+                  Linking.openURL(`${job.report_url}?t=${Date.now()}`);
+                } else {
+                  Alert.alert('Not Available', 'The PDF report is not yet available to download.');
+                }
+              }}
               style={{ flex: 1 }}
             />
             <Button
               title="Regenerate"
               icon="refresh"
-              variant="secondary"
+              variant={hasPendingSync ? "primary" : "secondary"}
               onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
               style={{ flex: 1 }}
             />

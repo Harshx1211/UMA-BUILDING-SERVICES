@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Sidebar from '@/components/layout/Sidebar';
@@ -69,7 +69,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       supabase.from('users').select('is_active, companies(subscription_status)').eq('id', user.id).single()
         .then(({ data, error }) => {
           if (!error && data) {
-            // @ts-ignore
+            // @ts-expect-error Companies might not be typed properly yet
             const companyStatus = data.companies?.subscription_status;
             if (data.is_active === false || companyStatus === 'suspended') {
               signOut();
@@ -89,8 +89,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  // ① If fully loaded and NO user or wrong role, block render entirely
-  if (hydrated && !loading && (!user || user.role !== 'admin')) return null;
+
 
   // ② Render the dashboard shell
   return (
@@ -119,8 +118,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header onMenuClick={() => setMobileOpen(o => !o)} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 relative">
-          {/* Strict guard: never render children if unauthorized, prevents 401 errors */}
-          {(!hydrated || loading || !user || user.role !== 'admin') ? null : children}
+          {children}
         </main>
       </div>
     </div>

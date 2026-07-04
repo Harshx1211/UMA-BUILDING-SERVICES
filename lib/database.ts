@@ -964,14 +964,14 @@ export function initializeSchema(): void {
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 23 complete');
   }
 
-  // Migration 24: Add remaining missing Supabase columns to users and companies
-  // Resolves sync warnings for users (accepted_tos_at, etc) and companies (appearance_settings, etc)
+  // Migration 24: Add remaining missing Supabase columns to users and companies.
+  // FIX: previously re-added fpas_number/fpas_class/fpas_expiry/state_license/
+  // state_license_expiry here too — those were already added in Migration 18, so this
+  // was pure dead weight (harmless since wrapped in try/catch, but redundant).
+  // Trimmed to only the genuinely-new columns: accepted_tos_at, accepted_aup_at
+  // (Legal Gate timestamps) and the companies columns.
   if (currentVersion < 24) {
-    const userCols = [
-      'fpas_number TEXT', 'fpas_class TEXT', 'fpas_expiry TEXT',
-      'state_license TEXT', 'state_license_expiry TEXT',
-      'accepted_tos_at TEXT', 'accepted_aup_at TEXT'
-    ];
+    const userCols = ['accepted_tos_at TEXT', 'accepted_aup_at TEXT'];
     for (const col of userCols) {
       try { db.runSync(`ALTER TABLE users ADD COLUMN ${col};`); } catch {}
     }
@@ -1171,19 +1171,86 @@ export function cleanOldSyncQueueItems(): void {
   }
 }
 
-/** Clears failed/stuck items from the sync queue for a specific table */
+/**
+ * FIX: this previously deleted `synced = 0` (PENDING, not-yet-attempted) items —
+ * the exact opposite of what the name promises. A pending item hasn't failed at
+ * all; deleting it silently drops a legitimate queued write with zero warning.
+ * Now correctly targets `synced = -1` (permanently failed, retries exhausted) —
+ * the rows this function's name says it clears. Use this only when you want to
+ * ABANDON that data; to give failed items a fresh shot instead, use
+ * resetStaleFailedSyncItems() or retryAllFailedSyncItems() below.
+ */
 export function clearFailedSyncItems(tableName: string): void {
   try {
     const db = openDatabase();
-    db.runSync(`DELETE FROM sync_queue WHERE table_name = ? AND synced = 0`, [
+    db.runSync(`DELETE FROM sync_queue WHERE table_name = ? AND synced = -1`, [
       tableName,
     ]);
     if (__DEV__)
       console.log(
-        `[UMA BUILDING SERVICES DB] Cleared failed sync queue items for table: ${tableName}`,
+        `[UMA BUILDING SERVICES DB] Cleared permanently-failed sync queue items for table: ${tableName}`,
       );
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] clearFailedSyncItems error:`, err);
+  }
+}
+
+/**
+ * NEW: Recovery mechanism for permanently-failed sync items.
+ *
+ * Without this, an item that exhausts MAX_SYNC_RETRIES (5) in sync.ts is
+ * abandoned forever — synced = -1, never looked at again — even if the root
+ * cause (a network blip, a missing RLS policy that got fixed server-side,
+ * momentarily missing company_id) is long gone. For a compliance app, that
+ * means a defect or photo a technician logged in the field can silently never
+ * reach the Admin, with no error surfaced to anyone.
+ *
+ * This gives every permanently-failed item a fresh retry budget, but only
+ * once it's been sitting failed for at least `cooldownMs` — so a persistent,
+ * still-broken row doesn't get hammered every sync cycle. Call this
+ * periodically (e.g. once per successful sync run) from sync.ts.
+ *
+ * Note: uses `created_at` (when the item was first queued) as the cooldown
+ * clock, since sync_queue doesn't currently track "time marked failed"
+ * separately. Good enough as a coarse cooldown; add a `failed_at` column if
+ * you want this to be precise.
+ */
+export function resetStaleFailedSyncItems(cooldownMs: number = 24 * 60 * 60 * 1000): number {
+  try {
+    const db = openDatabase();
+    const cutoff = new Date(Date.now() - cooldownMs).toISOString();
+    const result = db.runSync(
+      `UPDATE sync_queue
+       SET synced = 0, retry_count = 0, last_error = NULL
+       WHERE synced = -1 AND created_at < ?`,
+      [cutoff],
+    );
+    if (__DEV__ && result.changes > 0) {
+      console.log(`[UMA BUILDING SERVICES DB] Gave ${result.changes} stale failed sync item(s) a fresh retry`);
+    }
+    return result.changes;
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] resetStaleFailedSyncItems error:', err);
+    return 0;
+  }
+}
+
+/**
+ * NEW: Manually retry ALL permanently-failed items right now, regardless of
+ * cooldown. Intended for a "Retry failed syncs" button in a settings/support
+ * screen so a technician isn't stuck waiting on the cooldown window.
+ */
+export function retryAllFailedSyncItems(): number {
+  try {
+    const db = openDatabase();
+    const result = db.runSync(
+      `UPDATE sync_queue SET synced = 0, retry_count = 0, last_error = NULL WHERE synced = -1`,
+    );
+    if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Manually retried ${result.changes} failed sync item(s)`);
+    return result.changes;
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] retryAllFailedSyncItems error:', err);
+    return 0;
   }
 }
 
@@ -1379,7 +1446,8 @@ export function getPendingSyncItems(): SyncQueueItem[] {
 
 /**
  * Returns sync queue items that have permanently failed (synced = -1).
- * These will never be retried. Callers can expose them to the user
+ * These will never be retried automatically until resetStaleFailedSyncItems()
+ * or retryAllFailedSyncItems() runs. Callers can expose them to the user
  * so they know data may not have reached the server.
  */
 export function getFailedSyncItems(): SyncQueueItem[] {

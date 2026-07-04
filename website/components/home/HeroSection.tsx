@@ -70,7 +70,7 @@ export default function HeroSection({ platformName = 'SiteTrack' }: { platformNa
           }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--orange)', boxShadow: '0 0 10px var(--orange)' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--orange-tint)', letterSpacing: '0.04em' }}>
-              {platformName} Platform 2.0 is Live
+              {platformName} is Live
             </span>
           </div>
         </div>

@@ -5,17 +5,13 @@
 //   const { error }       = await adminApi.update('jobs', { status: 'completed' }, id)
 //   const { error }       = await adminApi.delete('defects', id)
 
-import { supabase } from './supabase';
+
 
 type ApiResult<T = unknown> = { data: T | null; error: string | null };
 
 async function call<T>(body: object): Promise<ApiResult<T>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
 
     const res = await fetch('/api/admin', {
       method: 'POST',
@@ -58,11 +54,7 @@ export const adminApi = {
     rows: object[],
   ): Promise<{ inserted: number; errors: string[]; error: string | null }> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
 
       const res = await fetch('/api/admin/bulk', {
         method: 'POST',
@@ -107,11 +99,7 @@ export async function adminRead<T = Record<string, unknown>>(
   options: ReadOptions = {}
 ): Promise<ReadResult<T>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
 
     const res = await fetch('/api/admin/read', {
       method: 'POST',
@@ -132,15 +120,13 @@ export async function adminRead<T = Record<string, unknown>>(
 // ─── Admin Read Batch API ──────────────────────────────────────────────────
 // Executes multiple read queries in a single HTTP request to eliminate round-trip latency.
 
+
 export async function adminReadBatch(
   queries: Array<{ table: string; options?: ReadOptions }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Array<ReadResult<any>>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
 
     const res = await fetch('/api/admin/read-batch', {
       method: 'POST',

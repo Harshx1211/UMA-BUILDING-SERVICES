@@ -123,8 +123,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    if (quantity > 10) {
-      Alert.alert('Max Quantity', 'You can add up to 10 assets at once.');
+    if (quantity > 100) {
+      Alert.alert('Max Quantity', 'You can add up to 100 assets at once.');
       return;
     }
     setIsSaving(true);
@@ -387,7 +387,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 </View>
                 <TouchableOpacity
                   style={[s.qtyBtn, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent' }]}
-                  onPress={() => { if (quantity < 10) { setQuantity(q => q + 1); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } }}
+                  onPress={() => { if (quantity < 100) { setQuantity(q => q + 1); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } }}
                   activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons name="plus" size={20} color={C.text} />

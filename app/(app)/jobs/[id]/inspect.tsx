@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, FilterPills, Button } from '@/components/ui';
-import { InspectionResult, DefectSeverity } from '@/constants/Enums';
+import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
@@ -21,18 +21,23 @@ import ChecklistModal from '@/components/inspections/ChecklistModal';
 import { COMPLIANCE_CHECKLISTS, GENERIC_CHECKLIST } from '@/constants/Checklists';
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
+import EditAssetModal from '@/components/inspections/EditAssetModal';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
-import { getJobById } from '@/lib/database';
+import { getJobById, upsertRecord, addToSyncQueue, updateRecord } from '@/lib/database';
+import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
 
 function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
   return getAssetTypeIcon(type);
 }
 
-const AssetCard = React.memo(({ asset, index, jobId }: {
+const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }: {
   asset: AssetWithResult;
   index: number;
   jobId: string;
+  onEdit: (asset: AssetWithResult) => void;
+  onClone: (asset: AssetWithResult) => void;
+  onDelete: (asset: AssetWithResult) => void;
 }) => {
   const C = useColors();
   const { updateAssetResult } = useInspectionStore();
@@ -94,7 +99,7 @@ const AssetCard = React.memo(({ asset, index, jobId }: {
   const cardBg = isPassed ? C.successLight : isFailed ? C.errorLight : C.surface;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 50).duration(350)} style={s.cardWrapper}>
+    <Animated.View entering={index < 12 ? FadeInDown.delay(index * 40).duration(300) : undefined} style={s.cardWrapper}>
       <View style={[s.assetCard, { backgroundColor: cardBg, borderColor: cardAccentColor }, cardShadow]}>
         <View style={s.cardInner}>
           <View style={s.cardHeader}>
@@ -113,13 +118,22 @@ const AssetCard = React.memo(({ asset, index, jobId }: {
               {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
             </View>
-            <View style={s.cardHeaderRight}>
+            <View style={[s.cardHeaderRight, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
               {asset.photos && asset.photos.length > 0 && (
                 <View style={[s.photoBadge, { backgroundColor: C.accent }]}>
                   <MaterialCommunityIcons name="camera" size={10} color={C.textOnPrimary} />
                   <Text style={[s.photoBadgeTxt, { color: C.textOnPrimary }]}>{asset.photos.length}</Text>
                 </View>
               )}
+              <TouchableOpacity onPress={() => onClone(asset)} hitSlop={8}>
+                <MaterialCommunityIcons name="content-copy" size={18} color={C.textTertiary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onEdit(asset)} hitSlop={8}>
+                <MaterialCommunityIcons name="pencil" size={18} color={C.textTertiary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onDelete(asset)} hitSlop={8}>
+                <MaterialCommunityIcons name="trash-can-outline" size={18} color={C.error} />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -226,6 +240,7 @@ export default function AssetInspectionScreen() {
 
   const [filter, setFilter] = useState<string>('All');
   const [showAddAsset, setShowAddAsset] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetWithResult | null>(null);
   const [propertyId, setPropertyId]  = useState<string>('');
   const [jobTitle, setJobTitle]    = useState<string>('');
   const [jobDate, setJobDate]     = useState<string>('');
@@ -291,9 +306,76 @@ export default function AssetInspectionScreen() {
     }
   };
 
+  const handleClone = useCallback(async (assetToClone: AssetWithResult) => {
+    try {
+      
+      
+      const newId = generateUUID();
+      const now = new Date().toISOString();
+      const payload = {
+        id: newId,
+        property_id: assetToClone.property_id,
+        asset_type: assetToClone.asset_type,
+        variant: assetToClone.variant,
+        asset_ref: null, 
+        description: assetToClone.description,
+        location_on_site: assetToClone.location_on_site,
+        serial_number: null,
+        barcode_id: null,
+        install_date: assetToClone.install_date,
+        last_service_date: null,
+        next_service_date: null,
+        status: AssetStatus.Active,
+        created_at: now,
+      };
+
+      upsertRecord('assets', payload);
+      addToSyncQueue('assets', newId, SyncOperation.Insert, payload);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Asset cloned' });
+      
+      if (jobId) store.loadAssetsForInspection(jobId);
+    } catch (err) {
+      console.error('Failed to clone asset:', err);
+      Toast.show({ type: 'error', text1: 'Failed to clone asset' });
+    }
+  }, [jobId, store]);
+
+  const handleDelete = useCallback((assetToDelete: AssetWithResult) => {
+    Alert.alert(
+      'Delete Asset',
+      `Are you sure you want to delete this ${formatAssetType(assetToDelete.asset_type)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            try {
+              
+              
+              const payload = { status: AssetStatus.Decommissioned };
+              updateRecord('assets', assetToDelete.id, payload);
+              addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
+              
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Toast.show({ type: 'success', text1: 'Asset deleted' });
+              
+              if (jobId) store.loadAssetsForInspection(jobId);
+            } catch (err) {
+              console.error('Failed to delete asset:', err);
+              Toast.show({ type: 'error', text1: 'Failed to delete asset' });
+            }
+          }
+        }
+      ]
+    );
+  }, [jobId, store]);
+
   const renderItem = useCallback(({ item, index }: { item: AssetWithResult; index: number }) => (
-    <AssetCard asset={item} index={index} jobId={jobId as string} />
-  ), [jobId]);
+    <AssetCard asset={item} index={index} jobId={jobId as string} onEdit={setEditingAsset} onClone={handleClone} onDelete={handleDelete} />
+  ), [jobId, handleClone, handleDelete]);
 
   const fillPct = store.progress.total > 0 ? (store.progress.inspected / store.progress.total) * 100 : 0;
 
@@ -440,6 +522,15 @@ export default function AssetInspectionScreen() {
           setShowAddAsset(false);
           if (jobId) store.loadAssetsForInspection(jobId);
           Toast.show({ type: 'success', text1: 'Asset added', text2: `${newAssets.length} asset(s) registered.` });
+        }}
+      />
+      <EditAssetModal
+        visible={!!editingAsset}
+        asset={editingAsset}
+        onClose={() => setEditingAsset(null)}
+        onAssetEdited={() => {
+          setEditingAsset(null);
+          if (jobId) store.loadAssetsForInspection(jobId);
         }}
       />
     </View>

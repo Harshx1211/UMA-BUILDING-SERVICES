@@ -50,6 +50,11 @@ import { buildReportHtml, ReportData, AssetWithResult } from '@/lib/reportTempla
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
+// FIX: FALLBACK_IMG now lives in a shared constants module so reportTemplate.ts
+// can import the exact same value and tell a "failed" photo apart from a real
+// one (previously it was defined only here, so reportTemplate had no way to
+// distinguish a fallback pixel from a genuine data: URI — see reportTemplate.ts).
+import { FALLBACK_IMG } from '@/lib/pdfConstants';
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -123,10 +128,9 @@ function hashCode(str: string): string {
  *               URL at once, only ONE encode runs; the second awaits the first.
  *               Without this, parallel batching would double-encode shared photos.
  *
- * Returns null (never throws) — callers show original URL as fallback.
+ * Returns FALLBACK_IMG (never throws) — reportTemplate.ts renders this as an
+ * explicit "Photo unavailable" placeholder rather than a blank image.
  */
-const FALLBACK_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
 async function toDataUri(
   url: string,
   width: number,

@@ -15,7 +15,9 @@
  * Photo handling:
  *   - Only data: URIs are embedded (safe for expo-print sandbox)
  *   - All images use explicit px dimensions (WKWebView collapses % sizes)
- *   - Broken images hidden via onerror handler
+ *   - Photos that failed to encode (FALLBACK_IMG) render as a labelled
+ *     "Photo unavailable" placeholder rather than an invisible blank box —
+ *     see isRealPhoto() below.
  */
 
 
@@ -30,6 +32,11 @@ import {
   TimeLog,
 } from '@/types';
 import { formatAssetType } from '@/utils/assetHelpers';
+// FIX: shared constant so we can tell an actually-failed photo apart from a
+// real one. Previously FALLBACK_IMG was only defined in pdfGenerator.ts, so
+// isSafe() here treated it as "safe" and rendered it as an invisible 1x1
+// transparent image — leaving a blank bordered box with no explanation.
+import { FALLBACK_IMG } from './pdfConstants';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,6 +143,15 @@ function isSafe(src: string | null | undefined): src is string {
   return src.startsWith('data:');
 }
 
+/**
+ * FIX: True only for a genuine, successfully-encoded photo — i.e. a data: URI
+ * that ISN'T the shared FALLBACK_IMG sentinel. Use this (instead of isSafe)
+ * anywhere you're about to render an <img> the reader expects to actually see
+ * a photo in. Failed photos are handled separately via placeholderHtml().
+ */
+function isRealPhoto(src: string | null | undefined): src is string {
+  return isSafe(src) && src !== FALLBACK_IMG;
+}
 
 
 function assetRefCode(asset: AssetWithResult, index: number): string {
@@ -498,6 +514,20 @@ p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
 .photo-defect[src=""] { display: none; }
 .photo-cap { font-size: 8px; color: #94A3B8; margin-top: 3px; text-align: center; }
 
+/* ── Failed-to-load photo placeholder (FIX: was previously invisible) ── */
+.photo-unavailable {
+  display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(45deg, #F1F5F9, #F1F5F9 6px, #E7ECF2 6px, #E7ECF2 12px);
+  border: 1.5px dashed #CBD5E1;
+  color: #94A3B8;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 6px;
+}
+
 /* ── Signature block ── */
 .sig-section {
   margin-top: 22px;
@@ -716,14 +746,29 @@ function buildPage1(data: ReportData): string {
 
 // ─── Photo helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * FIX: previously used isSafe(), which treats FALLBACK_IMG (a real data: URI)
+ * as renderable — resulting in an invisible 1x1 image stretched into a bordered
+ * box with nothing to show. Now genuinely-failed photos get a visible,
+ * labelled placeholder instead of silently rendering blank.
+ */
 function thumbHtml(photo: InspectionPhoto): string {
   if (!isSafe(photo.photo_url)) return '';
-  // onerror hides broken images rather than showing a broken icon
+  if (!isRealPhoto(photo.photo_url)) {
+    return `<div class="photo-thumb photo-unavailable" title="Photo unavailable"></div>`;
+  }
   return `<img src="${photo.photo_url}" class="photo-thumb" alt="" onerror="this.style.display='none'"/>`;
 }
 
 function defectPhotoHtml(url: string, cap = 'Photo'): string {
   if (!isSafe(url)) return '';
+  if (!isRealPhoto(url)) {
+    return `
+    <div class="photo-wrap nb">
+      <div class="photo-defect photo-unavailable">Photo<br/>unavailable</div>
+      <div class="photo-cap">${cap}</div>
+    </div>`;
+  }
   return `
   <div class="photo-wrap nb">
     <img src="${url}" class="photo-defect" alt="${cap}" onerror="this.style.display='none'"/>
@@ -960,12 +1005,12 @@ function buildMaintPage(data: ReportData): string {
 
 function buildSig(signature: Signature | null, techName: string): string {
   // Client signature
-  const clientSigHtml = signature?.signature_url && isSafe(signature.signature_url)
+  const clientSigHtml = signature?.signature_url && isRealPhoto(signature.signature_url)
     ? `<img src="${signature.signature_url}" class="sig-img" alt="Client Signature" onerror="this.style.display='none'"/>`
-    : `<span class="sig-empty">${signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
+    : `<span class="sig-empty">${signature?.signature_url ? 'Signature failed to load' : signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
 
   // Technician signature — real captured PNG preferred (AS1851); falls back to typed name
-  const techSigHtml = signature?.tech_signature_url && isSafe(signature.tech_signature_url)
+  const techSigHtml = signature?.tech_signature_url && isRealPhoto(signature.tech_signature_url)
     ? `<img src="${signature.tech_signature_url}" class="sig-img" alt="Inspector Signature" onerror="this.style.display='none'"/>`
     : `<span class="sig-typed">${techName}</span>`;
 
