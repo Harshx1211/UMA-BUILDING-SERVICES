@@ -13,6 +13,7 @@ import { runSync } from '@/lib/sync';
 import { generateUUID } from '@/utils/uuid';
 import { useColors } from '@/hooks/useColors';
 import { SyncOperation } from '@/constants/Enums';
+import { useAuthStore } from '@/store/authStore';
 import { Signature } from '@/types';
 import { ScreenHeader, Button, Card } from '@/components/ui';
 
@@ -55,6 +56,10 @@ export default function SignatureScreen() {
         });
       }
     }
+    // BUG-N8 FIX: Clear draft on unmount so stale sig never bleeds into another job.
+    return () => {
+      if (id) AsyncStorage.removeItem(`draft_tech_sig_${id}`).catch(() => {});
+    };
   }, [id]);
 
   const CONSENT =
@@ -88,19 +93,37 @@ export default function SignatureScreen() {
       if (!hasSig) { setSigError('Please ensure the technician signature is captured.'); return; }
       setSigError('');
       setSaving(true);
+      // FIX: Add a safety timeout — if readSignature() triggers onOK within
+      // the WebView but the promise never resolves (e.g. the WebView is still
+      // loading), setSaving stays true forever and the button is frozen.
+      // Reset after 10s to give the user a chance to retry.
+      const safetyTimer = setTimeout(() => {
+        setSaving(false);
+        setSigError('Signature capture timed out. Please try again.');
+      }, 10000);
+      // Store the timer so _handleOK can clear it on success
+      (techCanvasRef as any)._safetyTimer = safetyTimer;
       techCanvasRef.current?.readSignature(); // triggers _handleOK
     } else {
       if (!signedBy.trim()) { setSigError('Please enter the name of the person signing.'); return; }
       if (!hasSig) { setSigError('Please ensure the client signature is captured.'); return; }
       setSigError('');
       setSaving(true);
+      const safetyTimer = setTimeout(() => {
+        setSaving(false);
+        setSigError('Signature capture timed out. Please try again.');
+      }, 10000);
+      (clientCanvasRef as any)._safetyTimer = safetyTimer;
       clientCanvasRef.current?.readSignature(); // triggers _handleOK
     }
   }
 
   async function _handleOK(signature: string) {
+    // Clear the safety timeout — onOK fired successfully
     if (step === 'tech') {
-      if (id) await AsyncStorage.setItem(`draft_tech_sig_${id}`, signature);
+      const t = (techCanvasRef as any)._safetyTimer;
+      if (t) { clearTimeout(t); (techCanvasRef as any)._safetyTimer = null; }
+      await AsyncStorage.setItem(`draft_tech_sig_${id}`, signature);
       setTechSigBase64(signature);
       setStep('client');
       setHasSig(false);
@@ -108,15 +131,19 @@ export default function SignatureScreen() {
       return;
     }
 
+    const t = (clientCanvasRef as any)._safetyTimer;
+    if (t) { clearTimeout(t); (clientCanvasRef as any)._safetyTimer = null; }
+
     // Client step - final save
     try {
       const now       = new Date().toISOString();
-      // Reuse existing id if one exists — so upsertRecord's ON CONFLICT(id) updates
-      // the row instead of trying to INSERT a new one that violates the UNIQUE(job_id) constraint.
       const recordId  = existingRecordId.current ?? generateUUID();
       const isUpdate  = !!existingRecordId.current;
+      // BUG-N1 FIX: inject company_id so Supabase RLS doesn't reject the INSERT/UPDATE.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
       const record = {
         id: recordId, job_id: id!,
+        company_id: companyId,
         signature_url: signature, // client sig
         tech_signature_url: techSigBase64, // tech sig
         signed_by_name: signedBy.trim(),
@@ -148,8 +175,11 @@ export default function SignatureScreen() {
       const now      = new Date().toISOString();
       const recordId = existingRecordId.current ?? generateUUID();
       const isUpdate = !!existingRecordId.current;
+      // BUG-N1 FIX: inject company_id so Supabase RLS doesn't reject this.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
       const record = {
         id: recordId, job_id: id!,
+        company_id: companyId,
         signature_url: 'UNAVAILABLE',
         tech_signature_url: techSigBase64,
         signed_by_name: 'Client Unavailable',
@@ -215,9 +245,17 @@ export default function SignatureScreen() {
           {existingSig && !isEditing && (
             <Card variant="success" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }} padding={14}>
               <MaterialCommunityIcons name="check-circle" size={16} color={C.success} />
-              <Text style={[styles.capturedTxt, { color: C.successDark }]}>
+              <Text style={[styles.capturedTxt, { color: C.successDark, flex: 1 }]}>
                 Signed by {existingSig.signed_by_name} · {new Date(existingSig.signed_at).toLocaleDateString('en-AU')}
               </Text>
+              {/* BUG-N2 FIX: Re-sign button so users can update a captured signature */}
+              <TouchableOpacity
+                onPress={() => { setIsEditing(true); setStep('tech'); setHasSig(false); setSigError(''); }}
+                style={[styles.resignBtn, { backgroundColor: C.warning + '20', borderColor: C.warning + '60' }]}
+              >
+                <MaterialCommunityIcons name="pencil-outline" size={13} color={C.warningDark} />
+                <Text style={[styles.resignTxt, { color: C.warningDark }]}>Re-sign</Text>
+              </TouchableOpacity>
             </Card>
           )}
           <Text style={[styles.label, { color: C.textTertiary, marginTop: 12 }]}>TECHNICIAN SIGNATURE *</Text>
@@ -318,10 +356,19 @@ export default function SignatureScreen() {
               >
                 {existingSig && !isEditing ? (
                   <View style={styles.existingSigBg}>
-                    <Image
-                      source={{ uri: existingSig.signature_url }}
-                      style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-                    />
+                    {/* BUG-N14 FIX: 'UNAVAILABLE' is not a valid image URI — show placeholder */}
+                    {existingSig.signature_url === 'UNAVAILABLE' ? (
+                      <View style={{ alignItems: 'center', gap: 6 }}>
+                        <MaterialCommunityIcons name="account-off-outline" size={28} color={C.warning} />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.warningDark }}>Client Unavailable</Text>
+                        <Text style={{ fontSize: 11, color: C.textTertiary }}>No client signature captured</Text>
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: existingSig.signature_url }}
+                        style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                      />
+                    )}
                   </View>
                 ) : step === 'client' ? (
                   <SignatureScreenCanvas
@@ -384,7 +431,8 @@ export default function SignatureScreen() {
             </Text>
           </View>
 
-          {!existingSig && (
+          {/* Show action buttons when: no existing sig yet OR we are actively re-signing */}
+          {(!existingSig || isEditing) && (
             <View>
               <Button
                 variant="primary"
@@ -399,6 +447,16 @@ export default function SignatureScreen() {
                     variant="secondary"
                     title="Client Unavailable to Sign"
                     onPress={_handleClientUnavailable}
+                    disabled={saving}
+                  />
+                </View>
+              )}
+              {isEditing && (
+                <View style={{ marginTop: 12 }}>
+                  <Button
+                    variant="secondary"
+                    title="Cancel Re-sign"
+                    onPress={() => { setIsEditing(false); setStep('tech'); setHasSig(false); setSigError(''); }}
                     disabled={saving}
                   />
                 </View>
@@ -421,6 +479,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   clearTxt: { fontSize: 13, fontWeight: '600' },
+
+  // BUG-N2: Re-sign button in the captured sig banner
+  resignBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1,
+  },
+  resignTxt: { fontSize: 11, fontWeight: '800' },
 
   // Body
   scrollArea: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },

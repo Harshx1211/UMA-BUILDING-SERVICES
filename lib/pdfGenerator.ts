@@ -35,7 +35,10 @@ import {
   queryRecords,
   getRecord,
   updateRecord,
+  addToSyncQueue,
+  getPendingSyncItems,
 } from '@/lib/database';
+import { SyncOperation } from '@/constants/Enums';
 import {
   Job,
   Defect,
@@ -264,7 +267,8 @@ async function fetchReportData(jobId: string): Promise<ReportData> {
 
   return {
     job, assets, defects, signature, photos, timeLogs,
-    techName, reportId, approvedQuote, quoteItems, inventory, company,
+    techName, tech: tech ?? undefined, reportId,
+    approvedQuote, quoteItems, inventory, company,
   };
 }
 
@@ -321,25 +325,42 @@ async function processPhotos(
   const defectAssetIds = new Set(data.defects.map(d => d.asset_id));
 
   // ── Signature ────────────────────────────────────────────────────────────────
+  // FIX: The canvas outputs a data:image/png;base64,... string directly.
+  // Previously we passed this through toDataUri() → ImageManipulator → temp file
+  // write → re-read, which failed silently for large base64 strings and returned
+  // FALLBACK_IMG (a 1×1 pixel). Now we detect already-encoded data: URIs and embed
+  // them directly — they are already the correct format for WKWebView.
   let signature = data.signature;
   if (signature) {
     // 1. Client Signature
-    if (signature.signature_url) {
+    if (signature.signature_url && signature.signature_url !== 'UNAVAILABLE') {
       onProgress?.('Encoding signature…');
-      const uri = await toDataUri(
-        signature.signature_url, SIG_W, SIG_Q,
-        ImageManipulator.SaveFormat.PNG, cache, pending
-      );
-      signature = { ...signature, signature_url: uri };
+      let sigUri: string;
+      if (signature.signature_url.startsWith('data:')) {
+        // Already a base64 data URI from the canvas — embed directly, no re-encode needed
+        sigUri = signature.signature_url;
+      } else {
+        sigUri = await toDataUri(
+          signature.signature_url, SIG_W, SIG_Q,
+          ImageManipulator.SaveFormat.PNG, cache, pending
+        );
+      }
+      signature = { ...signature, signature_url: sigUri };
     }
 
     // 2. Technician Signature
     if (signature.tech_signature_url) {
       onProgress?.('Encoding technician signature…');
-      const techUri = await toDataUri(
-        signature.tech_signature_url, SIG_W, SIG_Q,
-        ImageManipulator.SaveFormat.PNG, cache, pending
-      );
+      let techUri: string;
+      if (signature.tech_signature_url.startsWith('data:')) {
+        // Already a base64 data URI from the canvas — embed directly
+        techUri = signature.tech_signature_url;
+      } else {
+        techUri = await toDataUri(
+          signature.tech_signature_url, SIG_W, SIG_Q,
+          ImageManipulator.SaveFormat.PNG, cache, pending
+        );
+      }
       signature = { ...signature, tech_signature_url: techUri };
     }
   }
@@ -611,7 +632,10 @@ async function uploadPdfToStorage(
       .eq('id', jobId);
 
     if (dbError) {
-      console.warn('[UMA BUILDING SERVICES] Failed to update jobs in Supabase:', dbError.message);
+      console.warn('[UMA BUILDING SERVICES] Failed to update jobs in Supabase — queuing for retry:', dbError.message);
+      // FIX: If the direct update fails (e.g. transient network error), queue it for
+      // the next sync cycle so report_url is never permanently lost.
+      addToSyncQueue('jobs', jobId, SyncOperation.Update, updatePayload);
     } else {
       console.log('[UMA BUILDING SERVICES] Supabase jobs row updated: report_url + status=completed');
     }
@@ -660,21 +684,46 @@ export async function generateJobReport(
     const title        = `Service Report — ${propertyName ?? data.reportId}`;
 
     const alreadyCompleted = (jobRecord?.status as string) === 'completed';
-    const cacheKey = `@report_hash_${jobId}`;
+    // BUG-N6 FIX: Cache key must be scoped to user so two technicians sharing
+    // a device never get each other's report. useAuthStore is synchronous.
+    const userId  = useAuthStore.getState().user?.id ?? 'anon';
+    const cacheKey = `@report_hash_${userId}_${jobId}`;
     const lastHash = await AsyncStorage.getItem(cacheKey);
+
+    // BUG-N3 FIX: If there are any unsynced items for this job or its property,
+    // the local data is ahead of what was used to build the last hash.
+    // Force regeneration so new assets/results are always included in the PDF.
+    const pending = getPendingSyncItems();
+    const jobPropertyId = (jobRecord as any).property_id as string | undefined;
+    const hasPendingForThisJob = pending.some(i =>
+      i.payload.includes(`"${jobId}"`) ||
+      (jobPropertyId && i.payload.includes(`"${jobPropertyId}"`)),
+    );
 
     let pdfUri: string;
     let reportUrl: string | null = jobRecord.report_url;
 
-    // Fast path: If the HTML hasn't changed AND we already have a report URL, skip generation and upload!
-    if (lastHash === htmlHash && reportUrl) {
+    // Fast path: If the HTML hasn't changed AND no pending local changes AND we
+    // already have a report URL, skip generation and upload for speed.
+    if (lastHash === htmlHash && reportUrl && !hasPendingForThisJob) {
       console.log('[UMA BUILDING SERVICES] Report HTML unchanged. Skipping PDF generation and upload.');
       onProgress?.('cached', 'Report is up to date.');
-      // We still need a local PDF in case they click Share
-      const destPath = `${FileSystem.cacheDirectory}preview_${jobId}_${Date.now()}.pdf`;
-      await FileSystem.downloadAsync(reportUrl, destPath);
-      pdfUri = destPath;
-    } else {
+      // We still need a local PDF in case they click Share.
+      // BUG-N9 FIX: Wrap download in try/catch — if offline or URL expired,
+      // fall through to full regeneration rather than throwing to the caller.
+      try {
+        const destPath = `${FileSystem.cacheDirectory}preview_${jobId}_${Date.now()}.pdf`;
+        await FileSystem.downloadAsync(reportUrl, destPath);
+        pdfUri = destPath;
+      } catch (dlErr) {
+        console.warn('[UMA BUILDING SERVICES] Cached PDF download failed — regenerating:', dlErr);
+        // Fall through to slow path below
+        reportUrl = null; // force the slow path
+        pdfUri = ''; // will be overwritten below
+      }
+    }
+
+    if (!pdfUri! || !reportUrl) {
       // Slow path: Generate and upload new PDF
       pdfUri = await generatePdf(html);
 
@@ -690,12 +739,17 @@ export async function generateJobReport(
         );
       } catch (stampErr) {
         console.warn('[UMA BUILDING SERVICES] PDF stamping failed, using unstamped fallback:', stampErr);
+      } finally {
+        // BUG-N17 FIX: Always clean up the raw unstamped temp file even on timeout,
+        // to prevent accumulating garbage on low-storage devices.
+        // Only skip deletion if stampedUri is null (stamping failed) since rawUri IS pdfUri in that case.
+        if (stampedUri && stampedUri !== rawUri) {
+          FileSystem.deleteAsync(rawUri, { idempotent: true }).catch(() => {});
+        }
       }
 
       if (stampedUri) {
         pdfUri = stampedUri;
-        // Delete the raw unstamped file only if stamping succeeded and we have a new file
-        FileSystem.deleteAsync(rawUri, { idempotent: true }).catch(() => {});
       }
 
       onProgress?.('uploading');

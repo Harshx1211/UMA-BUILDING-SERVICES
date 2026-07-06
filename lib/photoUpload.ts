@@ -190,10 +190,10 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
 
           // Read caption from the local SQLite row so it's included in the Supabase row.
           // Bug fix: caption was previously omitted, causing captions to be local-only.
-          const localRow = getRecord<{ caption: string | null }>('inspection_photos', payload.recordId);
+          const localRow = getRecord<{ caption: string | null; company_id: string | null }>('inspection_photos', payload.recordId);
 
           // Insert the row into Supabase via sync queue.
-          // uploaded_by is required — include it here so the Supabase constraint is satisfied.
+          // uploaded_by AND company_id are required — include both so Supabase RLS is satisfied.
           addToSyncQueue('inspection_photos', payload.recordId, SyncOperation.Insert, {
             id:          payload.recordId,
             job_id:      payload.jobId,
@@ -201,6 +201,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             defect_id:   payload.defectId ?? null,
             photo_url:   publicUrl,
             caption:     localRow?.caption ?? null,
+            company_id:  localRow?.company_id ?? null,
             uploaded_at: new Date().toISOString(),
             uploaded_by: currentUserId,
           });

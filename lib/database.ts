@@ -988,6 +988,61 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '24')`);
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 24 complete (users/companies columns)');
   }
+  // Migration 25: Ensure AS1851-required date columns exist on assets table.
+  // These are shown per asset in the PDF (install date, next service date).
+  // Fresh installs from the base CREATE TABLE already have them, but upgrades need this.
+  if (currentVersion < 25) {
+    const assetCols = [
+      'install_date TEXT',
+      'next_service_date TEXT',
+      'last_service_date TEXT',
+    ];
+    for (const col of assetCols) {
+      try { db.runSync(`ALTER TABLE assets ADD COLUMN ${col};`); } catch {}
+    }
+    currentVersion = 25;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '25')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 25 complete (assets date columns)');
+  }
+
+  // Migration 26: Ensure company_id column exists on assets table.
+  // Required for Supabase RLS when cloned assets are pushed via the sync queue.
+  if (currentVersion < 26) {
+    try { db.runSync(`ALTER TABLE assets ADD COLUMN company_id TEXT;`); } catch {}
+    currentVersion = 26;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '26')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 26 complete (assets.company_id)');
+  }
+
+  // Migration 27: Add company_id to inspection_photos, job_assets, and defects.
+  // These three tables are written by the tech in the field and pushed via sync queue.
+  // Without company_id the Supabase RLS policy (company_id = auth.jwt() company)
+  // silently rejects every INSERT — photos, job results and defects never reach the server.
+  if (currentVersion < 27) {
+    const cols: [string, string][] = [
+      ['inspection_photos', 'company_id TEXT'],
+      ['job_assets',        'company_id TEXT'],
+      ['defects',           'company_id TEXT'],
+    ];
+    for (const [tbl, col] of cols) {
+      try { db.runSync(`ALTER TABLE ${tbl} ADD COLUMN ${col};`); } catch {}
+    }
+    currentVersion = 27;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '27')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 27 complete (company_id on photos/job_assets/defects)');
+  }
+
+  // Migration 28: Add company_id to signatures table.
+  // Signatures are captured by the tech and synced to Supabase via the sync queue.
+  // Supabase RLS requires company_id on all tenant-scoped tables — without it
+  // every signature INSERT is silently rejected, meaning sign-off data is never
+  // delivered to the server even when the tech is back online.
+  if (currentVersion < 28) {
+    try { db.runSync(`ALTER TABLE signatures ADD COLUMN company_id TEXT;`); } catch {}
+    currentVersion = 28;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '28')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 28 complete (signatures.company_id)');
+  }
 
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();

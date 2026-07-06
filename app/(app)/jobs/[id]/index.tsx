@@ -230,6 +230,22 @@ export default function JobDetailScreen() {
       );
       return;
     }
+    // FIX: block completion if no assets have been inspected at all.
+    // A completed job with 0 inspected assets generates a meaningless blank PDF.
+    if (inspected === 0) {
+      Alert.alert(
+        'No Assets Inspected',
+        'You must inspect at least one asset before completing this job.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Inspection',
+            onPress: () => { if (job) router.push(`/jobs/${job.id}/inspect` as never); },
+          },
+        ]
+      );
+      return;
+    }
     finalizeCompletion();
   };
 

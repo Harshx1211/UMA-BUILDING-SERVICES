@@ -20,6 +20,9 @@ import { processPhotoQueue } from '@/lib/photoUpload';
 /** Max consecutive push failures before a sync queue item is permanently abandoned */
 const MAX_SYNC_RETRIES = 5;
 
+// Mutex for processPhotoQueue — prevents overlapping manual + interval calls (BUG-N12)
+let _isProcessingPhotos = false;
+
 /**
  * Status priority ladder for conflict resolution.
  * Higher number = further along in the job lifecycle.
@@ -202,7 +205,18 @@ export async function runSync(userId?: string): Promise<boolean> {
     // ---------------------------------
 
     // ── 2. PUSH — upload photo binaries then flush sync queue ────
-    await processPhotoQueue(resolvedUserId);
+    // BUG-N12 FIX: Guard processPhotoQueue with a boolean mutex so a manual
+    // call from the report/preview screen can't overlap with the sync interval.
+    if (!_isProcessingPhotos) {
+      _isProcessingPhotos = true;
+      try {
+        await processPhotoQueue(resolvedUserId);
+      } finally {
+        _isProcessingPhotos = false;
+      }
+    } else {
+      if (__DEV__) console.log('[SiteTrack Sync] Photo queue already processing — skipping duplicate run');
+    }
     if (_shouldStop) return false;
     await _pushQueue();
     if (_shouldStop) return false;
@@ -218,7 +232,15 @@ export async function runSync(userId?: string): Promise<boolean> {
     await AsyncStorage.setItem(LAST_SYNCED_KEY, now);
     if (__DEV__) console.log(`[SiteTrack Sync] Sync complete at ${now}`);
 
-    // ── 5. Warn about permanently-failed items ────────────────────
+    // ── 5. Warn about permanently-failed items and give stale ones a fresh retry
+    // FIX: Items that have been permanently abandoned for >24h get their retry
+    // budget reset. This prevents a transient network issue (RLS policy lag,
+    // momentary offline) from permanently silencing a tech's field data.
+    const { resetStaleFailedSyncItems } = await import('@/lib/database');
+    const resetCount = resetStaleFailedSyncItems(24 * 60 * 60 * 1000);
+    if (resetCount > 0 && __DEV__)
+      console.log(`[SiteTrack Sync] Reset ${resetCount} stale permanently-failed item(s) for retry`);
+
     const failedItems = getFailedSyncItems();
     if (failedItems.length > 0) {
       console.warn(
@@ -438,9 +460,6 @@ async function _pullRelated(
   }
   if (data) {
     // For inspection_photos: skip any row whose ID is in the permanent tombstone.
-    // This prevents a deleted photo from reappearing after reinstall, even if the
-    // Supabase delete is still pending, failed, or was permanently abandoned.
-    // Unlike the previous sync-queue-based guard, this tombstone NEVER expires.
     let tombstoneIds = new Set<string>();
     if (table === 'inspection_photos') {
       tombstoneIds = getDeletedPhotoIds();
@@ -453,12 +472,43 @@ async function _pullRelated(
         skipped++;
         continue; // permanently deleted — never re-insert
       }
+
+      // BUG-N4 FIX: For job_assets, never let the server overwrite a locally-actioned
+      // result (pass/fail/not-tested) with a stale null from the server.
+      // This can happen when the tech saves an inspection result offline — the local
+      // SQLite row has result='pass' but the server row still has result=null because
+      // the push hasn't completed yet. A naive upsert would reset it to null.
+      if (table === 'job_assets') {
+        const serverRow = row as Record<string, unknown>;
+        const localRow  = getRecord<{ result: string | null; actioned_at: string | null }>(
+          'job_assets', rowId
+        );
+        if (localRow?.result && !serverRow.result) {
+          // Local has an inspection result, server doesn't — preserve local.
+          if (__DEV__)
+            console.log(`[UMA BUILDING SERVICES Sync] PULL: preserving local job_asset result '${localRow.result}' over server null for ${rowId}`);
+          skipped++;
+          continue;
+        }
+        // If server has a result and local also has a result, trust server only if
+        // server actioned_at is newer (the admin may have corrected the result remotely).
+        if (localRow?.result && serverRow.result && localRow.actioned_at && serverRow.actioned_at) {
+          const localMs  = new Date(localRow.actioned_at as string).getTime();
+          const serverMs = new Date(serverRow.actioned_at as string).getTime();
+          if (localMs > serverMs) {
+            // Local is newer — preserve it.
+            skipped++;
+            continue;
+          }
+        }
+      }
+
       upsertRecord(table, row as Record<string, string | number | boolean | null>);
     }
     if (__DEV__) {
       const upserted = data.length - skipped;
       if (upserted > 0) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${upserted} ${table} row(s)`);
-      if (skipped > 0)  console.log(`[UMA BUILDING SERVICES Sync] PULL: skipped ${skipped} tombstoned ${table} row(s)`);
+      if (skipped > 0)  console.log(`[UMA BUILDING SERVICES Sync] PULL: skipped ${skipped} tombstoned/preserved ${table} row(s)`);
     }
   }
 }
@@ -509,6 +559,14 @@ async function _pushQueue(): Promise<void> {
         const result = await supabase.from(item.table_name).insert(payload);
         error = result.error;
       } else if (item.operation === SyncOperation.Update) {
+        // FIX: Inject company_id for UPDATE operations too.
+        // Although RLS on UPDATE typically filters on existing column values (not
+        // the payload), some Supabase policies check the payload's company_id to
+        // prevent cross-tenant writes. Injecting it here is safe and idempotent.
+        if (_cachedUserId && !payload.company_id) {
+          const u = getRecord<{ company_id: string }>('users', _cachedUserId);
+          if (u?.company_id) payload.company_id = u.company_id;
+        }
         const result = await supabase
           .from(item.table_name)
           .update(payload)

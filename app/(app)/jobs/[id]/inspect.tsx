@@ -23,9 +23,11 @@ import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
-import { getJobById, upsertRecord, addToSyncQueue, updateRecord } from '@/lib/database';
+import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
+import { useAuthStore } from '@/store/authStore';
+
 
 function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
   return getAssetTypeIcon(type);
@@ -40,7 +42,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   onDelete: (asset: AssetWithResult) => void;
 }) => {
   const C = useColors();
-  const { updateAssetResult } = useInspectionStore();
+  const { updateAssetResult, isSaving } = useInspectionStore();
 
   const [showFailModal,  setShowFailModal]  = useState(false);
   const [showChecklist,  setShowChecklist]  = useState(false);
@@ -172,27 +174,32 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </Animated.View>
           )}
 
-          <View style={s.resultBtnRow}>
+          {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
+              rapid-tap duplicates from creating two job_assets rows for the same asset. */}
+          <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
             <TouchableOpacity
               style={[s.resultBtn, isPassed ? { backgroundColor: C.success, borderColor: C.success } : { backgroundColor: C.successLight, borderColor: C.success }]}
-              onPress={() => handleResult(InspectionResult.Pass)}
+              onPress={() => !isSaving && handleResult(InspectionResult.Pass)}
               activeOpacity={0.8}
+              disabled={isSaving}
             >
               <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.success} />
               <Text style={[s.resultBtnTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.resultBtn, isFailed ? { backgroundColor: C.error, borderColor: C.error } : { backgroundColor: C.errorLight, borderColor: C.error }]}
-              onPress={() => handleResult(InspectionResult.Fail)}
+              onPress={() => !isSaving && handleResult(InspectionResult.Fail)}
               activeOpacity={0.8}
+              disabled={isSaving}
             >
               <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.error} />
               <Text style={[s.resultBtnTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.resultBtn, isNT ? { backgroundColor: C.textSecondary, borderColor: C.textSecondary } : { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-              onPress={() => handleResult(InspectionResult.NotTested)}
+              onPress={() => !isSaving && handleResult(InspectionResult.NotTested)}
               activeOpacity={0.8}
+              disabled={isSaving}
             >
               <MaterialCommunityIcons name="minus-circle-outline" size={16} color={isNT ? C.textOnPrimary : C.textSecondary} />
               <Text style={[s.resultBtnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
@@ -306,18 +313,22 @@ export default function AssetInspectionScreen() {
     }
   };
 
-  const handleClone = useCallback(async (assetToClone: AssetWithResult) => {
+  const handleClone = useCallback((assetToClone: AssetWithResult) => {
     try {
       
       
       const newId = generateUUID();
       const now = new Date().toISOString();
+      // FIX: Add company_id to the cloned payload so the sync queue INSERT
+      // passes Supabase RLS (all asset rows must belong to a company).
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
       const payload = {
         id: newId,
         property_id: assetToClone.property_id,
+        company_id: companyId,
         asset_type: assetToClone.asset_type,
         variant: assetToClone.variant,
-        asset_ref: null, 
+        asset_ref: null,
         description: assetToClone.description,
         location_on_site: assetToClone.location_on_site,
         serial_number: null,
@@ -353,15 +364,45 @@ export default function AssetInspectionScreen() {
           style: 'destructive',
           onPress: () => {
             try {
-              
-              
+              // BUG-N5 FIX: Clean up ALL related rows before soft-deleting the asset.
+              // Without this, the deleted asset's inspection result + photos still appear
+              // in getAssetsWithJobResults (LEFT JOIN on job_assets) and in the PDF.
+
+              // 1. Cancel/delete all inspection_photos for this asset in this job
+              if (jobId) {
+                const assetPhotos = queryRecords<{ id: string; photo_url: string }>(
+                  'inspection_photos', { job_id: jobId, asset_id: assetToDelete.id }
+                );
+                for (const p of assetPhotos) {
+                  deleteRecord('inspection_photos', p.id);
+                  recordDeletedPhoto(p.id);
+                  if (p.photo_url.startsWith('https://')) {
+                    addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+                      id: p.id, photo_url: p.photo_url,
+                    });
+                  } else {
+                    cancelPendingPhotoUpload(p.id);
+                  }
+                }
+
+                // 2. Delete the job_asset (inspection result) row for this asset
+                const jobAssetRows = queryRecords<{ id: string }>(
+                  'job_assets', { job_id: jobId, asset_id: assetToDelete.id }
+                );
+                for (const ja of jobAssetRows) {
+                  deleteRecord('job_assets', ja.id);
+                  addToSyncQueue('job_assets', ja.id, SyncOperation.Delete, { id: ja.id });
+                }
+              }
+
+              // 3. Soft-delete the asset by setting status = decommissioned
               const payload = { status: AssetStatus.Decommissioned };
               updateRecord('assets', assetToDelete.id, payload);
               addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
-              
+
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Toast.show({ type: 'success', text1: 'Asset deleted' });
-              
+
               if (jobId) store.loadAssetsForInspection(jobId);
             } catch (err) {
               console.error('Failed to delete asset:', err);

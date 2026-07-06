@@ -183,10 +183,15 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         isExistingRecord = Boolean(existing);
       }
 
+      // FIX: inject company_id for RLS on job_assets INSERT/UPDATE.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const userId = useAuthStore.getState().user?.id ?? '';
+
       const jobAssetPayload: Record<string, string | number | null> = {
         id: jobAssetId,
         job_id: currentJobId,
         asset_id: assetId,
+        company_id: companyId,
         result: result ?? null,
         checklist_data: checklistData ?? null,
         is_compliant: isCompliant ? 1 : 0,
@@ -221,7 +226,6 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       //                       photo_upload task so it never reaches Supabase.
       //   • Kept photos     → leave as-is (preserve upload state).
       //   • New photos      → insert into SQLite and queue for upload.
-      const userId = useAuthStore.getState().user?.id ?? '';
       let savedPhotoUris: string[] = []; // newly-inserted URIs (for defect back-fill)
 
       if (photos !== undefined) {
@@ -333,6 +337,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             job_id: currentJobId,
             asset_id: assetId,
             property_id: asset.property_id,
+            company_id: companyId,
             description: defectReason,
             severity: resolvedSeverity,
             status: DefectStatus.Open,

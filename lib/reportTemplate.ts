@@ -71,6 +71,8 @@ export interface ReportData {
   photos: InspectionPhoto[];
   timeLogs: TimeLog[];
   techName: string;
+  /** Full technician User record — used for FPAS/licence fields on the cover page (AS1851) */
+  tech?: any;
   reportId: string;
   approvedQuote?: Quote;
   quoteItems?: QuoteItem[];
@@ -148,6 +150,10 @@ function isSafe(src: string | null | undefined): src is string {
  * that ISN'T the shared FALLBACK_IMG sentinel. Use this (instead of isSafe)
  * anywhere you're about to render an <img> the reader expects to actually see
  * a photo in. Failed photos are handled separately via placeholderHtml().
+ *
+ * Special case: a data: URI that is NOT FALLBACK_IMG is always real — even
+ * if it wasn't re-encoded through ImageManipulator (e.g. canvas signatures that
+ * are embedded directly to avoid the re-encode failure path).
  */
 function isRealPhoto(src: string | null | undefined): src is string {
   return isSafe(src) && src !== FALLBACK_IMG;
@@ -594,7 +600,7 @@ function logoHtml(reportNum: string, company: any, reportLabel = 'Service Report
 // ─── Page 1 — Cover / Summary ──────────────────────────────────────────────────
 
 function buildPage1(data: ReportData): string {
-  const { job, assets, defects, techName, reportId } = data;
+  const { job, assets, defects, techName, reportId, tech } = data;
   const j = job as any;
 
   const propName    = j.property_name ?? '—';
@@ -604,6 +610,11 @@ function buildPage1(data: ReportData): string {
   const perfDate    = fmtDateShort(j.updated_at ?? job.scheduled_date);
   const jobType     = fmtJobType(job.job_type);
   const refNum      = shortId(job.id, 6);
+
+  // FPAS / licence fields for AS1851 cover page
+  const fpasNum     = tech?.fpas_number     ?? '—';
+  const fpasClass   = tech?.fpas_class      ?? '—';
+  const stateLic    = tech?.state_license   ?? '—';
 
   let timeStr = '';
   if (data.timeLogs && data.timeLogs.length > 0) {
@@ -680,8 +691,28 @@ function buildPage1(data: ReportData): string {
       </div>
     </div>
 
+    <div class="sec-bar">Inspector Accreditation</div>
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="info-label">Inspector Name</div>
+        <div class="info-val">${techName}</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-label">FPAS Accreditation No.</div>
+        <div class="info-val">${fpasNum}</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-label">FPAS Class</div>
+        <div class="info-val">${fpasClass}</div>
+      </div>
+      <div class="info-cell accent">
+        <div class="info-label">State Licence No.</div>
+        <div class="info-val">${stateLic}</div>
+      </div>
+    </div>
+
     ${siteNote ? `
-    <div class="sec-bar" style="background:#F1F5F9; color:#1C3048; border-left-color:#E97316;">📝 Site Note</div>
+    <div class="sec-bar" style="background:#F1F5F9; color:#1C3048; border-left-color:#E97316;">Site Note</div>
     <div class="scope-wrap" style="background:#F8FAFC; border:1px solid #E2E8F0; border-top:none; border-radius:0 0 6px 6px">
       <p style="font-size:11px; color:#475569; line-height:1.7">${siteNote}</p>
     </div>` : ''}
@@ -743,6 +774,8 @@ function buildPage1(data: ReportData): string {
     </div>
   </div>`;
 }
+
+
 
 // ─── Photo helpers ─────────────────────────────────────────────────────────────
 
@@ -922,28 +955,40 @@ function buildAssetRow(
   const loc     = asset.location_on_site ?? '';
   const notes   = asset.inspection_notes || asset.technician_notes;
 
+  // AS1851: show install date and next service date on every asset row
+  const installDate  = fmtDateShort(asset.install_date);
+  const nextSvcDate  = asset.next_service_date
+    ? fmtDateShort(asset.next_service_date)
+    : asset.actioned_at
+      ? fmtDateShort(new Date(new Date(asset.actioned_at).setFullYear(new Date(asset.actioned_at).getFullYear() + 1)).toISOString())
+      : '—';
+
   const linkedDefect = defects.find(d => d.asset_id === asset.id);
-  // ALL photos linked to this asset (no defect link) — pass thumbnails AND fail asset shots
   const assetPhotos  = photos.filter(p => p.asset_id === asset.id && !p.defect_id);
-  // Photos linked to the specific defect record
   const defectPhotos = linkedDefect ? photos.filter(p => p.defect_id === linkedDefect.id) : [];
 
-  // Pass rows: show up to 3 small thumbnails
   const thumbsHtml = isPass && assetPhotos.length > 0
     ? `<div class="thumb-grid">${assetPhotos.slice(0, 3).map(p => thumbHtml(p)).join('')}</div>`
     : '';
 
-  // Fail rows: pass ALL asset photos to buildDefectBox — not just the first one
   const defectHtml = isFail
     ? buildDefectBox(asset, linkedDefect, defectPhotos, assetPhotos)
+    : '';
+
+  const serialLine = asset.serial_number
+    ? `<span style="font-size:9px;color:#94A3B8;font-family:monospace;margin-left:8px">S/N: ${asset.serial_number}</span>`
     : '';
 
   return `
   <div class="a-wrap">
     <div class="a-row ${isFail ? 'fail-row' : ''} nb">
       <div class="a-left">
-        <span class="a-ref">${ref} - ${typeLbl}</span>${loc ? `<span class="a-loc">${loc}</span>` : ''}
+        <span class="a-ref">${ref} - ${typeLbl}</span>${loc ? `<span class="a-loc">${loc}</span>` : ''}${serialLine}
         ${notes ? `<div class="a-notes">${notes}</div>` : ''}
+        <div style="display:flex;gap:14px;margin-top:4px">
+          <span style="font-size:9px;color:#94A3B8"><span style="font-weight:700;color:#64748B">Installed:</span> ${installDate}</span>
+          <span style="font-size:9px;color:#94A3B8"><span style="font-weight:700;color:#64748B">Next Service:</span> ${nextSvcDate}</span>
+        </div>
       </div>
       <div class="a-right">
         <span class="pill ${pillCls}">${pillLbl}</span>
@@ -961,6 +1006,30 @@ function buildMaintPage(data: ReportData): string {
 
   const sigHtml = buildSig(signature, techName);
 
+  // AS1851: compliance declaration block
+  const passCount = assets.filter(a => a.result === 'pass').length;
+  const failCount = assets.filter(a => a.result === 'fail').length;
+  const ntCount   = assets.filter(a => a.result === 'not_tested' || (!a.result)).length;
+  const totalCount = assets.length;
+  const overallCompliant = failCount === 0 && totalCount > 0;
+  const declarationHtml = `
+  <div class="nb" style="margin-top:18px;border:1.5px solid ${overallCompliant ? '#6EE7B7' : '#FCA5A5'};border-radius:6px;overflow:hidden">
+    <div style="background:${overallCompliant ? '#D1FAE5' : '#FEE2E2'};padding:10px 14px;border-bottom:1px solid ${overallCompliant ? '#6EE7B7' : '#FCA5A5'};display:flex;align-items:center;gap:10px">
+      <div style="width:18px;height:18px;border-radius:50%;background:${overallCompliant ? '#059669' : '#DC2626'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <span style="color:#fff;font-size:11px;font-weight:900">${overallCompliant ? '\u2713' : '!'}</span>
+      </div>
+      <div style="font-size:10px;font-weight:800;color:${overallCompliant ? '#065F46' : '#991B1B'};text-transform:uppercase;letter-spacing:0.8px">
+        ${overallCompliant ? 'Inspection Outcome: Compliant' : 'Inspection Outcome: Defects Found'}
+      </div>
+    </div>
+    <div style="padding:10px 14px;background:#FAFBFD;font-size:10.5px;color:#475569;line-height:1.7">
+      All inspection activities were conducted in accordance with <strong>AS1851-2012</strong>.
+      <strong>${passCount}</strong> of <strong>${totalCount}</strong> asset(s) passed inspection.
+      ${failCount > 0 ? `<strong style="color:#DC2626">${failCount}</strong> defect(s) require remediation action.` : ''}
+      ${ntCount > 0 ? `<strong>${ntCount}</strong> asset(s) were not tested.` : ''}
+    </div>
+  </div>`;
+
   if (assets.length === 0) {
     return `
     <div class="section">
@@ -969,6 +1038,7 @@ function buildMaintPage(data: ReportData): string {
       <div style="padding:18px 14px;color:#94A3B8;font-size:11px;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px">
         No maintenance records for this job.
       </div>
+      ${declarationHtml}
       ${sigHtml}
     </div>`;
   }
@@ -999,15 +1069,24 @@ function buildMaintPage(data: ReportData): string {
     ${logoHtml(`R-${shortId(reportId, 5)}`, data.company)}
     <div class="sec-bar first">Asset Maintenance Log</div>
     ${body}
+    ${declarationHtml}
     ${sigHtml}
   </div>`;
 }
 
 function buildSig(signature: Signature | null, techName: string): string {
+  // FIX: A data: URI that is NOT FALLBACK_IMG is always a real signature image —
+  // even when it was embedded directly from the canvas without re-encoding.
+  // The previous check relied on isRealPhoto() which is correct, but only if the
+  // URI is not 'UNAVAILABLE' (which means the client was not present).
+  const isClientUnavailable = signature?.signature_url === 'UNAVAILABLE';
+
   // Client signature
-  const clientSigHtml = signature?.signature_url && isRealPhoto(signature.signature_url)
+  const clientSigHtml = !isClientUnavailable && signature?.signature_url && isRealPhoto(signature.signature_url)
     ? `<img src="${signature.signature_url}" class="sig-img" alt="Client Signature" onerror="this.style.display='none'"/>`
-    : `<span class="sig-empty">${signature?.signature_url ? 'Signature failed to load' : signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
+    : isClientUnavailable
+    ? `<span class="sig-empty" style="font-size:10px;color:#D97706;font-weight:700">Client unavailable to sign</span>`
+    : `<span class="sig-empty">${signature?.signed_by_name ? 'Signature not captured' : 'Not captured'}</span>`;
 
   // Technician signature — real captured PNG preferred (AS1851); falls back to typed name
   const techSigHtml = signature?.tech_signature_url && isRealPhoto(signature.tech_signature_url)

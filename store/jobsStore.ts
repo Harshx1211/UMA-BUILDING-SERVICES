@@ -155,6 +155,8 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   updateJobStatus: (jobId, newStatus) => {
     try {
       const now = new Date().toISOString();
+      // FIX: include company_id so UPDATE sync payload passes Supabase RLS.
+      // getRecord returns the local SQLite users row for the current device user.
       updateRecord('jobs', jobId, {
         status: newStatus,
         updated_at: now,

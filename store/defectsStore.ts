@@ -85,6 +85,9 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       
       const { photos, ...defectWithoutPhotos } = defectData;
 
+      // FIX: inject company_id so the sync-queue INSERT satisfies Supabase RLS.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+
       const payload: Defect = {
         ...defectWithoutPhotos,
         photos: photos || [], // keep for memory
@@ -95,6 +98,7 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       const dbPayload = {
         ...payload,
+        company_id: companyId,
         photos: JSON.stringify(photos || []), // save actual photos to SQLite
         defect_code: payload.defect_code ?? null,
         quote_price: payload.quote_price ?? null,
@@ -142,11 +146,14 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       set({ isSaving: true, error: null });
 
       // If photos array is updated, serialise before writing to SQLite
+      // BUG-N10 FIX: inject company_id so UPDATE payload passes Supabase RLS on cold-start.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
       const dbUpdates: Record<string, string | number | boolean | null> = {
         ...(updates as Record<string, string | number | boolean | null>),
         ...(updates.photos !== undefined
           ? { photos: JSON.stringify(updates.photos) }
           : {}),
+        company_id: companyId,
       };
 
       updateRecord('defects', defectId, dbUpdates);
@@ -166,7 +173,8 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
   updateDefectStatus: (defectId, status) => {
     try {
-      const dbUpdates = { status, updated_at: new Date().toISOString() };
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const dbUpdates = { status, updated_at: new Date().toISOString(), company_id: companyId };
       updateRecord('defects', defectId, dbUpdates);
       addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
 
