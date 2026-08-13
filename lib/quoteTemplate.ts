@@ -1,4 +1,5 @@
 import type { JoinedJob, Defect } from '@/types';
+import { sanitizeForHtml, MAX_LENGTHS } from '@/utils/sanitize';
 
 export interface QuoteReportData {
   job: JoinedJob;
@@ -144,9 +145,9 @@ function logoHtml(reportNum: string, company: Record<string, string | null | und
 export function generateQuoteHtml(data: QuoteReportData): string {
   const { job, defects, total_amount, reportId } = data;
   
-  const propName    = job.property_name    ?? '—';
-  const address     = [job.property_address, job.property_suburb, job.property_state, job.property_postcode].filter(Boolean).join(', ');
-  const siteContact = job.site_contact_name ?? 'Not provided';
+  const propName    = sanitizeForHtml(job.property_name    ?? '—', MAX_LENGTHS.name);
+  const address     = sanitizeForHtml([job.property_address, job.property_suburb, job.property_state, job.property_postcode].filter(Boolean).join(', '), MAX_LENGTHS.address);
+  const siteContact = sanitizeForHtml(job.site_contact_name ?? 'Not provided', MAX_LENGTHS.name);
   const refNum      = shortId(job.id, 6);
   const dateStr     = fmtDateShort(new Date().toISOString());
 
@@ -159,7 +160,7 @@ export function generateQuoteHtml(data: QuoteReportData): string {
     const rows = items.map(d => `
       <div class="t-row">
         <div class="c-id">${shortId(d.id, 5)}</div>
-        <div class="c-desc">${d.description || 'Defect remediation'}</div>
+        <div class="c-desc">${sanitizeForHtml(d.description || 'Defect remediation', MAX_LENGTHS.notes)}</div>
         <div class="c-price">${fmtCurrency(d.quote_price || 0)}</div>
       </div>
     `).join('');

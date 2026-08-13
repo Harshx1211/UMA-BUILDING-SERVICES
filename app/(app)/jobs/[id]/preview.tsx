@@ -127,7 +127,9 @@ export default function PreviewScreen() {
       });
 
       if (!isMountedRef.current) return;
-      const fileUri = `${FileSystem.cacheDirectory}preview_${jobId}_${Date.now()}.html`;
+      // FIX: stable path (no timestamp) — overwrites the previous HTML file
+      // instead of accumulating a new one per generation in cacheDirectory.
+      const fileUri = `${FileSystem.cacheDirectory}preview_${jobId}.html`;
       await FileSystem.writeAsStringAsync(fileUri, result.html);
       setHtmlContent(fileUri);
       setPdfUri(result.pdfUri);

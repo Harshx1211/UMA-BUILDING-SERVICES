@@ -286,8 +286,12 @@ export default function ReportSummaryScreen() {
   const failPct     = totalAssets > 0 ? (failedCount / totalAssets) * 100 : 0;
   const ntPct       = totalAssets > 0 ? (ntCount / totalAssets) * 100 : 0;
 
-  // Has everything needed to generate?
-  const isFullyInspected = (passedCount + failedCount) === totalAssets && totalAssets > 0;
+  // FIX: After Phase 2 auto-marking, 'not_tested' IS a valid final state.
+  // Previously only pass+fail counted toward completion, meaning a job with
+  // any NT assets was never considered "fully inspected" even though the
+  // tech had reviewed every asset (some just couldn't be tested).
+  // Correct check: every asset has a non-null result.
+  const isFullyInspected = assets.length > 0 && assets.every(a => a.result !== null);
   const hasSignature     = !!signature?.signature_url;
   const readyToGenerate  = isFullyInspected && hasSignature;
   const isCompleted      = job.status === 'completed';
@@ -324,7 +328,7 @@ export default function ReportSummaryScreen() {
                 </View>
                 <View style={[s.heroBadge, { backgroundColor: C.backgroundTertiary }]}>
                   <Text style={[s.heroBadgeTxt, { color: C.textSecondary }]}>
-                    {isCompleted ? 'COMPLETED' : isFullyInspected ? 'READY TO SUBMIT' : 'IN PROGRESS'}
+                    {isCompleted ? 'COMPLETED' : readyToGenerate ? 'READY TO GENERATE' : isFullyInspected ? 'AWAITING SIGNATURE' : 'IN PROGRESS'}
                   </Text>
                 </View>
               </View>

@@ -37,6 +37,7 @@ import { formatAssetType } from "@/utils/assetHelpers";
 // isSafe() here treated it as "safe" and rendered it as an invisible 1x1
 // transparent image — leaving a blank bordered box with no explanation.
 import { FALLBACK_IMG } from "./pdfConstants";
+import { sanitizeForHtml, MAX_LENGTHS } from "@/utils/sanitize";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -635,7 +636,7 @@ p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
 
 function logoHtml(
   reportNum: string,
-  company: any,
+  company: Record<string, string | null | undefined>,
   reportLabel = "Service Report",
 ): string {
   const name = company?.name || "Company Name";
@@ -660,7 +661,7 @@ function logoHtml(
 /** Compact running header for pages 2+ (maintenance / quote sections).
  *  Shows company name + report ref top-right only — no full brand bar repeat.
  */
-function compactHeaderHtml(reportNum: string, company: any): string {
+function compactHeaderHtml(reportNum: string, company: Record<string, string | null | undefined>): string {
   const name = company?.name || 'Company Name';
   return `
   <div style="display:flex;justify-content:flex-end;align-items:center;padding-bottom:10px;border-bottom:1px solid #E2E8F0;margin-bottom:16px">
@@ -676,16 +677,13 @@ function compactHeaderHtml(reportNum: string, company: any): string {
 function buildPage1(data: ReportData): string {
   const { job, assets, defects, techName, reportId, tech } = data;
 
-  const propName = job.property_name ?? "—";
-  const address = [
-    job.property_address,
-    job.property_suburb,
-    job.property_state,
-    job.property_postcode,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const siteContact = job.site_contact_name ?? "Not provided";
+  const propName    = sanitizeForHtml(job.property_name ?? '—', MAX_LENGTHS.name);
+  const address     = sanitizeForHtml(
+    [job.property_address, job.property_suburb, job.property_state, job.property_postcode]
+      .filter(Boolean).join(', '),
+    MAX_LENGTHS.address,
+  );
+  const siteContact = sanitizeForHtml(job.site_contact_name ?? 'Not provided', MAX_LENGTHS.name);
   const siteNote = job.site_note ?? null;
   // Date of Service: updated_at is set when the job status changes to 'completed'.
   // This is the most accurate proxy for the actual service date since there's no
@@ -694,10 +692,12 @@ function buildPage1(data: ReportData): string {
   const jobType = fmtJobType(job.job_type);
   const refNum = shortId(job.id, 6);
 
-  // FPAS / licence fields for AS1851 cover page
-  const fpasNum = tech?.fpas_number ?? "—";
-  const fpasClass = tech?.fpas_class ?? "—";
-  const stateLic = tech?.state_license ?? "—";
+  // FPAS / licence fields for AS1851 cover page — sanitized for HTML injection
+  const fpasNum   = sanitizeForHtml(tech?.fpas_number  ?? '—', MAX_LENGTHS.reference);
+  const fpasClass = sanitizeForHtml(tech?.fpas_class   ?? '—', MAX_LENGTHS.shortText);
+  const stateLic  = sanitizeForHtml(tech?.state_license ?? '—', MAX_LENGTHS.reference);
+  // techName comes from users.full_name (trusted internal data, but sanitize for HTML)
+  const safeTechName = sanitizeForHtml(techName, MAX_LENGTHS.name);
 
   let timeStr = "";
   if (data.timeLogs && data.timeLogs.length > 0) {
@@ -803,7 +803,7 @@ function buildPage1(data: ReportData): string {
     <div class="info-grid">
       <div class="info-cell">
         <div class="info-label">Inspector Name</div>
-        <div class="info-val">${techName}</div>
+        <div class="info-val">${safeTechName}</div>
       </div>
       <div class="info-cell">
         <div class="info-label">FPAS Accreditation No.</div>
@@ -824,7 +824,7 @@ function buildPage1(data: ReportData): string {
         ? `
     <div class="sec-bar" style="background:#F1F5F9; color:#1C3048; border-left-color:#E97316;">Site Note</div>
     <div class="scope-wrap" style="background:#F8FAFC; border:1px solid #E2E8F0; border-top:none; border-radius:0 0 6px 6px">
-      <p style="font-size:11px; color:#475569; line-height:1.7">${siteNote}</p>
+      <p style="font-size:11px; color:#475569; line-height:1.7">${siteNote.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
     </div>`
         : ""
     }
@@ -877,7 +877,7 @@ function buildPage1(data: ReportData): string {
 
     <div class="prepby">
       <span class="prepby-lbl">Report prepared by:</span>
-      <span class="prepby-name">${techName}</span>
+      <span class="prepby-name">${safeTechName}</span>
     </div>
   </div>`;
 }
@@ -1096,10 +1096,10 @@ function buildAssetRow(
   const pillCls = isPass ? "pass" : isFail ? "fail" : "nt";
   const pillLbl = isPass ? "PASS" : isFail ? "FAIL" : "N/T";
 
-  const ref = assetRefCode(asset, index);
-  const typeLbl = formatAssetType(asset.asset_type);
-  const loc = asset.location_on_site ?? "";
-  const notes = asset.inspection_notes || asset.technician_notes;
+  const ref     = sanitizeForHtml(assetRefCode(asset, index), MAX_LENGTHS.reference);
+  const typeLbl = sanitizeForHtml(formatAssetType(asset.asset_type), MAX_LENGTHS.shortText);
+  const loc     = sanitizeForHtml(asset.location_on_site ?? '', MAX_LENGTHS.shortText);
+  const notes   = sanitizeForHtml(asset.inspection_notes || asset.technician_notes || '', MAX_LENGTHS.notes);
 
   // AS1851: show install date and next service date on every asset row
   const installDate = fmtDateShort(asset.install_date);
@@ -1139,8 +1139,8 @@ function buildAssetRow(
     : "";
 
   const serialLine = asset.serial_number
-    ? `<span style="font-size:9px;color:#94A3B8;font-family:monospace;margin-left:8px">S/N: ${asset.serial_number}</span>`
-    : "";
+    ? `<span style="font-size:9px;color:#94A3B8;font-family:monospace;margin-left:8px">S/N: ${sanitizeForHtml(asset.serial_number, MAX_LENGTHS.reference)}</span>`
+    : '';
 
   return `
   <div class="a-wrap">
@@ -1295,9 +1295,9 @@ function buildSig(signature: Signature | null, techName: string): string {
   const techSigHtml =
     signature?.tech_signature_url && isRealPhoto(signature.tech_signature_url)
       ? `<img src="${signature.tech_signature_url}" class="sig-img" alt="Inspector Signature" onerror="this.style.display='none'"/>`
-      : `<span class="sig-typed">${techName}</span>`;
+      : `<span class="sig-typed">${sanitizeForHtml(techName, MAX_LENGTHS.name)}</span>`;
 
-  const signerName = signature?.signed_by_name ?? "";
+  const signerName = sanitizeForHtml(signature?.signed_by_name ?? '', MAX_LENGTHS.name);
 
   return `
   <div class="sig-section nb">
@@ -1322,7 +1322,7 @@ function buildQuotePage(
   items: QuoteItem[],
   inventory: InventoryItem[],
   reportId: string,
-  company: any,
+  company: Record<string, string | null | undefined>,
 ): string {
   if (!items.length) return "";
 
@@ -1344,9 +1344,13 @@ function buildQuotePage(
     })
     .join("");
 
+  // FIX: quote.total_amount is the subtotal (ex-GST) — gst = total * 0.10.
+  // Previously used total / 11 which is the formula for EXTRACTING GST from
+  // a GST-inclusive amount — wrong here. Compare with quoteTemplate.ts ln173.
   const total = parseFloat(String(quote.total_amount)) || 0;
-  const gst = total / 11;
-  const exGst = total - gst;
+  const gst    = total * 0.10;
+  const exGst  = total;
+  const grandTotal = total + gst;
 
   return `
   <div class="section">
@@ -1371,7 +1375,7 @@ function buildQuotePage(
       </div>
       <div class="grand-row">
         <div class="grand-lbl">Total Approved Estimate (inc. GST):</div>
-        <div class="grand-val">${fmtCurrency(total)}</div>
+        <div class="grand-val">${fmtCurrency(grandTotal)}</div>
       </div>
     </div>
   </div>`;

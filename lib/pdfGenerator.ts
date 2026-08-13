@@ -111,9 +111,8 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 // Minify HTML removed: the regex replacement was aggressively stripping spaces
 // and corrupting the base64 data URIs and CSS blocks, causing 200x zoom and broken images.
-function minifyHtml(html: string): string {
-  return html;
-}
+// minifyHtml was removed: the regex replacement corrupted base64 data URIs
+// and CSS blocks. expo-print's bridge handles raw HTML fine at this size.
 
 function hashCode(str: string): string {
   let hash = 0;
@@ -713,7 +712,7 @@ export async function generateJobReport(
     );
 
     onProgress?.('building_html');
-    const html = minifyHtml(buildReportHtml(data));
+    const html = buildReportHtml(data);
     const htmlHash = hashCode(html);
 
     onProgress?.('generating_pdf');
@@ -743,7 +742,10 @@ export async function generateJobReport(
       return (i.payload ?? '').includes(`"${jobId}"`);
     });
 
-    let pdfUri: string;
+    // FIX: initialize to '' — prevents 'used before assigned' in the slow-path
+    // guard below (line: if (!pdfUri || !reportUrl)). TypeScript narrows correctly
+    // but Hermes runtime would silently treat undefined as falsy without this.
+    let pdfUri = '';
     let reportUrl: string | null = jobRecord.report_url;
 
     // Fast path: If the HTML hasn't changed AND no pending local changes AND we
@@ -755,14 +757,16 @@ export async function generateJobReport(
       // BUG-N9 FIX: Wrap download in try/catch — if offline or URL expired,
       // fall through to full regeneration rather than throwing to the caller.
       try {
-        const destPath = `${FileSystem.cacheDirectory}preview_${jobId}_${Date.now()}.pdf`;
+        // FIX: use a stable (non-timestamped) path so we never accumulate stale
+        // PDF files in cacheDirectory. Each jobId maps to exactly one cached file.
+        const destPath = `${FileSystem.cacheDirectory}preview_${jobId}.pdf`;
         await FileSystem.downloadAsync(reportUrl, destPath);
         pdfUri = destPath;
       } catch (dlErr) {
         console.warn('[UMA BUILDING SERVICES] Cached PDF download failed — regenerating:', dlErr);
         // Fall through to slow path below
         reportUrl = null; // force the slow path
-        pdfUri = ''; // will be overwritten below
+        pdfUri = '';
       }
     }
 
