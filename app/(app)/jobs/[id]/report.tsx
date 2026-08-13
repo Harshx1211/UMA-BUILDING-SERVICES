@@ -406,7 +406,7 @@ export default function ReportSummaryScreen() {
             />
             <StatCard
               icon="minus-circle" iconColor={C.textSecondary} iconBg={C.backgroundTertiary}
-              value={ntCount} label="Pending" valueColor={C.textSecondary}
+              value={ntCount} label="Not Tested" valueColor={C.textSecondary}
               surface={C.surface} border={C.border}
             />
           </View>
@@ -547,7 +547,10 @@ export default function ReportSummaryScreen() {
                 title="Refresh"
                 icon="refresh"
                 variant="secondary"
-                onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+                // FIX: Refresh re-checks local sync state without re-generating PDF.
+                // Previously this was a duplicate of "Open PDF" — both navigated
+                // to /preview, which was confusing and wasted the user's time.
+                onPress={onRefresh}
                 style={{ flex: 1 }}
               />
             </View>
