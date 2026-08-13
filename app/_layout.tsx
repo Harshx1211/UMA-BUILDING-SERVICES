@@ -14,6 +14,7 @@ import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } f
 import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
 import Colors from '@/constants/Colors';
 import * as SplashScreen from 'expo-splash-screen';
+import * as ScreenCapture from 'expo-screen-capture';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -46,11 +47,10 @@ export default function RootLayout() {
   const obscureOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // TODO (PRE-RELEASE): Re-enable screen capture prevention before production build.
-    // Disabled temporarily for UI screenshots and design review only.
-    // ScreenCapture.preventScreenCaptureAsync();
+    // Re-enabled screen capture prevention for production build.
+    ScreenCapture.preventScreenCaptureAsync();
     return () => {
-      // ScreenCapture.allowScreenCaptureAsync();
+      ScreenCapture.allowScreenCaptureAsync();
     };
   }, []);
 
