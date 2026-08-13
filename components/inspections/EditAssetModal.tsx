@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, Platform, Alert,
+  ScrollView, Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,7 +12,6 @@ import { useColors } from '@/hooks/useColors';
 import { updateRecord, addToSyncQueue } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import type { Asset } from '@/types';
-import { useInspectionStore } from '@/store/inspectionStore';
 
 interface EditAssetModalProps {
   visible: boolean;
@@ -24,7 +23,6 @@ interface EditAssetModalProps {
 export default function EditAssetModal({ visible, asset, onClose, onAssetEdited }: EditAssetModalProps) {
   const C = useColors();
   const insets = useSafeAreaInsets();
-  const { loadAssetsForInspection } = useInspectionStore();
 
   const [location, setLocation] = useState('');
   const [assetRef, setAssetRef] = useState('');
@@ -57,8 +55,6 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
     }
 
     setIsSaving(true);
-    const now = new Date().toISOString();
-    
     try {
       const payload = {
         location_on_site: location.trim(),

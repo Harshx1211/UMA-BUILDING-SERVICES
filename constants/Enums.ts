@@ -64,6 +64,7 @@ export enum ComplianceStatus {
 export enum UserRole {
   Technician = 'technician',
   Subcontractor = 'subcontractor',
+  Admin = 'admin',
 }
 
 /** Type of write operation stored in the offline sync queue */

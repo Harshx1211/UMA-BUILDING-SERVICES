@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { upsertRecord, addToSyncQueue } from '@/lib/database';
+import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import type { Asset } from '@/types';
@@ -150,8 +151,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           status:           AssetStatus.Active,
           created_at:       now,
         };
-        upsertRecord('assets', payload as any);
-        addToSyncQueue('assets', id, SyncOperation.Insert, payload as any);
+        upsertRecord('assets', payload as RecordData);
+        addToSyncQueue('assets', id, SyncOperation.Insert, payload as RecordData);
         created.push(payload as unknown as Asset);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

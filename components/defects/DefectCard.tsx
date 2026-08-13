@@ -37,12 +37,12 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
     }
   }, [defect.severity, C]);
 
-  const statusBadge = useMemo(() => {
+  const statusBadge = useMemo((): { text: string; color: string; bg?: string; border: boolean } => {
     switch (defect.status) {
       case DefectStatus.Open:       return { text: 'Open',         color: C.error,   border: true };
       case DefectStatus.Monitoring: return { text: 'Monitoring',   color: C.warning, border: true };
       case DefectStatus.Quoted:     return { text: 'Quoted',       color: C.info,    border: true };
-      case DefectStatus.Repaired:   return { text: '✅ Repaired',  color: C.success, bg: C.successLight || C.success + '20', border: false };
+      case DefectStatus.Repaired:   return { text: '✅ Repaired',  color: C.success, bg: C.successLight ?? C.success + '20', border: false };
       default: return { text: 'Unknown', color: C.text, border: true };
     }
   }, [defect.status, C]);
@@ -77,10 +77,10 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
           )}
           <View style={[
             s.statusBadge,
-            (statusBadge as any).bg && { backgroundColor: (statusBadge as any).bg },
+            statusBadge.bg && { backgroundColor: statusBadge.bg },
             statusBadge.border && { borderWidth: 1, borderColor: statusBadge.color },
           ]}>
-            <Text style={[s.statusText, { color: statusBadge.border ? statusBadge.color : C.successDark || C.success }]}>
+            <Text style={[s.statusText, { color: statusBadge.border ? statusBadge.color : (C.successDark ?? C.success) }]}>
               {statusBadge.text}
             </Text>
           </View>
@@ -101,9 +101,9 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
 
       {/* Price badge */}
       {defect.quote_price != null && (
-        <View style={[s.priceBadge, { backgroundColor: '#10B981' + '12', borderColor: '#10B981' + '30' }]}>
-          <MaterialCommunityIcons name="tag-outline" size={11} color="#10B981" />
-          <Text style={s.priceTxt}>Ref: ${defect.quote_price}</Text>
+        <View style={[s.priceBadge, { backgroundColor: C.success + '12', borderColor: C.success + '30' }]}>
+          <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
+          <Text style={[s.priceTxt, { color: C.success }]}>Ref: ${defect.quote_price}</Text>
         </View>
       )}
 
@@ -182,7 +182,7 @@ const s = StyleSheet.create({
     marginTop: 8, alignSelf: 'flex-start',
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
   },
-  priceTxt: { fontSize: 11, fontWeight: '700', color: '#10B981' },
+  priceTxt: { fontSize: 11, fontWeight: '700' },
 
   photoList: { marginTop: 12 },
   thumbnail: { width: 60, height: 60, borderRadius: 8 },

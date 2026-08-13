@@ -14,16 +14,12 @@ import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 
-
-
 export default function DefectsScreen() {
   const C = useColors();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDefectsStore();
   const [filter, setFilter] = useState<string>('All');
   const sheetRef = useRef<AddDefectSheetRef>(null);
-
-
 
   const [propertyId, setPropertyId] = useState<string>('');
   // F4: Track job status to lock FAB on completed/cancelled jobs
@@ -111,7 +107,7 @@ export default function DefectsScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <DefectCard
-              defect={item as any}
+              defect={item as Defect & { asset_type?: string; location_on_site?: string }}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push(`/jobs/${jobId}/defects/${item.id}` as never);

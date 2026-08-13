@@ -1,49 +1,62 @@
-// Supabase client initialisation — uses AsyncStorage for session persistence across app restarts
+// Supabase client — uses AsyncStorage for session persistence across app restarts
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
-// Add fallbacks to bypass Expo cache issues if .env was just created
-const fallbackUrl = 'https://vnrmgcxmcspdgqcnmmdx.supabase.co';
-const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZucm1nY3htY3NwZGdxY25tbWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTU1NjUsImV4cCI6MjA5MDUzMTU2NX0.1k6VgJQiUrg83_dFKiKkisVeeJ83kZGj87810elmPKc';
+// ── Environment validation ────────────────────────────────────────────────
+// Both vars are required. A missing env var will produce a clear error at
+// startup rather than a silent auth failure or a request to the wrong project.
+const supabaseUrl     = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
 
-const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || fallbackUrl).trim();
-const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || fallbackKey).trim();
-
-if (!process.env.EXPO_PUBLIC_SUPABASE_URL) {
-  console.warn('[UMA BUILDING SERVICES] Using fallback Supabase URL. If this persists, restart Expo with --clear.');
+if (!supabaseUrl) {
+  // Throw in production — this is a fatal misconfiguration.
+  // In dev, give a clear actionable message.
+  const msg = '[SiteTrack] EXPO_PUBLIC_SUPABASE_URL is not set. Check your .env file and restart Expo with --clear.';
+  if (__DEV__) { console.error(msg); } else { throw new Error(msg); }
 }
-if (__DEV__) console.log(`[UMA BUILDING SERVICES] Supabase initialized with URL: ${supabaseUrl}`);
+if (!supabaseAnonKey) {
+  const msg = '[SiteTrack] EXPO_PUBLIC_SUPABASE_ANON_KEY is not set. Check your .env file and restart Expo with --clear.';
+  if (__DEV__) { console.error(msg); } else { throw new Error(msg); }
+}
+
+// ── Client ────────────────────────────────────────────────────────────────
 
 /** Typed Supabase client — import this everywhere you need backend access */
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    storage:            AsyncStorage,
+    autoRefreshToken:   true,
+    persistSession:     true,
     detectSessionInUrl: false,
   },
   global: {
+    // Retry network blips up to 3 times before surfacing the error.
+    // Expo's bundled fetch can briefly fail on wake from background.
     fetch: async (url, options) => {
-      let attempt = 0;
-      while (attempt < 3) {
+      const MAX_ATTEMPTS = 3;
+      const RETRY_DELAY_MS = 500;
+      let lastErr: unknown;
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          if (__DEV__ && attempt > 0) console.log(`[Supabase Fetch] Retry ${attempt} -> ${url}`);
-          const res = await fetch(url, options);
-          return res;
+          if (__DEV__ && attempt > 1) console.log(`[Supabase] Retry ${attempt - 1} → ${url}`);
+          return await fetch(url, options);
         } catch (err) {
-          attempt++;
-          if (attempt >= 3) {
-            console.warn(`[Supabase Fetch] Network error after 3 attempts for ${url}:`, err);
-            throw err;
+          lastErr = err;
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(r => setTimeout(r, RETRY_DELAY_MS * attempt)); // exponential back-off
           }
-          // Wait 500ms before retrying network blips
-          await new Promise(r => setTimeout(r, 500));
         }
       }
-      throw new Error('Unreachable');
-    }
-  }
+
+      console.warn(`[Supabase] Network error after ${MAX_ATTEMPTS} attempts:`, lastErr);
+      throw lastErr;
+    },
+  },
 });
+
+// ── Auth helpers ──────────────────────────────────────────────────────────
 
 /**
  * Returns the currently authenticated user, or null if not signed in.
@@ -51,19 +64,17 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error } = await supabase.auth.getUser();
     if (error) {
+      // 'Auth session missing!' is expected when not logged in — not a real error.
       if (error.message !== 'Auth session missing!') {
-        console.warn('[UMA BUILDING SERVICES] getCurrentUser warning:', error.message);
+        console.warn('[SiteTrack] getCurrentUser warning:', error.message);
       }
       return null;
     }
     return user;
   } catch (err) {
-    console.error('[UMA BUILDING SERVICES] getCurrentUser unexpected error:', err);
+    console.error('[SiteTrack] getCurrentUser unexpected error:', err);
     return null;
   }
 }
@@ -74,6 +85,6 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) {
-    console.error('[UMA BUILDING SERVICES] signOut error:', error.message);
+    console.error('[SiteTrack] signOut error:', error.message);
   }
 }

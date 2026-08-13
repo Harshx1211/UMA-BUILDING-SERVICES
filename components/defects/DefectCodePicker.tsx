@@ -33,6 +33,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+type ColorsType = ReturnType<typeof useColors>;
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 // ─── Props ─────────────────────────────────────────────────────────────────────
 interface DefectCodePickerProps {
   visible: boolean;
@@ -56,10 +59,10 @@ function CategoryPill({
   C,
 }: {
   label: string;
-  icon: string;
+  icon: MCIconName;
   isActive: boolean;
   onPress: () => void;
-  C: any;
+  C: ColorsType;
 }) {
   return (
     <TouchableOpacity
@@ -74,7 +77,7 @@ function CategoryPill({
       activeOpacity={0.75}
     >
       <MaterialCommunityIcons
-        name={icon as any}
+        name={icon as MCIconName}
         size={13}
         color={isActive ? '#FFF' : C.textSecondary}
       />
@@ -95,7 +98,7 @@ const CodeRow = React.memo(function CodeRow({
   item: DefectCode;
   isCustom?: boolean;
   onPress: () => void;
-  C: any;
+  C: ColorsType;
 }) {
   return (
     <TouchableOpacity
@@ -130,8 +133,8 @@ const CodeRow = React.memo(function CodeRow({
 
       {/* Price badge */}
       {item.quote_price !== undefined && (
-        <View style={[s.priceBadge, { backgroundColor: '#10B981' + '18', borderColor: '#10B981' + '40' }]}>
-          <Text style={s.priceBadgeTxt}>${item.quote_price}</Text>
+        <View style={[s.priceBadge, { backgroundColor: C.success + '18', borderColor: C.success + '40' }]}>
+          <Text style={[s.priceBadgeTxt, { color: C.success }]}>${item.quote_price}</Text>
         </View>
       )}
 
@@ -410,7 +413,6 @@ const s = StyleSheet.create({
   priceBadgeTxt: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#10B981',
   },
 
   // Empty state

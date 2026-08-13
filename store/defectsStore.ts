@@ -119,6 +119,7 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
             asset_id: payload.asset_id === 'unlinked' ? null : payload.asset_id,
             defect_id: id,
             photo_url: uri,
+            local_uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : null,
             caption: null,
             uploaded_at: new Date().toISOString(),
             uploaded_by: userId,

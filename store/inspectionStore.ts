@@ -274,11 +274,14 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             asset_id: assetId,
             defect_id: null as string | null,
             photo_url: uri,
+            // FIX: Store the original file:// URI so offline PDF generation can
+            // fall back to the local copy after photo_url is replaced with https://.
+            local_uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : null,
             caption: null,
             uploaded_at: new Date().toISOString(),
             uploaded_by: userId,
           };
-          insertRecord('inspection_photos', photoObj as unknown as Record<string, string | number | boolean | null>);
+          insertRecord('inspection_photos', photoObj as Record<string, string | number | boolean | null>);
           queuePhotoUpload(uri, currentJobId, assetId, photoId, undefined);
         }
       }
@@ -446,6 +449,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       asset_id: assetId,
       defect_id: null,
       photo_url: photoUri,
+      local_uri: (photoUri.startsWith('file://') || photoUri.startsWith('content://')) ? photoUri : null,
       caption: null,
       uploaded_by: userId,
     });
@@ -466,6 +470,15 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
   },
 
   reset: () => {
-    set({ isSaving: false, error: null });
+    // Full reset — clears all fields to prevent stale data from a previous
+    // inspection job from flashing when the user navigates to a new job.
+    set({
+      assets:       [],
+      currentJobId: null,
+      isLoading:    false,
+      isSaving:     false,
+      error:        null,
+      progress:     { inspected: 0, total: 0 },
+    });
   },
 }));

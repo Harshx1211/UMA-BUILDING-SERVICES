@@ -89,9 +89,8 @@ export const JobCard = React.memo(function JobCard({
   const suburb        = [job.property_suburb, job.property_state].filter(Boolean).join(', ');
   const timeLabel     = job.scheduled_time ? parseTime(job.scheduled_time) : null;
 
-  const handleNavigate = (e: { stopPropagation: () => void }) => {
+  const handleNavigate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    e.stopPropagation();
     const addr = [job.property_address, job.property_suburb, job.property_state].filter(Boolean).join(', ');
     Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(addr)}`);
   };
@@ -126,6 +125,7 @@ export const JobCard = React.memo(function JobCard({
       style={[s.card, {
         backgroundColor: C.surface,
         borderColor: C.cardBorder,
+        shadowColor: C.shadow,
       }]}
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
       activeOpacity={0.82}
@@ -169,7 +169,7 @@ export const JobCard = React.memo(function JobCard({
           {showNavigate && (
             <TouchableOpacity
               style={[s.navBtn, { backgroundColor: C.backgroundSecondary, borderColor: C.border, borderWidth: 1 }]}
-              onPress={handleNavigate as never}
+              onPress={handleNavigate}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <MaterialCommunityIcons name="navigation-variant-outline" size={12} color={C.primary} />

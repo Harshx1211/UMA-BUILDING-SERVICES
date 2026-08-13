@@ -22,6 +22,8 @@ import { T } from '@/constants/Colors';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 type Variant = 'primary' | 'secondary' | 'destructive';
 type Size    = 'large' | 'small';
 
@@ -33,7 +35,7 @@ interface ButtonProps {
   loading?: boolean;
   isLoading?: boolean;  // alias for loading
   disabled?: boolean;
-  icon?: React.ReactNode;
+  icon?: MCIconName | React.ReactNode;
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
@@ -109,7 +111,7 @@ export function Button({
         ) : icon ? (
           <View style={styles.iconWrap}>
             {typeof icon === 'string' ? (
-              <MaterialCommunityIcons name={icon as any} size={fontSize + 4} color={v.textColor} />
+              <MaterialCommunityIcons name={icon as MCIconName} size={fontSize + 4} color={v.textColor} />
             ) : (
               icon
             )}

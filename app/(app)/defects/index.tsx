@@ -2,7 +2,7 @@
  * Global Defects Screen — app/(app)/defects/index.tsx
  * Cross-job view of all defects with filtering, status badges, and navigation to detail.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl,
 } from 'react-native';
@@ -46,8 +46,10 @@ const STATUS_COLORS: Record<DefectStatus, string> = {
   [DefectStatus.Repaired]:   T.success,
 };
 
-// ─── Defect Row Card ──────────────────────────────────────
-function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: () => void; C: any }) {
+type ColorsType = ReturnType<typeof useColors>;
+
+// ─── Defect Row Card ─────────────────────────────────────────────────────────────
+function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: () => void; C: ColorsType }) {
   const sevColor = SEVERITY_COLORS[defect.severity as DefectSeverity] ?? C.textSecondary;
   const statusColor = STATUS_COLORS[defect.status as DefectStatus] ?? C.textSecondary;
   const codeInfo = defect.defect_code ? findDefectCode(defect.defect_code) : null;
@@ -108,8 +110,10 @@ function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: ()
   );
 }
 
-// ─── Filter pill ──────────────────────────────────────────
-function FilterPill({ label, isActive, color, onPress, C }: any) {
+// ─── Filter pill ─────────────────────────────────────────────────────────────
+function FilterPill({ label, isActive, color, onPress, C }: {
+  label: string; isActive: boolean; color?: string; onPress: () => void; C: ColorsType;
+}) {
   return (
     <TouchableOpacity
       style={[s.filterPill, {
@@ -142,15 +146,16 @@ export default function GlobalDefectsScreen() {
     return () => offSyncComplete(load);
   }, [load]);
 
-  // Apply filters
-  const filtered = (defects as ExtendedDefect[]).filter(d => {
-    if (severityFilter !== 'all' && d.severity !== severityFilter) return false;
-    if (statusFilter   !== 'all' && d.status   !== statusFilter)   return false;
-    return true;
-  });
+  const filtered = useMemo(() =>
+    (defects as ExtendedDefect[]).filter(d => {
+      if (severityFilter !== 'all' && d.severity !== severityFilter) return false;
+      if (statusFilter   !== 'all' && d.status   !== statusFilter)   return false;
+      return true;
+    })
+  , [defects, severityFilter, statusFilter]);
 
-  const openCount     = defects.filter(d => d.status === DefectStatus.Open).length;
-  const criticalCount = defects.filter(d => d.severity === DefectSeverity.Critical).length;
+  const openCount     = useMemo(() => defects.filter(d => d.status === DefectStatus.Open).length, [defects]);
+  const criticalCount = useMemo(() => defects.filter(d => d.severity === DefectSeverity.Critical).length, [defects]);
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>

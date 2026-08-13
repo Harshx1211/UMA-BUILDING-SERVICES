@@ -4,8 +4,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import Toast from 'react-native-toast-message';
-
-const NAVY = '#0E2141', WHITE = '#FFFFFF', SUCCESS = '#15803D';
+import { useColors } from '@/hooks/useColors';
 
 interface Props {
   visible: boolean;
@@ -15,10 +14,11 @@ interface Props {
 }
 
 export function SignatureModal({ visible, onClose, onSign, clientName }: Props) {
+  const C = useColors();
   const sigRef = useRef<SignatureViewRef>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // The HTML for the webview that SignatureCanvas uses
+  // WebView HTML style — canvas background must be a static string (not RN theme context)
   const webStyle = `
     .m-signature-pad { box-shadow: none; border: 2px solid #E4E8EF; border-radius: 12px; }
     .m-signature-pad--body { background-color: #F8FAFC; border-radius: 10px; }
@@ -37,32 +37,32 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
     }
   };
 
-  const handleClear = () => {
-    sigRef.current?.clearSignature();
-  };
-
-  const handleConfirm = () => {
-    sigRef.current?.readSignature();
-  };
+  const handleClear   = () => sigRef.current?.clearSignature();
+  const handleConfirm = () => sigRef.current?.readSignature();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.overlay}>
-        <View style={s.sheet}>
+      <View style={[s.overlay, { backgroundColor: C.overlay }]}>
+        <View style={[s.sheet, { backgroundColor: C.surface }]}>
           <View style={s.header}>
             <View>
-              <Text style={s.title}>Client Sign-off</Text>
-              <Text style={s.sub}>Please sign to confirm job completion</Text>
+              <Text style={[s.title, { color: C.text }]}>Client Sign-off</Text>
+              <Text style={[s.sub, { color: C.textSecondary }]}>Please sign to confirm job completion</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-              <MaterialCommunityIcons name="close" size={24} color="#8896A8" />
+            <TouchableOpacity
+              onPress={onClose}
+              style={[s.closeBtn, { backgroundColor: C.backgroundTertiary }]}
+            >
+              <MaterialCommunityIcons name="close" size={24} color={C.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {clientName ? (
-            <View style={s.contactBanner}>
-              <MaterialCommunityIcons name="account-tie" size={16} color={NAVY} />
-              <Text style={s.contactTxt}>Signing as: <Text style={{ fontWeight: '700' }}>{clientName}</Text></Text>
+            <View style={[s.contactBanner, { backgroundColor: C.backgroundSecondary }]}>
+              <MaterialCommunityIcons name="account-tie" size={16} color={C.primary} />
+              <Text style={[s.contactTxt, { color: C.text }]}>
+                Signing as: <Text style={{ fontWeight: '700' }}>{clientName}</Text>
+              </Text>
             </View>
           ) : null}
 
@@ -72,16 +72,27 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
               onOK={handleOK}
               webStyle={webStyle}
               backgroundColor="#F8FAFC"
-              penColor={NAVY}
+              penColor={C.primary}
             />
           </View>
 
           <View style={s.actions}>
-            <TouchableOpacity style={s.clearBtn} onPress={handleClear} disabled={isSaving}>
-              <Text style={s.clearTxt}>Clear</Text>
+            <TouchableOpacity
+              style={[s.clearBtn, { backgroundColor: C.backgroundTertiary }]}
+              onPress={handleClear}
+              disabled={isSaving}
+            >
+              <Text style={[s.clearTxt, { color: C.textSecondary }]}>Clear</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.okBtn, isSaving && s.okBtnDisabled]} onPress={handleConfirm} disabled={isSaving}>
-              {isSaving ? <ActivityIndicator color={WHITE} size="small" /> : <Text style={s.okTxt}>Save Signature</Text>}
+            <TouchableOpacity
+              style={[s.okBtn, { backgroundColor: C.success }, isSaving && s.okBtnDisabled]}
+              onPress={handleConfirm}
+              disabled={isSaving}
+            >
+              {isSaving
+                ? <ActivityIndicator color={C.textOnPrimary} size="small" />
+                : <Text style={[s.okTxt, { color: C.textOnPrimary }]}>Save Signature</Text>
+              }
             </TouchableOpacity>
           </View>
         </View>
@@ -91,19 +102,19 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet:   { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 32 },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  sheet:   { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 32 },
   header:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  title:   { fontSize: 20, fontWeight: '800', color: NAVY },
-  sub:     { fontSize: 13, color: '#4B5A6E', marginTop: 2 },
-  closeBtn:{ padding: 4, backgroundColor: '#F1F4F8', borderRadius: 20 },
-  contactBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F1F5F9', padding: 12, borderRadius: 8, marginBottom: 16 },
-  contactTxt: { fontSize: 13, color: NAVY },
+  title:   { fontSize: 20, fontWeight: '800' },
+  sub:     { fontSize: 13, marginTop: 2 },
+  closeBtn:{ padding: 4, borderRadius: 20 },
+  contactBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 8, marginBottom: 16 },
+  contactTxt: { fontSize: 13 },
   canvasWrap: { height: 260, marginBottom: 20 },
   actions: { flexDirection: 'row', gap: 12 },
-  clearBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, backgroundColor: '#F1F4F8', borderRadius: 12 },
-  clearTxt: { fontSize: 15, fontWeight: '700', color: '#4B5A6E' },
-  okBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, backgroundColor: SUCCESS, borderRadius: 12 },
+  clearBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12 },
+  clearTxt: { fontSize: 15, fontWeight: '700' },
+  okBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12 },
   okBtnDisabled: { opacity: 0.7 },
-  okTxt:    { fontSize: 15, fontWeight: '700', color: WHITE },
+  okTxt:    { fontSize: 15, fontWeight: '700' },
 });

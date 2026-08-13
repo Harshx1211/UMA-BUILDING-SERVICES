@@ -7,7 +7,11 @@ import { ASSET_TYPES } from '@/constants/AssetData';
 import { DEFECT_CODES } from '@/constants/DefectCodes';
 import type { AssetTypeDefinition } from '@/constants/AssetData';
 import type { DefectCode, DefectCategory } from '@/constants/DefectCodes';
+import type { ComponentProps } from 'react';
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 interface CatalogueState {
   assetTypes: AssetTypeDefinition[];
@@ -42,7 +46,7 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
             value:             r.value,
             label:             r.label,
             fullLabel:         r.full_label,
-            icon:              r.icon as any,
+            icon:              r.icon as IconName,
             color:             r.color,
             inspectionRoutine: r.inspection_routine,
             variants:          (() => { try { return JSON.parse(r.variants); } catch { return []; } })(),
@@ -57,7 +61,7 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
       }>('SELECT * FROM defect_codes WHERE is_active = 1 ORDER BY sort_order ASC');
 
       if (codes.length > 0) {
-        const codesMap = new Map<string, any>();
+        const codesMap = new Map<string, DefectCode>();
         for (const c of codes) {
           codesMap.set(c.code, {
             code:        c.code,

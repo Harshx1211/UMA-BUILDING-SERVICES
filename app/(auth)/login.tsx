@@ -22,8 +22,12 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { MAX_LENGTHS } from '@/utils/sanitize';
 
-const REMEMBER_ME_KEY = '@uma-building-services/remember_me';
+// CRITICAL FIX: must match the key used in authStore.ts line 13.
+// Previously '@uma-building-services/remember_me' — AsyncStorage reads always
+// returned null so biometrics never activated even when 'Remember me' was ticked.
+const REMEMBER_ME_KEY = '@sitetrack/remember_me';
 
 export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
@@ -84,11 +88,15 @@ export default function LoginScreen() {
   const handleSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     clearError();
+    // Normalise email before validation: trim whitespace and lowercase.
+    // Trailing spaces cause silent auth failures (Supabase treats them as different addresses).
+    const normalisedEmail = email.trim().toLowerCase();
+    setEmail(normalisedEmail);
     if (!validate()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    await signIn(email, password, rememberMe);
+    await signIn(normalisedEmail, password, rememberMe);
   };
 
   const handleBiometric = async () => {
@@ -153,6 +161,8 @@ export default function LoginScreen() {
               placeholder="you@company.com.au"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={MAX_LENGTHS.email}
               error={emailError}
               leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textTertiary} />}
               style={{ marginBottom: 16 }}
@@ -164,6 +174,7 @@ export default function LoginScreen() {
               onChangeText={(t) => { setPassword(t); setPasswordError(''); }}
               placeholder="Enter your password"
               secureTextEntry={!showPassword}
+              maxLength={128}
               error={passwordError}
               leftIcon={<MaterialCommunityIcons name="lock-outline" size={18} color={C.textTertiary} />}
               rightIcon={

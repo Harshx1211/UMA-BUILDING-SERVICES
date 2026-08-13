@@ -18,15 +18,25 @@ const COMPANY_CACHE_KEY  = '@sitetrack/company_profile';
 // Types
 // ---------------------------------------------
 
+// Minimum shape we need from the company row (subscription gate + display).
+// Extra columns from Supabase are permitted through the index signature.
+export interface CompanyRecord {
+  id: string;
+  name: string;
+  subscription_status: string;
+  [key: string]: unknown;
+}
+
 interface AuthState {
   user: User | null;
-  company: any | null;
+  company: CompanyRecord | null;
   session: Session | null;
   isLoading: boolean;
   isForceSyncing: boolean;
   isAuthenticated: boolean;
   error: string | null;
 }
+
 
 interface AuthActions {
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
@@ -94,7 +104,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             (data.user.user_metadata?.full_name as string) ??
             data.user.email?.split('@')[0] ??
             'User',
-          role: 'admin' as unknown as UserRole,
+          role: UserRole.Admin,
           phone: null,
           avatar_url: null,
           is_active: true,
@@ -190,7 +200,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
-        console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
+        if (__DEV__) console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
         const { runSync } = await import('@/lib/sync');
         // Give it up to 5 strong attempts to push data
         for (let i = 0; i < 5; i++) {
@@ -307,7 +317,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           id: su.id,
           email: su.email ?? '',
           full_name: (su.user_metadata?.full_name as string) ?? su.email?.split('@')[0] ?? 'User',
-          role: 'admin' as unknown as UserRole,
+          role: UserRole.Admin,
           phone: null,
           avatar_url: null,
           is_active: true,

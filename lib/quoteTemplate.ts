@@ -1,9 +1,11 @@
+import type { JoinedJob, Defect } from '@/types';
+
 export interface QuoteReportData {
-  job: any; // job with property, assigned_user, etc.
-  defects: any[]; // list of defects with quote_price
+  job: JoinedJob;
+  defects: Defect[];
   total_amount: number;
   reportId: string;
-  company?: any;
+  company?: Record<string, string | null | undefined>;
 }
 
 function fmtDateShort(iso: string | null | undefined): string {
@@ -117,7 +119,7 @@ body {
 .grand-val { font-weight: 900; font-size: 15px; color: #059669; min-width: 80px; text-align: right; }
 `;
 
-function logoHtml(reportNum: string, company: any): string {
+function logoHtml(reportNum: string, company: Record<string, string | null | undefined> | undefined): string {
   const name = company?.name || 'Company Name';
   return `
   <div class="brand-bar" style="border-bottom: 2px solid #E2E8F0; padding-bottom: 16px;">
@@ -142,17 +144,17 @@ function logoHtml(reportNum: string, company: any): string {
 export function generateQuoteHtml(data: QuoteReportData): string {
   const { job, defects, total_amount, reportId } = data;
   
-  const propName = job?.property?.name || '—';
-  const address = [job?.property?.address, job?.property?.suburb, job?.property?.state, job?.property?.postcode].filter(Boolean).join(', ');
-  const siteContact = job?.property?.site_contact_name || 'Not provided';
-  const refNum = shortId(job?.id || 'Q', 6);
-  const dateStr = fmtDateShort(new Date().toISOString());
+  const propName    = job.property_name    ?? '—';
+  const address     = [job.property_address, job.property_suburb, job.property_state, job.property_postcode].filter(Boolean).join(', ');
+  const siteContact = job.site_contact_name ?? 'Not provided';
+  const refNum      = shortId(job.id, 6);
+  const dateStr     = fmtDateShort(new Date().toISOString());
 
   const crit = defects.filter(d => d.severity === 'critical');
   const maj  = defects.filter(d => d.severity === 'major');
   const min  = defects.filter(d => d.severity === 'minor');
 
-  const renderGroup = (title: string, items: any[], cls: string) => {
+  const renderGroup = (title: string, items: Defect[], cls: string) => {
     if (items.length === 0) return '';
     const rows = items.map(d => `
       <div class="t-row">

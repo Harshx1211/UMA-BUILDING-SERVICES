@@ -21,10 +21,12 @@ import {
   updateRecord,
   getRecord,
   incrementSyncRetry,
+  queryRecords,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+
 
 
 /** Max concurrent photo binary uploads per sync cycle */
@@ -120,7 +122,7 @@ export function queuePhotoUpload(
     return;
   }
   const payload = { localUri, jobId, assetId, recordId, defectId };
-  addToSyncQueue('inspection_photos', recordId, 'photo_upload' as any, payload as any);
+  addToSyncQueue('inspection_photos', recordId, 'photo_upload', payload);
 }
 
 // ─── Process the photo upload queue ──────────────────────────
@@ -140,7 +142,7 @@ export function queuePhotoUpload(
 export async function processPhotoQueue(currentUserId: string): Promise<void> {
   try {
     const pending    = getPendingSyncItems();
-    const photoTasks = pending.filter(i => i.operation === ('photo_upload' as any));
+    const photoTasks = pending.filter(i => String(i.operation) === 'photo_upload');
 
     if (photoTasks.length === 0) return;
 
@@ -219,3 +221,101 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
     console.error('[PhotoUpload] processPhotoQueue error:', err);
   }
 }
+
+// ─── Local photo cleanup ──────────────────────────────────────
+
+/** How long to keep local photo files on the device after a job is completed */
+const LOCAL_PHOTO_RETENTION_DAYS = 15;
+
+/**
+ * Deletes local device photo files (local_uri) for jobs that:
+ *   1. Are in 'completed' or 'cancelled' status
+ *   2. Were last updated more than LOCAL_PHOTO_RETENTION_DAYS ago
+ *   3. Have already been successfully uploaded to Supabase (photo_url starts with https://)
+ *
+ * Safety guarantee: We NEVER delete local_uri if photo_url is still a file:// URI,
+ * meaning the upload hasn't completed yet. This ensures we never lose the only copy
+ * of a photo.
+ *
+ * After deletion, local_uri is set to NULL in SQLite so this row is never processed again.
+ *
+ * This is called automatically at the end of each sync cycle so no background
+ * task permission or OS scheduling is required.
+ */
+export async function cleanupLocalPhotos(): Promise<void> {
+  try {
+    const cutoffMs   = LOCAL_PHOTO_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - cutoffMs).toISOString();
+
+    // Find all inspection_photos rows that:
+    //   - Have a local_uri still set (haven't been cleaned up yet)
+    //   - Have an https:// photo_url (upload confirmed successful)
+    const candidates = queryRecords<{
+      id: string;
+      local_uri: string;
+      photo_url: string;
+      job_id: string;
+    }>('inspection_photos', {});
+
+    // Filter in JS — queryRecords uses simple equality matching so we do
+    // the richer checks (LIKE, date compare) manually. The set is small.
+    const uploaded = candidates.filter(
+      r => r.local_uri &&
+           r.photo_url &&
+           r.photo_url.startsWith('https://')
+    );
+
+    if (uploaded.length === 0) return;
+
+    // Get the unique job IDs and check their completion date
+    const jobIds = [...new Set(uploaded.map(r => r.job_id))];
+    const eligibleJobIds = new Set<string>();
+
+    for (const jobId of jobIds) {
+      const job = queryRecords<{ id: string; status: string; updated_at: string }>(
+        'jobs', { id: jobId }
+      )[0];
+      if (!job) continue;
+      // Only clean up photos for completed/cancelled jobs older than the retention window
+      const isEligibleStatus = job.status === 'completed' || job.status === 'cancelled';
+      const isOldEnough      = job.updated_at < cutoffDate;
+      if (isEligibleStatus && isOldEnough) {
+        eligibleJobIds.add(jobId);
+      }
+    }
+
+    if (eligibleJobIds.size === 0) return;
+
+    const toClean = uploaded.filter(r => eligibleJobIds.has(r.job_id));
+    let deletedCount = 0;
+
+    for (const photo of toClean) {
+      try {
+        const localPath = getValidLocalUri(photo.local_uri);
+        const info = await FileSystem.getInfoAsync(localPath);
+        if (info.exists) {
+          await FileSystem.deleteAsync(localPath, { idempotent: true });
+          deletedCount++;
+        }
+      } catch (e) {
+        // File already gone or path invalid — not a problem, just clear the column
+        if (__DEV__) console.warn(`[PhotoCleanup] Could not delete ${photo.local_uri}:`, e);
+      }
+      // Regardless of whether the file existed, clear local_uri so we don't
+      // attempt deletion again on the next sync cycle.
+      updateRecord('inspection_photos', photo.id, { local_uri: null });
+    }
+
+    if (deletedCount > 0 && __DEV__) {
+      console.log(
+        `[PhotoCleanup] Deleted ${deletedCount} local photo file(s) for ${
+          eligibleJobIds.size
+        } completed job(s) older than ${LOCAL_PHOTO_RETENTION_DAYS} days`
+      );
+    }
+  } catch (err) {
+    // Never crash the sync cycle — cleanup is best-effort
+    console.warn('[PhotoCleanup] cleanupLocalPhotos error:', err);
+  }
+}
+

@@ -1,8 +1,9 @@
 // Zustand store — full jobs state: loading, filtering, searching, status updates
 import { create } from 'zustand';
-import { getJobsForTechnician, updateRecord, addToSyncQueue } from '@/lib/database';
+import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord } from '@/lib/database';
 import { JobStatus, SyncOperation } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { useAuthStore } from '@/store/authStore';
 import type { Job } from '@/types';
 
 // ─── Extended type — includes property JOIN columns ───────────
@@ -155,17 +156,18 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   updateJobStatus: (jobId, newStatus) => {
     try {
       const now = new Date().toISOString();
-      // FIX: include company_id so UPDATE sync payload passes Supabase RLS.
-      // getRecord returns the local SQLite users row for the current device user.
-      updateRecord('jobs', jobId, {
-        status: newStatus,
-        updated_at: now,
-      });
-      addToSyncQueue('jobs', jobId, SyncOperation.Update, {
-        status: newStatus,
-        updated_at: now,
-      });
-      // Update local state immediately (optimistic update)
+      // Include company_id so the UPDATE sync payload passes Supabase RLS.
+      // Read from local SQLite users table (never trust the in-memory store alone
+      // since the store could be mid-rehydration on cold start).
+      const userId = useAuthStore.getState().user?.id ?? null;
+      const localUser = userId ? getRecord<{ company_id: string | null }>('users', userId) : null;
+      const companyId = localUser?.company_id ?? useAuthStore.getState().user?.company_id ?? null;
+
+      const update = { status: newStatus, updated_at: now, company_id: companyId };
+      updateRecord('jobs', jobId, update);
+      addToSyncQueue('jobs', jobId, SyncOperation.Update, update);
+
+      // Optimistic UI update — reflects change before the next sync cycle
       set((state) => ({
         jobs: state.jobs.map((j) =>
           j.id === jobId ? { ...j, status: newStatus, updated_at: now } : j

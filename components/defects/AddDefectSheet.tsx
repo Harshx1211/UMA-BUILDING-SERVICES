@@ -17,6 +17,9 @@ import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
 import type { Asset } from '@/types';
+import { T } from '@/constants/Colors';
+
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 /** Maximum photos allowed per defect — prevents memory pressure on older devices */
 const MAX_PHOTOS = 5;
@@ -26,10 +29,10 @@ interface Props { jobId: string; propertyId: string; onSaved: () => void; }
 export interface AddDefectSheetRef { open: () => void; close: () => void; }
 
 // ─── Severity config ──────────────────────────────────────────
-const SEV_CFG = [
-  { value: DefectSeverity.Minor,    label: 'Minor',    icon: 'alert-circle-outline', color: '#2563EB', desc: 'No immediate safety risk' },
-  { value: DefectSeverity.Major,    label: 'Major',    icon: 'alert',                color: '#EA580C', desc: 'Needs attention soon' },
-  { value: DefectSeverity.Critical, label: 'Critical', icon: 'alert-octagon',        color: '#DC2626', desc: 'Immediate safety risk' },
+const SEV_CFG: { value: DefectSeverity; label: string; icon: MCIconName; color: string; desc: string }[] = [
+  { value: DefectSeverity.Minor,    label: 'Minor',    icon: 'alert-circle-outline', color: T.info,    desc: 'No immediate safety risk' },
+  { value: DefectSeverity.Major,    label: 'Major',    icon: 'alert',                color: T.warning, desc: 'Needs attention soon' },
+  { value: DefectSeverity.Critical, label: 'Critical', icon: 'alert-octagon',        color: T.danger,  desc: 'Immediate safety risk' },
 ];
 
 // ─── Component ────────────────────────────────────────────────
@@ -113,9 +116,11 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
     }
     addDefect({
       job_id: jobId, property_id: propertyId,
-      asset_id: assetId || 'unlinked',
+      // FIX: use null for unlinked defects, not the string 'unlinked'.
+      // 'unlinked' is not a valid UUID and fails Supabase FK constraints on sync.
+      asset_id: assetId || null,
       description, severity,
-      photos: photos as any,
+      photos: photos,
       defect_code: selectedCode?.code ?? null,
       quote_price: selectedCode?.quote_price ?? null,
     });
@@ -143,7 +148,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               activeOpacity={0.8}
             >
               <View style={[s.sevIconWrap, { backgroundColor: active ? cfg.color : C.backgroundTertiary }]}>
-                <MaterialCommunityIcons name={cfg.icon as any} size={22} color={active ? '#FFF' : C.textSecondary} />
+                <MaterialCommunityIcons name={cfg.icon} size={22} color={active ? '#FFF' : C.textSecondary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[s.sevLabel, { color: active ? cfg.color : C.text }]}>{cfg.label}</Text>
@@ -195,7 +200,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               activeOpacity={0.8}
             >
               <View style={[s.assetIconBox, { backgroundColor: active ? C.accent + '20' : C.backgroundTertiary }]}>
-                <MaterialCommunityIcons name={iconName as any} size={20} color={active ? C.accent : C.textSecondary} />
+                <MaterialCommunityIcons name={iconName as MCIconName} size={20} color={active ? C.accent : C.textSecondary} />
               </View>
               <View style={{ flex: 1, gap: 3 }}>
                 <Text style={[s.assetName, { color: active ? C.accent : C.text }]} numberOfLines={1}>

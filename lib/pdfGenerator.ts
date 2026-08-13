@@ -38,9 +38,10 @@ import {
   addToSyncQueue,
   getPendingSyncItems,
 } from '@/lib/database';
-import { SyncOperation } from '@/constants/Enums';
+import { SyncOperation, JobStatus } from '@/constants/Enums';
 import {
   Job,
+  JoinedJob,
   Defect,
   Signature,
   InspectionPhoto,
@@ -48,6 +49,7 @@ import {
   QuoteItem,
   InventoryItem,
   User,
+  TechUser,
 } from '@/types';
 import { buildReportHtml, ReportData, AssetWithResult } from '@/lib/reportTemplate';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -236,19 +238,19 @@ async function toDataUri(
 // ─── Data fetching ─────────────────────────────────────────────────────────────
 
 async function fetchReportData(jobId: string): Promise<ReportData> {
-  const job = getJobById<Job>(jobId);
+  const job = getJobById<JoinedJob>(jobId);
   if (!job) throw new Error(`Report: job "${jobId}" not found`);
 
   const [assets, defects, signature, photos, quotes, timeLogs] = await Promise.all([
-    Promise.resolve(getAssetsWithJobResults<AssetWithResult>(jobId, (job as any).property_id)),
+    Promise.resolve(getAssetsWithJobResults<AssetWithResult>(jobId, job.property_id)),
     Promise.resolve(getDefectsForJob<Defect>(jobId)),
     Promise.resolve(getSignatureForJob<Signature>(jobId)),
     Promise.resolve(getPhotosForJob<InspectionPhoto>(jobId)),
     Promise.resolve(queryRecords<Quote>('quotes', { job_id: jobId })),
-    Promise.resolve(queryRecords<any>('time_logs', { job_id: jobId })),
+    Promise.resolve(queryRecords<Record<string, unknown>>('time_logs', { job_id: jobId })),
   ]);
 
-  const tech     = getRecord<User>('users', (job as any).assigned_to);
+  const tech     = getRecord<TechUser>('users', job.assigned_to);
   const techName = tech?.full_name ?? 'Assigned Technician';
   const reportId = jobId.substring(0, 8).toUpperCase();
 
@@ -312,6 +314,40 @@ function getReferencedPhotoIds(
 
 // ─── Photo processing ──────────────────────────────────────────────────────────
 
+// ─── Local URI resolver ────────────────────────────────────────────────────────
+
+/**
+ * Picks the best URI to encode for a given photo.
+ *
+ * Priority:
+ *   1. local_uri — the original device file:// path, stored at capture time.
+ *      If the file still exists on disk, this is fastest (no download) and
+ *      works fully offline even after the Supabase upload has completed.
+ *   2. photo_url — the https:// Supabase Storage URL. Requires network.
+ *
+ * This resolves the key offline PDF bug:
+ *   Once a photo is uploaded, photo_url becomes https://... and the local
+ *   file:// path is lost — meaning PDF generation fails offline even though
+ *   the binary is sitting on the device.
+ *   Storing local_uri (Migration 29) and preferring it here fixes this.
+ */
+async function resolvePhotoUri(
+  photo: InspectionPhoto | { photo_url: string; local_uri?: string | null },
+): Promise<string> {
+  const localUri = (photo as InspectionPhoto).local_uri;
+  if (localUri) {
+    try {
+      const info = await FileSystem.getInfoAsync(getValidLocalUri(localUri));
+      if (info.exists) return localUri;
+    } catch {
+      // File check failed — fall through to photo_url
+    }
+  }
+  return (photo as InspectionPhoto).photo_url;
+}
+
+
+
 async function processPhotos(
   data: ReportData,
   onProgress?: (detail: string) => void
@@ -321,7 +357,7 @@ async function processPhotos(
   // pending cache: URL → in-flight Promise (prevents duplicate parallel encodes)
   const pending = new Map<string, Promise<string>>();
 
-  const failAssetIds   = new Set(data.assets.filter(a => (a as any).result === 'fail').map(a => a.id));
+  const failAssetIds   = new Set(data.assets.filter(a => a.result === 'fail').map(a => a.id));
   const defectAssetIds = new Set(data.defects.map(d => d.asset_id));
 
   // ── Signature ────────────────────────────────────────────────────────────────
@@ -390,8 +426,8 @@ async function processPhotos(
   }
 
   // ── Encode InspectionPhoto records — parallel batches ────────────────────────
-  // ImageManipulator runs natively and truly concurrently. Batching ENCODE_CONCURRENCY
-  // photos at a time gives a 4-5x speedup over sequential encoding with no quality change.
+  // For each photo, resolvePhotoUri() returns the best local file path when
+  // available — skipping the https:// download entirely (works offline too).
   const encodedPhotos: InspectionPhoto[] = new Array(toEncode.length);
   for (let i = 0; i < toEncode.length; i += ENCODE_CONCURRENCY) {
     const batch = toEncode.slice(i, i + ENCODE_CONCURRENCY);
@@ -399,12 +435,14 @@ async function processPhotos(
     onProgress?.(`Encoding photos ${i + 1}–${batchEnd} of ${toEncode.length}…`);
 
     const results = await Promise.all(
-      batch.map(photo => {
+      batch.map(async photo => {
         const isDefect = !!(photo.defect_id || (photo.asset_id && (defectAssetIds.has(photo.asset_id) || failAssetIds.has(photo.asset_id))));
         const w = isDefect ? DEFECT_W : THUMB_W;
         const q = isDefect ? DEFECT_Q : THUMB_Q;
-        return toDataUri(photo.photo_url, w, q, ImageManipulator.SaveFormat.JPEG, cache, pending)
-          .then(uri => ({ ...photo, photo_url: uri }));
+        // OFFLINE FIX: prefer local_uri (device file) over https:// Supabase URL
+        const bestUri = await resolvePhotoUri(photo);
+        const encoded = await toDataUri(bestUri, w, q, ImageManipulator.SaveFormat.JPEG, cache, pending);
+        return { ...photo, photo_url: encoded };
       })
     );
     results.forEach((r, j) => { encodedPhotos[i + j] = r; });
@@ -488,7 +526,7 @@ function pdfSafeText(s: string | null | undefined): string {
  */
 async function addFooterToPdf(
   pdfUri: string,
-  company: any,
+  company: Record<string, string | null | undefined>,
   _reportId: string,
 ): Promise<string> {
   // Read raw bytes
@@ -679,26 +717,31 @@ export async function generateJobReport(
     const htmlHash = hashCode(html);
 
     onProgress?.('generating_pdf');
-    const jobRecord = rawData.job as any;
-    const propertyName = jobRecord.property_name as string | null;
+    const jobRecord = rawData.job;
+    const propertyName = jobRecord.property_name;
     const title        = `Service Report — ${propertyName ?? data.reportId}`;
 
-    const alreadyCompleted = (jobRecord?.status as string) === 'completed';
+    const alreadyCompleted = jobRecord.status === JobStatus.Completed;
     // BUG-N6 FIX: Cache key must be scoped to user so two technicians sharing
     // a device never get each other's report. useAuthStore is synchronous.
     const userId  = useAuthStore.getState().user?.id ?? 'anon';
     const cacheKey = `@report_hash_${userId}_${jobId}`;
     const lastHash = await AsyncStorage.getItem(cacheKey);
 
-    // BUG-N3 FIX: If there are any unsynced items for this job or its property,
-    // the local data is ahead of what was used to build the last hash.
-    // Force regeneration so new assets/results are always included in the PDF.
+    // BUG-N3 FIX: Only bypass the hash cache for genuine data-change operations.
+    // Exclude photo_upload tasks (photos are encoded from local_uri — binary upload
+    // status does not change the PDF HTML) and permanently-failed items (they will
+    // never succeed so forcing regeneration forever is pointless and slow).
     const pending = getPendingSyncItems();
-    const jobPropertyId = (jobRecord as any).property_id as string | undefined;
-    const hasPendingForThisJob = pending.some(i =>
-      i.payload.includes(`"${jobId}"`) ||
-      (jobPropertyId && i.payload.includes(`"${jobPropertyId}"`)),
-    );
+    const PDF_TABLES = new Set(['job_assets', 'defects', 'signatures', 'jobs']);
+    const PDF_MAX_RETRIES = 5;
+    const hasPendingForThisJob = pending.some(i => {
+      const op = String(i.operation);
+      if (op === 'photo_upload') return false;
+      if ((i.retry_count ?? 0) >= PDF_MAX_RETRIES) return false;
+      if (!PDF_TABLES.has(i.table_name)) return false;
+      return (i.payload ?? '').includes(`"${jobId}"`);
+    });
 
     let pdfUri: string;
     let reportUrl: string | null = jobRecord.report_url;
@@ -723,7 +766,7 @@ export async function generateJobReport(
       }
     }
 
-    if (!pdfUri! || !reportUrl) {
+    if (!pdfUri || !reportUrl) {
       // Slow path: Generate and upload new PDF
       pdfUri = await generatePdf(html);
 

@@ -80,8 +80,8 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
         total_amount: 0,
         created_at: new Date().toISOString(),
       };
-      insertRecord('quotes', payload as unknown as Record<string, string | number | boolean | null>);
-      addToSyncQueue('quotes', id, SyncOperation.Insert, payload as unknown as Record<string, string | number | boolean | null>);
+      insertRecord('quotes', payload as Record<string, string | number | boolean | null>);
+      addToSyncQueue('quotes', id, SyncOperation.Insert, payload as Record<string, string | number | boolean | null>);
       set({ currentQuote: payload, items: [], error: null });
     } catch (err: unknown) {
       console.error('[QuotesStore] createDraftQuote error:', err);
@@ -105,7 +105,8 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
         addToSyncQueue('quote_items', existing.id, SyncOperation.Update, { quantity: newQty });
 
         const newItems = items.map((i) => i.id === existing.id ? { ...i, quantity: newQty } : i);
-        const newTotal = newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+        // Round to 2 decimal places to prevent floating-point accumulation errors
+        const newTotal = Math.round(newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) * 100) / 100;
         const updatedQuote: Quote = { ...currentQuote, total_amount: newTotal };
         updateRecord('quotes', currentQuote.id, { total_amount: newTotal });
         addToSyncQueue('quotes', currentQuote.id, SyncOperation.Update, { total_amount: newTotal });
@@ -127,11 +128,12 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
         unit_price: unitPrice,
       };
 
-      insertRecord('quote_items', payload as unknown as Record<string, string | number | boolean | null>);
-      addToSyncQueue('quote_items', id, SyncOperation.Insert, payload as unknown as Record<string, string | number | boolean | null>);
+      insertRecord('quote_items', payload as Record<string, string | number | boolean | null>);
+      addToSyncQueue('quote_items', id, SyncOperation.Insert, payload as Record<string, string | number | boolean | null>);
 
       const newItems = [...items, payload];
-      const newTotal = newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      // Round to 2 decimal places to prevent floating-point accumulation errors
+      const newTotal = Math.round(newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) * 100) / 100;
 
       const updatedQuote: Quote = { ...currentQuote, total_amount: newTotal };
       updateRecord('quotes', currentQuote.id, { total_amount: newTotal });
@@ -153,7 +155,8 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
       addToSyncQueue('quote_items', itemId, SyncOperation.Delete, { id: itemId });
 
       const newItems = items.filter((i) => i.id !== itemId);
-      const newTotal = newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      // Round to 2 decimal places to prevent floating-point accumulation errors
+      const newTotal = Math.round(newItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) * 100) / 100;
 
       const updatedQuote: Quote = { ...currentQuote, total_amount: newTotal };
       updateRecord('quotes', currentQuote.id, { total_amount: newTotal });
@@ -167,14 +170,15 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
   },
 
   approveQuote: () => {
-    try {
-      const { currentQuote } = get();
-      if (!currentQuote) return;
+    const { currentQuote } = get();
+    if (!currentQuote) return;
+    // Guard: cannot approve a quote that is already approved
+    if (currentQuote.status === QuoteStatus.Approved) return;
 
+    try {
       const updatedQuote: Quote = { ...currentQuote, status: QuoteStatus.Approved };
       updateRecord('quotes', currentQuote.id, { status: QuoteStatus.Approved });
       addToSyncQueue('quotes', currentQuote.id, SyncOperation.Update, { status: QuoteStatus.Approved });
-
       set({ currentQuote: updatedQuote });
     } catch (err: unknown) {
       console.error('[QuotesStore] approveQuote error:', err);

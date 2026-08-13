@@ -1,12 +1,12 @@
 // components/ui/SkeletonCard.tsx
 import React, { useEffect } from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleSheet, View, ViewStyle, DimensionValue } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from './Card';
 
 interface SkeletonBlockProps {
-  width: number | string;
+  width: DimensionValue;
   height: number;
   borderRadius?: number;
   style?: ViewStyle;
@@ -35,7 +35,7 @@ export function SkeletonBlock({ width, height, borderRadius = 8, style }: Skelet
     <Animated.View
       style={[
         {
-          width: width as any,
+          width,
           height,
           borderRadius,
           backgroundColor: C.border,

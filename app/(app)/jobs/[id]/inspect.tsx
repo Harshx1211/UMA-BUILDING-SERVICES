@@ -56,7 +56,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
     catch { return null; }
   }, [asset.checklist_data]);
 
-  const handleSaveChecklist = (data: any, isCompliant: boolean) => {
+  const handleSaveChecklist = (data: Record<string, unknown>, isCompliant: boolean) => {
     setShowChecklist(false);
     if (isCompliant) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -268,12 +268,17 @@ export default function AssetInspectionScreen() {
   const allDone = store.progress.total > 0 && store.progress.inspected === store.progress.total;
   const hasActualResults = store.assets.some(a => a.result === InspectionResult.Pass || a.result === InspectionResult.Fail);
 
-  const counts = useMemo(() => ({
-    passed:    store.assets.filter(a => a.result === InspectionResult.Pass).length,
-    failed:    store.assets.filter(a => a.result === InspectionResult.Fail).length,
-    nt:        store.assets.filter(a => a.result === InspectionResult.NotTested).length,
-    remaining: store.assets.filter(a => a.result === null).length,
-  }), [store.assets]);
+  // Single-pass reduce instead of 4 separate .filter() calls — O(n) vs O(4n)
+  const counts = useMemo(() => {
+    const acc = { passed: 0, failed: 0, nt: 0, remaining: 0 };
+    for (const a of store.assets) {
+      if      (a.result === InspectionResult.Pass)      acc.passed++;
+      else if (a.result === InspectionResult.Fail)      acc.failed++;
+      else if (a.result === InspectionResult.NotTested) acc.nt++;
+      else                                              acc.remaining++;
+    }
+    return acc;
+  }, [store.assets]);
 
   useEffect(() => {
     if (jobId) store.loadAssetsForInspection(jobId);
@@ -282,7 +287,6 @@ export default function AssetInspectionScreen() {
   }, [jobId]);
 
   const filteredAssets = useMemo(() => {
-    if (!store.assets) return [];
     switch (filter) {
       case 'Passed':    return store.assets.filter(a => a.result === InspectionResult.Pass);
       case 'Failed':    return store.assets.filter(a => a.result === InspectionResult.Fail);
@@ -292,19 +296,32 @@ export default function AssetInspectionScreen() {
     }
   }, [store.assets, filter]);
 
+  // Decision #2: mark all uninspected assets as not_tested before completing.
+  // This runs synchronously before navigation — the store's updateAssetResult
+  // writes to SQLite + queues sync for each asset.
+  const markUninspectedAsNotTested = useCallback(() => {
+    for (const asset of store.assets) {
+      if (asset.result === null) {
+        store.updateAssetResult(asset.id, InspectionResult.NotTested);
+      }
+    }
+  }, [store]);
+
   const handleComplete = () => {
     if (!store.isInspectionComplete()) {
       Alert.alert(
         'Incomplete Inspection',
         `${store.progress.total - store.progress.inspected} asset${
           store.progress.total - store.progress.inspected !== 1 ? 's have' : ' has'
-        } not been inspected.\n\nComplete anyway?`,
+        } not been inspected.\n\nUninspected assets will be automatically marked as Not Tested.\n\nComplete anyway?`,
         [
           { text: 'Continue Inspecting', style: 'cancel' },
           {
             text: 'Complete Anyway',
-            style: 'destructive',
-            onPress: () => router.replace(`/jobs/${jobId}/report` as never),
+            onPress: () => {
+              markUninspectedAsNotTested();
+              router.replace(`/jobs/${jobId}/report` as never);
+            },
           },
         ]
       );
@@ -315,8 +332,6 @@ export default function AssetInspectionScreen() {
 
   const handleClone = useCallback((assetToClone: AssetWithResult) => {
     try {
-      
-      
       const newId = generateUUID();
       const now = new Date().toISOString();
       // FIX: Add company_id to the cloned payload so the sync queue INSERT

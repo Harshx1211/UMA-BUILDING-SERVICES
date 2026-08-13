@@ -189,37 +189,16 @@ export default function NotificationsScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  backBtn:    { minHeight: 48, justifyContent: 'center' },
   markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   markAllText:{ fontSize: 12, fontWeight: '700' },
 
   list:      { padding: 16, gap: 12, paddingBottom: 32 },
   listEmpty: { flex: 1, justifyContent: 'center' },
 
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    position: 'relative',
-  },
-  iconWrap: {
-    width: 44, height: 44, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  cardBody:    { flex: 1 },
-  cardTopRow:  { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, gap: 8 },
-  cardTitle:   { fontSize: 14, fontWeight: '700', flex: 1 },
-  cardTime:    { fontSize: 11, flexShrink: 0 },
-  cardMsg:     { fontSize: 13, lineHeight: 19 },
-
   unreadDot: {
     position: 'absolute', top: 12, right: 12,
     width: 8, height: 8, borderRadius: 4,
   },
-
-  emptyWrap:  { alignItems: 'center', paddingHorizontal: 32, paddingVertical: 48, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '700' },
-  emptySub:   { fontSize: 14, textAlign: 'center', lineHeight: 22 },
 
   clearBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

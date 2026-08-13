@@ -15,9 +15,12 @@ import { StatusBadge } from '@/components/jobs/StatusBadge';
 import { JobTypeBadge } from '@/components/jobs/JobTypeBadge';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 
+type ColorsType = ReturnType<typeof useColors>;
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 // ─── Compliance config ──────────────────────────────────────
-const getComplianceConfig = (C: any): Record<ComplianceStatus, {
-  bg: string; border: string; text: string; subtext: string; icon: string; label: string; badge: string;
+const getComplianceConfig = (C: ColorsType): Record<ComplianceStatus, {
+  bg: string; border: string; text: string; subtext: string; icon: MCIconName; label: string; badge: string;
 }> => ({
   [ComplianceStatus.Compliant]:    { bg: C.successLight, border: C.success, text: C.successDark, subtext: C.success, icon: 'check-decagram', label: 'Compliant', badge: C.success },
   [ComplianceStatus.NonCompliant]: { bg: C.errorLight,   border: C.error,   text: C.errorDark,   subtext: C.error,   icon: 'close-circle',  label: 'Non-Compliant', badge: C.errorDark },
@@ -130,8 +133,6 @@ export default function PropertyDetailScreen() {
   const [jobHistory, setJobHistory] = useState<JobHistory[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
 
-
-
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
@@ -201,7 +202,7 @@ export default function PropertyDetailScreen() {
           showBack={true}
           rightComponent={
             <View style={[s.compliancePill, { backgroundColor: compliance.badge + '30', borderColor: compliance.badge, borderWidth: 1 }]}>
-              <MaterialCommunityIcons name={compliance.icon as any} size={12} color={compliance.badge} />
+              <MaterialCommunityIcons name={compliance.icon} size={12} color={compliance.badge} />
               <Text style={[s.compliancePillTxt, { color: compliance.badge }]}>
                 {compliance.label.toUpperCase()}
               </Text>
@@ -213,7 +214,7 @@ export default function PropertyDetailScreen() {
         <Animated.View entering={FadeInDown.delay(40).duration(400)}>
           <View style={[s.complianceBanner, { backgroundColor: compliance.bg, borderColor: compliance.border, marginHorizontal: 16, marginTop: 16 }]}>
             <View style={[s.complianceBannerIcon, { backgroundColor: compliance.border + '25' }]}>
-              <MaterialCommunityIcons name={compliance.icon as any} size={26} color={compliance.text} />
+              <MaterialCommunityIcons name={compliance.icon} size={26} color={compliance.text} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.complianceBannerTitle, { color: compliance.text }]}>

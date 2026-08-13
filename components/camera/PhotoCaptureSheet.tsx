@@ -71,9 +71,9 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
     return 'flash-off';                          // filled with X = clearly OFF
   };
   const getFlashColor = (): string => {
-    if (flash === 'on')   return '#F59E0B';  // amber = active
-    if (flash === 'auto') return '#94A3B8';  // slate = auto/standby
-    return 'rgba(255,255,255,0.4)';           // muted = off
+    if (flash === 'on')   return C.warning;       // amber = active
+    if (flash === 'auto') return C.textTertiary;  // muted = standby
+    return 'rgba(255,255,255,0.4)';               // dim white = off
   };
 
   const takePicture = async () => {
@@ -116,10 +116,10 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           asset_id: assetId === '' ? null : assetId,
           defect_id: null,
           photo_url: destUri,
+          // local_uri preserves the device file path so offline PDF generation
+          // can encode the photo directly without downloading from Supabase.
+          local_uri: destUri,
           caption: caption.trim() || null,
-          // Use null rather than 'unknown' — 'unknown' is not a valid UUID and
-          // would silently fail Supabase FK constraints. The photoUpload H1 guard
-          // prevents queue processing without a valid user.id anyway.
           uploaded_by: currentUserId,
         });
 
@@ -189,6 +189,8 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
             placeholder="e.g. Extinguisher bay B2, Level 3"
             value={caption}
             onChangeText={setCaption}
+            maxLength={120}
+            returnKeyType="done"
           />
 
           <Text style={[s.label, { color: C.textSecondary }]}>Link to Asset (optional)</Text>
@@ -254,7 +256,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
         </View>
 
         <TouchableOpacity style={s.captureBtnInner} onPress={takePicture} activeOpacity={0.7}>
-          <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight || C.accent + '80' }]}>
+          <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight }]}>
              <MaterialCommunityIcons name="camera" size={32} color="#FFF" />
           </View>
         </TouchableOpacity>

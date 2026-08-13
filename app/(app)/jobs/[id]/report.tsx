@@ -226,11 +226,21 @@ export default function ReportSummaryScreen() {
       setSignature(getSignatureForJob(jobId));
 
       const pendingSyncs = getPendingSyncItems();
-      const hasPending = pendingSyncs.some(item => 
-        item.payload.includes(`"${jobId}"`) || 
-        item.payload.includes(`"${j.property_id}"`)
-      );
+      // Only tables whose data appears directly in the PDF HTML trigger the banner.
+      // inspection_photos is intentionally excluded: the PDF encodes photos from
+      // local_uri at generation time, so a pending Supabase INSERT for
+      // inspection_photos does NOT make the PDF stale.
+      const PDF_TABLES = new Set(['job_assets', 'defects', 'signatures', 'jobs']);
+      const MAX_RETRIES = 5;
+      const hasPending = pendingSyncs.some(item => {
+        const op = String(item.operation);
+        if (op === 'photo_upload') return false;            // binary upload task
+        if ((item.retry_count ?? 0) >= MAX_RETRIES) return false; // permanently failed
+        if (!PDF_TABLES.has(item.table_name)) return false; // not PDF-relevant
+        return (item.payload ?? '').includes(`"${jobId}"`);
+      });
       setHasPendingSync(hasPending);
+
     } catch (e) {
       console.error('[ReportSummary] load error:', e);
     } finally {
@@ -339,17 +349,17 @@ export default function ReportSummaryScreen() {
           </Card>
         </Animated.View>
 
-        {/* ── Pending Sync Warning Banner ── */}
+        {/* ── Pending Data Changes Warning Banner ── */}
         {hasPendingSync && (
           <Animated.View entering={FadeInDown.delay(60).duration(340)}>
             <View style={[s.warningBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
               <MaterialCommunityIcons name="cloud-sync-outline" size={24} color={C.warningDark} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: C.warningDark, marginBottom: 2 }}>
-                  Pending Offline Changes
+                  Inspection Data Not Yet in PDF
                 </Text>
                 <Text style={{ fontSize: 12, color: C.warningDark, lineHeight: 16 }}>
-                  You have unsynced local changes. Please regenerate the PDF report to ensure it includes the latest data.
+                  Results or signatures were recorded after the last PDF was generated. Tap Regenerate to update it.
                 </Text>
               </View>
             </View>
@@ -514,37 +524,38 @@ export default function ReportSummaryScreen() {
       {/* ── Bottom Action Bar ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
         {isCompleted && job.report_url ? (
-          <View style={s.bottomBtnRow}>
+          // When inspection data changed since last PDF: hide Download, show Regenerate only
+          hasPendingSync ? (
             <Button
-              title="Download PDF"
-              icon="file-download-outline"
-              variant={hasPendingSync ? "secondary" : "primary"}
-              onPress={() => {
-                if (hasPendingSync) {
-                  Alert.alert(
-                    'Unsynced Changes',
-                    'You have local changes that have not been synced to the PDF yet. Please hit "Regenerate" first.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Regenerate', onPress: () => router.push(`/jobs/${jobId}/preview` as never) }
-                    ]
-                  );
-                } else if (job.report_url) {
-                  Linking.openURL(`${job.report_url}?t=${Date.now()}`);
-                } else {
-                  Alert.alert('Not Available', 'The PDF report is not yet available to download.');
-                }
-              }}
-              style={{ flex: 1 }}
-            />
-            <Button
-              title="Regenerate"
+              title="Regenerate Report"
               icon="refresh"
-              variant={hasPendingSync ? "primary" : "secondary"}
+              variant="primary"
               onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
-              style={{ flex: 1 }}
             />
-          </View>
+          ) : (
+            <View style={s.bottomBtnRow}>
+              <Button
+                title="Download PDF"
+                icon="file-download-outline"
+                variant="primary"
+                onPress={() => {
+                  if (job.report_url) {
+                    Linking.openURL(`${job.report_url}?t=${Date.now()}`);
+                  } else {
+                    Alert.alert('Not Available', 'The PDF report is not yet available.');
+                  }
+                }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Regenerate"
+                icon="refresh"
+                variant="secondary"
+                onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          )
         ) : (
           <Button
             title={readyToGenerate ? "Generate Report PDF" : "Preview Draft Report"}

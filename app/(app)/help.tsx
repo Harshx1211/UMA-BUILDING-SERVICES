@@ -26,9 +26,10 @@ interface AccordionItem {
   title: string;
   content: string;
 }
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ─── Accordion card ─────────────────────────
-function AccordionCard({ item, icon }: { item: AccordionItem; icon: string }) {
+function AccordionCard({ item, icon }: { item: AccordionItem; icon: MCIconName }) {
   const C = useColors();
   const [open, setOpen] = useState(false);
   const animVal = useRef(new Animated.Value(0)).current;
@@ -46,7 +47,7 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: string }) {
     <Card style={{ marginBottom: 12 }} noPadding>
       <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={{ padding: 16 }}>
         <View style={s.accordionHeader}>
-          <MaterialCommunityIcons name={icon as any} size={18} color={C.accent} style={{ width: 28, textAlign: 'center' }} />
+          <MaterialCommunityIcons name={icon} size={18} color={C.accent} style={{ width: 28, textAlign: 'center' }} />
           <Text style={[s.accordionTitle, { color: C.text }]}>{item.title}</Text>
           <MaterialCommunityIcons
             name={open ? 'chevron-up' : 'chevron-down'}
@@ -63,7 +64,12 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: string }) {
 }
 
 // ─── Onboarding walkthrough modal ───────────
-const WALKTHROUGH_STEPS = [
+interface WalkthroughStep {
+  icon: MCIconName;
+  title: string;
+  body: string;
+}
+const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   {
     icon: 'home',
     title: 'Your Dashboard',
@@ -112,7 +118,7 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
             ))}
           </View>
 
-          <MaterialCommunityIcons name={current.icon as any} size={56} color={C.accent} style={{ marginBottom: 4 }} />
+          <MaterialCommunityIcons name={current.icon} size={56} color={C.accent} style={{ marginBottom: 4 }} />
           <Text style={[wt.title, { color: C.text }]}>{current.title}</Text>
           <Text style={[wt.body, { color: C.textSecondary }]}>{current.body}</Text>
 
@@ -152,7 +158,7 @@ const wt = StyleSheet.create({
 });
 
 // ─── Data ────────────────────────────────────
-const HOW_TO: { item: AccordionItem; icon: string }[] = [
+const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
   {
     icon: 'clock-outline',
     item: {
@@ -195,7 +201,7 @@ const HOW_TO: { item: AccordionItem; icon: string }[] = [
   },
 ];
 
-const FAQ_ITEMS: { item: AccordionItem; icon: string }[] = [
+const FAQ_ITEMS: { item: AccordionItem; icon: MCIconName }[] = [
   { icon: 'wifi-off', item: { id: 'faq1', title: 'What if I have no signal on site?', content: 'SiteTrack is built offline-first. Everything saves to your phone instantly — inspections, photos, defects, signatures. When you\'re back in range, the app syncs automatically in the background. You\'ll see a green "All synced" banner when it\'s done.' } },
   { icon: 'camera', item: { id: 'faq2', title: 'Can I add photos after leaving the site?', content: 'Photos taken while offline are queued and uploaded when you reconnect. The orange pending-upload dot on the Photos screen shows what\'s still waiting. Don\'t delete the photos app or clear cache until they\'ve synced.' } },
   { icon: 'alert-circle', item: { id: 'faq3', title: 'What is a defect?', content: 'A defect is any fire safety asset that failed inspection or has an issue needing follow-up. Defects are categorised as Minor, Major, or Critical. They appear in the compliance report and are tracked until repaired.' } },
@@ -211,8 +217,6 @@ export default function HelpScreen() {
   const C = useColors();
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.0';
-
-
 
   const handleFeedback = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

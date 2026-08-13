@@ -14,27 +14,27 @@ export function StatusBadge({ status, small = false }: Props) {
   const C = useColors();
   const CONFIG: Record<JobStatus, { bg: string; text: string; dot: string; label: string }> = {
     [JobStatus.Scheduled]:  {
-      bg: C.infoLight || '#DBEAFE',
-      text: C.infoDark || '#1D4ED8',
-      dot: C.info || '#3B82F6',
+      bg:   C.infoLight,
+      text: C.infoDark,
+      dot:  C.info,
       label: 'Scheduled',
     },
     [JobStatus.InProgress]: {
-      bg: '#FFF3E0',
-      text: '#B45309',
-      dot: '#F59E0B',
+      bg:   C.warningLight,
+      text: C.warningDark,
+      dot:  C.warning,
       label: 'In Progress',
     },
     [JobStatus.Completed]:  {
-      bg: C.successLight || '#DCFCE7',
-      text: C.successDark || '#15803D',
-      dot: C.success || '#22C55E',
+      bg:   C.successLight,
+      text: C.successDark,
+      dot:  C.success,
       label: 'Completed',
     },
     [JobStatus.Cancelled]:  {
-      bg: C.backgroundTertiary || '#F1F5F9',
+      bg:   C.backgroundTertiary,
       text: C.textSecondary,
-      dot: C.textTertiary,
+      dot:  C.textTertiary,
       label: 'Cancelled',
     },
   };

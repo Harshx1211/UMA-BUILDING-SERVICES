@@ -20,6 +20,7 @@ import {
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card } from '@/components/ui';
+import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -69,11 +70,12 @@ const JOB_TYPE_LABEL: Record<JobType, string> = {
 
 // ─── ActionCard mini-component ─────────────────────────────────────────────
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+type ColorsType = ReturnType<typeof useColors>;
 function ActionCard({
   icon, title, subtitle, badge, badgeColor, onPress, C,
 }: {
   icon: MCIconName; title: string; subtitle?: string;
-  badge?: number; badgeColor?: string; onPress: () => void; C: any;
+  badge?: number; badgeColor?: string; onPress: () => void; C: ColorsType;
 }) {
   return (
     <Card
@@ -164,8 +166,12 @@ export default function JobDetailScreen() {
   const handleSaveNotes = useCallback(() => {
     if (!job) return;
     const now = new Date().toISOString();
-    updateRecord('jobs', job.id, { status: job.status, notes, updated_at: now });
-    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes, updated_at: now });
+    // Sanitize before persisting — prevents injection patterns from reaching
+    // the sync queue payload and eventually the PDF HTML template.
+    const sanitized = sanitizeText(notes, MAX_LENGTHS.longNotes);
+    setNotes(sanitized);
+    updateRecord('jobs', job.id, { status: job.status, notes: sanitized, updated_at: now });
+    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes: sanitized, updated_at: now });
     setIsEditingNotes(false);
     Toast.show({ type: 'success', text1: 'Notes saved' });
   }, [job, notes]);
@@ -288,7 +294,7 @@ export default function JobDetailScreen() {
             setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
             Toast.show({
               type: 'success',
-              text1: '🔓 Job re-opened',
+              text1: 'Job re-opened',
               text2: 'Changes will sync to the server automatically',
             });
           },
@@ -692,9 +698,11 @@ export default function JobDetailScreen() {
                     value={notes}
                     onChangeText={setNotes}
                     multiline
+                    maxLength={MAX_LENGTHS.longNotes}
                     placeholder="Document site conditions, access details, or follow-up actions…"
                     placeholderTextColor={C.textTertiary}
                     textAlignVertical="top"
+                    autoCorrect={false}
                   />
                   <View style={s.notesActionRow}>
                     <TouchableOpacity
@@ -845,9 +853,6 @@ const s = StyleSheet.create({
   notFound: { fontSize: 20, fontWeight: '900', marginTop: 12, letterSpacing: -0.5 },
   scrollContent: { paddingBottom: 120 },
 
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  statusBadgeTxt: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
-
   body: { padding: 20, gap: 24 },
 
   timerLabel: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
@@ -863,7 +868,6 @@ const s = StyleSheet.create({
 
   chipsRow: { gap: 10, paddingBottom: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  chipIcon: { fontSize: 14 },
   chipTxt: { fontSize: 13, fontWeight: '700' },
 
   progressHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },

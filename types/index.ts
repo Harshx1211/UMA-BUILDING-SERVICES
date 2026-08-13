@@ -1,4 +1,14 @@
-// Full TypeScript interfaces for all UMA BUILDING SERVICES domain models, API responses, and forms
+/**
+ * types/index.ts
+ *
+ * Full TypeScript interfaces for all SiteTrack domain models, API responses,
+ * and form types. These MUST stay in sync with the SQLite schema in
+ * lib/database.ts (schema v29) and the Supabase remote schema.
+ *
+ * Audit rule: every field that exists in the SQLite schema must exist here.
+ * Missing fields cause silent data loss — the field is fetched from DB but
+ * TypeScript won't tell you it exists.
+ */
 
 import {
   JobStatus,
@@ -15,30 +25,38 @@ import {
 } from '@/constants/Enums';
 
 // ─────────────────────────────────────────────
-// Domain Models — mirror the Supabase schema
+// Domain Models — mirror the Supabase + SQLite schema (v29)
 // ─────────────────────────────────────────────
 
-/** A technician or subcontractor user registered in the system */
+/** A technician or admin user registered in the system */
 export interface User {
-  id: string;           // uuid — references auth.users
-  company_id?: string | null;
+  id: string;                         // uuid — references auth.users
+  company_id: string | null;          // required for RLS — never undefined
   email: string;
   full_name: string;
   role: UserRole;
   phone: string | null;
   avatar_url: string | null;
+  push_token: string | null;          // Expo push notification token
   is_active: boolean;
-  fpas_number?: string | null;
-  fpas_class?: string | null;
-  fpas_expiry?: string | null;
-  state_license?: string | null;
-  state_license_expiry?: string | null;
-  created_at: string;   // ISO 8601 timestamptz
+  // FPAS licence fields (v22 migration)
+  fpas_number: string | null;
+  fpas_class: string | null;
+  fpas_expiry: string | null;
+  // State licence fields (v23 migration)
+  state_license: string | null;
+  state_license_expiry: string | null;
+  // ToS / AUP acceptance timestamps (v26 migration)
+  accepted_tos_at: string | null;
+  accepted_aup_at: string | null;
+  created_at: string;                 // ISO 8601 timestamptz
+  updated_at: string;
 }
 
 /** A physical site/building managed for fire compliance */
 export interface Property {
   id: string;
+  company_id: string | null;
   name: string;
   address: string | null;
   suburb: string | null;
@@ -55,103 +73,153 @@ export interface Property {
   updated_at: string;
 }
 
-/** A fire safety asset installed at a property (extinguisher, sprinkler head, etc.) */
+/** A fire safety asset installed at a property */
 export interface Asset {
   id: string;
+  company_id: string | null;
   property_id: string;
   asset_type: string;
-  /** Sub-variant of the asset type (e.g. 'DCP AB(E) 4.5KG', 'Quick Fit (Ceiling Mount) - Exit') */
+  /** Sub-variant of the asset type (e.g. 'DCP AB(E) 4.5KG') */
   variant: string | null;
-  /** Short technician reference number for this asset at the site (e.g. '001', '040') */
+  /** Short technician reference number (e.g. '001', '040') */
   asset_ref: string | null;
   description: string | null;
   location_on_site: string | null;
   serial_number: string | null;
   barcode_id: string | null;
-  install_date: string | null;    // ISO 8601 date
+  install_date: string | null;        // ISO 8601 date
   last_service_date: string | null;
   next_service_date: string | null;
   status: AssetStatus;
   created_at: string;
+  updated_at: string;
 }
 
 /** A field service job assigned to a technician */
 export interface Job {
   id: string;
+  company_id: string | null;
   property_id: string;
-  assigned_to: string;            // user id
+  assigned_to: string;                // user id
   job_type: JobType;
   status: JobStatus;
-  scheduled_date: string;         // ISO 8601 date
-  scheduled_time: string | null;  // HH:MM
+  scheduled_date: string;             // ISO 8601 date
+  scheduled_time: string | null;      // HH:MM
   priority: Priority;
   notes: string | null;
+  report_url: string | null;          // generated PDF URL stored after report creation
   created_at: string;
   updated_at: string;
 
-  // Joined relations (populated from local DB queries)
+  // Joined relations (populated from JOIN queries, not columns)
   property?: Property;
   assigned_user?: User;
 }
 
+/**
+ * Job enriched with flat property JOIN fields — returned by getJobById()
+ * which does a LEFT JOIN on properties. Use this instead of 'job as any'
+ * in reportTemplate.ts and pdfGenerator.ts.
+ */
+export interface JoinedJob extends Job {
+  property_name:           string | null;
+  property_address:        string | null;
+  property_suburb:         string | null;
+  property_state:          string | null;
+  property_postcode:       string | null;
+  property_compliance:     string | null;
+  site_contact_name:       string | null;
+  site_note:               string | null;
+}
+
+/** Technician User record with optional FPAS / state licence fields */
+export interface TechUser extends User {
+  fpas_number:   string | null | undefined;
+  fpas_class:    string | null | undefined;
+  state_license: string | null | undefined;
+}
+
+
 /** The inspection record linking a specific asset to a job */
 export interface JobAsset {
   id: string;
+  company_id: string | null;
   job_id: string;
   asset_id: string;
   result: InspectionResult | null;
-  checklist_data: string | null;  // JSON string
+  checklist_data: string | null;      // JSON string of checklist answers
   is_compliant: boolean;
   defect_reason: string | null;
   technician_notes: string | null;
   actioned_at: string | null;
 
-  // Joined relations
+  // Joined relation (populated from JOIN queries)
   asset?: Asset;
 }
 
 /** A defect identified during an inspection */
 export interface Defect {
   id: string;
+  company_id: string | null;
   job_id: string;
   asset_id: string;
   property_id: string;
   description: string;
   severity: DefectSeverity;
   status: DefectStatus;
-  photos: string[];               // array of storage URLs
+  photos: string[];                   // array of photo_urls or local file URIs
   created_at: string;
-  /** Uptick defect code (e.g. "bg", "hg") — null for free-text defects */
-  defect_code?: string | null;
+  updated_at: string | null;
+  /** Uptick defect code (e.g. 'bg', 'hg') — null for free-text defects */
+  defect_code: string | null;
   /** Reference quote price in AUD from the Uptick code library */
-  quote_price?: number | null;
+  quote_price: number | null;
 }
 
 /** A photo taken during a job inspection */
 export interface InspectionPhoto {
   id: string;
+  company_id: string | null;
   job_id: string;
   asset_id: string | null;
   defect_id: string | null;
+  /**
+   * Supabase Storage CDN URL after upload, or a local file:// URI before upload.
+   * Never use this as the display URL without checking — use local_uri as a fallback
+   * for offline PDF generation.
+   */
   photo_url: string;
+  /**
+   * Original device file:// path. Preserved after upload so offline PDF generation
+   * can fall back to the local copy instead of failing with a placeholder image.
+   * Set to null by cleanupLocalPhotos() after the 15-day retention window.
+   */
+  local_uri: string | null;
   caption: string | null;
   uploaded_at: string;
-  uploaded_by: string | null;     // user id — null when captured offline without session
+  /** user id — null when captured offline before session is confirmed */
+  uploaded_by: string | null;
 }
 
 /** Client + technician signatures captured at job completion */
 export interface Signature {
   id: string;
-  job_id: string;                 // unique — one signature per job
-  signature_url: string;          // client signature (base64 PNG or storage URL)
-  tech_signature_url?: string | null; // technician sign-off (AS1851 compliance)
+  company_id: string | null;
+  job_id: string;                     // UNIQUE — one signature set per job
+  /** Client signature — base64 PNG data URI or Supabase Storage URL */
+  signature_url: string;
+  /** Technician sign-off — AS1851 compliance requires tech signature (v19 migration) */
+  tech_signature_url: string | null;
   signed_by_name: string;
   signed_at: string;
+  /** Device info at time of signing (OS, app version) — for audit trail (v28 migration) */
+  device_info: string | null;
 }
 
 /** Clock-in / clock-out record for a technician on a job */
 export interface TimeLog {
   id: string;
+  company_id: string | null;
   job_id: string;
   user_id: string;
   clock_in: string;
@@ -161,7 +229,7 @@ export interface TimeLog {
   travel_time_minutes: number | null;
 }
 
-/** Inventory parts available for quoting */
+/** Inventory parts / labour items available for quoting */
 export interface InventoryItem {
   id: string;
   name: string;
@@ -173,6 +241,7 @@ export interface InventoryItem {
 /** A quote generated by a technician for client approval */
 export interface Quote {
   id: string;
+  company_id: string | null;
   job_id: string;
   status: QuoteStatus;
   total_amount: number;
@@ -182,23 +251,34 @@ export interface Quote {
 /** Single line item on a Quote */
 export interface QuoteItem {
   id: string;
+  company_id: string | null;
   quote_id: string;
-  inventory_item_id: string;
+  /**
+   * References inventory_items — null for custom line items where the
+   * technician typed a free-text item_name instead of selecting from catalogue.
+   */
+  inventory_item_id: string | null;
   defect_id: string | null;
   quantity: number;
   unit_price: number;
+  /** Custom item name for non-catalogue line items (v27 migration) */
+  item_name: string | null;
 }
 
 /** Offline write operation waiting to be pushed to Supabase */
 export interface SyncQueueItem {
-  id: number;                     // SQLite autoincrement
+  id: number;                         // SQLite autoincrement
   table_name: string;
   record_id: string;
-  operation: SyncOperation;
-  payload: string;                // JSON.stringify'd record data
-  synced: number;                 // 0 = pending, 1 = done, -1 = permanently failed
-  retry_count: number;            // incremented on each failed push attempt
-  last_error: string | null;      // last error message from a failed push
+  /**
+   * The sync operation type. Includes the special 'photo_upload' pseudo-operation
+   * used by photoUpload.ts to queue binary uploads separately from DB row inserts.
+   */
+  operation: SyncOperation | 'photo_upload';
+  payload: string;                    // JSON.stringify'd record data
+  synced: number;                     // 0=pending, 1=done, -1=permanently failed
+  retry_count: number;                // incremented on each failed push attempt
+  last_error: string | null;          // last error message from a failed push
   created_at: string;
 }
 
@@ -249,7 +329,7 @@ export interface DefectForm {
   property_id: string;
   description: string;
   severity: DefectSeverity;
-  photos: string[];               // local file URIs before upload
+  photos: string[];                   // local file URIs before upload
 }
 
 // ─────────────────────────────────────────────
@@ -258,9 +338,9 @@ export interface DefectForm {
 
 /** Sync status snapshot returned by getSyncStatus() */
 export interface SyncStatus {
-  lastSynced: string | null;      // ISO 8601 or null if never synced
+  lastSynced: string | null;          // ISO 8601 or null if never synced
   pendingCount: number;
-  /** Items that permanently failed after MAX_SYNC_RETRIES — will never be retried */
+  /** Items that permanently failed after MAX_SYNC_RETRIES — never auto-retried */
   failedCount: number;
   isOnline: boolean;
 }

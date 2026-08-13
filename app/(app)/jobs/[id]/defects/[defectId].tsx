@@ -25,6 +25,9 @@ import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { T } from '@/constants/Colors';
+
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 type FullDefect = {
   id: string;
@@ -45,17 +48,17 @@ type FullDefect = {
   scheduled_date?: string;
 };
 
-const SEVERITY_CONFIG: Record<DefectSeverity, { color: string; label: string; icon: string; bg: string }> = {
-  [DefectSeverity.Critical]: { color: '#DC2626', label: 'Critical', icon: 'alert-octagon',        bg: '#FEE2E2' },
-  [DefectSeverity.Major]:    { color: '#EA580C', label: 'Major',    icon: 'alert',                bg: '#FFEDD5' },
-  [DefectSeverity.Minor]:    { color: '#2563EB', label: 'Minor',    icon: 'alert-circle-outline', bg: '#DBEAFE' },
+const SEVERITY_CONFIG: Record<DefectSeverity, { color: string; label: string; icon: MCIconName; bg: string }> = {
+  [DefectSeverity.Critical]: { color: T.danger,  label: 'Critical', icon: 'alert-octagon',        bg: T.dangerBg  },
+  [DefectSeverity.Major]:    { color: T.warning, label: 'Major',    icon: 'alert',                bg: T.warningBg },
+  [DefectSeverity.Minor]:    { color: T.info,    label: 'Minor',    icon: 'alert-circle-outline', bg: T.infoBg    },
 };
 
 const STATUS_COLORS: Record<DefectStatus, string> = {
-  [DefectStatus.Open]:       '#DC2626',
-  [DefectStatus.Monitoring]: '#D97706',
-  [DefectStatus.Quoted]:     '#2563EB',
-  [DefectStatus.Repaired]:   '#16A34A',
+  [DefectStatus.Open]:       T.danger,
+  [DefectStatus.Monitoring]: T.warning,
+  [DefectStatus.Quoted]:     T.info,
+  [DefectStatus.Repaired]:   T.success,
 };
 
 export default function DefectDetailScreen() {
@@ -168,7 +171,7 @@ export default function DefectDetailScreen() {
         <Animated.View entering={FadeInDown.delay(40).duration(380)}>
           <View style={[s.sevBanner, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
             <View style={[s.sevIconWrap, { backgroundColor: sev.color }]}>
-              <MaterialCommunityIcons name={sev.icon as any} size={22} color={C.textOnPrimary} />
+              <MaterialCommunityIcons name={sev.icon} size={22} color={C.textOnPrimary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.sevLabel, { color: sev.color }]}>{sev.label.toUpperCase()} DEFECT</Text>

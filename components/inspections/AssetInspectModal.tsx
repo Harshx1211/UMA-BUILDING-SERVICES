@@ -18,15 +18,19 @@ import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
 import { router } from 'expo-router';
+import { T } from '@/constants/Colors';
+
+type ColorsType = ReturnType<typeof useColors>;
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ─── Severity config ─────────────────────────────────────────
-const SEVERITIES: { value: DefectSeverity; label: string; icon: string; desc: string }[] = [
+const SEVERITIES: { value: DefectSeverity; label: string; icon: MCIconName; desc: string }[] = [
   { value: DefectSeverity.Minor,    label: 'Minor',    icon: 'alert-circle-outline', desc: 'Can be deferred' },
   { value: DefectSeverity.Major,    label: 'Major',    icon: 'alert',                desc: 'Action within 30 days' },
   { value: DefectSeverity.Critical, label: 'Critical', icon: 'alert-octagon',        desc: 'Immediate action required' },
 ];
 
-function getSeverityColors(severity: DefectSeverity, C: any) {
+function getSeverityColors(severity: DefectSeverity, C: ColorsType) {
   switch (severity) {
     case DefectSeverity.Minor:    return { active: C.info,    light: C.infoLight,    dark: C.infoDark };
     case DefectSeverity.Major:    return { active: C.warning, light: C.warningLight, dark: C.warningDark };
@@ -245,7 +249,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                     >
                       <View style={{ alignItems: 'center', gap: 4 }}>
                         <MaterialCommunityIcons
-                          name={sev.icon as any}
+                          name={sev.icon}
                           size={20}
                           color={isActive ? '#FFF' : colors.active}
                         />
@@ -495,14 +499,14 @@ const s = StyleSheet.create({
   codePickerTitle: { fontSize: 13, fontWeight: '700' },
   codePickerSub:   { fontSize: 11, marginTop: 2 },
   priceBadge: {
-    backgroundColor: '#10B981' + '18',
+    backgroundColor: T.success + '18',
     borderWidth: 1,
-    borderColor: '#10B981' + '40',
+    borderColor: T.success + '40',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#10B981' },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: T.success },
 
   // Input
   input: {

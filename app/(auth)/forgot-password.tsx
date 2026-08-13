@@ -117,6 +117,8 @@ export default function ForgotPasswordScreen() {
                 placeholder="you@company.com.au"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                maxLength={254}
                 error={emailError}
                 leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textSecondary} />}
                 style={{ marginBottom: 20 }}
@@ -218,33 +220,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
-  },
-
-  // Field
-  fieldGroup: { marginBottom: 20, gap: 6 },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 12,
-    height: 52,
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
-    gap: 10,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
-  },
-  fieldError: {
-    fontSize: 12,
-    marginTop: 2,
-    marginLeft: 2,
   },
 });

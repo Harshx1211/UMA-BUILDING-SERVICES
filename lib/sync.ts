@@ -11,12 +11,17 @@ import {
   getDeletedPhotoIds,
   getFailedSyncItems,
   getRecord,
+  retryAllFailedSyncItems,
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
-import { processPhotoQueue } from '@/lib/photoUpload';
+import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
+
+/** Re-exported for convenience — UI components only need to import from sync.ts */
+export { retryAllFailedSyncItems } from '@/lib/database';
+
 /** Max consecutive push failures before a sync queue item is permanently abandoned */
 const MAX_SYNC_RETRIES = 5;
 
@@ -77,6 +82,53 @@ function _emitSyncComplete(): void {
 }
 
 // ─────────────────────────────────────────────
+// Sync-failure alert event bus
+// Fired when items permanently fail to sync.
+// UI (SyncStatusBar / root layout) subscribes
+// to show the user a dismissible alert.
+// ─────────────────────────────────────────────
+export interface SyncFailureAlert {
+  /** Number of permanently-failed items */
+  failedCount: number;
+  /** Affected table names (de-duplicated) */
+  tables: string[];
+  /** Last error message from the most-recently failed item */
+  lastError: string;
+}
+type SyncFailureListener = (alert: SyncFailureAlert) => void;
+const _failureListeners = new Set<SyncFailureListener>();
+
+/** Subscribe to be notified when sync items permanently fail */
+export function onSyncFailure(listener: SyncFailureListener): void {
+  _failureListeners.add(listener);
+}
+
+/** Unsubscribe a sync failure listener */
+export function offSyncFailure(listener: SyncFailureListener): void {
+  _failureListeners.delete(listener);
+}
+
+/** Clears ALL failure listeners — called on sign-out */
+export function clearSyncFailureListeners(): void {
+  _failureListeners.clear();
+}
+
+/**
+ * Called when permanently-failed items are detected during a sync run.
+ * Emits to all registered UI listeners so the user sees an alert.
+ */
+function _emitSyncFailureAlert(alert: SyncFailureAlert): void {
+  // Always console.warn — visible in Expo Go and production logs
+  console.warn(
+    `[SiteTrack Sync] ALERT: ${alert.failedCount} item(s) failed to sync permanently. ` +
+    `Tables: ${alert.tables.join(', ')}. Last error: ${alert.lastError}`
+  );
+  _failureListeners.forEach((fn) => {
+    try { fn(alert); } catch (e) { console.warn('[SiteTrack Sync] failure listener error:', e); }
+  });
+}
+
+// ─────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────
 
@@ -113,6 +165,7 @@ export function stopSync(): void {
   _cachedUserId = null;
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
+  clearSyncFailureListeners();
 }
 
 /** Returns the currently cached user ID — useful for fire-and-forget callers */
@@ -243,13 +296,22 @@ export async function runSync(userId?: string): Promise<boolean> {
 
     const failedItems = getFailedSyncItems();
     if (failedItems.length > 0) {
-      console.warn(
-        `[SiteTrack Sync] ${failedItems.length} item(s) permanently failed. ` +
-        `Tables: ${[...new Set(failedItems.map(i => i.table_name))].join(', ')}`
-      );
+      // DECISION #3: never silently discard — always inform the user when data
+      // cannot reach the server after exhausting all retries.
+      _emitSyncFailureAlert({
+        failedCount: failedItems.length,
+        tables: [...new Set(failedItems.map(i => i.table_name))],
+        lastError: failedItems[0]?.last_error ?? 'Unknown error',
+      });
     }
 
-    // ── 6. Notify subscribers (stores reload from SQLite) ─────────
+    // ── 6. Clean up local photo files (15-day retention policy) ──────
+    // Runs AFTER the photo upload queue so we only ever delete a local file
+    // once photo_url has been confirmed as an https:// Supabase URL.
+    // cleanupLocalPhotos() catches all its own errors \u2014 it can never crash sync.
+    await cleanupLocalPhotos();
+
+    // ── 7. Notify subscribers (stores reload from SQLite) ─────────────
     _emitSyncComplete();
     return true;
   } catch (err) {
@@ -525,16 +587,11 @@ async function _pushQueue(): Promise<void> {
     return;
   }
 
-  // Filter out permanently-failed items (synced = -1) before processing
-  const actionable = pending.filter((i) => (i.retry_count ?? 0) < MAX_SYNC_RETRIES);
-  const skipped = pending.length - actionable.length;
-  if (skipped > 0) {
-    if (__DEV__) console.warn(`[UMA BUILDING SERVICES Sync] PUSH: skipping ${skipped} permanently-failed item(s)`);
-  }
+  // Items returned by getPendingSyncItems already exclude those at/above MAX_SYNC_RETRIES.
+  // We process all returned items — no secondary filter needed.
+  if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: processing ${pending.length} queue item(s)`);
 
-  if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: processing ${actionable.length} queue item(s)`);
-
-  for (const item of actionable) {
+  for (const item of pending) {
     try {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
       let error: { message: string } | null = null;

@@ -59,10 +59,17 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
         ...photoData,
         id,
         uploaded_at: new Date().toISOString(),
+        // Store the original device file path in local_uri so offline PDF
+        // generation can access the local file even after photo_url is replaced
+        // with the Supabase https:// public URL by processPhotoQueue.
+        local_uri: (
+          photoData.photo_url.startsWith('file://') ||
+          photoData.photo_url.startsWith('content://')
+        ) ? photoData.photo_url : (photoData.local_uri ?? null),
       };
 
       // 1. Persist locally with the file:// URI immediately (offline-safe)
-      insertRecord('inspection_photos', newPhoto as unknown as Record<string, string | number | boolean | null>);
+      insertRecord('inspection_photos', newPhoto as Record<string, string | number | boolean | null>);
 
       // 2. Queue the binary upload — processPhotoQueue in sync.ts handles this.
       //    BUG 8 FIX: do NOT also queue a SyncOperation.Insert here with the local file:// URI

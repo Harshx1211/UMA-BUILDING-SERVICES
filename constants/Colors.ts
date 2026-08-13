@@ -41,6 +41,7 @@ const palette = {
 
   blue600:   '#2563EB',
   blueBg:    'rgba(37,99,235,0.12)',
+  blueDark:  '#1E3A8A',
 };
 
 // ─── Semantic Tokens (use ONLY these in all components/screens) ───────────────
@@ -168,7 +169,7 @@ const Colors = {
     errorDark:           T.dangerDark,
     info:                T.info,
     infoLight:           T.infoBg,
-    infoDark:            '#1E3A8A',
+    infoDark:            palette.blueDark,
 
     tint:                T.primary,
     icon:                T.textSecondary,

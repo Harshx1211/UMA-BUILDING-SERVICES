@@ -1,5 +1,5 @@
 // Main app tab navigator — premium tab bar with active top indicator
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
 import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -49,6 +49,11 @@ export default function AppLayout() {
   const { subscribeToSync: jobsSubscribe, unsubscribeFromSync: jobsUnsub } = useJobsStore();
   const { subscribeToSync: dashSubscribe, unsubscribeFromSync: dashUnsub } = useDashboardStore();
 
+  // Throttle the heartbeat access check to once per 5 minutes.
+  // Checking on every segment change causes up to 10+ Supabase calls/min during normal navigation.
+  const lastHeartbeatRef = useRef<number>(0);
+  const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
   const segments = useSegments();
   
   // Only show the tab bar on the three main screens. All detail routes hide it.
@@ -63,22 +68,41 @@ export default function AppLayout() {
   // Always mount the network listener at the root so it fires on ALL tabs
   useNetworkStatus();
 
-  // Heartbeat access check on mobile route changes
+  // Heartbeat access check: re-validates account on navigation but at most once per 5 minutes.
+  // Catches admin deactivation without waiting for the next 60s sync cycle.
   useEffect(() => {
-    if (user?.id) {
-      supabase.from('users').select('is_active, companies(subscription_status)').eq('id', user.id).single()
-        .then(({ data, error }) => {
-          if (!error && data) {
-            // @ts-ignore
-            const companyStatus = data.companies?.subscription_status;
-            if (data.is_active === false || companyStatus === 'suspended') {
-              console.warn('[AppLayout] Access revoked. Forcing graceful logout.');
-              useAuthStore.getState().forceFinalSyncAndSignOut();
-            }
-          }
-        });
-    }
-  }, [segments, user?.id]);
+    if (!user?.id) return;
+    const now = Date.now();
+    if (now - lastHeartbeatRef.current < HEARTBEAT_INTERVAL_MS) return;
+    lastHeartbeatRef.current = now;
+
+    supabase
+      .from('users')
+      .select('is_active, company_id')
+      .eq('id', user.id)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        if (data.is_active === false) {
+          console.warn('[AppLayout] User deactivated. Forcing graceful logout.');
+          useAuthStore.getState().forceFinalSyncAndSignOut();
+          return;
+        }
+        if (data.company_id) {
+          supabase
+            .from('companies')
+            .select('subscription_status')
+            .eq('id', data.company_id)
+            .single()
+            .then(({ data: company }) => {
+              if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
+                console.warn('[AppLayout] Company suspended. Forcing graceful logout.');
+                useAuthStore.getState().forceFinalSyncAndSignOut();
+              }
+            });
+        }
+      });
+  }, [segments, user?.id, HEARTBEAT_INTERVAL_MS]);
 
   // Start background sync interval on mount (runs immediately + every 60s)
   // NOTE: startSync() is intentionally called AFTER the stores subscribe

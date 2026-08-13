@@ -76,7 +76,8 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
       const totalCount = countRow?.count ?? 0;
 
       const rows = db.getAllSync<Record<string, unknown>>(
-        `SELECT * FROM notifications ORDER BY created_at DESC LIMIT ${MAX_NOTIFICATIONS}`
+        `SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?`,
+        [MAX_NOTIFICATIONS],
       );
       const notifications = rows.map(mapRow);
       set({
@@ -129,16 +130,16 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
       db.runSync(
         `INSERT INTO notifications (id, type, title, message, job_id, user_id, is_read, created_at)
          VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-        [id, data.type, data.title, data.message, data.job_id ?? null, (data as AppNotification).user_id ?? null, now]
+        [id, data.type, data.title, data.message, data.job_id ?? null, data.user_id ?? null, now],
       );
       const newNotif: AppNotification = {
         id,
-        type: data.type,
-        title: data.title,
-        message: data.message,
-        job_id: data.job_id ?? null,
-        user_id: (data as AppNotification).user_id ?? null,
-        is_read: false,
+        type:       data.type,
+        title:      data.title,
+        message:    data.message,
+        job_id:     data.job_id ?? null,
+        user_id:    data.user_id ?? null,
+        is_read:    false,
         created_at: now,
       };
       set((state) => ({

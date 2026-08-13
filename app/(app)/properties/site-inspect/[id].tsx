@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Alert, Modal, TextInput, Platform,
+  Alert, Modal, TextInput, Platform, BackHandler,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,6 +26,7 @@ import { InspectionResult, SyncOperation, JobType, JobStatus, Priority, DefectSe
 import {
   getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue,
 } from '@/lib/database';
+import type { RecordData } from '@/lib/database';
 import type { Property, Asset } from '@/types';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 
@@ -265,6 +266,47 @@ export default function SiteInspectScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Decision #1: Back-press guard ───────────────────────
+  // If any asset has been inspected, intercept Android back and the
+  // navigation header back-button, and offer Save or Discard.
+  const hasProgress = useMemo(
+    () => Object.values(results).some(r => r.result !== null),
+    [results]
+  );
+
+  const handleBackPress = useCallback(() => {
+    if (!hasProgress) return false; // let navigation proceed normally
+    Alert.alert(
+      'Save Progress?',
+      'You have inspected some assets. What would you like to do?',
+      [
+        {
+          text: 'Keep Inspecting',
+          style: 'cancel',
+        },
+        {
+          text: 'Discard & Exit',
+          style: 'destructive',
+          onPress: () => router.back(),
+        },
+        {
+          text: 'Save & Exit',
+          onPress: () => {
+            void saveInspection().then(() => router.back()).catch(() => router.back());
+          },
+        },
+      ],
+      { cancelable: false }
+    );
+    return true;
+  }, [hasProgress, saveInspection]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => sub.remove();
+  }, [handleBackPress]);
+
+
   // ── Result handlers ──────────────────────────────────────
   const handleResult = useCallback((assetId: string, r: InspectionResult) => {
     setResults(prev => ({
@@ -343,13 +385,13 @@ export default function SiteInspectScreen() {
     }
   };
 
-  const saveInspection = async () => {
+  const saveInspection = useCallback(async () => {
     if (!property || !user) return;
     setIsSaving(true);
     try {
       const now   = new Date().toISOString();
       const today = now.slice(0, 10);
-      const jobId = generateUUID();  // BUG 28 FIX
+      const jobId = generateUUID();
 
       // 1. Create completed job
       const jobPayload = {
@@ -359,34 +401,36 @@ export default function SiteInspectScreen() {
         notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
       };
-      upsertRecord('jobs', jobPayload as any);
-      addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as any);
+      upsertRecord('jobs', jobPayload as RecordData);
+      addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
 
       // 2. Save job_assets records
+      // DECISION #2: assets the tech did not explicitly inspect are auto-marked
+      // as not_tested. Never silently skip them — a missing record = missing compliance data.
       for (const asset of assets) {
         const r = results[asset.id];
-        if (!r || r.result === null) continue;
-        const jaId = generateUUID();  // BUG 28 FIX
+        const resolvedResult = r?.result ?? InspectionResult.NotTested;
+        const jaId = generateUUID();
         const jaPayload = {
           id: jaId, job_id: jobId, asset_id: asset.id,
-          result: r.result, checklist_data: null,
-          is_compliant: r.result === InspectionResult.Pass ? 1 : 0,
-          defect_reason: r.defectReason || null,
+          result: resolvedResult, checklist_data: null,
+          is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
+          defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
           technician_notes: null, actioned_at: now,
         };
-        upsertRecord('job_assets', jaPayload as any);
-        addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as any);
+        upsertRecord('job_assets', jaPayload as RecordData);
+        addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
 
         // 3. Auto-create defect if failed with reason
-        if (r.result === InspectionResult.Fail && r.defectReason.trim()) {
-          const dId = generateUUID();  // BUG 28 FIX
+        if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
+          const dId = generateUUID();
           const dPayload = {
             id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
             description: r.defectReason.trim(), severity: DefectSeverity.Major,
             status: 'open', photos: '[]', created_at: now,
           };
-          upsertRecord('defects', dPayload as any);
-          addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as any);
+          upsertRecord('defects', dPayload as RecordData);
+          addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
         }
       }
 
@@ -396,9 +440,6 @@ export default function SiteInspectScreen() {
       addToSyncQueue('properties', property.id, SyncOperation.Update,
         { compliance_status: compliance, updated_at: now });
 
-      // BUG 6 FIX: navigate to the report screen for this newly created job
-      // This connects the site-inspect flow to the full report pipeline
-      setIsSaving(false);
       Toast.show({
         type: 'success',
         text1: 'Inspection Saved',
@@ -407,10 +448,11 @@ export default function SiteInspectScreen() {
       router.replace(`/jobs/${jobId}/report` as never);
     } catch (err) {
       console.error('[SiteInspect] save error:', err);
-      setIsSaving(false);
       Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });
+    } finally {
+      setIsSaving(false);
     }
-  };
+  }, [property, user, assets, results, counts]);
 
   // ── Render item ──────────────────────────────────────────
   const renderItem = useCallback(({ item, index }: { item: Asset; index: number }) => (

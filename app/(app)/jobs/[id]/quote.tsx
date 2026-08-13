@@ -21,15 +21,18 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { Defect } from '@/types';
 
+type ColorsType = ReturnType<typeof useColors>;
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 // ─── Severity colour palette ──────────────────────────────────────────
-const SEV: Record<DefectSeverity, { color: (C: any) => string; label: string; icon: string }> = {
-  [DefectSeverity.Critical]: { color: (C) => C.error, label: 'Critical / Immediate',  icon: 'alert-octagon' },
-  [DefectSeverity.Major]:    { color: (C) => C.warning, label: 'Major Defects',          icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: (C) => C.info, label: 'Minor Defects',          icon: 'alert-circle-outline' },
+const SEV: Record<DefectSeverity, { color: (C: ColorsType) => string; label: string; icon: MCIconName }> = {
+  [DefectSeverity.Critical]: { color: (C) => C.error,   label: 'Critical / Immediate', icon: 'alert-octagon' },
+  [DefectSeverity.Major]:    { color: (C) => C.warning, label: 'Major Defects',         icon: 'alert' },
+  [DefectSeverity.Minor]:    { color: (C) => C.info,    label: 'Minor Defects',         icon: 'alert-circle-outline' },
 };
 
 // ─── Single defect row (read-only) ────────────────────────────────────
-function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: any }) {
+function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: ColorsType }) {
   const hasPrice = defect.quote_price != null && Number(defect.quote_price) > 0;
   return (
     <View style={[dr.row, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: color }]}>
@@ -107,7 +110,7 @@ export default function QuoteScreen() {
       <Animated.View key={key} entering={FadeInDown.delay(delay).duration(340)}>
         <View style={s.groupHeader}>
           <View style={[s.groupDot, { backgroundColor: groupColor }]} />
-          <MaterialCommunityIcons name={cfg.icon as any} size={14} color={groupColor} />
+          <MaterialCommunityIcons name={cfg.icon} size={14} color={groupColor} />
           <Text style={[s.groupTitle, { color: C.textTertiary }]}>
             {cfg.label} ({defects.length})
           </Text>

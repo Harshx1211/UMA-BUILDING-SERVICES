@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 24;
+const CURRENT_SCHEMA_VERSION = 29;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1044,6 +1044,25 @@ export function initializeSchema(): void {
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 28 complete (signatures.company_id)');
   }
 
+  // Migration 29: Add local_uri column to inspection_photos.
+  //
+  // THE PROBLEM THIS SOLVES:
+  //   1. Tech captures a photo → stored as file:// URI in inspection_photos.photo_url
+  //   2. Background sync uploads the binary → updateRecord() REPLACES photo_url with https:// URL
+  //   3. Tech generates PDF offline → toDataUri() tries FileSystem.downloadAsync(https://) → FAILS
+  //   4. PDF shows a grey "Photo unavailable" placeholder even though the file is on the device
+  //
+  // THE FIX:
+  //   Store the original file:// path in a separate local_uri column that is NEVER overwritten.
+  //   pdfGenerator.ts now checks local_uri first — if the file still exists it encodes it directly.
+  //   Only if local_uri is missing or the file has been deleted does it fall back to photo_url (https://).
+  if (currentVersion < 29) {
+    try { db.runSync(`ALTER TABLE inspection_photos ADD COLUMN local_uri TEXT;`); } catch {}
+    currentVersion = 29;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '29')`);
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 29 complete (inspection_photos.local_uri)');
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1052,7 +1071,7 @@ export function initializeSchema(): void {
 // Generic CRUD helpers
 // ─────────────────────────────────────────────
 
-type RecordData = Record<string, string | number | boolean | null>;
+export type RecordData = Record<string, string | number | boolean | null>;
 
 /**
  * Inserts a new row into the given table.
@@ -1385,7 +1404,7 @@ export function getJobAssetRecord(jobId: string, assetId: string): { id: string;
 export function addToSyncQueue(
   tableName: string,
   recordId: string,
-  operation: SyncOperation,
+  operation: SyncOperation | 'photo_upload',
   payload: RecordData,
 ): void {
   try {
@@ -1486,15 +1505,22 @@ export function getDeletedPhotoIds(): Set<string> {
   }
 }
 
-/** Returns all sync queue items not yet pushed to Supabase and below the retry limit */
-export function getPendingSyncItems(): SyncQueueItem[] {
+/**
+ * Returns all sync queue items not yet pushed to Supabase (synced=0).
+ * Ordered oldest-first so earlier writes are pushed before later ones.
+ * NOTE: items with retry_count >= maxRetries are still returned here;
+ * the sync engine is responsible for calling incrementSyncRetry() to
+ * mark them synced=-1 after the final failure.
+ */
+export function getPendingSyncItems(maxRetries = 5): SyncQueueItem[] {
   try {
     const db = openDatabase();
     return db.getAllSync<SyncQueueItem>(
-      `SELECT * FROM sync_queue WHERE synced = 0 ORDER BY created_at ASC`,
+      `SELECT * FROM sync_queue WHERE synced = 0 AND retry_count < ? ORDER BY created_at ASC`,
+      [maxRetries],
     );
   } catch (err) {
-    console.error("[UMA BUILDING SERVICES DB] getPendingSyncItems error:", err);
+    console.error('[UMA BUILDING SERVICES DB] getPendingSyncItems error:', err);
     return [];
   }
 }
@@ -1684,40 +1710,38 @@ export function getAssetsWithJobResults<T = RecordData>(
   try {
     const db = openDatabase();
     return db.getAllSync<T>(
-      // The subquery picks the single most-recent job_assets row per asset for this job.
-      // Without it, rapid taps that create duplicate job_assets rows cause the LEFT JOIN
-      // to return multiple rows per asset — the first PDF shows all of them, but the
-      // second (after sync collapses duplicates) shows only one.
+      // Uses MAX(actioned_at) to select the single most-recent job_assets row per asset.
+      // ORDER BY inside IN() is not guaranteed in older SQLite versions — this GROUP BY
+      // approach is portable and reliable. Prevents duplicate rows when rapid taps
+      // create multiple job_assets entries for the same asset+job combination.
       `SELECT a.*,
-              ja.id         AS job_asset_id,
+              ja.id              AS job_asset_id,
               ja.result,
               ja.defect_reason,
               ja.technician_notes,
-              ja.technician_notes  AS inspection_notes,
+              ja.technician_notes AS inspection_notes,
               ja.checklist_data,
               ja.is_compliant,
               ja.actioned_at
        FROM assets a
        LEFT JOIN (
-         SELECT *
-         FROM job_assets
-         WHERE job_id = ?
-           AND id IN (
-             -- For each asset, pick only the most-recently actioned row
-             SELECT id FROM job_assets ji2
-             WHERE ji2.job_id = job_assets.job_id
-               AND ji2.asset_id = job_assets.asset_id
-             ORDER BY ji2.actioned_at DESC
-             LIMIT 1
-           )
+         SELECT jb.*
+         FROM job_assets jb
+         INNER JOIN (
+           SELECT asset_id, MAX(actioned_at) AS latest_at
+           FROM job_assets
+           WHERE job_id = ?
+           GROUP BY asset_id
+         ) latest ON jb.asset_id = latest.asset_id AND jb.actioned_at = latest.latest_at
+         WHERE jb.job_id = ?
        ) ja ON a.id = ja.asset_id
        WHERE a.property_id = ?
          AND a.status = 'active'
        ORDER BY a.asset_type ASC, COALESCE(a.asset_ref, '') ASC`,
-      [jobId, propertyId],
+      [jobId, jobId, propertyId],
     );
   } catch (err) {
-    console.error(`[UMA BUILDING SERVICES DB] getAssetsWithJobResults error:`, err);
+    console.error('[UMA BUILDING SERVICES DB] getAssetsWithJobResults error:', err);
     return [];
   }
 }
@@ -1940,8 +1964,7 @@ export function seedInventoryFromDefectCodes(): void {
   try {
     const db = openDatabase();
     const count = db.getFirstSync<{ n: number }>('SELECT COUNT(*) as n FROM inventory_items');
-    if (count && count.n > 0) return; // Already seeded
-
+    if (count && count.n > 0) return; // Already seeded — never overwrites existing data
 
     const pricedCodes = DEFECT_CODES.filter(d => d.quote_price !== undefined);
     const now = new Date().toISOString();
@@ -1964,14 +1987,15 @@ export function seedInventoryFromDefectCodes(): void {
   }
 }
 
+/** Returns the number of unread notifications for a given user ID. */
 export function getUnreadNotificationCount(userId: string): number {
   try {
     const db = openDatabase();
-    const res = db.getFirstSync<{ count: number }>(`
-      SELECT count(*) as count FROM notifications
-      WHERE user_id = ? AND is_read = 0
-    `, [userId]);
-    return res?.count || 0;
+    const res = db.getFirstSync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`,
+      [userId],
+    );
+    return res?.count ?? 0;
   } catch {
     return 0;
   }
@@ -1995,7 +2019,7 @@ export function clearDatabase(): void {
     
     for (const table of tables) {
       try {
-        db.runSync(`DELETE FROM ${table};`);
+        db.runSync(`DELETE FROM ${_safeColumnName(table)};`);
       } catch (err) {
         console.warn(`[UMA BUILDING SERVICES DB] Failed to wipe ${table}:`, err);
       }

@@ -10,7 +10,7 @@ import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 
 import { useAuthStore } from '@/store/authStore';
-import { initializeSchema, cleanOldSyncQueueItems, clearFailedSyncItems } from '@/lib/database';
+import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
 import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
 import Colors from '@/constants/Colors';
 import * as SplashScreen from 'expo-splash-screen';
@@ -46,7 +46,8 @@ export default function RootLayout() {
   const obscureOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // ⚠️ TEMPORARILY DISABLED FOR UI REVIEW — re-enable after screenshots are taken
+    // TODO (PRE-RELEASE): Re-enable screen capture prevention before production build.
+    // Disabled temporarily for UI screenshots and design review only.
     // ScreenCapture.preventScreenCaptureAsync();
     return () => {
       // ScreenCapture.allowScreenCaptureAsync();
@@ -80,7 +81,10 @@ export default function RootLayout() {
       try {
         initializeSchema();
         cleanOldSyncQueueItems();
-        clearFailedSyncItems('job_assets');
+        // Give any permanently-failed sync items a fresh retry budget on startup.
+        // Better than clearing them — data that failed due to a transient issue
+        // (RLS policy lag, momentary offline) gets another chance to reach the server.
+        resetStaleFailedSyncItems();
       } catch (e) {
         console.error('[DB] Schema init error:', e);
       }
@@ -96,12 +100,18 @@ export default function RootLayout() {
     requestNotificationPermission();
   }, []);
 
+  // Hide splash once loading is complete. MUST be above the conditional early-return
+  // so React Hooks are always called in the same order (rules-of-hooks).
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isLoading]);
+
   // Always dark — field service app.
   const theme = paperDarkTheme;
 
   // Show a blank loading screen while session is being restored.
-  // The Slot renders NOTHING until isLoading is false, so there is
-  // no risk of navigating before the navigator is mounted.
   if (isLoading) {
     return (
       <GestureHandlerRootView style={styles.container}>
@@ -116,9 +126,6 @@ export default function RootLayout() {
       </GestureHandlerRootView>
     );
   }
-
-  // Once loading is complete, hide the splash screen
-  SplashScreen.hideAsync();
 
   return (
     <GestureHandlerRootView style={styles.container}>

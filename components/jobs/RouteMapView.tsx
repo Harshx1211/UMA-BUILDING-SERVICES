@@ -52,9 +52,9 @@ async function geocodeAddress(address: string) {
 
 function getJobAddress(job: JobWithProperty): string {
   return [
-    (job as any).property_address,
-    (job as any).property_suburb,
-    (job as any).property_state,
+    job.property_address,
+    job.property_suburb,
+    job.property_state,
   ].filter(Boolean).join(', ');
 }
 
@@ -173,7 +173,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
           <View style={[s.jobCardPriority, { backgroundColor: PRIORITY_COLOR[selectedJob.priority] ?? C.primary }]} />
           <View style={s.jobCardContent}>
             <Text style={[s.jobCardProperty, { color: C.text }]} numberOfLines={1}>
-              {(selectedJob as any).property_name ?? 'Unknown Property'}
+              {selectedJob.property_name ?? 'Unknown Property'}
             </Text>
             <Text style={[s.jobCardAddress, { color: C.textSecondary }]} numberOfLines={1}>
               {getJobAddress(selectedJob) || 'No address'}

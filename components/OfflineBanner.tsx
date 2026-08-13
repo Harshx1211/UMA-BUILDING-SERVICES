@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getPendingSyncItems } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 const BANNER_HEIGHT = 40;
 
@@ -33,7 +34,6 @@ export function OfflineBanner() {
     }
     return undefined;
   }, [isOnline]);
-
 
   // ── State machine ─────────────────────────────────────
   useEffect(() => {
@@ -76,12 +76,12 @@ export function OfflineBanner() {
   // ── Config per state ──────────────────────────────────
   const stateConfig = {
     offline: {
-      bg:   '#FBBF24',
+      bg:   T.warningBg,
       icon: 'wifi-off' as const,
       text: pendingCount > 0
         ? `⚠️  Offline — ${pendingCount} change${pendingCount > 1 ? 's' : ''} pending sync`
         : '⚠️  Offline Mode — changes save locally',
-      textColor: '#78350F',
+      textColor: T.warning,
     },
     syncing: {
       bg:   C.primary,

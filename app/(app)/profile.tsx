@@ -1,7 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
 import { stopSync } from '@/lib/sync';
@@ -11,6 +10,7 @@ import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Badge } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
+import { sanitizeText } from '@/utils/sanitize';
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -22,7 +22,6 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 }
 
 export default function ProfileScreen() {
-  useSafeAreaInsets();
   const { user } = useAuth();
   const { signOut, company, updateUser } = useAuthStore();
   const C = useColors();
@@ -60,9 +59,11 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!user) return;
     setIsSaving(true);
+    // Sanitize phone: strip anything that isn't digits, +, -, spaces or parentheses
+    const phone = sanitizeText(editForm.phone.trim(), 15);
     const { data, error } = await supabase
       .from('users')
-      .update({ phone: editForm.phone })
+      .update({ phone })
       .eq('id', user.id)
       .select()
       .single();
@@ -170,11 +171,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: T.background },
-  header:         {
-    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: T.surface,
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  title:          { color: T.textPrimary, fontSize: 22, fontWeight: '800' },
   scroll:         { padding: 16, paddingBottom: 40 },
   avatarCard:     {
     backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border,
