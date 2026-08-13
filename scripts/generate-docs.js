@@ -38,12 +38,39 @@ function findFiles(dir, fileList = []) {
   return fileList;
 }
 
+function extractCodeBlock(content, matchIndex) {
+  let openBraces = 0;
+  let inBlock = false;
+  let endIndex = matchIndex;
+
+  for (let i = matchIndex; i < content.length; i++) {
+    if (content[i] === '{') {
+      openBraces++;
+      inBlock = true;
+    } else if (content[i] === '}') {
+      openBraces--;
+    }
+    
+    if (inBlock && openBraces === 0) {
+      endIndex = i + 1;
+      break;
+    }
+  }
+  
+  if (!inBlock) {
+    // Fallback for one-liners or things without braces
+    const newline = content.indexOf('\n', matchIndex);
+    endIndex = newline !== -1 ? newline : content.length;
+  }
+  
+  return content.slice(matchIndex, endIndex).trim();
+}
+
 let allFiles = [];
 for (const dir of targetDirs) {
   allFiles = findFiles(dir, allFiles);
 }
 
-// Group files by top-level directory
 const groupedFiles = {};
 for (const file of allFiles) {
   const normalizedPath = file.replace(/\\/g, '/');
@@ -74,14 +101,12 @@ for (const [group, files] of Object.entries(groupedFiles)) {
     
     mdContent += `## 📄 \`${fileObj.path}\`\n\n`;
     
-    // Extract top level comment block if exists
     const topCommentMatch = content.match(/^\/\*\*([\s\S]*?)\*\//);
     let description = "Contains specific implementation logic for this module.";
     if (topCommentMatch) {
       description = topCommentMatch[1].split('\n').map(l => l.replace(/^\s*\*\s?/, '').trim()).filter(l => l).join(' ');
     }
     
-    // Guess intent based on path
     let intent = "Core system file.";
     if (fileObj.path.startsWith('app/')) intent = "Defines a navigable screen or layout in the Expo Router structure. **We expect this to render UI and handle user interactions for a specific route.**";
     if (fileObj.path.startsWith('components/')) intent = "Reusable React component. **We expect this to receive props and render a specific piece of the UI independently.**";
@@ -92,53 +117,58 @@ for (const [group, files] of Object.entries(groupedFiles)) {
 
     mdContent += `> **Description:** ${description}\n>\n> **What we expect from it:** ${intent}\n\n`;
     
-    // Extract functions
-    const funcRegex = /export\s+(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)/g;
-    const funcs = [];
+    mdContent += `### Core Code Logic & Implementations:\n\n`;
+
+    let extractedAnything = false;
+
+    // Extract default exports
+    const defRegex = /export\s+default\s+(?:async\s+)?function\s+([a-zA-Z0-9_]*)/g;
     let m;
+    while ((m = defRegex.exec(content)) !== null) {
+      extractedAnything = true;
+      const name = m[1] || 'DefaultComponent';
+      const block = extractCodeBlock(content, m.index);
+      mdContent += `#### \`default function ${name}\`\n\`\`\`tsx\n${block}\n\`\`\`\n\n`;
+    }
+
+    // Extract functions
+    const funcRegex = /export\s+(?:async\s+)?function\s+([a-zA-Z0-9_]+)/g;
     while ((m = funcRegex.exec(content)) !== null) {
-      const args = m[2].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      funcs.push(`- **\`function ${m[1]}(${args})\`**: Executes logic related to ${m[1].replace(/([A-Z])/g, ' $1').toLowerCase()}.`);
+      // Don't duplicate if it's export default function (handled above loosely, but just in case)
+      extractedAnything = true;
+      const block = extractCodeBlock(content, m.index);
+      mdContent += `#### \`function ${m[1]}\`\n\`\`\`tsx\n${block}\n\`\`\`\n\n`;
     }
     
     // Extract const exports (including arrows)
     const constRegex = /export\s+const\s+([a-zA-Z0-9_]+)\s*=/g;
-    const consts = [];
     while ((m = constRegex.exec(content)) !== null) {
-      consts.push(`- **\`const ${m[1]}\`**: Exported constant or arrow function.`);
-    }
-
-    // Extract default exports
-    const defRegex = /export\s+default\s+(?:async\s+)?function\s+([a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
-    const defs = [];
-    while ((m = defRegex.exec(content)) !== null) {
-      const name = m[1] || 'DefaultComponent';
-      const args = m[2].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      defs.push(`- **\`default function ${name}(${args})\`**: The primary export of this file.`);
+      extractedAnything = true;
+      const block = extractCodeBlock(content, m.index);
+      mdContent += `#### \`const ${m[1]}\`\n\`\`\`tsx\n${block}\n\`\`\`\n\n`;
     }
 
     // Extract interfaces/types
     const typeRegex = /export\s+(?:interface|type)\s+([a-zA-Z0-9_]+)/g;
-    const types = [];
     while ((m = typeRegex.exec(content)) !== null) {
-      types.push(`- **\`${m[1]}\`**: Type definition.`);
+      extractedAnything = true;
+      const block = extractCodeBlock(content, m.index);
+      mdContent += `#### \`type ${m[1]}\`\n\`\`\`tsx\n${block}\n\`\`\`\n\n`;
     }
 
-    mdContent += `### Code & Functions Inside:\n`;
-    if (defs.length > 0 || funcs.length > 0 || consts.length > 0 || types.length > 0) {
-      if (defs.length > 0) mdContent += defs.join('\n') + '\n';
-      if (funcs.length > 0) mdContent += funcs.join('\n') + '\n';
-      if (consts.length > 0) mdContent += consts.join('\n') + '\n';
-      if (types.length > 0) mdContent += types.join('\n') + '\n';
-    } else {
-      mdContent += `- *No explicitly exported functions or types found. This may be an internal script, a layout configuration, or purely side-effecting code.*\n`;
+    if (!extractedAnything) {
+      // If no explicit exports, maybe it's just a raw sql script or logic file. Show the whole file.
+      if (fileObj.path.endsWith('.sql') || content.length < 500) {
+        mdContent += `#### Raw File Source\n\`\`\`sql\n${content.trim()}\n\`\`\`\n\n`;
+      } else {
+        mdContent += `- *No explicitly exported functions or types found. This may be an internal script, a layout configuration, or purely side-effecting code.*\n\n`;
+      }
     }
     
-    // Stats
     const lines = content.split('\n').length;
-    mdContent += `\n*Size: **${lines}** lines of code.*\n\n---\n\n`;
+    mdContent += `*Size: **${lines}** lines of code.*\n\n---\n\n`;
   }
 }
 
 fs.writeFileSync('docs/EXHAUSTIVE_CODEBASE_REFERENCE.md', mdContent);
-console.log('Done!');
+console.log('Done generating code blocks!');
