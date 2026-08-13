@@ -701,7 +701,7 @@ async function uploadPdfToStorage(
 export async function generateJobReport(
   jobId: string,
   onProgress?: ReportProgressCallback
-): Promise<{ pdfUri: string; html: string; title: string; reportUrl: string | null; completed: boolean }> {
+): Promise<{ pdfUri: string; html: string; title: string; reportUrl: string | null; completed: boolean; wasCacheHit: boolean }> {
   try {
     onProgress?.('fetching_data');
     const rawData = await fetchReportData(jobId);
@@ -750,9 +750,11 @@ export async function generateJobReport(
 
     // Fast path: If the HTML hasn't changed AND no pending local changes AND we
     // already have a report URL, skip generation and upload for speed.
+    let wasCacheHit = false;
     if (lastHash === htmlHash && reportUrl && !hasPendingForThisJob) {
       console.log('[UMA BUILDING SERVICES] Report HTML unchanged. Skipping PDF generation and upload.');
       onProgress?.('cached', 'Report is up to date.');
+      wasCacheHit = true;
       // We still need a local PDF in case they click Share.
       // BUG-N9 FIX: Wrap download in try/catch — if offline or URL expired,
       // fall through to full regeneration rather than throwing to the caller.
@@ -811,7 +813,7 @@ export async function generateJobReport(
     // `completed` is true only when the job was already completed AND the PDF uploaded/exists OK.
     const completed = alreadyCompleted && reportUrl !== null;
 
-    return { pdfUri, html, title, reportUrl, completed };
+    return { pdfUri, html, title, reportUrl, completed, wasCacheHit };
   } catch (error) {
     console.error('[UMA BUILDING SERVICES] PDF generation error:', error);
     throw error;

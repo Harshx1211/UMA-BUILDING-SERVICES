@@ -6,8 +6,6 @@ import {
   Platform,
   TouchableOpacity,
   RefreshControl,
-  Linking,
-  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -539,20 +537,14 @@ export default function ReportSummaryScreen() {
           ) : (
             <View style={s.bottomBtnRow}>
               <Button
-                title="Download PDF"
-                icon="file-download-outline"
+                title="Open PDF"
+                icon="file-eye-outline"
                 variant="primary"
-                onPress={() => {
-                  if (job.report_url) {
-                    Linking.openURL(`${job.report_url}?t=${Date.now()}`);
-                  } else {
-                    Alert.alert('Not Available', 'The PDF report is not yet available.');
-                  }
-                }}
+                onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
                 style={{ flex: 1 }}
               />
               <Button
-                title="Regenerate"
+                title="Refresh"
                 icon="refresh"
                 variant="secondary"
                 onPress={() => router.push(`/jobs/${jobId}/preview` as never)}

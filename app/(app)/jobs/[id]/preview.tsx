@@ -5,6 +5,8 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  BackHandler,
+  Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -94,6 +96,27 @@ function GeneratingView({ stage, detail, primaryColor, textColor, textSecondary,
   );
 }
 
+// ─── Viewport injection for Android ───────────────────────────────────────
+// The report HTML uses <meta name="viewport" content="width=794"/> (A4 width).
+// On Android, scalesPageToFit is deprecated and doesn't reliably scale a 794px
+// layout to fit a ~360–414px screen. We inject JS to set the meta tag correctly
+// and let the WebView scale the content to the visible width automatically.
+
+const VIEWPORT_INJECTION = `
+(function() {
+  var meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'viewport';
+    document.head.appendChild(meta);
+  }
+  meta.content = 'width=device-width, initial-scale=1.0, shrink-to-fit=yes';
+  // Allow pinch-to-zoom for detailed review of the PDF content
+  document.body.style.webkitTextSizeAdjust = '100%';
+  true;
+})();
+`;
+
 // ─── Main screen ───────────────────────────────────────────────────────────
 
 export default function PreviewScreen() {
@@ -110,15 +133,51 @@ export default function PreviewScreen() {
   const [pdfTitle, setPdfTitle]         = useState('Service Report');
   const [webViewReady, setWebViewReady] = useState(false);
   const [isSharing, setIsSharing]       = useState(false);
-  const isMountedRef                    = useRef(true);
 
-  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
+  // isMountedRef: prevents state updates after unmount (e.g. fast back-navigation
+  // while generation is still running in the background).
+  const isMountedRef    = useRef(true);
+  // isRunningRef: prevents re-entrant calls to generate() (e.g. rapid retry taps).
+  const isRunningRef    = useRef(false);
 
-  // M6: `generate` as useCallback so the retry Alert always calls the current closure
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  // ── BackHandler: warn user if generation is in progress ──────────────────
+  useEffect(() => {
+    if (!isGenerating) return;
+
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert(
+        'Report in Progress',
+        'The PDF is still generating. Going back will not cancel it — it will complete in the background.\n\nWould you like to go back anyway?',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Go Back', style: 'destructive', onPress: () => router.back() },
+        ],
+      );
+      return true; // Consume the back press — our Alert handles navigation
+    });
+
+    return () => handler.remove();
+  }, [isGenerating]);
+
+  // M6: `generate` as useCallback so the retry Alert always calls the current closure.
   const generate = useCallback(async () => {
     if (!jobId) return;
+
+    // Re-entrant guard — prevents double-generation if the user taps Retry very fast
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
+
+    // Reset all display state for a clean retry experience
     setIsGenerating(true);
     setStage('fetching_data');
+    setStageDetail(undefined);
+    setWebViewReady(false);
+
     try {
       const result = await generateJobReport(jobId, (s, detail) => {
         if (!isMountedRef.current) return;
@@ -127,6 +186,7 @@ export default function PreviewScreen() {
       });
 
       if (!isMountedRef.current) return;
+
       // FIX: stable path (no timestamp) — overwrites the previous HTML file
       // instead of accumulating a new one per generation in cacheDirectory.
       const fileUri = `${FileSystem.cacheDirectory}preview_${jobId}.html`;
@@ -135,21 +195,26 @@ export default function PreviewScreen() {
       setPdfUri(result.pdfUri);
       setPdfTitle(result.title);
 
-      // Only mark the job complete if pdfGenerator confirmed it was ALREADY completed
-      // before generation. Draft previews (in_progress → /preview) set result.completed=false
-      // even when a reportUrl exists, preserving the CompletionBottomSheet signature gate.
-      if (result.completed) {
+      // FIX: Only show Toasts when something actually happened this call.
+      // Cache hits (result.wasCacheHit=true) mean nothing was uploaded —
+      // showing "Report Uploaded" would be misleading.
+      if (result.completed && !result.wasCacheHit) {
+        // A NEW upload just completed and the job was already in completed state
         updateJobStatus(jobId, JobStatus.Completed);
         Toast.show({
           type: 'success',
           text1: 'Report Uploaded',
-          text2: 'Job marked complete. Admin can now access this report.',
+          text2: 'Admin can now access this report.',
         });
-      } else if (result.reportUrl) {
-        // Draft preview — PDF saved to cloud but job remains in-progress
+      } else if (result.completed && result.wasCacheHit) {
+        // Just opened a cached report for a completed job — no Toast needed,
+        // the report is already there and the user can immediately share it.
+        // Silently proceed.
+      } else if (result.reportUrl && !result.wasCacheHit) {
+        // A NEW draft PDF was saved to cloud for an in-progress job
         Toast.show({
           type: 'info',
-          text1: 'Draft Saved',
+          text1: 'Draft Preview Saved',
           text2: 'Complete the job first to finalise this report.',
         });
       }
@@ -169,9 +234,11 @@ export default function PreviewScreen() {
             onPress: () => generate(),
           },
           { text: 'Go Back', style: 'cancel', onPress: () => router.back() },
-        ]
+        ],
       );
       setIsGenerating(false);
+    } finally {
+      isRunningRef.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -249,11 +316,18 @@ export default function PreviewScreen() {
               originWhitelist={['*']}
               source={{ uri: htmlContent }}
               allowFileAccess={true}
+              // FIX: allowFileAccessFromFileURLs is required on Android for data: URIs
+              // embedded in a file:// HTML to load (photos encoded as base64 data URIs).
+              allowFileAccessFromFileURLs={true}
+              // FIX: scalesPageToFit is deprecated on Android. Use injectedJavaScript
+              // to set a proper viewport meta tag so the 794px A4 layout scales to
+              // fit the device screen width correctly on both iOS and Android.
+              scalesPageToFit={Platform.OS === 'ios'}
+              injectedJavaScript={Platform.OS === 'android' ? VIEWPORT_INJECTION : undefined}
               style={{ flex: 1, backgroundColor: C.surface }}
               onLoadEnd={() => setWebViewReady(true)}
               showsVerticalScrollIndicator={false}
               bounces={false}
-              scalesPageToFit={true}
             />
           ) : (
             <View style={[styles.errorView, { backgroundColor: C.background }]}>
