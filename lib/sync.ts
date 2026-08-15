@@ -7,6 +7,7 @@ import {
   markSyncItemComplete,
   incrementSyncRetry,
   upsertRecord,
+  upsertRecordBulk,
   getJobStatus,
   getDeletedPhotoIds,
   getFailedSyncItems,
@@ -527,6 +528,17 @@ async function _pullRelated(
       tombstoneIds = getDeletedPhotoIds();
     }
 
+    // Collect rows to upsert after applying all local-override logic.
+    // We build the list first, then call upsertRecordBulk() which wraps the
+    // entire batch in PRAGMA foreign_keys=OFF.
+    //
+    // WHY: expo-sqlite enables FK enforcement by default on Android. When the
+    // sync pulls job_assets before all their referenced asset rows exist locally
+    // (e.g. first install, or after a cache wipe), the FK check fires and crashes
+    // with "FOREIGN KEY constraint failed". The server is already the source of
+    // referential truth, so we disable FK checks only for this server-pull batch.
+    const rowsToUpsert: Record<string, string | number | boolean | null>[] = [];
+
     let skipped = 0;
     for (const row of data) {
       const rowId = (row as Record<string, unknown>).id as string;
@@ -565,11 +577,14 @@ async function _pullRelated(
         }
       }
 
-      upsertRecord(table, row as Record<string, string | number | boolean | null>);
+      rowsToUpsert.push(row as Record<string, string | number | boolean | null>);
     }
+
+    // Bulk upsert with FK enforcement temporarily disabled
+    upsertRecordBulk(table, rowsToUpsert);
+
     if (__DEV__) {
-      const upserted = data.length - skipped;
-      if (upserted > 0) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${upserted} ${table} row(s)`);
+      if (rowsToUpsert.length > 0) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${rowsToUpsert.length} ${table} row(s)`);
       if (skipped > 0)  console.log(`[UMA BUILDING SERVICES Sync] PULL: skipped ${skipped} tombstoned/preserved ${table} row(s)`);
     }
   }

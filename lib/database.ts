@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 29;
+const CURRENT_SCHEMA_VERSION = 30;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1691,9 +1691,39 @@ export function upsertRecord(table: string, data: RecordData): void {
   }
 }
 
-// ─────────────────────────────────────────────
-// Extended query helpers
-// ─────────────────────────────────────────────
+/**
+ * Upserts a batch of server-pulled records with FK enforcement temporarily disabled.
+ *
+ * WHY: expo-sqlite enables PRAGMA foreign_keys=ON by default on Android. When the
+ * sync engine pulls related tables (e.g. job_assets before its asset row is locally
+ * present), the FK check fires and crashes the upsert with:
+ *   "FOREIGN KEY constraint failed"
+ * The server is already the source of referential truth — if Supabase accepted the
+ * row, the FK is valid server-side. We don't need the local device to re-validate it
+ * during a bulk pull. This wrapper disables FK checks for the duration of the batch
+ * and re-enables them immediately after, so user-initiated writes (inserts from screens)
+ * are still FK-guarded.
+ *
+ * @param table  - SQLite table name
+ * @param rows   - Array of rows from Supabase to upsert
+ */
+export function upsertRecordBulk(
+  table: string,
+  rows: RecordData[],
+): void {
+  if (rows.length === 0) return;
+  const db = openDatabase();
+  try {
+    db.runSync('PRAGMA foreign_keys = OFF');
+    for (const row of rows) {
+      upsertRecord(table, row);
+    }
+  } finally {
+    // Always re-enable FK enforcement, even if an individual upsert threw.
+    db.runSync('PRAGMA foreign_keys = ON');
+  }
+}
+
 
 /**
  * Returns a single job by id with a full property JOIN.
