@@ -14,7 +14,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
@@ -31,6 +31,8 @@ import type { Property, Asset } from '@/types';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 
 import { generateUUID } from '@/utils/uuid';  // BUG 28 FIX
+import { localDateString } from '@/utils/dateHelpers';
+import { useFocusEffect } from '@react-navigation/native';
 
 // ─── Defect quick-suggestion chips per asset type ────────────
 const DEFECT_CHIPS: Record<string, string[]> = {
@@ -302,9 +304,28 @@ export default function SiteInspectScreen() {
   }, [hasProgress, saveInspection]);
 
   useEffect(() => {
+    // Android hardware back button
     const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => sub.remove();
   }, [handleBackPress]);
+
+  // FIX: Intercept ALL back navigation — including the iOS header back button
+  // and swipe-to-go-back gesture. BackHandler only handles the Android hardware
+  // back key. Without this, tapping the Expo Router navigation header on iOS
+  // would silently discard all inspection results without any confirmation dialog.
+  const navigation = useNavigation();
+  useFocusEffect(
+    useCallback(() => {
+      const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+        if (!hasProgress) return; // allow navigation if no work done
+        // Prevent the default back action
+        e.preventDefault();
+        // Show the same confirmation dialog
+        handleBackPress();
+      });
+      return unsubscribe;
+    }, [navigation, hasProgress, handleBackPress])
+  );
 
 
   // ── Result handlers ──────────────────────────────────────
@@ -390,7 +411,11 @@ export default function SiteInspectScreen() {
     setIsSaving(true);
     try {
       const now   = new Date().toISOString();
-      const today = now.slice(0, 10);
+      // FIX: Use localDateString() for the job's scheduled_date.
+      // new Date().toISOString().slice(0,10) is UTC — before ~10am AEST
+      // this writes yesterday's date as the on-site job's scheduled_date,
+      // creating a job record that appears to have happened the day before.
+      const today = localDateString();
       const jobId = generateUUID();
 
       // 1. Create completed job

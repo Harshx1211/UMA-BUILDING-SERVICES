@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { InspectionPhoto } from '@/types';
 import {
   getPhotosForJob,
+  getRecord,
   insertRecord,
   updateRecord,
   deleteRecord,
@@ -86,8 +87,15 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   deletePhoto: (photoId) => {
     try {
-      const photo = get().photos.find((p) => p.id === photoId);
-      const photoUrl = photo?.photo_url;
+      // FIX: Read the photo's current state from SQLite, NOT from the in-memory store.
+      // processPhotoQueue updates photo_url in SQLite (file:// → https://) but
+      // never updates the Zustand store. If the app backgrounded after upload,
+      // the in-memory photo still shows a file:// URI even though the photo is
+      // already on Supabase. Using the stale in-memory value caused
+      // cancelPendingPhotoUpload() to fire on an already-uploaded photo,
+      // leaving an orphaned Supabase row and binary that could never be deleted.
+      const dbPhoto = getRecord<{ photo_url: string | null }>('inspection_photos', photoId);
+      const photoUrl = dbPhoto?.photo_url ?? get().photos.find(p => p.id === photoId)?.photo_url;
 
       // 1. Remove from local SQLite immediately
       deleteRecord('inspection_photos', photoId);

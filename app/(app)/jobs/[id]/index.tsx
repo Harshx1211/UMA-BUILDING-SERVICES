@@ -236,12 +236,17 @@ export default function JobDetailScreen() {
       );
       return;
     }
-    // FIX: block completion if no assets have been inspected at all.
-    // A completed job with 0 inspected assets generates a meaningless blank PDF.
-    if (inspected === 0) {
+    // FIX: Check that all assets have a result (pass/fail/not_tested),
+    // not just that pass+fail count > 0.
+    // Previously: inspected = passedCount + failedCount, so an all-N/T job
+    // had inspected===0 and was permanently blocked from completion.
+    // N/T is a valid final inspection state — a tech who marks everything N/T
+    // has completed their assessment.
+    const allAssetsResulted = totalAssets > 0 && assets.every(a => a.result !== null);
+    if (!allAssetsResulted && totalAssets > 0) {
       Alert.alert(
-        'No Assets Inspected',
-        'You must inspect at least one asset before completing this job.',
+        'Inspection Incomplete',
+        'All assets must have a result (Pass, Fail, or Not Tested) before completing this job.',
         [
           { text: 'Cancel', style: 'cancel' },
           {

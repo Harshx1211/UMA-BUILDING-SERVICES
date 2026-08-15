@@ -21,7 +21,10 @@ export default function CompletionBottomSheet({
 }: Props) {
   const C = useColors();
 
-  const allAssetsDone = assetsTotal > 0 && assetsTotal === assetsInspected;
+  // FIX: assetsInspected used to be pass+fail only, so an all-N/T job showed
+  // the warning state even though all assets had been actioned.
+  // allAssetsResulted is passed from the parent and uses .every(a=>a.result!==null).
+  const allAssetsDone = assetsTotal > 0 && assetsInspected === assetsTotal;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

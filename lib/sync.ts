@@ -424,13 +424,13 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
         const localUpdateMs = new Date(localStatus.updated_at).getTime();
         const isStale = Date.now() - localUpdateMs > STALE_THRESHOLD_MS;
         if (!isStale) {
-          // Preserve local status — still upsert all other fields from server
-          if (__DEV__) {
-            console.log(
-              `[UMA BUILDING SERVICES Sync] PULL: preserving local '${localStatus.status}' over server '${job.status}' for job ${job.id}`
-            );
-          }
-          const { status: _ignored, ...rest } = job as Record<string, unknown>;
+          // FIX: Also strip updated_at from the server payload.
+          // Previously we only stripped 'status' but wrote the server's updated_at.
+          // On the next pull, the staleness check (Date.now() - updated_at > 6h)
+          // treated the row as freshly-updated by the server and overwrote the
+          // tech's in_progress/completed status. Stripping both columns ensures
+          // the local updated_at (set when the tech changed status) is preserved.
+          const { status: _ignored, updated_at: _updIgnored, ...rest } = job as Record<string, unknown>;
           upsertRecord('jobs', { ...rest, status: localStatus.status } as Record<string, string | number | boolean | null>);
           preservedCount++;
           continue;
@@ -579,7 +579,10 @@ async function _pullRelated(
  * Pushes all pending sync_queue items to Supabase, marking each complete on success.
  * Items that fail MAX_SYNC_RETRIES times are permanently abandoned to prevent infinite loops.
  */
-async function _pushQueue(): Promise<void> {
+// Exported for emergency use by authStore.forceFinalSyncAndSignOut only.
+// The leading underscore signals this is an internal function — do not call
+// it from screens or other stores. Use runSync() for normal sync triggering.
+export async function _pushQueue(): Promise<void> {
   const pending = getPendingSyncItems();
 
   if (pending.length === 0) {
@@ -657,10 +660,26 @@ async function _pushQueue(): Promise<void> {
         );
         // Increment retry counter; marks synced=-1 when limit is reached
         incrementSyncRetry(item.id, error.message, MAX_SYNC_RETRIES);
-      } else {
+      } else if (error === null && (
+        item.operation === SyncOperation.Insert ||
+        item.operation === SyncOperation.Update ||
+        item.operation === SyncOperation.Delete
+      )) {
+        // Only mark complete for operations we actually handled above.
+        // FIX: Previously any unrecognised operation (e.g. 'photo_upload')
+        // fell through to markSyncItemComplete() here — the photo binary was
+        // never uploaded but the queue item was marked done, permanently
+        // losing the photo. Now we only mark complete for handled operations.
         markSyncItemComplete(item.id);
         if (__DEV__) console.log(
           `[UMA BUILDING SERVICES Sync] PUSH: queue item ${item.id} (${item.table_name}/${item.operation}) complete`
+        );
+      } else if (error === null) {
+        // Unrecognised operation — leave in queue, log a warning so it's visible.
+        // photo_upload items are handled separately by processPhotoQueue() in
+        // photoUpload.ts and must NOT be marked complete here.
+        console.warn(
+          `[UMA BUILDING SERVICES Sync] PUSH: skipping unknown operation '${item.operation}' for item ${item.id} — not marking complete`
         );
       }
     } catch (err) {

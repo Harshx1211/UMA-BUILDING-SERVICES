@@ -35,11 +35,16 @@ import * as FileSystem from 'expo-file-system/legacy';
 export function getValidLocalUri(uri: string | null | undefined): string {
   if (!uri) return '';
 
-  // Remote URLs and data URIs are unaffected by session path changes
+  // Remote URLs, data URIs, and Android content URIs are unaffected by session path changes
   if (
     uri.startsWith('http://') ||
     uri.startsWith('https://') ||
-    uri.startsWith('data:')
+    uri.startsWith('data:') ||
+    // FIX: content:// URIs are Android media store references (e.g. content://media/external/images/media/123)
+    // They are OS-managed handles — NOT file paths that can be reconstructed.
+    // Previously they fell through to the filename-extraction path and became
+    // {documentDirectory}123 — a nonexistent path that broke all previews and uploads.
+    uri.startsWith('content://')
   ) {
     return uri;
   }

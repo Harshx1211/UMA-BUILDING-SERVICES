@@ -201,14 +201,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
         if (__DEV__) console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
-        const { runSync } = await import('@/lib/sync');
-        // Give it up to 5 strong attempts to push data
+        // FIX: Import _pushQueue directly instead of runSync().
+        // runSync() has a mutex guard (_isSyncing) that returns immediately
+        // when called from within an already-running sync cycle (e.g. when the
+        // deactivated-user check fires during a pull). Calling runSync() in a
+        // loop would spin 5x and make 0 progress, then show "Final Sync Failed"
+        // even with a perfect network connection.
+        // _pushQueue bypasses the mutex and directly processes pending items.
+        const { _pushQueue } = await import('@/lib/sync');
         for (let i = 0; i < 5; i++) {
-          await runSync();
+          await _pushQueue();
           pending = getPendingSyncItems();
           if (pending.length === 0) break;
-          // backoff
-          await new Promise(r => setTimeout(r, 3000));
+          // Exponential backoff: 1s, 2s, 3s, 4s, 5s
+          await new Promise(r => setTimeout(r, (i + 1) * 1000));
         }
         
         // Critical Data Loss Prevention:
@@ -281,7 +287,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
                 if (companyRes) {
                   await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(companyRes)).catch(() => null);
                   useAuthStore.setState({ company: companyRes });
-                  if (companyRes.subscription_status !== 'active') {
+                  // FIX: Check is_active FIRST, inside the companyRes branch.
+                  // Previously, is_active was only checked in the `else if` branch
+                  // that only ran when companyRes was null. A deactivated user with
+                  // a valid company row was never logged out.
+                  if (profile.is_active === false) {
+                    console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
+                    get().forceFinalSyncAndSignOut();
+                  } else if (companyRes.subscription_status !== 'active') {
                     console.warn('[AuthStore] Company suspended during background check. Forcing graceful logout.');
                     get().forceFinalSyncAndSignOut();
                   }

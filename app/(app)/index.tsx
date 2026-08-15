@@ -26,6 +26,7 @@ import { Typography } from '@/constants/Typography';
 import { JobStatus } from '@/constants/Enums';
 import type { Job } from '@/types';
 import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow } from '@/components/ui';
+import { localDateString } from '@/utils/dateHelpers';
 
 // ─── Priority left-bar color (semantic, matches the rule: urgent=danger, high=warning) ──
 const PRIORITY_BAR: Record<string, string> = {
@@ -146,7 +147,10 @@ export default function HomeScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const today      = new Date().toISOString().slice(0, 10);
+  // FIX: Use localDateString() instead of toISOString().slice(0,10).
+  // toISOString() is UTC — before ~10am AEST the UTC date is already "yesterday".
+  // This caused "Today's Jobs" to show 0 jobs all morning in Australian timezones.
+  const today      = localDateString();
   const todayJobs  = jobs.filter((j: Job) => j.scheduled_date === today);
   const doneToday  = todayJobs.filter((j: Job) => j.status === JobStatus.Completed).length;
   const inProgress = jobs.find((j: Job) => j.status === JobStatus.InProgress);
@@ -168,15 +172,21 @@ export default function HomeScreen() {
     };
     onSyncComplete(onSync);
 
-    // Active job pulse animation
-    Animated.loop(
+    // Active job pulse animation — store reference so we can stop it on unmount
+    const pulseAnimation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.025, duration: 1000, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1,     duration: 1000, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulseAnimation.start();
 
-    return () => offSyncComplete(onSync);
+    return () => {
+      offSyncComplete(onSync);
+      // FIX: Stop the pulse animation on unmount to prevent the
+      // "Can't perform a React state update on an unmounted component" warning.
+      pulseAnimation.stop();
+    };
   }, [user, loadJobs, pulseAnim]);
 
   const onRefresh = useCallback(async () => {

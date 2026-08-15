@@ -4,7 +4,8 @@ import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
 import { stopSync } from '@/lib/sync';
-import { supabase } from '@/lib/supabase';
+import { updateRecord, addToSyncQueue } from '@/lib/database';
+import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Badge } from '@/components/ui';
@@ -59,21 +60,24 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!user) return;
     setIsSaving(true);
-    // Sanitize phone: strip anything that isn't digits, +, -, spaces or parentheses
-    const phone = sanitizeText(editForm.phone.trim(), 15);
-    const { data, error } = await supabase
-      .from('users')
-      .update({ phone })
-      .eq('id', user.id)
-      .select()
-      .single();
-    
-    setIsSaving(false);
-    if (error) {
-      Alert.alert('Error', 'Failed to update profile.');
-    } else {
-      updateUser(data);
+    try {
+      // Sanitize phone: strip anything that isn't digits, +, -, spaces or parentheses
+      const phone = sanitizeText(editForm.phone.trim(), 15);
+
+      // FIX: Use offline-first pattern — write to SQLite immediately, queue
+      // for sync. The old code wrote directly to Supabase with no try/catch
+      // and no retry logic, meaning it silently failed when offline.
+      updateRecord('users', user.id, { phone });
+      addToSyncQueue('users', user.id, SyncOperation.Update, { phone });
+
+      // Update in-memory auth state so the UI reflects the change immediately
+      updateUser({ ...user, phone });
       setIsEditing(false);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      console.error('[Profile] handleSave error:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 

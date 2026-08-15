@@ -900,17 +900,19 @@ function thumbHtml(photo: InspectionPhoto): string {
 
 function defectPhotoHtml(url: string, cap = "Photo"): string {
   if (!isSafe(url)) return "";
+  // FIX: sanitize photo captions — user-supplied text that goes directly into HTML
+  const safeCaption = sanitizeForHtml(cap);
   if (!isRealPhoto(url)) {
     return `
     <div class="photo-wrap nb">
       <div class="photo-defect photo-unavailable">Photo<br/>unavailable</div>
-      <div class="photo-cap">${cap}</div>
+      <div class="photo-cap">${safeCaption}</div>
     </div>`;
   }
   return `
   <div class="photo-wrap nb">
-    <img src="${url}" class="photo-defect" alt="${cap}" onerror="this.style.display='none'"/>
-    <div class="photo-cap">${cap}</div>
+    <img src="${url}" class="photo-defect" alt="${safeCaption}" onerror="this.style.display='none'"/>
+    <div class="photo-cap">${safeCaption}</div>
   </div>`;
 }
 
@@ -1032,11 +1034,11 @@ function buildDefectBox(
       <div class="db-body">
         <div class="db-field">
           <span class="db-field-lbl">Description: </span>
-          <span class="db-field-val">${defect.description || 'Defect observed during inspection.'}</span>
+          <span class="db-field-val">${sanitizeForHtml(defect.description || 'Defect observed during inspection.')}</span>
         </div>
         <div class="db-field">
           <span class="db-field-lbl">Resolution: </span>
-          <span class="db-field-val">${resolution}</span>
+          <span class="db-field-val">${sanitizeForHtml(resolution)}</span>
         </div>
         <div class="db-field">
           <span class="db-field-lbl">Status: </span>
@@ -1067,7 +1069,7 @@ function buildDefectBox(
     <div class="db-body">
       <div class="db-field">
         <div class="db-field-lbl">Defect Description</div>
-        <div class="db-field-val">${asset.defect_reason || "Asset failed testing parameters during inspection."}</div>
+        <div class="db-field-val">${sanitizeForHtml(asset.defect_reason || 'Asset failed testing parameters during inspection.')}</div>
       </div>
       <div class="db-field">
         <div class="db-field-lbl">Required Remediation Action</div>

@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sitetrack.app"
+      "bundleIdentifier": "com.sitetrack.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "SiteTrack needs access to your photo library to attach existing photos to inspection reports and defect records.",
+        "NSPhotoLibraryAddUsageDescription": "SiteTrack needs permission to save inspection photos to your photo library."
+      }
     },
     "android": {
       "package": "com.sitetrack.app",
@@ -39,7 +43,8 @@
         "android.permission.USE_FINGERPRINT",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {

@@ -76,7 +76,12 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       setShowFailModal(true);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, true, undefined, asset.technician_notes || '');
+      // FIX: N/T (Not Tested) must store is_compliant=false.
+      // An asset that was not tested has NOT been validated as compliant.
+      // Storing true caused the PDF to count N/T assets as compliant,
+      // directly corrupting AS1851 compliance data.
+      // The site-inspect path correctly uses false — this now matches it.
+      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '');
     }
   };
 

@@ -1063,6 +1063,35 @@ export function initializeSchema(): void {
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 29 complete (inspection_photos.local_uri)');
   }
 
+  // Migration 30: Add missing updated_at columns to users, assets, and defects.
+  //
+  // WHY: These columns exist in Supabase and are included in every pull response,
+  // but were absent from the local SQLite CREATE TABLE definitions.
+  // Effect was threefold:
+  //   1. Every sync pull called upsertRecord() which threw "no column named updated_at",
+  //      forcing a second PRAGMA table_info() lookup + filtered re-insert on EVERY row.
+  //   2. defects.updated_at was always null in SQLite, so the PDF's "Last Verified" date
+  //      always fell back to created_at even when the defect had been updated.
+  //   3. The sync conflict-resolution staleness guard on assets couldn't read updated_at.
+  if (currentVersion < 30) {
+    const addUpdatedAt = (table: string) => {
+      try {
+        db.runSync(`ALTER TABLE ${table} ADD COLUMN updated_at TEXT;`);
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 30: added ${table}.updated_at`);
+      } catch (err: unknown) {
+        const msg = String(err);
+        if (!msg.includes('duplicate column')) {
+          console.error(`[UMA BUILDING SERVICES DB] Migration 30 (${table}.updated_at) failed:`, msg);
+        }
+      }
+    };
+    addUpdatedAt('users');
+    addUpdatedAt('assets');
+    addUpdatedAt('defects');
+    currentVersion = 30;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '30')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
