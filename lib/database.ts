@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 30;
+const CURRENT_SCHEMA_VERSION = 31;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1090,6 +1090,32 @@ export function initializeSchema(): void {
     addUpdatedAt('defects');
     currentVersion = 30;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '30')`);
+  }
+
+  // Migration 31: Add custom_sidebar_label and custom_sidebar_url to companies.
+  //
+  // WHY: These columns exist in Supabase (added via the admin portal migration)
+  // but were never added to the local SQLite companies table.
+  // Every sync pull was emitting:
+  //   "upsertRecord(companies): skipping unknown columns [custom_sidebar_label, custom_sidebar_url]"
+  // and silently dropping those values, so any custom sidebar config set by
+  // an admin would never reach the technician's app.
+  if (currentVersion < 31) {
+    const addSidebarCols = (col: string) => {
+      try {
+        db.runSync(`ALTER TABLE companies ADD COLUMN ${col} TEXT;`);
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 31: added companies.${col}`);
+      } catch (err: unknown) {
+        const msg = String(err);
+        if (!msg.includes('duplicate column')) {
+          console.error(`[UMA BUILDING SERVICES DB] Migration 31 (companies.${col}) failed:`, msg);
+        }
+      }
+    };
+    addSidebarCols('custom_sidebar_label');
+    addSidebarCols('custom_sidebar_url');
+    currentVersion = 31;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '31')`);
   }
 
   // Seed inventory from Uptick defect codes on first run
