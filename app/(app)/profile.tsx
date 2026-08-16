@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
-import { stopSync } from '@/lib/sync';
-import { updateRecord, addToSyncQueue } from '@/lib/database';
+import { stopSync, retryAllFailedSyncItems } from '@/lib/sync';
+import { updateRecord, addToSyncQueue, getFailedSyncItems } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
 import { useColors } from '@/hooks/useColors';
@@ -29,9 +29,12 @@ export default function ProfileScreen() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [editForm, setEditForm] = useState({
     phone: user?.phone || '',
   });
+
+  const failedSyncCount = getFailedSyncItems().length;
 
   function _confirmLogout() {
     Alert.alert(
@@ -167,6 +170,30 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
+        {/* Retry failed syncs — only visible when there are permanently-failed items */}
+        {failedSyncCount > 0 && (
+          <TouchableOpacity
+            style={[styles.retryBtn, isRetrying && { opacity: 0.6 }]}
+            onPress={async () => {
+              setIsRetrying(true);
+              retryAllFailedSyncItems();
+              // Give the sync cycle a moment to kick off
+              setTimeout(() => setIsRetrying(false), 1500);
+              Alert.alert(
+                'Retry Queued',
+                `${failedSyncCount} failed item(s) have been re-queued. They will sync automatically within 60 seconds.`,
+              );
+            }}
+            activeOpacity={0.85}
+            disabled={isRetrying}
+          >
+            <MaterialCommunityIcons name="refresh" size={16} color="#f59e0b" />
+            <Text style={styles.retryText}>
+              {isRetrying ? 'Retrying…' : `Retry ${failedSyncCount} Failed Sync${failedSyncCount !== 1 ? 's' : ''}`}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.version}>SiteTrack v2.0  •  {company?.name || 'Company'}</Text>
       </ScrollView>
     </View>
@@ -213,9 +240,15 @@ const styles = StyleSheet.create({
   infoValue:      { color: T.textPrimary, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
   signOutBtn:     {
     backgroundColor: T.dangerBg, borderRadius: T.radiusCard, borderWidth: 1,
-    borderColor: T.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 20,
+    borderColor: T.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 12,
   },
   signOutText:    { color: T.danger, fontSize: 15, fontWeight: '700' },
+  retryBtn:       {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: T.radiusCard, borderWidth: 1,
+    borderColor: '#f59e0b', paddingVertical: 14, marginBottom: 20,
+  },
+  retryText:      { color: '#f59e0b', fontSize: 14, fontWeight: '700' },
   version:        { color: T.textMuted, fontSize: 11, textAlign: 'center' },
   input:          {
     color: T.textPrimary, fontSize: 13, fontWeight: '500',
