@@ -77,8 +77,12 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
     return 'rgba(255,255,255,0.4)';               // dim white = off
   };
 
+  // Guard: prevent double-tap from firing two concurrent takePicture calls
+  const isTakingRef = useRef(false);
+
   const takePicture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || isTakingRef.current) return;
+    isTakingRef.current = true;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (photo) {
@@ -92,11 +96,17 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
         // Save to document directory for permanent app access
         const filename = `photo_${Date.now()}.jpg`;
         const destUri = `${FileSystem.documentDirectory}${filename}`;
-        
+
+        // FIX: If the permanent copy fails, abort entirely. Previously the catch was
+        // silent and addPhoto still ran with the temp camera URI — that temp file is
+        // deleted by the OS, leaving a broken photo row and an upload task that retries
+        // 5 times before being permanently abandoned.
         try {
           await FileSystem.copyAsync({ from: manipResult.uri, to: destUri });
-        } catch (e) {
-          console.warn('Failed to copy to document directory', e);
+        } catch (copyErr) {
+          console.error('[PhotoCapture] Failed to copy to document directory:', copyErr);
+          Toast.show({ type: 'error', text1: 'Photo save failed', text2: 'Could not write to device storage. Please try again.' });
+          return;
         }
 
         const currentUserId = useAuthStore.getState().user?.id ?? null;
@@ -131,6 +141,8 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
     } catch (e) {
       console.error(e);
       Toast.show({ type: 'error', text1: 'Failed to take photo' });
+    } finally {
+      isTakingRef.current = false;
     }
   };
 

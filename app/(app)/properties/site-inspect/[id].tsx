@@ -278,6 +278,16 @@ export default function SiteInspectScreen() {
     [results]
   );
 
+  // FIX: Flag set immediately before any programmatic navigation so the
+  // beforeRemove listener knows to skip the guard (avoids infinite loop where
+  // 'Discard & Exit' → router.back() → beforeRemove fires again → alert again).
+  const skipGuardRef = useRef(false);
+
+  const navigateAway = useCallback((action: () => void) => {
+    skipGuardRef.current = true;
+    action();
+  }, []);
+
   const handleBackPress = useCallback(() => {
     if (!hasProgress) return false; // let navigation proceed normally
     Alert.alert(
@@ -291,19 +301,19 @@ export default function SiteInspectScreen() {
         {
           text: 'Discard & Exit',
           style: 'destructive',
-          onPress: () => router.back(),
+          onPress: () => navigateAway(() => router.back()),
         },
         {
           text: 'Save & Exit',
           onPress: () => {
-            void saveInspection().then(() => router.back()).catch(() => router.back());
+            void saveInspection().catch(() => navigateAway(() => router.back()));
           },
         },
       ],
       { cancelable: false }
     );
     return true;
-  }, [hasProgress, saveInspection]);
+  }, [hasProgress, saveInspection, navigateAway]);
 
   useEffect(() => {
     // Android hardware back button
@@ -319,10 +329,10 @@ export default function SiteInspectScreen() {
   useFocusEffect(
     useCallback(() => {
       const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-        if (!hasProgress) return; // allow navigation if no work done
-        // Prevent the default back action
+        // FIX: Skip guard when we programmatically navigate (Discard/Save flows)
+        if (skipGuardRef.current) { skipGuardRef.current = false; return; }
+        if (!hasProgress) return;
         e.preventDefault();
-        // Show the same confirmation dialog
         handleBackPress();
       });
       return unsubscribe;
@@ -472,7 +482,8 @@ export default function SiteInspectScreen() {
         text1: 'Inspection Saved',
         text2: 'Generating your report…',
       });
-      router.replace(`/jobs/${jobId}/report` as never);
+      // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace
+      navigateAway(() => router.replace(`/jobs/${jobId}/report` as never));
     } catch (err) {
       console.error('[SiteInspect] save error:', err);
       Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });

@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 import { queueReportGeneration, getReportUrl } from '@/lib/pdfGenerator';
+import { getFailedSyncItems } from '@/lib/database';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -213,19 +214,16 @@ export default function PreviewScreen() {
     pollRef.current = setInterval(check, POLL_MS);
 
     const onSync = () => {
-      // Check for failure: if sync ran but item is still pending after MAX retries,
-      // surface an error instead of spinning forever.
-      const { getFailedSyncItems } = require('@/lib/database');
-      const failed = (getFailedSyncItems() as Array<{ operation: string; payload: string }>)
-        .filter(i => {
-          if (i.operation !== 'report_generate') return false;
-          try { return (JSON.parse(i.payload) as { jobId?: string }).jobId === jobId; }
-          catch { return false; }
-        });
+      // Check for failure: if item reached MAX retries, surface error instead of spinning
+      const failed = getFailedSyncItems().filter(i => {
+        if (i.operation !== 'report_generate') return false;
+        try { return (JSON.parse(i.payload ?? '{}') as { jobId?: string }).jobId === jobId; }
+        catch { return false; }
+      });
       if (failed.length > 0 && isMounted.current) {
         clearInterval(pollRef.current!);
         clearInterval(elapsedRef.current!);
-        setErrorMsg('Report generation failed after multiple retries. Please try again when online.');
+        setErrorMsg('Report generation failed after multiple retries. Check your connection and try again.');
         setScreenState('error');
         return;
       }
