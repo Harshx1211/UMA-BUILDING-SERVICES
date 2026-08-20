@@ -359,34 +359,6 @@ export async function buildPdfDefinition(data: any): Promise<any> {
     });
   }
 
-    sigContent.push(sectionBar('SIGNATURES'));
-    sigContent.push({
-      table: {
-        widths: ['*', '*'],
-        body: [[
-          { stack: [
-            { text: 'CLIENT SIGN-OFF', fontSize: 8, bold: true, color: MUTED, margin: [0, 0, 0, 6] },
-            clientSig
-              ? { image: clientSig, maxWidth: 220, maxHeight: 70 }
-              : { text: signature.signed_by_name ?? 'Signed', fontSize: 22, color: NAVY, italics: true },
-            { text: `Name: ${signature.signed_by_name ?? '—'}`, fontSize: 9, color: SLATE, margin: [0, 6, 0, 0] },
-            { text: `Date: ${fmtDate(signature.signed_at)}`, fontSize: 9, color: MUTED },
-          ], margin: [12, 12, 12, 12] },
-          { stack: [
-            { text: 'TECHNICIAN SIGN-OFF', fontSize: 8, bold: true, color: MUTED, margin: [0, 0, 0, 6] },
-            techSig
-              ? { image: techSig, maxWidth: 220, maxHeight: 70 }
-              : { text: techName, fontSize: 22, color: NAVY, italics: true },
-            { text: `Name: ${techName}`, fontSize: 9, color: SLATE, margin: [0, 6, 0, 0] },
-            { text: `Date: ${fmtDate(signature.signed_at)}`, fontSize: 9, color: MUTED },
-          ], margin: [12, 12, 12, 12] },
-        ]],
-      },
-      layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => BORDER, vLineColor: () => BORDER },
-      margin: [0, 8, 0, 0],
-    });
-  }
-
   // ── Document definition ───────────────────────────────────────────────────
   return {
     pageSize: 'A4',
