@@ -69,9 +69,11 @@ export enum UserRole {
 
 /** Type of write operation stored in the offline sync queue */
 export enum SyncOperation {
-  Insert = 'insert',
-  Update = 'update',
-  Delete = 'delete',
+  Insert         = 'insert',
+  Update         = 'update',
+  Delete         = 'delete',
+  /** Queued server-side PDF generation — processed by Edge Function, not a DB write */
+  ReportGenerate = 'report_generate',
 }
 
 /** Job/task urgency level */

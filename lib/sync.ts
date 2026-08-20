@@ -667,6 +667,39 @@ export async function _pushQueue(): Promise<void> {
           .delete()
           .eq('id', item.record_id);
         error = result.error;
+
+      } else if (item.operation === SyncOperation.ReportGenerate) {
+        // ── Server-side PDF generation via Supabase Edge Function ────────────
+        // The payload contains { jobId }. We call the generate-report function
+        // with the user's session token. On success, the function uploads the
+        // PDF to Storage and updates jobs.report_url server-side. We mirror
+        // that URL into local SQLite so the UI updates immediately after sync.
+        const { jobId: reportJobId } = payload as { jobId: string };
+        const session = useAuthStore.getState().session;
+        if (!session?.access_token) {
+          // No session — can't call the Edge Function. Will retry next cycle.
+          throw new Error('No auth session — report generation deferred');
+        }
+
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling generate-report Edge Function for job ${reportJobId}`);
+
+        const fnRes = await supabase.functions.invoke('generate-report', {
+          body: { jobId: reportJobId },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+
+        if (fnRes.error) {
+          error = { message: fnRes.error.message ?? 'Edge Function error' };
+        } else {
+          const { pdfUrl } = fnRes.data as { pdfUrl: string; pages?: number };
+          if (pdfUrl) {
+            // Mirror the report URL into local SQLite immediately so the
+            // preview and report screens don't have to wait for the next pull.
+            upsertRecord('jobs', { id: reportJobId, report_url: pdfUrl } as Record<string, string | number | boolean | null>);
+            if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generated → ${pdfUrl}`);
+          }
+          // error stays null → item marked complete below
+        }
       }
 
       if (error) {
@@ -678,7 +711,8 @@ export async function _pushQueue(): Promise<void> {
       } else if (error === null && (
         item.operation === SyncOperation.Insert ||
         item.operation === SyncOperation.Update ||
-        item.operation === SyncOperation.Delete
+        item.operation === SyncOperation.Delete ||
+        item.operation === SyncOperation.ReportGenerate
       )) {
         // Only mark complete for operations we actually handled above.
         // FIX: Previously any unrecognised operation (e.g. 'photo_upload')

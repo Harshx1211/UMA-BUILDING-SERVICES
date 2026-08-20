@@ -743,7 +743,50 @@ async function uploadPdfToStorage(
 }
 
 
-// ─── Main export ───────────────────────────────────────────────────────────────
+// ─── Server-side PDF via sync queue (new primary path) ────────────────────────
+//
+// Always server-side, queue-backed:
+//   Online  → sync engine calls Edge Function on next cycle (≤60s)
+//   Offline → request stored in sync_queue, fires automatically on reconnect
+//
+// Eliminates on-device base64 encoding, WebView memory pressure, and the
+// asset-count ceiling. Any site size works identically.
+
+export type ReportQueueResult = {
+  /** Existing report URL if one already exists (show immediately) */
+  existingUrl: string | null;
+  /** True if a new generation was queued */
+  queued: boolean;
+};
+
+/**
+ * Queue a server-side PDF generation request.
+ * Returns the existing report_url immediately if the job already has one,
+ * so the share button works right away for unchanged reports.
+ */
+export function queueReportGeneration(jobId: string): ReportQueueResult {
+  const job = getRecord<{ report_url: string | null }>('jobs', jobId);
+  const existingUrl = job?.report_url ?? null;
+
+  // Don't double-queue if already pending
+  const pending = getPendingSyncItems();
+  const alreadyQueued = pending.some(
+    i => i.operation === SyncOperation.ReportGenerate &&
+         (i.payload ?? '').includes(`"${jobId}"`)
+  );
+  if (alreadyQueued) return { existingUrl, queued: false };
+
+  addToSyncQueue('jobs', jobId, SyncOperation.ReportGenerate, { jobId });
+  if (__DEV__) console.log(`[PDF] report_generate queued for job ${jobId}`);
+  return { existingUrl, queued: true };
+}
+
+/** Returns the current report_url for a job from local SQLite — used to poll for completion. */
+export function getReportUrl(jobId: string): string | null {
+  return getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url ?? null;
+}
+
+// ─── Legacy on-device export (kept for reference — no longer called by preview.tsx) ──
 
 export async function generateJobReport(
   jobId: string,
