@@ -40,7 +40,6 @@ import {
 } from '@/lib/database';
 import { SyncOperation, JobStatus } from '@/constants/Enums';
 import {
-  Job,
   JoinedJob,
   Defect,
   Signature,
@@ -48,8 +47,8 @@ import {
   Quote,
   QuoteItem,
   InventoryItem,
-  User,
   TechUser,
+  TimeLog,
 } from '@/types';
 import { buildReportHtml, ReportData, AssetWithResult } from '@/lib/reportTemplate';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -276,7 +275,7 @@ async function fetchReportData(jobId: string): Promise<ReportData> {
     Promise.resolve(getSignatureForJob<Signature>(jobId)),
     Promise.resolve(getPhotosForJob<InspectionPhoto>(jobId)),
     Promise.resolve(queryRecords<Quote>('quotes', { job_id: jobId })),
-    Promise.resolve(queryRecords<Record<string, unknown>>('time_logs', { job_id: jobId })),
+    Promise.resolve(queryRecords<TimeLog>('time_logs', { job_id: jobId })),
   ]);
 
   const tech     = getRecord<TechUser>('users', job.assigned_to);
@@ -299,7 +298,10 @@ async function fetchReportData(jobId: string): Promise<ReportData> {
   return {
     job, assets, defects, signature, photos, timeLogs,
     techName, tech: tech ?? undefined, reportId,
-    approvedQuote, quoteItems, inventory, company,
+    approvedQuote, quoteItems, inventory,
+    // FIX: company is CompanyRecord|null but ReportData.company is non-nullable Record.
+    // Fallback to {} so the template gets an empty object instead of null.
+    company: (company as Record<string, string | null | undefined>) ?? {},
   };
 }
 
@@ -443,6 +445,16 @@ async function processPhotos(
   );
 
 
+  // ── Adaptive budget based on site size ───────────────────────────────────────
+  const { maxDefect, maxPass } = getPhotoBudget(data.assets.length);
+
+  const cappedDefects = defectPhotos.slice(0, maxDefect);
+  const budgetForPass = Math.max(0, maxPass - cappedDefects.length);
+  // FIX: toEncode declared HERE (line ~459 previously) but the __DEV__ log
+  // below referenced it BEFORE this declaration — Temporal Dead Zone crash on Hermes.
+  // Moved declaration above the log block to fix the TDZ.
+  const toEncode      = [...cappedDefects, ...passPhotos.slice(0, budgetForPass)];
+
   if (__DEV__) {
     console.log(
       `[PDF] Photos: total=${data.photos.length} referenced=${relevantPhotos.length} ` +
@@ -450,13 +462,6 @@ async function processPhotos(
       `encoding=${toEncode.length} assets=${data.assets.length}`
     );
   }
-
-  // ── Adaptive budget based on site size ───────────────────────────────────────
-  const { maxDefect, maxPass } = getPhotoBudget(data.assets.length);
-
-  const cappedDefects = defectPhotos.slice(0, maxDefect);
-  const budgetForPass = Math.max(0, maxPass - cappedDefects.length);
-  const toEncode      = [...cappedDefects, ...passPhotos.slice(0, budgetForPass)];
 
   const droppedDefect = defectPhotos.length - cappedDefects.length;
   const droppedPass   = passPhotos.length - Math.min(passPhotos.length, budgetForPass);

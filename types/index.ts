@@ -53,6 +53,19 @@ export interface User {
   updated_at: string;
 }
 
+/** A clock-in/clock-out time record for a job */
+export interface TimeLog {
+  id: string;
+  company_id: string;
+  job_id: string;
+  user_id: string;
+  clock_in: string;                   // ISO 8601 timestamptz
+  clock_out: string | null;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  travel_time_minutes: number | null;
+}
+
 /** A physical site/building managed for fire compliance */
 export interface Property {
   id: string;
