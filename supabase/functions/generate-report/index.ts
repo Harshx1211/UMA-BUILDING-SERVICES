@@ -184,12 +184,19 @@ serve(async (req: Request) => {
       });
     if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
-    const { data: { publicUrl } } = db.storage.from('job-reports').getPublicUrl(storagePath);
+    // FIX DB5: job-reports bucket is now private; use createSignedUrl (1h TTL).
+    // getPublicUrl() returned unauthenticated-accessible URLs — anyone with the
+    // link could download any company's compliance report without logging in.
+    const { data: signedData, error: signErr } = await db.storage
+      .from('job-reports')
+      .createSignedUrl(storagePath, 60 * 60); // 1-hour TTL
+    if (signErr || !signedData?.signedUrl) throw new Error(`Signed URL failed: ${signErr?.message}`);
+    const pdfUrl = signedData.signedUrl;
 
     // ── 7. Update jobs.report_url ─────────────────────────────────────────────
-    await db.from('jobs').update({ report_url: publicUrl }).eq('id', jobId);
+    await db.from('jobs').update({ report_url: pdfUrl }).eq('id', jobId);
 
-    return json({ pdfUrl: publicUrl });
+    return json({ pdfUrl });
   } catch (err) {
     console.error('[generate-report]', err);
     return json({ error: err instanceof Error ? err.message : 'Internal server error' }, 500);

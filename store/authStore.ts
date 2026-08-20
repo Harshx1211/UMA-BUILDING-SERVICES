@@ -195,30 +195,31 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   forceFinalSyncAndSignOut: async () => {
     // Prevent multiple parallel calls
     if (get().isForceSyncing) return;
-    
+
     set({ isForceSyncing: true });
     try {
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
         if (__DEV__) console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
-        // FIX: Import _pushQueue directly instead of runSync().
-        // runSync() has a mutex guard (_isSyncing) that returns immediately
-        // when called from within an already-running sync cycle (e.g. when the
-        // deactivated-user check fires during a pull). Calling runSync() in a
-        // loop would spin 5x and make 0 progress, then show "Final Sync Failed"
-        // even with a perfect network connection.
-        // _pushQueue bypasses the mutex and directly processes pending items.
+
+        // FIX S2: Run processPhotoQueue FIRST so offline photo binaries upload.
+        // _pushQueue only handles data records (Insert/Update/Delete/ReportGenerate).
+        // Photo binaries live in a separate binary upload queue (photoUpload.ts).
+        // Previously, offline photos were permanently lost on forced logout.
+        const { processPhotoQueue } = await import('@/lib/photoUpload');
         const { _pushQueue } = await import('@/lib/sync');
+
         for (let i = 0; i < 5; i++) {
+          await processPhotoQueue();
           await _pushQueue();
           pending = getPendingSyncItems();
           if (pending.length === 0) break;
           // Exponential backoff: 1s, 2s, 3s, 4s, 5s
           await new Promise(r => setTimeout(r, (i + 1) * 1000));
         }
-        
+
         // Critical Data Loss Prevention:
-        // If we still have pending items (e.g. poor connection), DO NOT log out and wipe the DB.
+        // If we still have pending items (poor connection), DO NOT wipe the DB.
         if (pending.length > 0) {
           console.warn(`[AuthStore] Final sync failed. ${pending.length} items remain. Aborting logout to prevent data loss.`);
           set({ isForceSyncing: false });
@@ -229,11 +230,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
               [{ text: 'OK' }]
             );
           });
-          return; // Abort signOut()
+          return;
         }
       }
-      
-      // If queue is empty (or was empty to begin with), safely wipe and logout
+
       await get().signOut();
     } catch (err) {
       console.error('[AuthStore] forceFinalSyncAndSignOut error:', err);
@@ -268,6 +268,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       if (cachedProfileStr) {
         try {
           const cached = JSON.parse(cachedProfileStr) as User;
+          // FIX A2: Validate cached profile belongs to the current session user.
+          // Without this check, a device used by User A then User B would restore
+          // User A's profile even after User B signs in (stale AsyncStorage key).
+          if (cached.id !== session.user.id) {
+            if (__DEV__) console.warn('[AuthStore] Cached profile user mismatch — discarding stale cache.');
+            await AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY]).catch(() => null);
+            throw new Error('stale cache');
+          }
           const cachedCompany = cachedCompanyStr ? JSON.parse(cachedCompanyStr) : null;
           set({ user: cached, company: cachedCompany, session, isAuthenticated: true, isLoading: false, error: null });
           // Refresh cache in the background (non-blocking) so it stays fresh
@@ -403,6 +411,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 // ---------------------------------------------
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || !session) {
+    // FIX A3: Clear SQLite and AsyncStorage on sign-out so a previous user's
+    // data doesn't persist on shared devices. stopSync() prevents the sync
+    // engine from trying to pull data for a user who is no longer logged in.
+    stopSync();
+    clearDatabase();
+    AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY]).catch(() => null);
     useAuthStore.setState({
       user: null,
       company: null,
