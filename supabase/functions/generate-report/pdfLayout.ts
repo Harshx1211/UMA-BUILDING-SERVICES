@@ -83,7 +83,7 @@ function pillCell(result: string | null): Record<string, unknown> {
   const s = map[result ?? 'not_tested'] ?? map['not_tested'];
   // fillColor only works inside a table cell — wrap in a 1-cell table for the pill look
   return {
-    table: { widths: ['*'], body: [[{ text: s.text, bold: true, fontSize: 8, color: s.color, alignment: 'center' as const, margin: [4, 3, 4, 3] }]] },
+    table: { widths: ['*'], body: [[{ text: s.text, bold: true, fontSize: 8, color: s.color, alignment: 'center', margin: [4, 3, 4, 3] }]] },
     layout: { fillColor: () => s.fill, hLineWidth: () => 0, vLineWidth: () => 0 },
   };
 }
@@ -140,8 +140,8 @@ export async function buildPdfDefinition(data: any): Promise<any> {
           { text: 'FACILITY MANAGEMENT & MAINTENANCE', fontSize: 7, color: MUTED, bold: true, characterSpacing: 1.5, margin: [0, 2, 0, 0] },
         ]},
         { stack: [
-          { text: `R-${refNum}`, fontSize: 14, bold: true, color: NAVY, alignment: 'right' as const },
-          { text: 'SERVICE REPORT', fontSize: 7, color: MUTED, bold: true, alignment: 'right' as const, characterSpacing: 0.5 },
+          { text: `R-${refNum}`, fontSize: 14, bold: true, color: NAVY, alignment: 'right' },
+          { text: 'SERVICE REPORT', fontSize: 7, color: MUTED, bold: true, alignment: 'right', characterSpacing: 0.5 },
         ]},
       ],
       margin: [0, 0, 0, 14],
@@ -178,9 +178,9 @@ export async function buildPdfDefinition(data: any): Promise<any> {
       table: {
         widths: ['*', '*', '*'],
         body: [[
-          { stack: [{ text: String(passCount), fontSize: 22, bold: true, color: '#059669' }, { text: 'PASS', fontSize: 8, bold: true, color: MUTED }], alignment: 'center' as const, margin: [0, 10, 0, 10] },
-          { stack: [{ text: String(failCount), fontSize: 22, bold: true, color: '#DC2626' }, { text: 'FAIL / DEFECT', fontSize: 8, bold: true, color: MUTED }], alignment: 'center' as const, margin: [0, 10, 0, 10] },
-          { stack: [{ text: String(ntCount),   fontSize: 22, bold: true, color: SLATE     }, { text: 'NOT TESTED', fontSize: 8, bold: true, color: MUTED }], alignment: 'center' as const, margin: [0, 10, 0, 10] },
+          { stack: [{ text: String(passCount), fontSize: 22, bold: true, color: '#059669' }, { text: 'PASS', fontSize: 8, bold: true, color: MUTED }], alignment: 'center', margin: [0, 10, 0, 10] },
+          { stack: [{ text: String(failCount), fontSize: 22, bold: true, color: '#DC2626' }, { text: 'FAIL / DEFECT', fontSize: 8, bold: true, color: MUTED }], alignment: 'center', margin: [0, 10, 0, 10] },
+          { stack: [{ text: String(ntCount),   fontSize: 22, bold: true, color: SLATE     }, { text: 'NOT TESTED', fontSize: 8, bold: true, color: MUTED }], alignment: 'center', margin: [0, 10, 0, 10] },
         ]],
       },
       layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => BORDER, vLineColor: () => BORDER },
@@ -238,7 +238,7 @@ export async function buildPdfDefinition(data: any): Promise<any> {
           [
             { text: 'REF', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG },
             { text: 'ASSET / DESCRIPTION', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG },
-            { text: 'RESULT', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'center' as const },
+            { text: 'RESULT', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'center' },
           ],
           ...rows,
         ],
@@ -276,7 +276,7 @@ export async function buildPdfDefinition(data: any): Promise<any> {
                 { text: (d.severity ?? 'MAJOR').toUpperCase(), bold: true, fontSize: 9, color: sevColor },
                 { text: `Defect #${d.id.substring(0, 6).toUpperCase()}`, fontSize: 8, color: MUTED },
               ]},
-              { text: fmtDate(d.created_at), fontSize: 8, color: MUTED, alignment: 'right' as const },
+              { text: fmtDate(d.created_at), fontSize: 8, color: MUTED, alignment: 'right' },
             ], margin: [0, 6, 0, 4] },
             { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 500, y2: 0, lineWidth: 0.5, lineColor: BORDER }] },
             { text: [{ text: 'Description: ', bold: true, color: NAVY, fontSize: 10 }, { text: d.description ?? '—', color: SLATE, fontSize: 10 }], margin: [0, 6, 0, 4] },
@@ -300,20 +300,20 @@ export async function buildPdfDefinition(data: any): Promise<any> {
         body: [
           [
             { text: 'ITEM', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG },
-            { text: 'QTY',  fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'center' as const },
-            { text: 'UNIT',  fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'right' as const },
-            { text: 'TOTAL', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'right' as const },
+            { text: 'QTY',  fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'center' },
+            { text: 'UNIT',  fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'right' },
+            { text: 'TOTAL', fontSize: 8, bold: true, color: MUTED, fillColor: GREY_BG, alignment: 'right' },
           ],
           ...quoteItems.map((item: any) => [
             { text: item.item_name ?? item.inventory_item?.name ?? '—', fontSize: 10, color: SLATE },
-            { text: String(item.quantity), fontSize: 10, alignment: 'center' as const },
-            { text: fmtCurrency(item.unit_price), fontSize: 10, alignment: 'right' as const },
-            { text: fmtCurrency(item.quantity * item.unit_price), fontSize: 10, bold: true, alignment: 'right' as const },
+            { text: String(item.quantity), fontSize: 10, alignment: 'center' },
+            { text: fmtCurrency(item.unit_price), fontSize: 10, alignment: 'right' },
+            { text: fmtCurrency(item.quantity * item.unit_price), fontSize: 10, bold: true, alignment: 'right' },
           ]),
           [
-            { text: 'Total (ex. GST)', colSpan: 3, bold: true, fontSize: 11, alignment: 'right' as const, fillColor: '#F7F9FC', border: [false, true, false, false] },
+            { text: 'Total (ex. GST)', colSpan: 3, bold: true, fontSize: 11, alignment: 'right', fillColor: '#F7F9FC', border: [false, true, false, false] },
             {}, {},
-            { text: fmtCurrency(approvedQuote.total_amount), bold: true, fontSize: 13, color: '#059669', alignment: 'right' as const, fillColor: '#F7F9FC', border: [false, true, false, false] },
+            { text: fmtCurrency(approvedQuote.total_amount), bold: true, fontSize: 13, color: '#059669', alignment: 'right', fillColor: '#F7F9FC', border: [false, true, false, false] },
           ],
         ],
       },
@@ -390,15 +390,15 @@ export async function buildPdfDefinition(data: any): Promise<any> {
   // ── Document definition ───────────────────────────────────────────────────
   return {
     pageSize: 'A4',
-    pageMargins: [36, 36, 36, 60] as [number, number, number, number],
+    pageMargins: [36, 36, 36, 60],
 
     footer: (currentPage: number, pageCount: number) => ({
       table: {
         widths: ['*', 'auto', '*'],
         body: [[
           { text: `${compName}  |  ABN: ${compAbn || 'N/A'}`, fontSize: 7.5, color: '#fff', bold: true, margin: [14, 0, 0, 0] },
-          { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8.5, color: ORANGE, bold: true, alignment: 'center' as const },
-          { text: company?.phone ? `P: ${company.phone}  |  E: ${company.contact_email ?? ''}` : '', fontSize: 7.5, color: '#aaa', alignment: 'right' as const, margin: [0, 0, 14, 0] },
+          { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8.5, color: ORANGE, bold: true, alignment: 'center' },
+          { text: company?.phone ? `P: ${company.phone}  |  E: ${company.contact_email ?? ''}` : '', fontSize: 7.5, color: '#aaa', alignment: 'right', margin: [0, 0, 14, 0] },
         ]],
       },
       layout: { fillColor: () => NAVY, hLineWidth: () => 0, vLineWidth: () => 0,
@@ -408,7 +408,7 @@ export async function buildPdfDefinition(data: any): Promise<any> {
 
     content: [
       ...coverContent,
-      { text: '', pageBreak: 'before' as const },
+      { text: '', pageBreak: 'before' },
       ...assetContent,
       ...defectContent,
       ...quoteContent,
