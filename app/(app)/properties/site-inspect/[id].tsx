@@ -85,6 +85,7 @@ const AssetInspectCard = React.memo(({
   index: number;
 }) => {
   const C     = useColors();
+  const noMotion = useReducedMotion();
   const chips = useMemo(() => getDefectChips(asset.asset_type), [asset.asset_type]);
 
   const isPassed = result.result === InspectionResult.Pass;

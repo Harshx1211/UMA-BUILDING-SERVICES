@@ -176,20 +176,15 @@ export default function PreviewScreen() {
     if (!jobId) return;
     setErrorMsg(null);
     setElapsedS(0);
+    setScreenState('pending');
 
     // Clear stale intervals before starting fresh
     if (pollRef.current)    clearInterval(pollRef.current);
     if (elapsedRef.current) clearInterval(elapsedRef.current);
 
-    const { existingUrl } = queueReportGeneration(jobId);
-
-    if (existingUrl) {
-      setPdfUrl(existingUrl);
-      setScreenState('ready');
-      return;
-    }
-
-    setScreenState('pending');
+    // queueReportGeneration clears local report_url first, then queues.
+    // Always returns existingUrl:null — signed URLs must never be cached stale.
+    queueReportGeneration(jobId);
 
     elapsedRef.current = setInterval(() => {
       if (isMounted.current) setElapsedS(s => s + 1);

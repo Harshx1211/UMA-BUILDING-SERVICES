@@ -761,12 +761,20 @@ export type ReportQueueResult = {
 
 /**
  * Queue a server-side PDF generation request.
- * Returns the existing report_url immediately if the job already has one,
- * so the share button works right away for unchanged reports.
+ *
+ * Always forces a fresh generation — clears the locally cached report_url
+ * before queuing so that:
+ *   1. Signed URLs (1h TTL) are never returned as a stale cached value.
+ *   2. The polling loop in preview.tsx waits for the new Edge Function result
+ *      instead of short-circuiting with an expired URL.
+ *   3. Duplicate queue entries are still prevented (idempotent per jobId).
  */
 export function queueReportGeneration(jobId: string): ReportQueueResult {
-  const job = getRecord<{ report_url: string | null }>('jobs', jobId);
-  const existingUrl = job?.report_url ?? null;
+  // FIX: Clear stale report_url from local DB BEFORE queuing.
+  // Previously, getRecord returned the old signed URL and the preview screen
+  // immediately showed it — bypassing the Edge Function entirely and displaying
+  // an expired/outdated PDF. Now we wipe it first so polling waits for fresh output.
+  updateRecord('jobs', jobId, { report_url: null });
 
   // Don't double-queue if already pending — use exact JSON match not substring
   const pending = getPendingSyncItems();
@@ -777,11 +785,11 @@ export function queueReportGeneration(jobId: string): ReportQueueResult {
       return p.jobId === jobId;
     } catch { return false; }
   });
-  if (alreadyQueued) return { existingUrl, queued: false };
+  if (alreadyQueued) return { existingUrl: null, queued: false };
 
   addToSyncQueue('jobs', jobId, SyncOperation.ReportGenerate, { jobId });
   if (__DEV__) console.log(`[PDF] report_generate queued for job ${jobId}`);
-  return { existingUrl, queued: true };
+  return { existingUrl: null, queued: true };
 }
 
 /** Returns the current report_url for a job from local SQLite — used to poll for completion. */
