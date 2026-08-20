@@ -8,11 +8,10 @@ import * as Haptics from 'expo-haptics';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { JobTypeBadge } from './JobTypeBadge';
-import { StatusBadge } from './StatusBadge';
 import { JobStatus, JobType, Priority, ComplianceStatus } from '@/constants/Enums';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
+import { Badge } from '@/components/ui';
 import type { JobWithProperty } from '@/store/jobsStore';
 
 interface Props {
@@ -141,7 +140,7 @@ export const JobCard = React.memo(function JobCard({
           <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>
             {job.property_name ?? 'Unknown Property'}
           </Text>
-          <StatusBadge status={job.status as JobStatus} small />
+          <Badge status={job.status} dot small />
         </View>
 
         {/* Row 2: Address */}
@@ -159,7 +158,7 @@ export const JobCard = React.memo(function JobCard({
 
         {/* Row 3: Type badge + time + navigate */}
         <View style={s.row3}>
-          <JobTypeBadge jobType={job.job_type as JobType} />
+          <Badge status={job.job_type} />
           {timeLabel ? (
             <View style={[s.timeChip, { backgroundColor: C.backgroundSecondary }]}>
               <MaterialCommunityIcons name="clock-outline" size={11} color={C.textSecondary} />

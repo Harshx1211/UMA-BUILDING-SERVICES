@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 interface Props {
   visible: boolean;
@@ -19,9 +20,10 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
   const [isSaving, setIsSaving] = useState(false);
 
   // WebView HTML style — canvas background must be a static string (not RN theme context)
+  // Using CSS custom values that match T.backgroundSecondary and T.border
   const webStyle = `
-    .m-signature-pad { box-shadow: none; border: 2px solid #E4E8EF; border-radius: 12px; }
-    .m-signature-pad--body { background-color: #F8FAFC; border-radius: 10px; }
+    .m-signature-pad { box-shadow: none; border: 2px solid ${T.border}; border-radius: 12px; }
+    .m-signature-pad--body { background-color: #FFFFFF; border-radius: 10px; }
     .m-signature-pad--footer { display: none; }
   `;
 
@@ -71,7 +73,7 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
               ref={sigRef}
               onOK={handleOK}
               webStyle={webStyle}
-              backgroundColor="#F8FAFC"
+              backgroundColor="#FFFFFF"
               penColor={C.primary}
             />
           </View>

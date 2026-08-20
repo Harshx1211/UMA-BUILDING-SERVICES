@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
@@ -65,6 +66,7 @@ function InfoRow({
 
 export default function AssetDetailScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [serviceHistory, setServiceHistory] = useState<ServiceRecord[]>([]);
@@ -144,7 +146,7 @@ export default function AssetDetailScreen() {
         ) : null}
 
         {/* Asset info */}
-        <Animated.View entering={FadeInDown.delay(60).duration(350)} style={{ marginTop: !isOverdue ? 16 : 0 }}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(350)} style={{ marginTop: !isOverdue ? 16 : 0 }}>
           <SectionHeader title="Asset information" eyebrow />
           <Card style={{ marginHorizontal: 16 }}>
             {asset.variant ? (
@@ -183,7 +185,7 @@ export default function AssetDetailScreen() {
         </Animated.View>
 
         {/* Service history */}
-        <Animated.View entering={FadeInDown.delay(120).duration(350)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(120).duration(350)}>
           <SectionHeader title="Service history" eyebrow />
           <Card noPadding style={{ marginHorizontal: 16 }}>
             {serviceHistory.length === 0 ? (
@@ -230,7 +232,7 @@ export default function AssetDetailScreen() {
         </Animated.View>
 
         {/* Defect history */}
-        <Animated.View entering={FadeInDown.delay(180).duration(350)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(350)}>
           <SectionHeader title="Defect history" eyebrow />
           <Card noPadding style={{ marginHorizontal: 16 }}>
             {defects.length === 0 ? (

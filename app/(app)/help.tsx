@@ -16,6 +16,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { Card, ScreenHeader, SectionHeader, Button } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
@@ -31,6 +32,7 @@ type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 // ─── Accordion card ─────────────────────────
 function AccordionCard({ item, icon }: { item: AccordionItem; icon: MCIconName }) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const animVal = useRef(new Animated.Value(0)).current;
 
@@ -94,6 +96,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
 
 function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const [step, setStep] = useState(0);
   const current = WALKTHROUGH_STEPS[step];
 
@@ -215,6 +218,7 @@ const FAQ_ITEMS: { item: AccordionItem; icon: MCIconName }[] = [
 // ─── Main Screen ─────────────────────────────
 export default function HelpScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -237,7 +241,7 @@ export default function HelpScreen() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* ── Walkthrough CTA ── */}
-        <Reanimated.View entering={FadeInDown.delay(30).duration(350)}>
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(30).duration(350)}>
           <Card 
             style={[s.walkthroughCard, { borderColor: C.accent + '26', borderWidth: 1.5 }]} 
             noPadding
@@ -256,7 +260,7 @@ export default function HelpScreen() {
         </Reanimated.View>
 
         {/* ── How To Use ── */}
-        <Reanimated.View entering={FadeInDown.delay(80).duration(350)} style={s.section}>
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(350)} style={s.section}>
           <SectionHeader title="How to use SiteTrack" eyebrow />
           {HOW_TO.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
@@ -264,7 +268,7 @@ export default function HelpScreen() {
         </Reanimated.View>
 
         {/* ── FAQ ── */}
-        <Reanimated.View entering={FadeInDown.delay(130).duration(350)} style={s.section}>
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(130).duration(350)} style={s.section}>
           <SectionHeader title="Frequently asked questions" eyebrow />
           {FAQ_ITEMS.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
@@ -272,12 +276,12 @@ export default function HelpScreen() {
         </Reanimated.View>
 
         {/* ── Feedback button ── */}
-        <Reanimated.View entering={FadeInDown.delay(180).duration(350)}>
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(350)}>
           <Button variant="secondary" title="Send Feedback to Support" onPress={handleFeedback} />
         </Reanimated.View>
 
         {/* ── App info row ── */}
-        <Reanimated.View entering={FadeInDown.delay(210).duration(350)}>
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(210).duration(350)}>
           <Card style={s.versionCard}>
             <View style={[s.versionIconWrap, { backgroundColor: C.backgroundTertiary }]}>
               <MaterialCommunityIcons name="fire" size={20} color={C.accent} />

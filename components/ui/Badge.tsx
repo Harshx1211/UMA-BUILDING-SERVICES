@@ -28,7 +28,9 @@ type KnownStatus =
   | 'open' | 'quoted' | 'repaired' | 'monitoring'
   | 'urgent' | 'high' | 'normal' | 'low'
   | 'active' | 'decommissioned'
-  | 'compliant' | 'non_compliant' | 'overdue' | 'pending';
+  | 'compliant' | 'non_compliant' | 'overdue' | 'pending'
+  // Job types
+  | 'routine_service' | 'defect_repair' | 'installation' | 'emergency' | 'quote';
 
 const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
   in_progress:    'In Progress',
@@ -52,6 +54,12 @@ const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
   non_compliant:  'Non-Compliant',
   overdue:        'Overdue',
   pending:        'Pending',
+  // Job types
+  routine_service: 'Routine Service',
+  defect_repair:   'Defect Repair',
+  installation:    'Installation',
+  emergency:       'EMERGENCY',
+  quote:           'Quote',
 };
 
 const STATUS_COLORS: Record<KnownStatus, { bg: string; text: string }> = {
@@ -76,15 +84,25 @@ const STATUS_COLORS: Record<KnownStatus, { bg: string; text: string }> = {
   non_compliant:  { bg: T.dangerBg,   text: T.danger   },
   overdue:        { bg: T.dangerBg,   text: T.danger   },
   pending:        { bg: T.warningBg,  text: T.warning  },
+  // Job types
+  routine_service: { bg: T.infoBg,    text: T.info    },
+  defect_repair:   { bg: T.dangerBg,  text: T.danger  },
+  installation:    { bg: T.infoBg,    text: T.info    },
+  emergency:       { bg: T.dangerBg,  text: T.danger  },
+  quote:           { bg: T.border,    text: T.textMuted },
 };
 
 interface BadgeProps {
   status: KnownStatus | string;
   /** Override the auto-generated label */
   label?: string;
+  /** Renders at reduced size (10px text, less padding) */
+  small?: boolean;
+  /** Show a dot indicator before the label */
+  dot?: boolean;
 }
 
-export function Badge({ status, label }: BadgeProps) {
+export function Badge({ status, label, small = false, dot = false }: BadgeProps) {
   const colors = STATUS_COLORS[status as KnownStatus] ?? {
     bg: T.border,
     text: T.textMuted,
@@ -92,8 +110,13 @@ export function Badge({ status, label }: BadgeProps) {
   const displayLabel = label ?? HUMAN_LABEL[status as KnownStatus] ?? status;
 
   return (
-    <View style={[styles.pill, { backgroundColor: colors.bg }]}>
-      <Text style={[styles.text, { color: colors.text }]}>{displayLabel}</Text>
+    <View style={[styles.pill, { backgroundColor: colors.bg }, small && styles.pillSmall]}>
+      {dot && (
+        <View style={[styles.dot, { backgroundColor: colors.text }]} />
+      )}
+      <Text style={[styles.text, { color: colors.text }, small && styles.textSmall]}>
+        {displayLabel}
+      </Text>
     </View>
   );
 }
@@ -104,10 +127,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: T.radiusPill,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  pillSmall: { paddingHorizontal: 8, paddingVertical: 3 },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   text: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
+  textSmall: { fontSize: 10 },
 });

@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { ScreenHeader } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
@@ -131,6 +132,7 @@ function FilterPill({ label, isActive, color, onPress, C }: {
 // ─── Main Screen ──────────────────────────────────────────
 export default function GlobalDefectsScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { defects, isLoading, loadAllDefects } = useDefectsStore();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>('all');
@@ -178,7 +180,7 @@ export default function GlobalDefectsScreen() {
       />
 
       {/* Severity filters */}
-      <Animated.View entering={FadeInDown.delay(40).duration(300)}>
+      <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(300)}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -238,7 +240,7 @@ export default function GlobalDefectsScreen() {
             // not on every filter change re-render.
             <Animated.View
               key={item.id + severityFilter + statusFilter}
-              entering={FadeInDown.delay(index * 30).duration(350)}
+              entering={noMotion ? undefined : FadeInDown.delay(index * 30).duration(350)}
             >
               <DefectRow
                 defect={item as ExtendedDefect}

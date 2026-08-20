@@ -222,7 +222,9 @@ const styles = StyleSheet.create({
   filterTabTextActive:  { color: T.textPrimary },
   searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14 },
-  scroll:               { padding: 16, paddingBottom: 32 },
+  // padding around list + ensure list always grows to fill screen height
+  // (prevents empty dark area below last card when few jobs are visible)
+  scroll: { padding: 16, paddingBottom: 40, flexGrow: 1 },
   emptyState:           { alignItems: 'center', paddingVertical: 60, backgroundColor: T.surface, borderRadius: 16, borderWidth: 1, borderColor: T.border, gap: 8, ...cardShadow },
   emptyTitle:           { color: T.textPrimary, fontSize: 16, fontWeight: '700' },
   emptyText:            { color: T.textMuted, fontSize: 13 },

@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useAuth } from '@/hooks/useAuth';
 import { ScreenHeader, FilterPills, Button } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
@@ -95,7 +96,7 @@ const AssetInspectCard = React.memo(({
   const cardBorder = isPassed ? C.success : isFailed ? C.error : isNT ? C.textTertiary : C.border;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 40).duration(300)} style={s.cardOuter}>
+    <Animated.View entering={noMotion ? undefined : FadeInDown.delay(index * 40).duration(300)} style={s.cardOuter}>
       <View style={[s.assetCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
         {/* Left colour stripe */}
         <View style={[s.cardStripe, { backgroundColor: cardBorder }]} />
@@ -137,7 +138,7 @@ const AssetInspectCard = React.memo(({
 
           {/* ── Defect section — expands when failed ────── */}
           {isFailed && (
-            <Animated.View entering={FadeIn.duration(220)} style={[s.defectSection, { backgroundColor: C.errorLight, borderColor: C.error }]}>
+            <Animated.View entering={noMotion ? undefined : FadeIn.duration(220)} style={[s.defectSection, { backgroundColor: C.errorLight, borderColor: C.error }]}>
               <Text style={[s.defectTitle, { color: C.errorDark }]}>Defect Description *</Text>
               <View style={s.chipRow}>
                 {chips.map(chip => {
@@ -229,6 +230,7 @@ AssetInspectCard.displayName = 'AssetInspectCard';
 // MAIN SCREEN
 // ═══════════════════════════════════════════════════════════════
 export default function SiteInspectScreen() {
+  const noMotion = useReducedMotion();
   const C          = useColors();
   const { id: propertyId } = useLocalSearchParams<{ id: string }>();
   const { user }   = useAuth();

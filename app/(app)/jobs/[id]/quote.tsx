@@ -12,6 +12,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity } from '@/constants/Enums';
@@ -71,6 +72,7 @@ const dr = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────
 export default function QuoteScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDefectsStore();
 
@@ -107,7 +109,7 @@ export default function QuoteScreen() {
     const cfg = SEV[key === 'critical' ? DefectSeverity.Critical : key === 'major' ? DefectSeverity.Major : DefectSeverity.Minor];
     const groupColor = cfg.color(C);
     return (
-      <Animated.View key={key} entering={FadeInDown.delay(delay).duration(340)}>
+      <Animated.View key={key} entering={noMotion ? undefined : FadeInDown.delay(delay).duration(340)}>
         <View style={s.groupHeader}>
           <View style={[s.groupDot, { backgroundColor: groupColor }]} />
           <MaterialCommunityIcons name={cfg.icon} size={14} color={groupColor} />
@@ -168,7 +170,7 @@ export default function QuoteScreen() {
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
           {/* Admin-managed info banner */}
-          <Animated.View entering={FadeInDown.delay(20).duration(300)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(20).duration(300)}>
             <View style={[s.infoBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
               <MaterialCommunityIcons name="shield-account-outline" size={16} color={C.textSecondary} />
               <Text style={[s.infoBannerTxt, { color: C.textSecondary }]}>
@@ -183,7 +185,7 @@ export default function QuoteScreen() {
           {renderGroup('minor',    120)}
 
           {/* Total footer */}
-          <Animated.View entering={FadeInDown.delay(150).duration(340)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(150).duration(340)}>
             <View style={[s.totalCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <View style={s.totalRow}>
                 <Text style={[s.totalLabel, { color: C.textSecondary }]}>Subtotal (ex-GST)</Text>

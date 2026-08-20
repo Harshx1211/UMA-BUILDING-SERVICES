@@ -3,6 +3,7 @@
 // Expo Metro will use THIS file on web, and RouteMapView.tsx on native.
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { T } from '@/constants/Colors';
 
 export default function RouteMapView() {
   return (
@@ -13,6 +14,6 @@ export default function RouteMapView() {
 }
 
 const s = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F6FA' },
-  text: { fontSize: 13, color: '#8898AA' },
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: T.background },
+  text: { fontSize: 13, color: T.textMuted },
 });

@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { getRecord, getAssetsForProperty } from '@/lib/database';
 import { AssetStatus } from '@/constants/Enums';
 import type { Property, Asset } from '@/types';
@@ -29,6 +30,7 @@ function assetStatusColor(status: string, C: any) {
 
 export default function PropertyAssetsScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
@@ -120,7 +122,7 @@ export default function PropertyAssetsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 }}
         >
-          <Animated.View entering={FadeInDown.delay(100).duration(400)} style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)} style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
             {assets.map((asset, i) => {
               const isOverdue = asset.next_service_date && asset.next_service_date < today;
               const statusColor = assetStatusColor(asset.status, C);

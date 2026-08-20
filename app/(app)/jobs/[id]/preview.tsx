@@ -19,6 +19,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { generateJobReport, ReportStage } from '@/lib/pdfGenerator';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useJobsStore } from '@/store/jobsStore';
 import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
@@ -59,7 +60,7 @@ function GeneratingView({ stage, detail, primaryColor, textColor, textSecondary,
   const progress = cfg.step / TOTAL_STEPS;
 
   return (
-    <Animated.View entering={FadeIn} style={styles.generatingWrap}>
+    <Animated.View entering={noMotion ? undefined : FadeIn} style={styles.generatingWrap}>
       {/* Icon circle */}
       <View style={[styles.genIconCircle, { backgroundColor: primaryColor + '18', borderColor: primaryColor + '30' }]}>
         <MaterialCommunityIcons name={cfg.icon} size={36} color={primaryColor} />
@@ -121,6 +122,7 @@ const VIEWPORT_INJECTION = `
 
 export default function PreviewScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const { updateJobStatus } = useJobsStore();
@@ -303,7 +305,7 @@ export default function PreviewScreen() {
           border={C.border}
         />
       ) : (
-        <Animated.View entering={FadeInDown} style={{ flex: 1 }}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown} style={{ flex: 1 }}>
           {!webViewReady && (
             <View style={[styles.loadingOverlay, { backgroundColor: C.background }]}>
               <ActivityIndicator color={C.primary} size="large" />

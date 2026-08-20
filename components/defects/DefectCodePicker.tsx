@@ -22,6 +22,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import {
   DEFECT_CODES,
@@ -153,6 +154,7 @@ const CodeRow = React.memo(function CodeRow({
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function DefectCodePicker({ visible, onSelect, onClose }: DefectCodePickerProps) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<DefectCategory | 'All'>('All');
@@ -199,7 +201,7 @@ export default function DefectCodePicker({ visible, onSelect, onClose }: DefectC
   const keyExtractor = useCallback((item: DefectCode) => item.code, []);
 
   const ListHeader = useMemo(() => (
-    <Animated.View entering={FadeIn.duration(200)}>
+    <Animated.View entering={noMotion ? undefined : FadeIn.duration(200)}>
       {/* Custom Note (always at top) */}
       <CodeRow
         item={CUSTOM_NOTE}

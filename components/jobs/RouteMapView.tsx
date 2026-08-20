@@ -8,6 +8,7 @@ import MapView, { Marker, Region, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { Priority } from '@/constants/Enums';
 import type { JobWithProperty } from '@/store/jobsStore';
@@ -21,10 +22,10 @@ interface Props {
 
 // ── Priority → marker color  ──────────────────────────
 const PRIORITY_COLOR: Record<string, string> = {
-  [Priority.Urgent]: '#EF4444',
-  [Priority.High]:   '#EAB308',
-  [Priority.Normal]: '#1B2D4F',
-  [Priority.Low]:    '#94A3B8',
+  [Priority.Urgent]: T.danger,
+  [Priority.High]:   T.warning,
+  [Priority.Normal]: T.primary,
+  [Priority.Low]:    T.textMuted,
 };
 
 // ── Address → coords cache ────────────────────────────
@@ -66,6 +67,7 @@ type JobMarker = {
 
 export default function RouteMapView({ jobs, onJobSelect }: Props) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const mapRef = useRef<MapView>(null);
   const [markers, setMarkers] = useState<JobMarker[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -167,7 +169,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
       {/* Selected job card */}
       {selectedJob && (
         <Animated.View
-          entering={FadeInDown.duration(250)}
+          entering={noMotion ? undefined : FadeInDown.duration(250)}
           exiting={FadeOutDown.duration(200)}
           style={[s.jobCard, { backgroundColor: C.surface }]}
         >

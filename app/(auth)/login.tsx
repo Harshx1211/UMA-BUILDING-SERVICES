@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 import { APP_NAME } from '@/constants/Config';
@@ -36,6 +37,7 @@ export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
   const { restoreSession } = useAuthStore();
   const C = useColors();
+  const noMotion = useReducedMotion();
   const scrollRef = useRef<ScrollView>(null);
   const passwordRef = useRef<TextInput>(null);
   const { isOnline } = useNetworkStatus();
@@ -130,7 +132,7 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           {/* ── Brand Logo ────── */}
-          <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
+          <Animated.View entering={noMotion ? undefined : FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
             <BrandLogo
               size="medium"
               tagline="Enter your credentials to continue"
@@ -139,7 +141,7 @@ export default function LoginScreen() {
           </Animated.View>
 
           {/* ── Form Section ─────────────── */}
-          <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.formContainer}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(300).duration(500)} style={styles.formContainer}>
             {!isOnline && (
               <View style={[styles.alertBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
                 <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />

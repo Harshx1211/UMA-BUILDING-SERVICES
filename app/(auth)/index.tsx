@@ -6,12 +6,14 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function SplashScreen() {
   const { isLoading, isAuthenticated } = useAuthStore();
   const C = useColors();
+  const noMotion = useReducedMotion();
 
   useEffect(() => {
     if (isLoading) return;
@@ -28,12 +30,12 @@ export default function SplashScreen() {
   return (
     <View style={[styles.container, { backgroundColor: T.primary }]}>
       {/* ── Logo ─────────────────── */}
-      <Animated.View entering={FadeIn.duration(600)} style={styles.content}>
+      <Animated.View entering={noMotion ? undefined : FadeIn.duration(600)} style={styles.content}>
         <BrandLogo size="large" textColor={T.textPrimary} />
       </Animated.View>
 
       {/* ── Loading indicator ─────── */}
-      <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.footer}>
+      <Animated.View entering={noMotion ? undefined : FadeInDown.delay(400).duration(400)} style={styles.footer}>
         <ActivityIndicator size="small" color={T.textPrimary} />
         <Text style={styles.loadingText}>Loading...</Text>
       </Animated.View>

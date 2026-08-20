@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById } from '@/lib/database';
@@ -63,6 +64,7 @@ const STATUS_COLORS: Record<DefectStatus, string> = {
 
 export default function DefectDetailScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
   const { deleteDefect } = useDefectsStore();
 
@@ -157,7 +159,7 @@ export default function DefectDetailScreen() {
 
         {/* Locked notice — shown when job is completed */}
         {jobLocked && (
-          <Animated.View entering={FadeInDown.delay(20).duration(300)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(20).duration(300)}>
             <View style={[s.lockedBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
               <MaterialCommunityIcons name="lock-outline" size={15} color={C.textTertiary} />
               <Text style={[s.lockedTxt, { color: C.textTertiary }]}>
@@ -168,7 +170,7 @@ export default function DefectDetailScreen() {
         )}
 
         {/* Severity Banner */}
-        <Animated.View entering={FadeInDown.delay(40).duration(380)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(380)}>
           <View style={[s.sevBanner, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
             <View style={[s.sevIconWrap, { backgroundColor: sev.color }]}>
               <MaterialCommunityIcons name={sev.icon} size={22} color={C.textOnPrimary} />
@@ -195,7 +197,7 @@ export default function DefectDetailScreen() {
 
         {/* Defect Code */}
         {codeInfo && (
-          <Animated.View entering={FadeInDown.delay(70).duration(380)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(70).duration(380)}>
             <View style={[s.codeBanner, { backgroundColor: C.primary + '0D', borderColor: C.primary + '30' }]}>
               <View style={[s.codeIconWrap, { backgroundColor: C.primary + '18' }]}>
                 <MaterialCommunityIcons name="tag-outline" size={16} color={C.primary} />
@@ -213,7 +215,7 @@ export default function DefectDetailScreen() {
         )}
 
         {/* Description */}
-        <Animated.View entering={FadeInDown.delay(100).duration(380)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(380)}>
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
             <Text style={[s.cardLabel, { color: C.textTertiary }]}>DESCRIPTION</Text>
             <Text style={[s.cardBody, { color: C.text }]}>{defect.description}</Text>
@@ -222,7 +224,7 @@ export default function DefectDetailScreen() {
 
         {/* Asset & Location */}
         {(defect.asset_type || defect.location_on_site) && (
-          <Animated.View entering={FadeInDown.delay(130).duration(380)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(130).duration(380)}>
             <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
               <Text style={[s.cardLabel, { color: C.textTertiary }]}>ASSET</Text>
               {defect.asset_type && (
@@ -249,7 +251,7 @@ export default function DefectDetailScreen() {
 
         {/* Photos */}
         {photosArr.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(160).duration(380)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(380)}>
             <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
               <Text style={[s.cardLabel, { color: C.textTertiary }]}>PHOTOS ({photosArr.length})</Text>
               <View style={s.photoGrid}>
@@ -272,7 +274,7 @@ export default function DefectDetailScreen() {
         )}
 
         {/* Status info (read-only) */}
-        <Animated.View entering={FadeInDown.delay(190).duration(380)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(190).duration(380)}>
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
             <Text style={[s.cardLabel, { color: C.textTertiary }]}>CURRENT STATUS</Text>
             <View style={s.statusReadRow}>

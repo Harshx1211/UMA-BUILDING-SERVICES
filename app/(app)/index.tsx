@@ -6,9 +6,9 @@
  *  - KPI stat numbers are neutral (T.textPrimary) — not semantic colors
  *  - No emoji anywhere in UI copy
  *  - Status badges use the shared <Badge> component
- *  - Empty state uses <EmptyState> with a vector icon, not a 🎉
+ *  - Empty state uses <EmptyState> with a vector icon, not an emoji
  *  - Section labels are sentence-case via <SectionHeader>
- *  - Notification bell uses MaterialCommunityIcons, not a 🔔 emoji
+ *  - Notification bell uses MaterialCommunityIcons, not an emoji
  */
 import { useEffect, useCallback, useRef, useState } from 'react';
 import {

@@ -10,6 +10,7 @@ import Toast from 'react-native-toast-message';
 import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import {
   JobStatus, JobType, Priority, InspectionResult, SyncOperation,
 } from '@/constants/Enums';
@@ -113,6 +114,7 @@ const ac = StyleSheet.create({
 // ─── Main Screen ─────────────────────────────────────────────────────────
 export default function JobDetailScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { updateJobStatus } = useJobsStore();
@@ -379,7 +381,7 @@ export default function JobDetailScreen() {
 
           {/* ── JOB ACTIONS WIDGET ── */}
           {!isCompleted && !isCancelled && (
-            <Animated.View entering={FadeInDown.delay(40).duration(360)}>
+            <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(360)}>
               {isInProgress ? (
                 <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <View style={{ flex: 1 }}>
@@ -445,7 +447,7 @@ export default function JobDetailScreen() {
 
           {/* ── SAFETY ALERTS ── */}
           {(job.hazard_notes || job.access_notes || job.site_note) && (
-            <Animated.View entering={FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
+            <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(360)} style={{ gap: 8 }}>
               {job.hazard_notes && (
                 <Card variant="danger" style={{ flexDirection: 'row', gap: 12 }}>
                   <MaterialCommunityIcons name="alert" size={20} color={C.error} />
@@ -477,7 +479,7 @@ export default function JobDetailScreen() {
           )}
 
           {/* ── INFO CHIPS ── */}
-          <Animated.View entering={FadeInDown.delay(80).duration(360)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(360)}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
               <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
                 <MaterialCommunityIcons name="calendar" size={15} color={C.textSecondary} />
@@ -513,7 +515,7 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── INSPECTION PROGRESS ── */}
-          <Animated.View entering={FadeInDown.delay(100).duration(360)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(360)}>
             <Card variant="default">
               <View style={s.progressHeader}>
                 <View style={{ flex: 1 }}>
@@ -552,7 +554,7 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── OPEN INSPECTION FORM CTA ── */}
-          <Animated.View entering={FadeInDown.delay(120).duration(360)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(120).duration(360)}>
             <TouchableOpacity
               style={{ borderRadius: 16, overflow: 'hidden' }}
               onPress={
@@ -611,7 +613,7 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── QUICK ACTIONS GRID ── */}
-          <Animated.View entering={FadeInDown.delay(140).duration(360)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(140).duration(360)}>
             <Text style={[s.sectionLabel, { color: C.textTertiary }]}>Quick actions</Text>
             <View style={s.actionsRow}>
               <ActionCard
@@ -652,7 +654,7 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── NAVIGATE & CONTACT ── */}
-          <Animated.View entering={FadeInDown.delay(160).duration(360)} style={{ gap: 12 }}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(360)} style={{ gap: 12 }}>
             <TouchableOpacity
               style={[s.quickBtn, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={handleNavigate}
@@ -693,7 +695,7 @@ export default function JobDetailScreen() {
           </Animated.View>
 
           {/* ── FIELD NOTES ── */}
-          <Animated.View entering={FadeInDown.delay(180).duration(360)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(360)}>
             <Text style={[s.sectionLabel, { color: C.textTertiary }]}>Field notes</Text>
             <Card variant="default">
               {isEditingNotes ? (
@@ -803,7 +805,7 @@ export default function JobDetailScreen() {
         <View style={[cm.overlay, { backgroundColor: C.shadow + 'D9' }]}>
           <View style={[cm.card, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, shadowColor: C.shadow }]}>
             <View style={[cm.checkCircle, { backgroundColor: C.success + '18' }]}>
-              <Animated.View entering={FadeInDown.delay(100).springify()}>
+              <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).springify()}>
                 <MaterialCommunityIcons name="check-bold" size={44} color={C.success} />
               </Animated.View>
             </View>

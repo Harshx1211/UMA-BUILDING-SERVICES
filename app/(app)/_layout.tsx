@@ -12,6 +12,7 @@ import { useDashboardStore } from '@/store/dashboardStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { supabase } from '@/lib/supabase';
 import { T } from '@/constants/Colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -45,6 +46,7 @@ function TabIcon({ name, name_active, color, size, focused, label, activeColor }
 
 export default function AppLayout() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isForceSyncing } = useAuthStore();
   const { subscribeToSync: jobsSubscribe, unsubscribeFromSync: jobsUnsub } = useJobsStore();
   const { subscribeToSync: dashSubscribe, unsubscribeFromSync: dashUnsub } = useDashboardStore();
@@ -159,8 +161,12 @@ export default function AppLayout() {
           shadowOffset: { width: 0, height: -3 },
           shadowOpacity: 0.10,
           shadowRadius: 16,
-          height: Platform.OS === 'ios' ? 82 : 72,
-          paddingBottom: Platform.OS === 'ios' ? 22 : 12,
+          // Use real safe-area bottom inset so the tab bar sits flush
+          // with the gesture nav bar on any Android device (fixes the gap
+          // reported by user — was previously a hardcoded 12px that was
+          // too small for devices with a tall gesture navigation bar).
+          height: Platform.OS === 'ios' ? 82 : 56 + insets.bottom,
+          paddingBottom: Platform.OS === 'ios' ? 22 : insets.bottom + 6,
           paddingTop: 2,
         },
         tabBarActiveTintColor: C.accent,

@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { Button } from '@/components/ui/Button';
 import { Card, Input } from '@/components/ui';
@@ -26,6 +27,7 @@ export default function ForgotPasswordScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [banner, setBanner]       = useState<BannerState>(null);
   const C = useColors();
+  const noMotion = useReducedMotion();
 
   const validate = (): boolean => {
     if (!email.trim()) {
@@ -87,7 +89,7 @@ export default function ForgotPasswordScreen() {
         </View>
 
         {/* ── Form Card ─────────────────── */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}>
           <Card style={[styles.formCard]}>
 
           {/* Success state replaces form */}

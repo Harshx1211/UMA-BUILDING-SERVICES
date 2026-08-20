@@ -13,6 +13,7 @@ import {
   type SyncFailureAlert,
 } from '@/lib/sync';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { T } from '@/constants/Colors';
 import type { SyncStatus } from '@/types';
 
 const POLL_MS = 30_000;
@@ -92,12 +93,12 @@ export function SyncStatusBar({ light = false }: Props) {
   // ── Dot colour ──────────────────────────────────────────
   const hasFailures = (status?.failedCount ?? 0) > 0;
   const dotColor = !isOnline
-    ? (light ? 'rgba(255,255,255,0.4)' : '#94A3B8')
+    ? (light ? 'rgba(255,255,255,0.4)' : T.textMuted)
     : hasFailures
-      ? (light ? '#FCA5A5' : '#DC2626')   // red — permanent failures
+      ? (light ? '#FCA5A5' : T.danger)      // red — permanent failures
       : (status?.pendingCount ?? 0) > 0
-        ? (light ? '#FCD34D' : '#D97706') // amber — pending
-        : (light ? '#6EE7B7' : '#059669'); // green — all good
+        ? (light ? '#FCD34D' : T.warning)   // amber — pending
+        : (light ? '#6EE7B7' : T.success);  // green — all good
 
   // ── Label ────────────────────────────────────────────────
   let label = 'Never synced';
@@ -123,8 +124,8 @@ export function SyncStatusBar({ light = false }: Props) {
   }
 
   const textColor = hasFailures
-    ? (light ? '#FCA5A5' : '#DC2626')
-    : light ? 'rgba(255,255,255,0.7)' : '#8896A8';
+    ? (light ? '#FCA5A5' : T.danger)
+    : light ? 'rgba(255,255,255,0.7)' : T.textMuted;
 
   return (
     <TouchableOpacity

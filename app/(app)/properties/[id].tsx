@@ -8,12 +8,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ComplianceStatus, AssetStatus, JobStatus, JobType } from '@/constants/Enums';
 import { getRecord, getAssetsForProperty, getJobsForProperty } from '@/lib/database';
 import type { Property, Asset, Job } from '@/types';
-import { StatusBadge } from '@/components/jobs/StatusBadge';
-import { JobTypeBadge } from '@/components/jobs/JobTypeBadge';
-import { ScreenHeader, EmptyState } from '@/components/ui';
+import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
+import { localDateString } from '@/utils/dateHelpers';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -60,6 +60,7 @@ function SectionHeader({ icon, title, count, actionLabel, onAction }: {
   actionLabel?: string; onAction?: () => void;
 }) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   return (
     <View style={[sh.row, { marginHorizontal: 16, marginBottom: 12, marginTop: 24 }]}>
       <View style={sh.left}>
@@ -98,6 +99,7 @@ function InfoRow({ icon, label, value, onPress, valueColor }: {
   onPress?: () => void; valueColor?: string;
 }) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const Comp = onPress ? TouchableOpacity : View;
   return (
     <Comp style={infoRow.wrap} onPress={onPress} activeOpacity={0.7}>
@@ -127,6 +129,7 @@ const infoRow = StyleSheet.create({
 // ═══════════════════════════════════════════════════════════════
 export default function PropertyDetailScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
@@ -180,7 +183,7 @@ export default function PropertyDetailScreen() {
   const compliance = COMPLIANCE_CONFIG[property.compliance_status as ComplianceStatus]
     ?? COMPLIANCE_CONFIG[ComplianceStatus.Pending];
 
-  const today         = new Date().toISOString().slice(0, 10);
+  const today         = localDateString();
   const activeAssets  = assets.filter(a => a.status === AssetStatus.Active).length;
   const isOverdue     = property.next_inspection_date && property.next_inspection_date < today;
   const passedJobs    = jobHistory.filter(j => j.status === JobStatus.Completed).length;
@@ -211,7 +214,7 @@ export default function PropertyDetailScreen() {
         />
 
         {/* ── COMPLIANCE BANNER ──────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(40).duration(400)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(400)}>
           <View style={[s.complianceBanner, { backgroundColor: compliance.bg, borderColor: compliance.border, marginHorizontal: 16, marginTop: 16 }]}>
             <View style={[s.complianceBannerIcon, { backgroundColor: compliance.border + '25' }]}>
               <MaterialCommunityIcons name={compliance.icon} size={26} color={compliance.text} />
@@ -234,7 +237,7 @@ export default function PropertyDetailScreen() {
         </Animated.View>
 
         {/* ── QUICK STATS ROW ────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(80).duration(400)} style={s.statsRow}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(400)} style={s.statsRow}>
           <StatPill
             icon="shield-check"
             value={activeAssets}
@@ -263,7 +266,7 @@ export default function PropertyDetailScreen() {
 
 
         {/* ── QUICK ACTIONS ──────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(130).duration(400)} style={s.actionRowWrap}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(130).duration(400)} style={s.actionRowWrap}>
           {property.site_contact_phone && (
             <TouchableOpacity
               style={[s.actionBtn, { backgroundColor: C.surface, borderColor: C.border }]}
@@ -292,7 +295,7 @@ export default function PropertyDetailScreen() {
 
         {/* ── SAFETY ALERTS ──────────────────────────────── */}
         {(property.hazard_notes || property.access_notes || property.site_note) && (
-          <Animated.View entering={FadeInDown.delay(160).duration(400)} style={{ marginHorizontal: 16, gap: 10, marginTop: 8 }}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(400)} style={{ marginHorizontal: 16, gap: 10, marginTop: 8 }}>
             {property.hazard_notes && (
               <View style={[s.alertCard, { backgroundColor: C.errorLight, borderColor: C.error }]}>
                 <View style={[s.alertIconWrap, { backgroundColor: C.error }]}>
@@ -330,7 +333,7 @@ export default function PropertyDetailScreen() {
         )}
 
         {/* ── PROPERTY INFO CARD ──────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(200).duration(400)}>
           <SectionHeader icon="information-outline" title="Site Details" />
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16 }]}>
             <InfoRow
@@ -364,7 +367,7 @@ export default function PropertyDetailScreen() {
         </Animated.View>
 
         {/* ── ASSET SUMMARY ──────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(240).duration(400)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(240).duration(400)}>
           <SectionHeader
             icon="shield-outline"
             title="Asset Register"
@@ -403,7 +406,7 @@ export default function PropertyDetailScreen() {
         </Animated.View>
 
         {/* ── JOB HISTORY ─────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(280).duration(400)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(280).duration(400)}>
           <SectionHeader
             icon="clipboard-list-outline"
             title="Job History"
@@ -439,10 +442,10 @@ export default function PropertyDetailScreen() {
                           ? ` → ${job.updated_at.substring(0, 10)}` 
                           : ''}
                       </Text>
-                      <JobTypeBadge jobType={job.job_type as JobType} />
+                      <Badge status={job.job_type} />
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                      <StatusBadge status={job.status as JobStatus} small />
+                      <Badge status={job.status} dot small />
                       <MaterialCommunityIcons name="chevron-right" size={16} color={C.border} />
                     </View>
                   </TouchableOpacity>

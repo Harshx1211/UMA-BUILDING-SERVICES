@@ -7,6 +7,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, FilterPills, Button } from '@/components/ui';
 import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
@@ -42,6 +43,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   onDelete: (asset: AssetWithResult) => void;
 }) => {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { updateAssetResult, isSaving } = useInspectionStore();
 
   const [showFailModal,  setShowFailModal]  = useState(false);
@@ -182,7 +184,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
           )}
 
           {isFailed && Boolean(asset.defect_reason) && (
-            <Animated.View entering={FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.errorLight, borderColor: C.error }]}>
+            <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.errorLight, borderColor: C.error }]}>
               <MaterialCommunityIcons name="alert-circle" size={15} color={C.errorDark} />
               <View style={{ flex: 1 }}>
                 <Text style={[s.defectNoticeTitle, { color: C.errorDark }]}>Defect Logged</Text>
@@ -262,6 +264,7 @@ AssetCard.displayName = 'AssetCard';
 
 export default function AssetInspectionScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useInspectionStore();
 

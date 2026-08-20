@@ -19,6 +19,7 @@ import {
   getPendingSyncItems,
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
@@ -66,6 +67,7 @@ type StatCardProps = {
 
 function StatCard({ icon, iconColor, iconBg, value, label, valueColor }: StatCardProps) {
   const C = useColors();
+  const noMotion = useReducedMotion();
   return (
     <Card variant="default" style={s.statCard} padding={12}>
       <View style={[s.statIconWrap, { backgroundColor: iconBg }]}>
@@ -143,7 +145,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
                : C.infoLight;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 60).duration(300)}>
+    <Animated.View entering={noMotion ? undefined : FadeInDown.delay(index * 60).duration(300)}>
       <Card variant="default" noPadding style={s.defectCard}>
         {/* Severity stripe */}
         <View style={[s.defectStripe, { backgroundColor: sev.color(C) }]} />
@@ -201,6 +203,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
 
 export default function ReportSummaryScreen() {
   const C = useColors();
+  const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
 
   const [job, setJob]             = useState<JobWithProperty | null>(null);
@@ -316,7 +319,7 @@ export default function ReportSummaryScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       >
         {/* ── Top Hero Card: Property Info ── */}
-        <Animated.View entering={FadeInDown.delay(40).duration(340)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(340)}>
           <Card variant="default" style={{ marginBottom: 20, position: 'relative', overflow: 'hidden' }} padding={16}>
             <View style={[s.heroDecor, { backgroundColor: C.primary + '10' }]} />
             <View style={s.heroInner}>
@@ -353,7 +356,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Pending Data Changes Warning Banner ── */}
         {hasPendingSync && (
-          <Animated.View entering={FadeInDown.delay(60).duration(340)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(340)}>
             <View style={[s.warningBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
               <MaterialCommunityIcons name="cloud-sync-outline" size={24} color={C.warningDark} />
               <View style={{ flex: 1 }}>
@@ -370,7 +373,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Warning if completed job lacks signature (data corruption edge case) ── */}
         {isCompleted && !hasSignature && (
-          <Animated.View entering={FadeIn.delay(200)}>
+          <Animated.View entering={noMotion ? undefined : FadeIn.delay(200)}>
             <View style={[s.warningBanner, { backgroundColor: C.errorLight, borderColor: C.error }]}>
               <MaterialCommunityIcons name="alert" size={20} color={C.error} />
               <View style={{ flex: 1 }}>
@@ -387,7 +390,7 @@ export default function ReportSummaryScreen() {
         )}
 
         {/* ── Stats Grid (2x2) ── */}
-        <Animated.View entering={FadeInDown.delay(80).duration(340)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(340)}>
           <View style={s.statsGrid}>
             <StatCard
               icon="shield-check" iconColor={C.success} iconBg={C.successLight}
@@ -413,7 +416,7 @@ export default function ReportSummaryScreen() {
         </Animated.View>
 
         {/* ── Results Bar ── */}
-        <Animated.View entering={FadeInDown.delay(100).duration(340)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(340)}>
           <Card variant="default" style={{ marginBottom: 16 }} padding={16}>
             <View style={s.barHeader}>
               <Text style={[s.barTitle, { color: C.textSecondary, flex: 1, marginRight: 8 }]} numberOfLines={1}>COMPLIANCE BREAKDOWN</Text>
@@ -434,7 +437,7 @@ export default function ReportSummaryScreen() {
         </Animated.View>
 
         {/* ── Documentation Checklist (Status) ── */}
-        <Animated.View entering={FadeInDown.delay(120).duration(340)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(120).duration(340)}>
           <SectionHeader title="Documentation" eyebrow />
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {/* Inspections Row */}
@@ -496,7 +499,7 @@ export default function ReportSummaryScreen() {
         </Animated.View>
 
         {/* ── Asset Breakdown Table ── */}
-        <Animated.View entering={FadeInDown.delay(140).duration(340)}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(140).duration(340)}>
           <SectionHeader title="Asset Breakdown" eyebrow />
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {assets.length === 0 ? (
@@ -513,7 +516,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Defect Summary ── */}
         {defects.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(160).duration(340)}>
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(340)}>
             <SectionHeader title="Logged Defects" eyebrow />
             <View style={{ gap: 12 }}>
               {defects.map((d, i) => <DefectCard key={d.id} defect={d} index={i} colors={C} />)}
