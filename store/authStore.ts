@@ -105,10 +105,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             data.user.email?.split('@')[0] ??
             'User',
           role: UserRole.Admin,
+          company_id: null,
           phone: null,
           avatar_url: null,
+          push_token: null,
+          fpas_number: null,
+          fpas_class: null,
+          fpas_expiry: null,
+          state_license: null,
+          state_license_expiry: null,
+          accepted_tos_at: null,
+          accepted_aup_at: null,
           is_active: true,
           created_at: data.user.created_at ?? new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         };
         if (rememberMe) await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
         await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(fallback));
@@ -208,9 +218,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // Previously, offline photos were permanently lost on forced logout.
         const { processPhotoQueue } = await import('@/lib/photoUpload');
         const { _pushQueue } = await import('@/lib/sync');
+        const currentUserId = get().user?.id ?? session?.user.id ?? '';
 
         for (let i = 0; i < 5; i++) {
-          await processPhotoQueue();
+          await processPhotoQueue(currentUserId);
           await _pushQueue();
           pending = getPendingSyncItems();
           if (pending.length === 0) break;
@@ -339,10 +350,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           email: su.email ?? '',
           full_name: (su.user_metadata?.full_name as string) ?? su.email?.split('@')[0] ?? 'User',
           role: UserRole.Admin,
+          company_id: null,
           phone: null,
           avatar_url: null,
+          push_token: null,
+          fpas_number: null,
+          fpas_class: null,
+          fpas_expiry: null,
+          state_license: null,
+          state_license_expiry: null,
+          accepted_tos_at: null,
+          accepted_aup_at: null,
           is_active: true,
           created_at: su.created_at ?? new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         };
         set({ user: fallback, company: null, session, isAuthenticated: true, isLoading: false });
         return;
