@@ -132,13 +132,28 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
                   <Text style={[s.photoBadgeTxt, { color: C.textOnPrimary }]}>{asset.photos.length}</Text>
                 </View>
               )}
-              <TouchableOpacity onPress={() => onClone(asset)} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => onClone(asset)}
+                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clone asset"
+              >
                 <MaterialCommunityIcons name="content-copy" size={18} color={C.textTertiary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => onEdit(asset)} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => onEdit(asset)}
+                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
+                accessibilityRole="button"
+                accessibilityLabel="Edit asset"
+              >
                 <MaterialCommunityIcons name="pencil" size={18} color={C.textTertiary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => onDelete(asset)} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => onDelete(asset)}
+                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
+                accessibilityRole="button"
+                accessibilityLabel="Delete asset"
+              >
                 <MaterialCommunityIcons name="trash-can-outline" size={18} color={C.error} />
               </TouchableOpacity>
             </View>

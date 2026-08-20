@@ -51,7 +51,7 @@ export function SyncStatusBar({ light = false }: Props) {
     if (!failureAlert) return;
     const { failedCount, tables, lastError } = failureAlert;
     Alert.alert(
-      '⚠️ Sync Failed',
+      'Sync Failed',
       `${failedCount} item${failedCount > 1 ? 's' : ''} could not be saved to the server.\n\n` +
       `Affected: ${tables.join(', ')}\n` +
       `Reason: ${lastError}\n\n` +

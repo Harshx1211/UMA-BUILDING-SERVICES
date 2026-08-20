@@ -185,9 +185,9 @@ export default function GlobalDefectsScreen() {
           contentContainerStyle={s.filterRow}
         >
           <FilterPill label="All Severity" isActive={severityFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter('all'); }} C={C} />
-          <FilterPill label="🔴 Critical" isActive={severityFilter === DefectSeverity.Critical} color={SEVERITY_COLORS[DefectSeverity.Critical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Critical); }} C={C} />
-          <FilterPill label="🟡 Major" isActive={severityFilter === DefectSeverity.Major} color={SEVERITY_COLORS[DefectSeverity.Major]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Major); }} C={C} />
-          <FilterPill label="🔵 Minor" isActive={severityFilter === DefectSeverity.Minor} color={SEVERITY_COLORS[DefectSeverity.Minor]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Minor); }} C={C} />
+          <FilterPill label="Critical" isActive={severityFilter === DefectSeverity.Critical} color={SEVERITY_COLORS[DefectSeverity.Critical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Critical); }} C={C} />
+          <FilterPill label="Major" isActive={severityFilter === DefectSeverity.Major} color={SEVERITY_COLORS[DefectSeverity.Major]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Major); }} C={C} />
+          <FilterPill label="Minor" isActive={severityFilter === DefectSeverity.Minor} color={SEVERITY_COLORS[DefectSeverity.Minor]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Minor); }} C={C} />
         </ScrollView>
 
         <ScrollView

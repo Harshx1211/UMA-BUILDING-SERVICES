@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Defect } from '@/types';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { cardShadow } from '@/components/ui/Card';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
 import { Image } from 'expo-image';
@@ -30,19 +31,19 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
 
   const severityBadge = useMemo(() => {
     switch (defect.severity) {
-      case DefectSeverity.Critical: return { text: '🔴 Critical', bg: C.error };
-      case DefectSeverity.Major:    return { text: '🟡 Major',    bg: C.warning };
-      case DefectSeverity.Minor:    return { text: '🔵 Minor',    bg: C.info };
+      case DefectSeverity.Critical: return { text: 'Critical', bg: C.error };
+      case DefectSeverity.Major:    return { text: 'Major',    bg: C.warning };
+      case DefectSeverity.Minor:    return { text: 'Minor',    bg: C.info };
       default: return { text: 'Unknown', bg: C.border };
     }
   }, [defect.severity, C]);
 
   const statusBadge = useMemo((): { text: string; color: string; bg?: string; border: boolean } => {
     switch (defect.status) {
-      case DefectStatus.Open:       return { text: 'Open',         color: C.error,   border: true };
-      case DefectStatus.Monitoring: return { text: 'Monitoring',   color: C.warning, border: true };
-      case DefectStatus.Quoted:     return { text: 'Quoted',       color: C.info,    border: true };
-      case DefectStatus.Repaired:   return { text: '✅ Repaired',  color: C.success, bg: C.successLight ?? C.success + '20', border: false };
+      case DefectStatus.Open:       return { text: 'Open',       color: C.error,   border: true };
+      case DefectStatus.Monitoring: return { text: 'Monitoring', color: C.warning, border: true };
+      case DefectStatus.Quoted:     return { text: 'Quoted',     color: C.info,    border: true };
+      case DefectStatus.Repaired:   return { text: 'Repaired',   color: C.success, bg: C.successLight ?? C.success + '20', border: false };
       default: return { text: 'Unknown', color: C.text, border: true };
     }
   }, [defect.status, C]);
@@ -91,7 +92,10 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
       {defect.asset_type && (
         <View style={s.assetRow}>
           <View style={[s.assetPill, { backgroundColor: C.backgroundSecondary }]}>
-            <Text style={[s.assetPillText, { color: C.textSecondary }]}>🔧 {defect.asset_type} — {defect.location_on_site || 'No Location'}</Text>
+            <MaterialCommunityIcons name="tools" size={11} color={C.textSecondary} />
+            <Text style={[s.assetPillText, { color: C.textSecondary }]}>
+              {defect.asset_type} — {defect.location_on_site || 'No Location'}
+            </Text>
           </View>
         </View>
       )}
@@ -124,9 +128,12 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
 
       {/* Footer */}
       <View style={s.footerRow}>
-        <Text style={[s.dateText, { color: C.textTertiary }]}>
-          📅 {new Date(defect.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-        </Text>
+        <View style={s.dateRow}>
+          <MaterialCommunityIcons name="calendar-outline" size={12} color={C.textTertiary} />
+          <Text style={[s.dateText, { color: C.textTertiary }]}>
+            {new Date(defect.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </Text>
+        </View>
         <View style={s.footerActions}>
           {onPress && (
             <TouchableOpacity style={[s.viewBtn, { backgroundColor: C.backgroundTertiary }]} onPress={onPress} hitSlop={8}>
@@ -160,7 +167,7 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   severityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  severityText:  { color: '#FFFFFF', fontWeight: '700', fontSize: 11 },
+  severityText:  { color: T.textPrimary, fontWeight: '700', fontSize: 11 },
 
   codeBadge: {
     paddingHorizontal: 7, paddingVertical: 3,
@@ -172,7 +179,7 @@ const s = StyleSheet.create({
   statusText:  { fontWeight: '800', fontSize: 11, letterSpacing: 0.2 },
 
   assetRow: { marginBottom: 8, flexDirection: 'row' },
-  assetPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  assetPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   assetPillText: { fontSize: 12, fontWeight: '700' },
 
   description: { fontSize: 14, lineHeight: 20, marginTop: 4 },
@@ -193,6 +200,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     marginTop: 14,
   },
+  dateRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dateText: { fontSize: 12 },
   footerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   viewBtn: {

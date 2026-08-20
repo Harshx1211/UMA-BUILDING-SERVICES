@@ -53,7 +53,7 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
                 isActive && [
                   styles.activePill,
                   {
-                    backgroundColor: isDark ? C.surface : '#FFFFFF',
+                    backgroundColor: isDark ? C.surface : C.surface,
                     borderColor: isDark ? C.border : 'transparent',
                     borderWidth: isDark ? 1 : 0,
                     shadowColor: '#0D1526',
@@ -66,6 +66,13 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
               ]}
               onPress={() => onSelect(i)}
               activeOpacity={0.75}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={
+                opt.count !== undefined
+                  ? `${opt.label}, ${opt.count} item${opt.count !== 1 ? 's' : ''}`
+                  : opt.label
+              }
             >
               <Text
                 style={[

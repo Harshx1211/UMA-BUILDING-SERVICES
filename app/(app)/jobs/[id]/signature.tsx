@@ -16,6 +16,7 @@ import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import type { Signature } from '@/types';
 import { ScreenHeader, Button, Card } from '@/components/ui';
+import { T } from '@/constants/Colors';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 
 // Canvas lib doesn't export its ref type — capture the minimal surface we use.
@@ -498,7 +499,7 @@ const s = StyleSheet.create({
   // Step indicator
   stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 4 },
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  stepPillTxt:{ fontSize: 10, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
+  stepPillTxt:{ fontSize: 10, fontWeight: '900', color: T.textPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
 
   // Field label

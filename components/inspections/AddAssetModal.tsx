@@ -11,6 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { upsertRecord, addToSyncQueue } from '@/lib/database';
 import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
@@ -208,8 +209,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   <View key={s2} style={s.stepItem}>
                     <View style={[s.stepDot, { backgroundColor: isActive ? C.primary : isDone ? C.success : C.backgroundTertiary, borderColor: isActive ? C.primary : isDone ? C.success : C.border, borderWidth: 1 }]}>
                       {isDone
-                        ? <MaterialCommunityIcons name="check" size={12} color="#fff" />
-                        : <Text style={[s.stepNum, { color: isActive ? '#fff' : C.textTertiary }]}>{i + 1}</Text>
+                        ? <MaterialCommunityIcons name="check" size={12} color={T.textPrimary} />
+                        : <Text style={[s.stepNum, { color: isActive ? T.textPrimary : C.textTertiary }]}>{i + 1}</Text>
                       }
                     </View>
                     <Text style={[s.stepLabel, { color: isActive ? C.primary : C.textTertiary }]}>
@@ -246,7 +247,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                     <View style={[s.typeIconWrap, {
                       backgroundColor: selectedType === t.value ? t.color : C.backgroundTertiary,
                     }]}>
-                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? '#fff' : t.color} />
+                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? T.textPrimary : t.color} />
                     </View>
                     <Text style={[s.typeLabel, { color: selectedType === t.value ? t.color : C.text }]}>{t.label}</Text>
                     <MaterialCommunityIcons
@@ -479,11 +480,10 @@ const s = StyleSheet.create({
   headerIconBtn: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, color: '#FFF' },
-  headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
+  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600' },
 
   // Step indicators
   stepBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 1, justifyContent: 'space-between' },
@@ -559,7 +559,7 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   },
   saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, height: 54 },
-  saveBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  saveBtnTxt: { color: T.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
   cancelBtn:  { paddingHorizontal: 12 },
   cancelBtnTxt: { fontSize: 15, fontWeight: '800' },
 });

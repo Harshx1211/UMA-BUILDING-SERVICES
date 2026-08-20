@@ -8,6 +8,7 @@ import MapView, { Marker, Region, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { Priority } from '@/constants/Enums';
 import type { JobWithProperty } from '@/store/jobsStore';
 
@@ -35,7 +36,7 @@ async function geocodeAddress(address: string) {
     const encoded = encodeURIComponent(address);
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`,
-      { headers: { 'User-Agent': 'UMA BUILDING SERVICES/1.0' } }
+      { headers: { 'User-Agent': 'SiteTrack/1.0' } }
     );
     const json = await res.json() as { lat: string; lon: string }[];
     if (json.length > 0) {
@@ -158,7 +159,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
       {/* Marker count badge */}
       {!isLoading && markers.length > 0 && (
         <View style={[s.countBadge, { backgroundColor: C.primary }]}>
-          <MaterialCommunityIcons name="map-marker-multiple" size={14} color="#FFFFFF" />
+          <MaterialCommunityIcons name="map-marker-multiple" size={14} color={T.textPrimary} />
           <Text style={s.countText}>{markers.length} jobs</Text>
         </View>
       )}
@@ -179,9 +180,9 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
               {getJobAddress(selectedJob) || 'No address'}
             </Text>
             <Text style={[s.jobCardDate, { color: C.textTertiary }]}>
-              📅 {selectedJob.scheduled_date}
+              {selectedJob.scheduled_date}
               {(selectedJob.status === 'in_progress' || selectedJob.status === 'completed') && selectedJob.updated_at
-                ? `  |  ${selectedJob.status === 'completed' ? '✓ Done' : '▶ Started'} ${selectedJob.updated_at.substring(0, 10)}`
+                ? `  |  ${selectedJob.status === 'completed' ? 'Done' : 'Started'} ${selectedJob.updated_at.substring(0, 10)}`
                 : ''}
             </Text>
           </View>
@@ -191,7 +192,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
             </TouchableOpacity>
             <TouchableOpacity style={[s.openBtn, { backgroundColor: C.accent }]} onPress={() => { setSelectedJob(null); onJobSelect(selectedJob); }}>
               <Text style={s.openBtnText}>Open Job</Text>
-              <MaterialCommunityIcons name="chevron-right" size={16} color="#FFFFFF" />
+              <MaterialCommunityIcons name="chevron-right" size={16} color={T.textPrimary} />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -206,21 +207,21 @@ const s = StyleSheet.create({
 
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(244,246,249,0.9)',
+    backgroundColor: 'rgba(13,27,46,0.92)',
     alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 10,
   },
   loadingText: { fontSize: 14 },
 
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(244,246,249,0.85)',
+    backgroundColor: 'rgba(13,27,46,0.88)',
     alignItems: 'center', justifyContent: 'center', gap: 12,
   },
   emptyText: { fontSize: 14 },
 
   markerPin: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: T.surface,
     borderWidth: 2.5,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -236,11 +237,10 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
   },
-  countText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  countText: { fontSize: 12, fontWeight: '700', color: T.textPrimary },
 
   jobCard: {
     position: 'absolute', bottom: 16, left: 16, right: 16,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     flexDirection: 'row',
     overflow: 'hidden',
@@ -264,5 +264,5 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 7,
     borderRadius: 10,
   },
-  openBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  openBtnText: { fontSize: 12, fontWeight: '700', color: T.textPrimary },
 });

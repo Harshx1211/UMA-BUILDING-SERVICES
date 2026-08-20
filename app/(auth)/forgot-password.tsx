@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { Button } from '@/components/ui/Button';
 import { Card, Input } from '@/components/ui';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -79,7 +80,7 @@ export default function ForgotPasswordScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons name="arrow-left" size={20} color="#FFFFFF" />
+            <MaterialCommunityIcons name="arrow-left" size={20} color={T.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.heroTitle}>Reset Password</Text>
           <Text style={styles.heroSub}>Enter your email to receive a reset link</Text>
@@ -93,7 +94,7 @@ export default function ForgotPasswordScreen() {
           {banner?.type === 'success' ? (
             <View style={styles.successCard}>
               <View style={[styles.successIcon, { backgroundColor: C.success }]}>
-                <MaterialCommunityIcons name="check-circle" size={36} color="#FFFFFF" />
+                <MaterialCommunityIcons name="check-circle" size={36} color={T.textPrimary} />
               </View>
               <Text style={[styles.successTitle, { color: C.text }]}>Email Sent!</Text>
               <Text style={[styles.successBody, { color: C.textSecondary }]}>{banner.message}</Text>
@@ -118,6 +119,10 @@ export default function ForgotPasswordScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="send"
+                onSubmitEditing={handleSendReset}
+                editable={!isLoading}
                 maxLength={254}
                 error={emailError}
                 leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textSecondary} />}
@@ -162,11 +167,12 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: T.textPrimary,
   },
   heroSub: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.65)',
+    color: T.textPrimary,
+    opacity: 0.65,
   },
 
   // Form card

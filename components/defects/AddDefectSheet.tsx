@@ -126,7 +126,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
     });
     sheetRef.current?.close();
     onSaved();
-    Toast.show({ type: 'success', text1: 'Defect logged ✓' });
+    Toast.show({ type: 'success', text1: 'Defect logged' });
   };
 
   const selectedAsset = assets.find(a => a.id === assetId) ?? null;
@@ -148,7 +148,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               activeOpacity={0.8}
             >
               <View style={[s.sevIconWrap, { backgroundColor: active ? cfg.color : C.backgroundTertiary }]}>
-                <MaterialCommunityIcons name={cfg.icon} size={22} color={active ? '#FFF' : C.textSecondary} />
+                <MaterialCommunityIcons name={cfg.icon} size={22} color={active ? T.textPrimary : C.textSecondary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[s.sevLabel, { color: active ? cfg.color : C.text }]}>{cfg.label}</Text>
@@ -327,7 +327,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               <TouchableOpacity key={uri} onLongPress={() => removePhoto(uri)} activeOpacity={0.85} style={s.thumbWrap}>
                 <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
                 <TouchableOpacity style={s.thumbDel} onPress={() => removePhoto(uri)}>
-                  <MaterialCommunityIcons name="close" size={12} color="#FFF" />
+                  <MaterialCommunityIcons name="close" size={12} color={T.textPrimary} />
                 </TouchableOpacity>
               </TouchableOpacity>
             ))}
@@ -390,7 +390,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
                   activeOpacity={0.7}
                 >
                   <Text style={[s.tabTxt, { color: active ? sevCfg.color : done ? C.success : C.textTertiary }]}>
-                    {done ? '✓ ' : ''}{label}
+                    {done ? '\u2713 ' : ''}{label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -421,7 +421,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
                 activeOpacity={0.85}
               >
                 <Text style={s.nextBtnTxt}>Next</Text>
-                <MaterialCommunityIcons name="arrow-right" size={16} color="#FFF" />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={T.textPrimary} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -430,7 +430,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
                 disabled={!description.trim()}
                 activeOpacity={0.85}
               >
-                <MaterialCommunityIcons name="check" size={16} color="#FFF" />
+                <MaterialCommunityIcons name="check" size={16} color={T.textPrimary} />
                 <Text style={s.nextBtnTxt}>Save Defect</Text>
               </TouchableOpacity>
             )}
@@ -516,5 +516,5 @@ const s = StyleSheet.create({
   backBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1, flex: 1 },
   backBtnTxt: { fontSize: 14, fontWeight: '700' },
   nextBtn:    { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: 14 },
-  nextBtnTxt: { color: '#FFF', fontSize: 15, fontWeight: '800' },
+  nextBtnTxt: { color: T.textPrimary, fontSize: 15, fontWeight: '800' },
 });

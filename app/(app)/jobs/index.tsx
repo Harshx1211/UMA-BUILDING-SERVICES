@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   filterTab:            { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   filterTabActive:      { backgroundColor: T.primary, borderColor: T.primary },
   filterTabText:        { color: T.textMuted, fontSize: 12, fontWeight: '600' },
-  filterTabTextActive:  { color: '#FFFFFF' },
+  filterTabTextActive:  { color: T.textPrimary },
   searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14 },
   scroll:               { padding: 16, paddingBottom: 32 },

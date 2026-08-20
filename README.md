@@ -1,50 +1,177 @@
-# Welcome to your Expo app 👋
+# SiteTrack — Field Service Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A professional-grade React Native / Expo mobile application for fire protection service technicians. Built for offline-first field operations, AS 1851-2012 compliance, and seamless cloud synchronisation via Supabase.
 
-## Get started
+---
 
-1. Install dependencies
+## Overview
 
-   ```bash
-   npm install
-   ```
+SiteTrack is the technician-facing mobile companion to the SiteTrack platform. Technicians use it to:
 
-2. Start the app
+- View and manage assigned jobs (scheduled, in-progress, completed)
+- Conduct AS 1851-compliant fire asset inspections with checklist workflows
+- Log defects with severity ratings, defect codes, photo evidence, and quote pricing
+- Capture client and technician signatures for job completion
+- Generate and share PDF compliance reports directly from the device
+- Operate fully offline — all data syncs automatically when connectivity is restored
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## Tech Stack
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+| Layer | Technology |
+|---|---|
+| Framework | React Native + Expo SDK 52 (file-based routing via Expo Router) |
+| Language | TypeScript (strict mode) |
+| State Management | Zustand |
+| Local Database | SQLite (via `expo-sqlite`) |
+| Cloud Backend | Supabase (PostgreSQL + Row-Level Security + Storage) |
+| Styling | Custom design system — `constants/Colors.ts` (T tokens) + `constants/Typography.ts` |
+| UI Icons | `@expo/vector-icons` — MaterialCommunityIcons exclusively |
+| Maps | Expo MapView (Google Maps) |
+| PDF Generation | `react-native-html-to-pdf` |
+| Offline Detection | NetInfo + custom `OfflineBanner` + `SyncStatusBar` |
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## Project Structure
 
-When you're ready, run:
+```
+app/
+  (auth)/          Login, forgot password, splash screen
+  (app)/           Authenticated screens (tab-based)
+    index.tsx      Dashboard — KPI tiles, today's jobs, upcoming
+    jobs/          Job list, job detail, inspection, signature, report, quote
+    defects/       Defect log and detail
+    assets/        Asset detail view
+    profile.tsx    Technician profile and sync controls
+    help.tsx       In-app help and FAQ
+    notifications/ Push notification centre
 
-```bash
-npm run reset-project
+components/
+  ui/              Shared design system primitives (Button, Card, Badge, Input, etc.)
+  jobs/            Job-specific components (JobCard, StatusBadge, RouteMapView)
+  defects/         DefectCard, AddDefectSheet, DefectCodePicker
+  inspections/     AssetInspectModal, AddAssetModal, ChecklistModal, EditAssetModal
+  camera/          PhotoCaptureSheet, PhotoGrid
+
+constants/
+  Colors.ts        Single source of truth — T (static tokens) + dynamic useColors() hook
+  Typography.ts    Type scale and font weight tokens
+  Config.ts        App-wide config (APP_NAME, BUNDLE_ID, DB_NAME, API keys)
+  Enums.ts         JobStatus, DefectSeverity, Priority, AssetStatus, etc.
+
+store/             Zustand stores (authStore, jobsStore, defectsStore, photosStore, etc.)
+lib/               Database (SQLite), Supabase client, sync engine, PDF generator
+hooks/             useAuth, useColors, useOffline, useUnsavedChanges
+utils/             dateHelpers, sanitize, uuid, assetHelpers, fileHelpers
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## Getting Started
 
-To learn more about developing your project with Expo, look at the following resources:
+### Prerequisites
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Node.js 18+
+- Expo CLI (`npm install -g expo-cli`)
+- iOS Simulator (macOS) or Android Emulator, or a physical device with Expo Go
 
-## Join the community
+### Installation
 
-Join our community of developers creating universal apps.
+```bash
+npm install
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Environment Variables
+
+Create a `.env.local` file in the project root (never commit this file):
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your-maps-key
+```
+
+> **Note:** `googleMaps.apiKey` in `app.json` is intentionally left empty. It is injected at build time via EAS Secrets for production builds.
+
+### Running Locally
+
+```bash
+npx expo start
+```
+
+Then open in:
+- iOS Simulator: press `i`
+- Android Emulator: press `a`
+- Physical device: scan the QR code with the Expo Go app
+
+---
+
+## Design System
+
+All colours must come from the token system — **no hardcoded hex values are permitted** anywhere in the UI layer.
+
+- **Static tokens:** `import { T } from '@/constants/Colors'` — use for `StyleSheet.create()` blocks
+- **Dynamic tokens:** `const C = useColors()` — use for inline styles and computed values
+
+```tsx
+// Correct
+const styles = StyleSheet.create({ text: { color: T.textPrimary } });
+<Text style={{ color: C.error }}>Error</Text>
+
+// Forbidden
+<Text style={{ color: '#FF0000' }}>Error</Text>
+```
+
+### Emoji Policy
+
+**Zero emoji in any UI string.** All status indicators, icons, and visual cues use `MaterialCommunityIcons`.
+
+---
+
+## Sync Architecture
+
+SiteTrack uses a **write-ahead local queue** pattern:
+
+1. All mutations (insert / update) write to SQLite immediately (offline-first)
+2. The mutation is enqueued in the `sync_queue` table
+3. A background sync engine (`lib/sync.ts`) processes the queue when online
+4. Failed items are retried with exponential back-off; permanently failed items are reset on app restart
+
+The `SyncStatusBar` component at the bottom of most screens shows real-time sync health.
+
+---
+
+## PDF Reports
+
+Reports are generated entirely on-device using `lib/pdfGenerator.ts`:
+
+- Pulls all relevant data from local SQLite (assets, defects, photos, signatures)
+- Renders a styled HTML template
+- Converts to PDF via `react-native-html-to-pdf`
+- Shared via the native share sheet
+
+Reports are AS 1851-2012 compliant and include tenant branding (company name, logo) injected at the job level.
+
+---
+
+## Building for Production
+
+```bash
+# Build for iOS
+eas build --platform ios --profile production
+
+# Build for Android
+eas build --platform android --profile production
+```
+
+EAS build profiles are defined in `eas.json`. Google Maps API key and other secrets are injected via EAS Secrets — do not add them to source code or `.env` files tracked by git.
+
+---
+
+## Key Notes for Beta Testers
+
+- **First launch after a DB_NAME change** (`sitetrack.db`) will clear the local SQLite cache — all unsynced data will be lost. Ensure a full sync before updating.
+- **Session key changes** will log out all existing sessions on device.
+- The app targets **Australian timezones** (AEST/AEDT). Date calculations use `localDateString()` from `utils/dateHelpers.ts` — never `toISOString().slice(0,10)`.

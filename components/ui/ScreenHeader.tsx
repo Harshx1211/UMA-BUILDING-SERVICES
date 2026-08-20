@@ -48,6 +48,8 @@ export function ScreenHeader({
             }
             style={[styles.backBtn, { backgroundColor: C.backgroundTertiary }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <MaterialCommunityIcons name="arrow-left" size={20} color={C.text} />
           </TouchableOpacity>
@@ -88,8 +90,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',

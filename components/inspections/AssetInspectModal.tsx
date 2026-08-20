@@ -251,10 +251,10 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                         <MaterialCommunityIcons
                           name={sev.icon}
                           size={20}
-                          color={isActive ? '#FFF' : colors.active}
+                          color={isActive ? T.textPrimary : colors.active}
                         />
-                        <Text style={[s.severityLabel, { color: isActive ? '#FFF' : C.text }]}>{sev.label}</Text>
-                        <Text style={[s.severityDesc, { color: isActive ? 'rgba(255,255,255,0.75)' : C.textTertiary }]}>
+                        <Text style={[s.severityLabel, { color: isActive ? T.textPrimary : C.text }]}>{sev.label}</Text>
+                        <Text style={[s.severityDesc, { color: isActive ? T.textPrimary : C.textTertiary, opacity: isActive ? 0.75 : 1 }]}>
                           {sev.desc}
                         </Text>
                       </View>
@@ -403,7 +403,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                         setPhotos(p => p.filter((_, i) => i !== idx));
                       }}
                     >
-                      <MaterialCommunityIcons name="close" size={11} color="#FFF" />
+                      <MaterialCommunityIcons name="close" size={11} color={T.textPrimary} />
                     </TouchableOpacity>
                   </View>
                 ))}

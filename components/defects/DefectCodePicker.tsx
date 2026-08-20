@@ -22,6 +22,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import {
   DEFECT_CODES,
   DEFECT_CATEGORIES,
@@ -79,9 +80,9 @@ function CategoryPill({
       <MaterialCommunityIcons
         name={icon as MCIconName}
         size={13}
-        color={isActive ? '#FFF' : C.textSecondary}
+        color={isActive ? T.textPrimary : C.textSecondary}
       />
-      <Text style={[s.catPillTxt, { color: isActive ? '#FFF' : C.textSecondary }]}>
+      <Text style={[s.catPillTxt, { color: isActive ? T.textPrimary : C.textSecondary }]}>
         {label}
       </Text>
     </TouchableOpacity>

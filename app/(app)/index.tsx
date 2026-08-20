@@ -25,7 +25,7 @@ import { T } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { JobStatus } from '@/constants/Enums';
 import type { Job } from '@/types';
-import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow } from '@/components/ui';
+import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow, SkeletonBlock } from '@/components/ui';
 import { localDateString } from '@/utils/dateHelpers';
 
 // ─── Priority left-bar color (semantic, matches the rule: urgent=danger, high=warning) ──
@@ -141,9 +141,9 @@ function JobCard({ job, index }: { job: Job; index: number }) {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
-  const { user }            = useAuth();
-  const { jobs, loadJobs }  = useJobsStore();
-  const [refreshing, setRefreshing] = useState(false);
+  const { user }               = useAuth();
+  const { jobs, loadJobs, isLoading } = useJobsStore();
+  const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -205,6 +205,8 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.bellBtn}
             onPress={() => router.push('/(app)/notifications')}
+            accessibilityRole="button"
+            accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
           >
             <MaterialCommunityIcons
               name={unreadCount > 0 ? 'bell-badge-outline' : 'bell-outline'}
@@ -255,16 +257,24 @@ export default function HomeScreen() {
 
         {/* ── KPI Stat Tiles ── */}
         <View style={styles.kpiRow}>
-          {[
-            { value: todayJobs.length, label: 'Today'     },
-            { value: doneToday,        label: 'Done today' },
-            { value: openCount,        label: 'Open jobs'  },
-          ].map(({ value, label }) => (
-            <View key={label} style={styles.kpiCard}>
-              <Text style={styles.kpiValue}>{value}</Text>
-              <Text style={styles.kpiLabel}>{label}</Text>
-            </View>
-          ))}
+          {isLoading
+            ? (['Today', 'Done today', 'Open jobs'] as const).map((label) => (
+                <View key={label} style={styles.kpiCard}>
+                  <SkeletonBlock width={32} height={26} borderRadius={6} />
+                  <SkeletonBlock width={48} height={10} borderRadius={4} style={{ marginTop: 6 }} />
+                </View>
+              ))
+            : [
+                { value: todayJobs.length, label: 'Today'     },
+                { value: doneToday,        label: 'Done today' },
+                { value: openCount,        label: 'Open jobs'  },
+              ].map(({ value, label }) => (
+                <View key={label} style={styles.kpiCard}>
+                  <Text style={styles.kpiValue}>{value}</Text>
+                  <Text style={styles.kpiLabel}>{label}</Text>
+                </View>
+              ))
+          }
         </View>
 
         {/* ── Today's Jobs ── */}
@@ -313,8 +323,8 @@ const styles = StyleSheet.create({
 
   // Notification bell
   bellBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: T.radiusButton,
     backgroundColor: T.iconBg(T.textMuted),
     alignItems: 'center',
@@ -333,7 +343,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   bellBadgeText: {
-    color: '#FFFFFF',
+    color: T.textPrimary,
     fontSize: 8,
     fontWeight: '800',
   },

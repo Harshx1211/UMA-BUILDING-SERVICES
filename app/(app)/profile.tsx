@@ -187,7 +187,7 @@ export default function ProfileScreen() {
             activeOpacity={0.85}
             disabled={isRetrying}
           >
-            <MaterialCommunityIcons name="refresh" size={16} color="#f59e0b" />
+            <MaterialCommunityIcons name="refresh" size={16} color={T.warning} />
             <Text style={styles.retryText}>
               {isRetrying ? 'Retrying…' : `Retry ${failedSyncCount} Failed Sync${failedSyncCount !== 1 ? 's' : ''}`}
             </Text>
@@ -245,10 +245,10 @@ const styles = StyleSheet.create({
   signOutText:    { color: T.danger, fontSize: 15, fontWeight: '700' },
   retryBtn:       {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: T.radiusCard, borderWidth: 1,
-    borderColor: '#f59e0b', paddingVertical: 14, marginBottom: 20,
+    backgroundColor: T.warningBg, borderRadius: T.radiusCard, borderWidth: 1,
+    borderColor: T.warning, paddingVertical: 14, marginBottom: 20,
   },
-  retryText:      { color: '#f59e0b', fontSize: 14, fontWeight: '700' },
+  retryText:      { color: T.warning, fontSize: 14, fontWeight: '700' },
   version:        { color: T.textMuted, fontSize: 11, textAlign: 'center' },
   input:          {
     color: T.textPrimary, fontSize: 13, fontWeight: '500',

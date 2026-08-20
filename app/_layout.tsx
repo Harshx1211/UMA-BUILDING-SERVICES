@@ -12,7 +12,7 @@ import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
 import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
-import Colors from '@/constants/Colors';
+import Colors, { T } from '@/constants/Colors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as ScreenCapture from 'expo-screen-capture';
 
@@ -153,15 +153,15 @@ export default function RootLayout() {
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 24 }}>
-      <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
-      <Text style={{ fontSize: 20, fontWeight: '700', color: '#0E2141', marginTop: 16, textAlign: 'center' }}>Something went wrong</Text>
-      <Text style={{ fontSize: 14, color: '#4B5A6E', marginTop: 8, textAlign: 'center', marginBottom: 24 }}>An unexpected error occurred while loading this module.</Text>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: T.backgroundSecondary, padding: 24 }}>
+      <MaterialCommunityIcons name="alert-circle-outline" size={48} color={T.danger} />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: T.text, marginTop: 16, textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ fontSize: 14, color: T.textSecondary, marginTop: 8, textAlign: 'center', marginBottom: 24 }}>An unexpected error occurred while loading this module.</Text>
       <TouchableOpacity 
         onPress={retry}
-        style={{ backgroundColor: '#0E2141', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+        style={{ backgroundColor: T.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
       >
-        <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Try Again</Text>
+        <Text style={{ color: T.textPrimary, fontWeight: '700' }}>Try Again</Text>
       </TouchableOpacity>
     </View>
   );

@@ -14,7 +14,7 @@ export function JobTypeBadge({ jobType }: Props) {
   const CONFIG: Record<JobType, { bg: string; text: string; label: string; bold?: boolean }> = {
     [JobType.RoutineService]: { bg: C.infoLight || C.info + '20',    text: C.infoDark || C.info,    label: 'Routine Service' },
     [JobType.DefectRepair]:   { bg: C.errorLight || C.error + '20',   text: C.errorDark || C.error,   label: 'Defect Repair' },
-    [JobType.Installation]:   { bg: '#F3E8FF',                 text: '#6D28D9',                label: 'Installation' },
+    [JobType.Installation]:   { bg: C.infoLight || C.info + '20',    text: C.infoDark || C.info,    label: 'Installation' },
     [JobType.Emergency]:      { bg: C.errorLight || C.error + '20',   text: C.error,                 label: 'EMERGENCY', bold: true },
     [JobType.Quote]:          { bg: C.backgroundSecondary || C.surface, text: C.textSecondary, label: 'Quote' },
   };

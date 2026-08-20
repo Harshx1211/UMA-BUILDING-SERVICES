@@ -44,13 +44,13 @@ const VARIANT_STYLES: Record<Variant, {
   bg: string; textColor: string; borderWidth: number; borderColor: string;
 }> = {
   primary: {
-    bg: T.primary, textColor: '#FFFFFF', borderWidth: 0, borderColor: 'transparent',
+    bg: T.primary, textColor: T.textPrimary, borderWidth: 0, borderColor: 'transparent',
   },
   secondary: {
     bg: 'transparent', textColor: T.textSecondary, borderWidth: 1, borderColor: T.border,
   },
   destructive: {
-    bg: T.danger, textColor: '#FFFFFF', borderWidth: 0, borderColor: 'transparent',
+    bg: T.danger, textColor: T.textPrimary, borderWidth: 0, borderColor: 'transparent',
   },
 };
 
@@ -96,6 +96,9 @@ export function Button({
         }
         onPress={handlePress}
         disabled={disabled || resolvedLoading}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: !!(disabled || resolvedLoading), busy: !!resolvedLoading }}
         style={[
           styles.btn,
           {

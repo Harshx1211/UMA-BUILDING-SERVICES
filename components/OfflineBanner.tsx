@@ -79,27 +79,27 @@ export function OfflineBanner() {
       bg:   T.warningBg,
       icon: 'wifi-off' as const,
       text: pendingCount > 0
-        ? `⚠️  Offline — ${pendingCount} change${pendingCount > 1 ? 's' : ''} pending sync`
-        : '⚠️  Offline Mode — changes save locally',
+        ? `Offline — ${pendingCount} change${pendingCount > 1 ? 's' : ''} pending sync`
+        : 'Offline Mode — changes save locally',
       textColor: T.warning,
     },
     syncing: {
       bg:   C.primary,
       icon: 'sync' as const,
-      text: '🔄  Syncing changes with cloud...',
-      textColor: '#FFFFFF',
+      text: 'Syncing changes with cloud...',
+      textColor: T.textPrimary,
     },
     synced: {
       bg:   C.success,
       icon: 'cloud-check-outline' as const,
-      text: '✅  All changes synced successfully',
-      textColor: '#FFFFFF',
+      text: 'All changes synced successfully',
+      textColor: T.textPrimary,
     },
     hidden: {
       bg:   'transparent',
       icon: 'wifi-off' as const,
       text: '',
-      textColor: '#000',
+      textColor: T.textMuted,
     },
   };
 

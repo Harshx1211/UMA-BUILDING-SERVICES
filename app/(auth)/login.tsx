@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
   Keyboard,
@@ -20,9 +21,11 @@ import { useAuthStore } from '@/store/authStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { MAX_LENGTHS } from '@/utils/sanitize';
+import { APP_NAME } from '@/constants/Config';
 
 // CRITICAL FIX: must match the key used in authStore.ts line 13.
 // Previously '@uma-building-services/remember_me' — AsyncStorage reads always
@@ -34,6 +37,7 @@ export default function LoginScreen() {
   const { restoreSession } = useAuthStore();
   const C = useColors();
   const scrollRef = useRef<ScrollView>(null);
+  const passwordRef = useRef<TextInput>(null);
   const { isOnline } = useNetworkStatus();
 
   const [email, setEmail]                   = useState('');
@@ -127,13 +131,11 @@ export default function LoginScreen() {
         <View style={styles.content}>
           {/* ── Brand Logo ────── */}
           <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
-            <View style={[styles.logoBox, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <MaterialCommunityIcons name="shield-check" size={42} color={C.primary} />
-            </View>
-            <Animated.View entering={FadeInDown.delay(200).duration(500)}>
-              <Text style={[styles.brandName, { color: C.text }]}>SiteTrack</Text>
-              <Text style={[styles.brandTagline, { color: C.textSecondary }]}>Enter your credentials to continue</Text>
-            </Animated.View>
+            <BrandLogo
+              size="medium"
+              tagline="Enter your credentials to continue"
+              textColor={C.text}
+            />
           </Animated.View>
 
           {/* ── Form Section ─────────────── */}
@@ -162,23 +164,39 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
               maxLength={MAX_LENGTHS.email}
               error={emailError}
+              disabled={isLoading}
               leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textTertiary} />}
               style={{ marginBottom: 16 }}
             />
 
             <Input
+              ref={passwordRef}
               label="Password"
               value={password}
               onChangeText={(t) => { setPassword(t); setPasswordError(''); }}
               placeholder="Enter your password"
               secureTextEntry={!showPassword}
+              textContentType="password"
+              autoComplete="current-password"
+              returnKeyType="done"
+              onSubmitEditing={handleSignIn}
               maxLength={128}
               error={passwordError}
+              disabled={isLoading}
               leftIcon={<MaterialCommunityIcons name="lock-outline" size={18} color={C.textTertiary} />}
               rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8}>
+                <TouchableOpacity
+                  onPress={() => setShowPassword(v => !v)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
                   <MaterialCommunityIcons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={18}
@@ -240,7 +258,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={[styles.footerTxt, { color: C.textTertiary }]}>© 2026 SiteTrack · Field Service Platform</Text>
+          <Text style={[styles.footerTxt, { color: C.textTertiary }]}>© 2026 {APP_NAME} · Field Service Platform</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -259,27 +277,6 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: 48,
-  },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  brandName: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  brandTagline: {
-    fontSize: 15,
-    fontWeight: '400',
-    textAlign: 'center',
   },
 
   // ── Form Container ───────────────

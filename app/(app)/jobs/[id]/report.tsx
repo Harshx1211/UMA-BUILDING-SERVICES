@@ -19,7 +19,7 @@ import {
   getPendingSyncItems,
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
-import { ScreenHeader, Button, SectionTitle, Card } from '@/components/ui';
+import { ScreenHeader, Button, SectionHeader, Card } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
@@ -435,7 +435,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Documentation Checklist (Status) ── */}
         <Animated.View entering={FadeInDown.delay(120).duration(340)}>
-          <SectionTitle title="Documentation" />
+          <SectionHeader title="Documentation" eyebrow />
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {/* Inspections Row */}
             <View style={[s.checkRow, { borderBottomColor: C.border }]}>
@@ -497,7 +497,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Asset Breakdown Table ── */}
         <Animated.View entering={FadeInDown.delay(140).duration(340)}>
-          <SectionTitle title="Asset Breakdown" />
+          <SectionHeader title="Asset Breakdown" eyebrow />
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {assets.length === 0 ? (
               <View style={s.emptyTable}>
@@ -514,7 +514,7 @@ export default function ReportSummaryScreen() {
         {/* ── Defect Summary ── */}
         {defects.length > 0 && (
           <Animated.View entering={FadeInDown.delay(160).duration(340)}>
-            <SectionTitle title="Logged Defects" />
+            <SectionHeader title="Logged Defects" eyebrow />
             <View style={{ gap: 12 }}>
               {defects.map((d, i) => <DefectCard key={d.id} defect={d} index={i} colors={C} />)}
             </View>

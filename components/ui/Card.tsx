@@ -82,6 +82,7 @@ export function Card({
           onPressOut={() =>
             Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }).start()
           }
+          accessibilityRole="button"
           style={containerStyle}
         >
           {children}

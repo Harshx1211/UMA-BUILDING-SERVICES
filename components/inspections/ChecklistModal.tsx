@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { ChecklistItem } from '@/constants/Checklists';
 import { Card, Button } from '@/components/ui';
 
@@ -160,7 +161,7 @@ export default function ChecklistModal({
                 <View style={[s.questionNum, {
                   backgroundColor: isPassed ? C.success : isFailed ? C.error : C.backgroundTertiary,
                 }]}>
-                  <Text style={[s.questionNumTxt, { color: isAnswered ? '#FFF' : C.textTertiary }]}>
+                  <Text style={[s.questionNumTxt, { color: isAnswered ? T.textPrimary : C.textTertiary }]}>
                     {String(idx + 1).padStart(2, '0')}
                   </Text>
                 </View>
@@ -195,7 +196,7 @@ export default function ChecklistModal({
                   <MaterialCommunityIcons
                     name={isPassed ? 'check' : isFailed ? 'close' : 'minus'}
                     size={18}
-                    color={isAnswered ? '#FFF' : C.textTertiary}
+                    color={isAnswered ? T.textPrimary : C.textTertiary}
                   />
                 </View>
                 </View>

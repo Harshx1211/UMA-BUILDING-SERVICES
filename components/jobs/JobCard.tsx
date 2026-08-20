@@ -12,6 +12,7 @@ import { JobTypeBadge } from './JobTypeBadge';
 import { StatusBadge } from './StatusBadge';
 import { JobStatus, JobType, Priority, ComplianceStatus } from '@/constants/Enums';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import type { JobWithProperty } from '@/store/jobsStore';
 
 interface Props {
@@ -34,7 +35,7 @@ function parseTime(hhmm: string): string {
 function StartAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
   return (
     <TouchableOpacity style={[sw.startAction, { backgroundColor: C.success }]} onPress={onPress} activeOpacity={0.85}>
-      <MaterialCommunityIcons name="play-circle-outline" size={22} color="#FFFFFF" />
+      <MaterialCommunityIcons name="play-circle-outline" size={22} color={T.textPrimary} />
       <Text style={sw.actionLabel}>Start</Text>
     </TouchableOpacity>
   );
@@ -44,7 +45,7 @@ StartAction.displayName = 'StartAction';
 function CancelAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
   return (
     <TouchableOpacity style={[sw.cancelAction, { backgroundColor: C.error }]} onPress={onPress} activeOpacity={0.85}>
-      <MaterialCommunityIcons name="close-circle-outline" size={22} color="#FFFFFF" />
+      <MaterialCommunityIcons name="close-circle-outline" size={22} color={T.textPrimary} />
       <Text style={sw.actionLabel}>Cancel</Text>
     </TouchableOpacity>
   );
@@ -54,7 +55,7 @@ CancelAction.displayName = 'CancelAction';
 const sw = StyleSheet.create({
   startAction:  { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginLeft: 8, gap: 4 },
   cancelAction: { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginRight: 8, gap: 4 },
-  actionLabel:  { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  actionLabel:  { fontSize: 11, fontWeight: '700', color: T.textPrimary },
 });
 
 // ─── Main card ───────────────────────────────

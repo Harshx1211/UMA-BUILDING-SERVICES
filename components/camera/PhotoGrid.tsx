@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions, TouchableOpacity, SectionList } from 'rea
 import { Text } from 'react-native-paper';
 import { InspectionPhoto } from '@/types';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -63,7 +64,7 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
         )}
         {isPending && (
           <View style={[s.pendingBadge, { backgroundColor: C.accent, shadowColor: '#000' }]}>
-            <MaterialCommunityIcons name="timer-sand" size={10} color="#FFF" />
+            <MaterialCommunityIcons name="timer-sand" size={10} color={T.textPrimary} />
           </View>
         )}
       </TouchableOpacity>
@@ -119,7 +120,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
-  captionText: { color: '#FFF', fontSize: 10 },
+  captionText: { color: T.textPrimary, fontSize: 10 },
   pendingBadge: {
     position: 'absolute',
     top: 4,

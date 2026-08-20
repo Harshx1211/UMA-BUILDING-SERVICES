@@ -118,8 +118,8 @@ export default function DefectDetailScreen() {
   if (!defect) {
     return (
       <View style={[s.center, { backgroundColor: C.background }]}>
-        <Text style={{ fontSize: 40 }}>🔍</Text>
-        <Text style={{ color: C.textSecondary, marginTop: 8 }}>Defect not found</Text>
+        <MaterialCommunityIcons name="file-search-outline" size={48} color={C.textTertiary} />
+        <Text style={{ color: C.textSecondary, marginTop: 8, fontSize: 16, fontWeight: '600' }}>Defect not found</Text>
         <View style={{ marginTop: 16 }}>
           <Button title="Go Back" onPress={() => router.back()} />
         </View>

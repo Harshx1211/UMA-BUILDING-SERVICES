@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react
 import { Text } from 'react-native-paper';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { CameraView, useCameraPermissions, FlashMode } from 'expo-camera';
 
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -125,7 +126,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
         setPhotosTaken(prev => prev + 1);
         setCaption(''); // reset per photo as a nice touch
-        Toast.show({ type: 'success', text1: 'Photo saved ✓' });
+        Toast.show({ type: 'success', text1: 'Photo saved' });
       }
     } catch (e) {
       console.error(e);
@@ -163,7 +164,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
             />
             <View style={s.cameraOverlay}>
               <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
-                <MaterialCommunityIcons name="camera-flip" size={24} color="#FFF" />
+                <MaterialCommunityIcons name="camera-flip" size={24} color={T.textPrimary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={cycleFlash} style={[
                 s.camBtn,
@@ -213,9 +214,9 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
               <MaterialCommunityIcons
                 name="link-off"
                 size={13}
-                color={assetId === '' ? '#FFF' : C.textSecondary}
+                color={assetId === '' ? T.textPrimary : C.textSecondary}
               />
-              <Text style={[s.assetChipTxt, { color: assetId === '' ? '#FFF' : C.textSecondary }]}>
+              <Text style={[s.assetChipTxt, { color: assetId === '' ? T.textPrimary : C.textSecondary }]}>
                 None
               </Text>
             </TouchableOpacity>
@@ -237,14 +238,14 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
                   <MaterialCommunityIcons
                     name="shield-check-outline"
                     size={13}
-                    color={isSelected ? '#FFF' : C.textSecondary}
+                    color={isSelected ? T.textPrimary : C.textSecondary}
                   />
                   <View>
-                    <Text style={[s.assetChipTxt, { color: isSelected ? '#FFF' : C.text }]} numberOfLines={1}>
+                    <Text style={[s.assetChipTxt, { color: isSelected ? T.textPrimary : C.text }]} numberOfLines={1}>
                       {a.asset_type}
                     </Text>
                     {a.location_on_site ? (
-                      <Text style={[s.assetChipSub, { color: isSelected ? 'rgba(255,255,255,0.75)' : C.textTertiary }]} numberOfLines={1}>
+                      <Text style={[s.assetChipSub, { color: isSelected ? T.textPrimary : C.textTertiary, opacity: isSelected ? 0.75 : 1 }]} numberOfLines={1}>
                         {a.location_on_site}
                       </Text>
                     ) : null}
@@ -257,7 +258,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
         <TouchableOpacity style={s.captureBtnInner} onPress={takePicture} activeOpacity={0.7}>
           <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight }]}>
-             <MaterialCommunityIcons name="camera" size={32} color="#FFF" />
+             <MaterialCommunityIcons name="camera" size={32} color={T.textPrimary} />
           </View>
         </TouchableOpacity>
 

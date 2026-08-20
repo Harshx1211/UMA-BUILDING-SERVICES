@@ -16,7 +16,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
-import { Card, ScreenHeader, SectionTitle, Button } from '@/components/ui';
+import { Card, ScreenHeader, SectionHeader, Button } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 
@@ -135,7 +135,7 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
               </View>
             )}
             <View style={{ flex: 2 }}>
-               <Button title={step < WALKTHROUGH_STEPS.length - 1 ? 'Next →' : 'Got it! ✓'} onPress={handleNext} />
+               <Button title={step < WALKTHROUGH_STEPS.length - 1 ? 'Next' : 'Got it!'} onPress={handleNext} />
             </View>
           </View>
         </View>
@@ -172,7 +172,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     item: {
       id: 'inspect',
       title: 'Inspecting Assets',
-      content: '1. From the job detail, tap "Inspect All Assets"\n2. Each asset card shows the asset type and location\n3. Tap ✅ Pass, ❌ Fail, or ⬜ N/T for each asset\n4. If you tap Fail, a defect reason field appears — fill it in\n5. You can take a photo directly from the inspection screen',
+      content: '1. From the job detail, tap "Inspect All Assets"\n2. Each asset card shows the asset type and location\n3. Tap Pass, Fail, or N/T for each asset\n4. If you tap Fail, a defect reason field appears — fill it in\n5. You can take a photo directly from the inspection screen',
     },
   },
   {
@@ -257,7 +257,7 @@ export default function HelpScreen() {
 
         {/* ── How To Use ── */}
         <Reanimated.View entering={FadeInDown.delay(80).duration(350)} style={s.section}>
-          <SectionTitle title="HOW TO USE SiteTrack" />
+          <SectionHeader title="How to use SiteTrack" eyebrow />
           {HOW_TO.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
           ))}
@@ -265,7 +265,7 @@ export default function HelpScreen() {
 
         {/* ── FAQ ── */}
         <Reanimated.View entering={FadeInDown.delay(130).duration(350)} style={s.section}>
-          <SectionTitle title="FREQUENTLY ASKED QUESTIONS" />
+          <SectionHeader title="Frequently asked questions" eyebrow />
           {FAQ_ITEMS.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
           ))}
