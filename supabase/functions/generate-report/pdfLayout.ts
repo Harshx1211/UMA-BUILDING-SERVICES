@@ -102,7 +102,10 @@ export async function buildPdfDefinition(data: any): Promise<any> {
   const prop       = job.property ?? {};
   const propName   = prop.name ?? '—';
   const address    = [prop.address, prop.suburb, prop.state, prop.postcode].filter(Boolean).join(', ') || '—';
-  const perfDate   = fmtDate(job.updated_at ?? job.scheduled_date);
+  // FIX: Use date_of_service (set from completed_at/scheduled_date by the Edge Function).
+  // DO NOT use updated_at — it is bumped by the handle_updated_at trigger every time
+  // report_url changes, causing the "Date of Service" to drift to today on regeneration.
+  const perfDate   = fmtDate(job.date_of_service ?? job.scheduled_date);
   const refNum     = (job.id ?? reportId ?? '').replace(/-/g, '').substring(0, 6).toUpperCase();
   const compName   = company?.name ?? 'Company Name';
   const compAbn    = company?.abn ?? '';

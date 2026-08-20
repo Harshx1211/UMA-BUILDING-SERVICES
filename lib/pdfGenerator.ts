@@ -768,12 +768,15 @@ export function queueReportGeneration(jobId: string): ReportQueueResult {
   const job = getRecord<{ report_url: string | null }>('jobs', jobId);
   const existingUrl = job?.report_url ?? null;
 
-  // Don't double-queue if already pending
+  // Don't double-queue if already pending — use exact JSON match not substring
   const pending = getPendingSyncItems();
-  const alreadyQueued = pending.some(
-    i => i.operation === SyncOperation.ReportGenerate &&
-         (i.payload ?? '').includes(`"${jobId}"`)
-  );
+  const alreadyQueued = pending.some(i => {
+    if (i.operation !== SyncOperation.ReportGenerate) return false;
+    try {
+      const p = JSON.parse(i.payload ?? '{}') as { jobId?: string };
+      return p.jobId === jobId;
+    } catch { return false; }
+  });
   if (alreadyQueued) return { existingUrl, queued: false };
 
   addToSyncQueue('jobs', jobId, SyncOperation.ReportGenerate, { jobId });

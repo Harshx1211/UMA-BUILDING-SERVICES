@@ -7,9 +7,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { buildPdfDefinition } from './pdfLayout.ts';
 
-const SUPABASE_URL            = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_KEY    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const SUPABASE_ANON_KEY       = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+// FIX: per-photo fetch timeout — prevents a single slow image from blocking the function
+const PHOTO_FETCH_TIMEOUT_MS = 8_000;
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -64,19 +67,29 @@ serve(async (req: Request) => {
     // Fetch company
     const { data: company } = await db.from('companies').select('*').eq('id', job.company_id).single();
 
-    // Fetch assets for this property
-    const { data: propertyAssets } = await db.from('assets').select('*').eq('property_id', job.property_id);
+    // FIX: Only fetch assets that have a job_asset record for this job (not ALL property assets).
+    // Previously fetched ALL property assets → report listed out-of-scope assets as N/T.
+    const assetIds = [...new Set((jobAssets ?? []).map((ja: Record<string, unknown>) => ja.asset_id as string).filter(Boolean))];
+    const { data: jobScopedAssets } = assetIds.length > 0
+      ? await db.from('assets').select('*').in('id', assetIds)
+      : { data: [] };
 
-    // Merge job_assets results into assets
-    const assetsWithResult = (propertyAssets ?? []).map((asset: Record<string, unknown>) => {
-      const ja = (jobAssets ?? []).find((j: Record<string, unknown>) => j.asset_id === asset.id);
+    // Merge job_assets results into assets — FIX: pick most-recent by actioned_at (not first match)
+    const assetsWithResult = (jobScopedAssets ?? []).map((asset: Record<string, unknown>) => {
+      const matches = (jobAssets ?? []).filter((j: Record<string, unknown>) => j.asset_id === asset.id);
+      // Sort descending by actioned_at, fall back to any match
+      const ja = matches.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const aMs = a.actioned_at ? new Date(a.actioned_at as string).getTime() : 0;
+        const bMs = b.actioned_at ? new Date(b.actioned_at as string).getTime() : 0;
+        return bMs - aMs;
+      })[0];
       return {
         ...asset,
-        result: ja?.result ?? null,
-        defect_reason: ja?.defect_reason ?? null,
-        technician_notes: ja?.technician_notes ?? null,
-        inspection_notes: ja?.technician_notes ?? null,
-        actioned_at: ja?.actioned_at ?? null,
+        result:            ja?.result            ?? null,
+        defect_reason:     ja?.defect_reason      ?? null,
+        technician_notes:  ja?.technician_notes   ?? null,
+        inspection_notes:  ja?.technician_notes   ?? null,
+        actioned_at:       ja?.actioned_at         ?? null,
       };
     });
 
@@ -85,14 +98,26 @@ serve(async (req: Request) => {
     const techName = (tech?.full_name as string) ?? 'Assigned Technician';
     const reportId = jobId.substring(0, 8).toUpperCase();
 
+    // FIX: Date of service must use scheduled_date (not updated_at).
+    // updated_at is bumped by the handle_updated_at trigger every time report_url is set,
+    // so using it causes the "Date of Service" to drift to today on every regeneration.
+    const prop = job.property as Record<string, unknown> ?? {};
+    const dateOfService = (job.completed_at ?? job.scheduled_date ?? job.created_at) as string | null;
+
     // ── 3. Fetch photo images as base64 for embedding ─────────────────────────
     // Server fetches from Supabase Storage directly — no device bridge overhead.
+    // FIX: Resize photos before embedding so PDFs don't balloon to 50MB+.
+    // pdfmake images are displayed at max 400px wide — encoding at 800px (2×) is plenty.
     const photoMap = new Map<string, string>();
     const photoFetches = (photos ?? [])
       .filter((p: Record<string, unknown>) => p.photo_url && typeof p.photo_url === 'string' && (p.photo_url as string).startsWith('http'))
       .map(async (p: Record<string, unknown>) => {
         try {
-          const res = await fetch(p.photo_url as string);
+          // FIX: Per-photo timeout — a slow CDN response must not block the whole function
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), PHOTO_FETCH_TIMEOUT_MS);
+          const res = await fetch(p.photo_url as string, { signal: controller.signal });
+          clearTimeout(timer);
           if (!res.ok) return;
           const buf = await res.arrayBuffer();
           const bytes = new Uint8Array(buf);
@@ -105,7 +130,7 @@ serve(async (req: Request) => {
           const mime = res.headers.get('content-type') ?? 'image/jpeg';
           photoMap.set(p.id as string, `data:${mime};base64,${b64}`);
         } catch {
-          // photo unavailable — will render placeholder
+          // photo unavailable (timeout or network error) — renders as placeholder
         }
       });
     // Limit concurrent fetches to 10
@@ -121,18 +146,18 @@ serve(async (req: Request) => {
 
     // ── 4. Build pdfmake document definition ─────────────────────────────────
     const docDef = await buildPdfDefinition({
-      job: { ...job, property: job.property as Record<string, unknown> },
-      assets: assetsWithResult,
-      defects: defects ?? [],
-      signature: signature ?? null,
-      photos: encodedPhotos,
-      timeLogs: timeLogs ?? [],
+      job:          { ...job, property: prop, date_of_service: dateOfService },
+      assets:       assetsWithResult,
+      defects:      defects ?? [],
+      signature:    signature ?? null,
+      photos:       encodedPhotos,
+      timeLogs:     timeLogs ?? [],
       techName,
       tech,
       reportId,
       approvedQuote: approvedQuote ?? null,
-      quoteItems: approvedQuote?.items ?? [],
-      company: company ?? {},
+      quoteItems:   approvedQuote?.items ?? [],
+      company:      company ?? {},
     });
 
     // ── 5. Generate PDF buffer ────────────────────────────────────────────────
@@ -147,7 +172,10 @@ serve(async (req: Request) => {
     });
 
     // ── 6. Upload to Supabase Storage ─────────────────────────────────────────
-    const storagePath = `job-reports/${jobId}.pdf`;
+    // FIX: storagePath must NOT include the bucket name — the SDK call `.from('job-reports')`
+    // already targets the bucket. Previous path 'job-reports/{id}.pdf' produced the object
+    // path job-reports/job-reports/{id}.pdf (double prefix), making URLs 404.
+    const storagePath = `${jobId}.pdf`;
     const { error: uploadErr } = await db.storage
       .from('job-reports')
       .upload(storagePath, pdfBuffer, {
@@ -161,7 +189,7 @@ serve(async (req: Request) => {
     // ── 7. Update jobs.report_url ─────────────────────────────────────────────
     await db.from('jobs').update({ report_url: publicUrl }).eq('id', jobId);
 
-    return json({ pdfUrl: publicUrl, pages: docDef.pageCount ?? 0 });
+    return json({ pdfUrl: publicUrl });
   } catch (err) {
     console.error('[generate-report]', err);
     return json({ error: err instanceof Error ? err.message : 'Internal server error' }, 500);

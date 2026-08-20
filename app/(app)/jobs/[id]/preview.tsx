@@ -155,6 +155,7 @@ export default function PreviewScreen() {
   const [pdfUrl, setPdfUrl]           = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [elapsedS, setElapsedS]       = useState(0);
+  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
 
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -169,28 +170,30 @@ export default function PreviewScreen() {
     };
   }, []);
 
-  // ── Queue the generation on mount ───────────────────────────────────────────
-  useEffect(() => {
+  // ── Queue the generation on mount (or on explicit retry) ──────────────────
+  const startGeneration = useCallback(() => {
     if (!jobId) return;
+    setErrorMsg(null);
+    setElapsedS(0);
 
-    const { existingUrl, queued } = queueReportGeneration(jobId);
+    // Clear stale intervals before starting fresh
+    if (pollRef.current)    clearInterval(pollRef.current);
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+
+    const { existingUrl } = queueReportGeneration(jobId);
 
     if (existingUrl) {
-      // Report already exists — show it immediately
       setPdfUrl(existingUrl);
       setScreenState('ready');
       return;
     }
 
-    // New generation queued
     setScreenState('pending');
 
-    // Start elapsed timer
     elapsedRef.current = setInterval(() => {
       if (isMounted.current) setElapsedS(s => s + 1);
     }, 1000);
 
-    // Poll local SQLite every 5s for the report_url (set by sync engine)
     const check = () => {
       const url = getReportUrl(jobId);
       if (url && isMounted.current) {
@@ -198,8 +201,6 @@ export default function PreviewScreen() {
         clearInterval(elapsedRef.current!);
         setPdfUrl(url);
         setScreenState('ready');
-
-        // Mark job complete in store if applicable
         if (job?.status === JobStatus.Completed) {
           updateJobStatus(jobId, JobStatus.Completed);
           Toast.show({ type: 'success', text1: 'Report Ready', text2: 'Admin can now access this report.' });
@@ -211,17 +212,41 @@ export default function PreviewScreen() {
 
     pollRef.current = setInterval(check, POLL_MS);
 
-    // Also check immediately after each sync cycle completes
-    const onSync = () => check();
+    const onSync = () => {
+      // Check for failure: if sync ran but item is still pending after MAX retries,
+      // surface an error instead of spinning forever.
+      const { getFailedSyncItems } = require('@/lib/database');
+      const failed = (getFailedSyncItems() as Array<{ operation: string; payload: string }>)
+        .filter(i => {
+          if (i.operation !== 'report_generate') return false;
+          try { return (JSON.parse(i.payload) as { jobId?: string }).jobId === jobId; }
+          catch { return false; }
+        });
+      if (failed.length > 0 && isMounted.current) {
+        clearInterval(pollRef.current!);
+        clearInterval(elapsedRef.current!);
+        setErrorMsg('Report generation failed after multiple retries. Please try again when online.');
+        setScreenState('error');
+        return;
+      }
+      check();
+    };
     onSyncComplete(onSync);
 
     return () => {
       offSyncComplete(onSync);
-      if (pollRef.current)    clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
+      clearInterval(pollRef.current!);
+      clearInterval(elapsedRef.current!);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  useEffect(() => {
+    const cleanup = startGeneration();
+    return () => { cleanup?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
 
   // ── Download and share ───────────────────────────────────────────────────────
   const handleDownloadShare = useCallback(async () => {
@@ -295,6 +320,25 @@ export default function PreviewScreen() {
           border={C.border}
           elapsedS={elapsedS}
         />
+      )}
+
+      {screenState === 'error' && (
+        <Animated.View entering={FadeIn} style={styles.centeredWrap}>
+          <View style={[styles.iconCircle, { backgroundColor: '#DC262618', borderColor: '#DC262630' }]}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={42} color="#DC2626" />
+          </View>
+          <Text style={[styles.bigTitle, { color: C.text }]}>Generation Failed</Text>
+          <Text style={[styles.hintTxt, { color: C.textSecondary }]}>
+            {errorMsg ?? 'Could not generate report. Please try again.'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => startGeneration()}
+            style={[styles.secondaryBtn, { backgroundColor: C.primary + '18', borderRadius: 10, paddingHorizontal: 24 }]}
+          >
+            <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />
+            <Text style={[styles.secondaryTxt, { color: C.primary }]}>Try Again</Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {(screenState === 'ready' || screenState === 'downloading') && pdfUrl && (

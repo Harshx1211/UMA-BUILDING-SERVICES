@@ -691,14 +691,20 @@ export async function _pushQueue(): Promise<void> {
         if (fnRes.error) {
           error = { message: fnRes.error.message ?? 'Edge Function error' };
         } else {
-          const { pdfUrl } = fnRes.data as { pdfUrl: string; pages?: number };
-          if (pdfUrl) {
+          const respData = fnRes.data as { pdfUrl?: string; error?: string };
+          if (respData?.error) {
+            // Function returned a JSON error body with status 2xx — treat as failure
+            error = { message: respData.error };
+          } else if (respData?.pdfUrl) {
             // Mirror the report URL into local SQLite immediately so the
             // preview and report screens don't have to wait for the next pull.
-            upsertRecord('jobs', { id: reportJobId, report_url: pdfUrl } as Record<string, string | number | boolean | null>);
-            if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generated → ${pdfUrl}`);
+            upsertRecord('jobs', { id: reportJobId, report_url: respData.pdfUrl } as Record<string, string | number | boolean | null>);
+            if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generated → ${respData.pdfUrl}`);
+          } else {
+            // FIX: Function returned success but no pdfUrl — treat as a retryable failure.
+            // Previously this silently marked the item complete, losing the report forever.
+            error = { message: 'Edge Function returned no pdfUrl — will retry' };
           }
-          // error stays null → item marked complete below
         }
       }
 
