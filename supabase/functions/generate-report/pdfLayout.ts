@@ -75,14 +75,17 @@ function infoGrid(cells: { label: string; value: string; accent?: boolean }[]): 
 }
 
 function pillCell(result: string | null): Record<string, unknown> {
-  const map: Record<string, { text: string; color: string; bg: string }> = {
-    pass:       { text: 'PASS',    color: GREEN, bg: GREEN_BG },
-    fail:       { text: 'FAIL',    color: RED,   bg: RED_BG   },
-    not_tested: { text: 'N/T',     color: SLATE, bg: GREY_BG  },
+  const map: Record<string, { text: string; color: string; fill: string }> = {
+    pass:       { text: 'PASS', color: GREEN, fill: GREEN_BG },
+    fail:       { text: 'FAIL', color: RED,   fill: RED_BG   },
+    not_tested: { text: 'N/T', color: SLATE,  fill: GREY_BG  },
   };
   const s = map[result ?? 'not_tested'] ?? map['not_tested'];
-  return { text: s.text, bold: true, fontSize: 8, color: s.color,
-    background: s.bg, alignment: 'center' as const };
+  // fillColor only works inside a table cell — wrap in a 1-cell table for the pill look
+  return {
+    table: { widths: ['*'], body: [[{ text: s.text, bold: true, fontSize: 8, color: s.color, alignment: 'center' as const, margin: [4, 3, 4, 3] }]] },
+    layout: { fillColor: () => s.fill, hLineWidth: () => 0, vLineWidth: () => 0 },
+  };
 }
 
 function defectSeverityColor(sev: string): string {
@@ -119,9 +122,6 @@ export async function buildPdfDefinition(data: any): Promise<any> {
   }
 
   // ── Photo lookup by id ────────────────────────────────────────────────────
-  const photoById = new Map<string, any>();
-  for (const p of (photos ?? [])) { if (p.photo_url) photoById.set(p.id, p); }
-
   const photosByAsset = new Map<string, any[]>();
   const photosByDefect = new Map<string, any[]>();
   for (const p of (photos ?? [])) {
@@ -259,44 +259,17 @@ export async function buildPdfDefinition(data: any): Promise<any> {
       const sevColor = defectSeverityColor(d.severity ?? 'major');
       const defPhotos = (photosByDefect.get(d.id) ?? []).filter((p: any) => p.photo_url).slice(0, 6);
 
-      defectContent.push({
-        stack: [
-          // Header
-          {
-            columns: [
-              { stack: [
-                { text: (d.severity ?? 'MAJOR').toUpperCase(), bold: true, fontSize: 9, color: sevColor },
-                { text: `Defect #${d.id.substring(0, 6).toUpperCase()}`, fontSize: 8, color: MUTED },
-              ]},
-              { text: fmtDate(d.created_at), fontSize: 8, color: MUTED, alignment: 'right' as const },
-            ],
-            margin: [10, 8, 10, 6],
-          },
-          { canvas: [{ type: 'line', x1: 10, y1: 0, x2: 505, y2: 0, lineWidth: 1, lineColor: BORDER }] },
-          // Body
-          { stack: [
-            { text: [{ text: 'Description: ', bold: true, color: NAVY }, { text: d.description ?? '—', color: SLATE }], fontSize: 10, margin: [10, 8, 10, 4] },
-            ...(d.quote_price != null ? [{ text: [{ text: 'Quote: ', bold: true, color: NAVY }, { text: fmtCurrency(d.quote_price), color: '#059669', bold: true }], fontSize: 10, margin: [10, 0, 10, 4] }] : []),
-          ]},
-          // Photos
-          ...(defPhotos.length > 0 ? [{
-            columns: defPhotos.map((p: any) => ({ image: p.photo_url, width: 155, height: 116, margin: [5, 8, 5, 8] })),
-            margin: [5, 0, 5, 8],
-          }] : []),
-        ],
-        margin: [0, 8, 0, 8],
-        // Left border accent via table wrapper
-        table: { widths: [4, '*'], body: [[
-          { border: [false, false, false, false], fillColor: sevColor, text: '' },
-          { border: [false, false, false, false], stack: [] }, // placeholder — real content injected below
-        ]]},
-      });
+      // Build photo rows — max 3 per row
+      const photoChunks: any[][] = [];
+      for (let i = 0; i < defPhotos.length; i += 3) {
+        photoChunks.push(defPhotos.slice(i, i + 3).map((p: any) => ({
+          image: p.photo_url, width: 150, height: 112, margin: [0, 4, 6, 4],
+        })));
+      }
 
-      // Simpler approach — just use margin and a colored left rule
-      defectContent.pop(); // Remove the complex table attempt
       defectContent.push({
         columns: [
-          { width: 4, canvas: [{ type: 'rect', x: 0, y: 0, w: 4, h: 120, color: sevColor }] },
+          { width: 4, canvas: [{ type: 'rect', x: 0, y: 0, w: 4, h: 999, color: sevColor }] },
           { width: '*', margin: [8, 0, 0, 0], stack: [
             { columns: [
               { stack: [
@@ -308,11 +281,10 @@ export async function buildPdfDefinition(data: any): Promise<any> {
             { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 500, y2: 0, lineWidth: 0.5, lineColor: BORDER }] },
             { text: [{ text: 'Description: ', bold: true, color: NAVY, fontSize: 10 }, { text: d.description ?? '—', color: SLATE, fontSize: 10 }], margin: [0, 6, 0, 4] },
             ...(d.quote_price != null ? [{ text: [{ text: 'Quote: ', bold: true, color: NAVY, fontSize: 10 }, { text: fmtCurrency(d.quote_price), color: '#059669', bold: true, fontSize: 10 }], margin: [0, 0, 0, 6] }] : []),
-            ...(defPhotos.length > 0 ? [{ columns: defPhotos.map((p: any) => ({ image: p.photo_url, width: 150, height: 112, margin: [0, 4, 6, 4] })), margin: [0, 4, 0, 6] }] : []),
+            ...photoChunks.map(chunk => ({ columns: chunk, margin: [0, 4, 0, 6] })),
           ]},
         ],
         margin: [0, 6, 0, 6],
-        background: '#FFFCF5',
       });
     }
   }
@@ -354,8 +326,38 @@ export async function buildPdfDefinition(data: any): Promise<any> {
   // ── Signature block ───────────────────────────────────────────────────────
   const sigContent: any[] = [];
   if (signature) {
-    const clientSig = signature.signature_url?.startsWith('data:') ? signature.signature_url : null;
-    const techSig   = signature.tech_signature_url?.startsWith('data:') ? signature.tech_signature_url : null;
+    // signature_url from Supabase is an https:// URL — check for both https and data: URIs
+    const isSigUrl = (v: unknown) => typeof v === 'string' && (v.startsWith('http') || v.startsWith('data:'));
+    const clientSigUrl  = isSigUrl(signature.signature_url)     ? (signature.signature_url as string)     : null;
+    const techSigUrl    = isSigUrl(signature.tech_signature_url) ? (signature.tech_signature_url as string) : null;
+
+    const sigImage = (url: string | null, fallback: string) =>
+      url ? { image: url, maxWidth: 220, maxHeight: 70 }
+          : { text: fallback, fontSize: 22, color: NAVY, italics: true };
+
+    sigContent.push(sectionBar('SIGNATURES'));
+    sigContent.push({
+      table: {
+        widths: ['*', '*'],
+        body: [[
+          { stack: [
+            { text: 'CLIENT SIGN-OFF', fontSize: 8, bold: true, color: MUTED, margin: [0, 0, 0, 6] },
+            sigImage(clientSigUrl, signature.signed_by_name ?? 'Signed'),
+            { text: `Name: ${signature.signed_by_name ?? '—'}`, fontSize: 9, color: SLATE, margin: [0, 6, 0, 0] },
+            { text: `Date: ${fmtDate(signature.signed_at)}`, fontSize: 9, color: MUTED },
+          ], margin: [12, 12, 12, 12] },
+          { stack: [
+            { text: 'TECHNICIAN SIGN-OFF', fontSize: 8, bold: true, color: MUTED, margin: [0, 0, 0, 6] },
+            sigImage(techSigUrl, techName),
+            { text: `Name: ${techName}`, fontSize: 9, color: SLATE, margin: [0, 6, 0, 0] },
+            { text: `Date: ${fmtDate(signature.signed_at)}`, fontSize: 9, color: MUTED },
+          ], margin: [12, 12, 12, 12] },
+        ]],
+      },
+      layout: { hLineWidth: () => 1, vLineWidth: () => 1, hLineColor: () => BORDER, vLineColor: () => BORDER },
+      margin: [0, 8, 0, 0],
+    });
+  }
 
     sigContent.push(sectionBar('SIGNATURES'));
     sigContent.push({

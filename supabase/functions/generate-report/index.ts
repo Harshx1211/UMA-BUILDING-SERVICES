@@ -43,7 +43,6 @@ serve(async (req: Request) => {
 
     const [
       { data: job },
-      { data: assets },
       { data: jobAssets },
       { data: defects },
       { data: photos },
@@ -52,8 +51,7 @@ serve(async (req: Request) => {
       { data: quotes },
     ] = await Promise.all([
       db.from('jobs').select('*, property:properties(*), assigned_user:users(*)').eq('id', jobId).single(),
-      db.from('assets').select('*').eq('property_id', '').limit(0), // placeholder — fetched below
-      db.from('job_assets').select('*, asset:assets(*)').eq('job_id', jobId),
+      db.from('job_assets').select('*').eq('job_id', jobId),
       db.from('defects').select('*').eq('job_id', jobId),
       db.from('inspection_photos').select('*').eq('job_id', jobId),
       db.from('signatures').select('*').eq('job_id', jobId).maybeSingle(),
