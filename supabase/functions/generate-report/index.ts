@@ -193,10 +193,12 @@ serve(async (req: Request) => {
     if (signErr || !signedData?.signedUrl) throw new Error(`Signed URL failed: ${signErr?.message}`);
     const pdfUrl = signedData.signedUrl;
 
-    // ── 7. Update jobs.report_url ─────────────────────────────────────────────
-    await db.from('jobs').update({ report_url: pdfUrl }).eq('id', jobId);
+    // FIX: Store the permanent storage PATH in jobs.report_url (not the ephemeral signed URL).
+    // A 1-hour signed URL stored in the DB becomes a 403 after expiry.
+    // The sync handler generates a fresh signed URL for local SQLite display on each generation.
+    await db.from('jobs').update({ report_url: storagePath }).eq('id', jobId);
 
-    return json({ pdfUrl });
+    return json({ pdfUrl: pdfUrl, storagePath });
   } catch (err) {
     console.error('[generate-report]', err);
     return json({ error: err instanceof Error ? err.message : 'Internal server error' }, 500);

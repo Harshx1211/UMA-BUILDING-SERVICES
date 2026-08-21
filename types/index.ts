@@ -53,19 +53,6 @@ export interface User {
   updated_at: string;
 }
 
-/** A clock-in/clock-out time record for a job */
-export interface TimeLog {
-  id: string;
-  company_id: string;
-  job_id: string;
-  user_id: string;
-  clock_in: string;                   // ISO 8601 timestamptz
-  clock_out: string | null;
-  gps_lat: number | null;
-  gps_lng: number | null;
-  travel_time_minutes: number | null;
-}
-
 /** A physical site/building managed for fire compliance */
 export interface Property {
   id: string;
@@ -145,11 +132,13 @@ export interface JoinedJob extends Job {
   site_note:               string | null;
 }
 
-/** Technician User record with optional FPAS / state licence fields */
+/** Technician User record — same as User but used specifically for PDF cover-page rendering.
+ *  fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry are
+ *  inherited from User (already typed as string | null there). No need to re-declare.
+ */
 export interface TechUser extends User {
-  fpas_number:   string | null | undefined;
-  fpas_class:    string | null | undefined;
-  state_license: string | null | undefined;
+  // No additional fields beyond User — this type alias exists so call-sites
+  // can express intent ("this is the assigned tech") without widening the base type.
 }
 
 
