@@ -14,7 +14,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { queueReportGeneration, getReportUrl } from '@/lib/pdfGenerator';
+import { queueReportGeneration, getOrRefreshReportUrl, hasReportUrl } from '@/lib/pdfGenerator';
 import { getFailedSyncItems } from '@/lib/database';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
@@ -191,8 +191,14 @@ export default function PreviewScreen() {
       if (isMounted.current) setElapsedS(s => s + 1);
     }, 1000);
 
-    const check = () => {
-      const url = getReportUrl(jobId);
+    // Polling check — async because getOrRefreshReportUrl may call Supabase
+    // Storage to re-sign a raw storage path returned by the PULL.
+    const check = async () => {
+      if (!isMounted.current) return;
+      // Fast synchronous pre-check: is there anything stored at all?
+      if (!hasReportUrl(jobId)) return;
+      // Full async check: ensures we have a proper signed https:// URL
+      const url = await getOrRefreshReportUrl(jobId);
       if (url && isMounted.current) {
         clearInterval(pollRef.current!);
         clearInterval(elapsedRef.current!);
@@ -207,7 +213,7 @@ export default function PreviewScreen() {
       }
     };
 
-    pollRef.current = setInterval(check, POLL_MS);
+    pollRef.current = setInterval(() => { void check(); }, POLL_MS);
 
     const onSync = () => {
       // Check for failure: if item reached MAX retries, surface error instead of spinning
@@ -223,7 +229,7 @@ export default function PreviewScreen() {
         setScreenState('error');
         return;
       }
-      check();
+      void check();
     };
     onSyncComplete(onSync);
 

@@ -797,9 +797,41 @@ export function queueReportGeneration(jobId: string): ReportQueueResult {
   return { existingUrl: null, queued: true };
 }
 
-/** Returns the current report_url for a job from local SQLite — used to poll for completion. */
-export function getReportUrl(jobId: string): string | null {
-  return getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url ?? null;
+/**
+ * Returns a valid signed URL for the job's PDF report.
+ *
+ * The Supabase DB (and SQLite after a PULL) stores only the permanent storage
+ * PATH (e.g. "5f422fdb-....pdf"), not a signed URL. This function detects that
+ * case and generates a fresh 1-hour signed URL from the path, then caches it
+ * in SQLite so subsequent calls within the hour are instant.
+ *
+ * Returns null if no report has been generated yet.
+ */
+export async function getOrRefreshReportUrl(jobId: string): Promise<string | null> {
+  const stored = getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url ?? null;
+  if (!stored) return null;
+
+  // Already a full signed URL — return it directly
+  if (stored.startsWith('https://')) return stored;
+
+  // It's a raw storage path — generate a fresh signed URL
+  const { data, error } = await supabase.storage
+    .from('job-reports')
+    .createSignedUrl(stored, 60 * 60); // 1-hour TTL
+
+  if (error || !data?.signedUrl) {
+    console.warn('[PDF] Failed to re-sign report URL for', jobId, error?.message);
+    return null;
+  }
+
+  // Cache the signed URL in SQLite so the next call within the hour is instant
+  updateRecord('jobs', jobId, { report_url: data.signedUrl });
+  return data.signedUrl;
+}
+
+/** Synchronous check — returns true if a report exists (path or URL), false if none yet. */
+export function hasReportUrl(jobId: string): boolean {
+  return !!(getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url);
 }
 
 // ─── Legacy on-device export (kept for reference — no longer called by preview.tsx) ──
