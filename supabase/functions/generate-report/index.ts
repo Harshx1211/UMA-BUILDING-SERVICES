@@ -8,7 +8,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { encodeBase64 } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
+import { encode as encodeBase64 } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
 import { buildPdfDefinition } from './pdfLayout.ts';
 // NOTE: pdfmake is loaded via dynamic import inside the request handler.
 // Deno caches the module after the first import, so subsequent calls within
