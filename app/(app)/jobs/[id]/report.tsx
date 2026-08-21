@@ -137,6 +137,7 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
 
 // C2: Uses ExtendedDefect type — no `as any` needed for joined fields
 function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; index: number; colors: ReturnType<typeof useColors> }) {
+  const noMotion = useReducedMotion();
   const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
   const isOpen = !defect.status || defect.status === 'open';
   // M7: severity badge bg derived from color token to be dark-mode safe
