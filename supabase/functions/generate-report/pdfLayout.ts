@@ -204,10 +204,15 @@ export async function buildPdfDefinition(data: any): Promise<any> {
     sectionBar('SCOPE OF WORKS'),
     ...((() => {
       const groups: Record<string, number> = {};
+      // FIX: Normalize asset_type before grouping — DB may store 'fire_detection_devices'
+      // (snake_case) or 'Fire Detection Devices' (display). titleCase both to merge them.
       // deno-lint-ignore no-explicit-any
-      for (const a of assets) { groups[a.asset_type ?? 'General'] = (groups[a.asset_type ?? 'General'] ?? 0) + 1; }
+      for (const a of assets) { 
+        const key = titleCase(a.asset_type ?? 'General');
+        groups[key] = (groups[key] ?? 0) + 1; 
+      }
       return Object.entries(groups).map(([type, cnt], i) => ({
-        text: `${String(i + 1).padStart(2, '0')}  Annual Inspection – ${titleCase(type)}  (${cnt})`,
+        text: `${String(i + 1).padStart(2, '0')}  Annual Inspection – ${type}  (${cnt})`,
         fontSize: 9.5, color: SLATE, margin: [12, 3, 0, 0],
       }));
     })()),
@@ -220,12 +225,13 @@ export async function buildPdfDefinition(data: any): Promise<any> {
     sectionBar('ASSET INSPECTION LOG'),
   ];
 
-  // Group by asset_type
+  // Group by asset_type — normalize to titleCase so snake_case and Display Format
+  // values (e.g. 'fire_detection_devices' vs 'Fire Detection Devices') are merged.
   // deno-lint-ignore no-explicit-any
   const assetGroups: Record<string, any[]> = {};
   // deno-lint-ignore no-explicit-any
   for (const a of assets) {
-    const k = a.asset_type ?? 'General Asset';
+    const k = titleCase(a.asset_type ?? 'General Asset');
     if (!assetGroups[k]) assetGroups[k] = [];
     assetGroups[k].push(a);
   }

@@ -8,6 +8,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { encodeBase64 } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
 import { buildPdfDefinition } from './pdfLayout.ts';
 // NOTE: pdfmake is loaded via dynamic import inside the request handler.
 // Deno caches the module after the first import, so subsequent calls within
@@ -131,27 +132,33 @@ serve(async (req: Request) => {
       .filter((p: Record<string, unknown>) => p.photo_url && typeof p.photo_url === 'string' && (p.photo_url as string).startsWith('http'))
       .map(async (p: Record<string, unknown>) => {
         try {
-          // FIX: Per-photo timeout — a slow CDN response must not block the whole function
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), PHOTO_FETCH_TIMEOUT_MS);
           const res = await fetch(p.photo_url as string, { signal: controller.signal });
           clearTimeout(timer);
-          if (!res.ok) return;
-          const buf = await res.arrayBuffer();
-          const bytes = new Uint8Array(buf);
-          // Chunked encode — spread on large buffers overflows Deno's call stack
-          const CHUNK = 8192;
-          let b64 = '';
-          for (let i = 0; i < bytes.length; i += CHUNK) {
-            b64 += btoa(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
+          if (!res.ok) {
+            console.log(`[Photo] SKIP ${p.id} — HTTP ${res.status}`);
+            return;
           }
-          // FIX: Strip parameters (e.g. "image/jpeg; charset=utf-8" → "image/jpeg")
+          const buf = await res.arrayBuffer();
+          // Skip photos larger than 5MB to prevent memory exhaustion in pdfmake
+          if (buf.byteLength > 5 * 1024 * 1024) {
+            console.log(`[Photo] SKIP ${p.id} — too large (${buf.byteLength} bytes)`);
+            return;
+          }
+          // FIX: Use Deno standard library encodeBase64 instead of the custom
+          // btoa(String.fromCharCode(...chunk)) approach. The chunked btoa approach
+          // can produce corrupt base64 on some Deno runtime versions.
+          const b64 = encodeBase64(new Uint8Array(buf));
+          // Strip parameters (e.g. "image/jpeg; charset=utf-8" → "image/jpeg")
           // pdfmake only supports image/jpeg and image/png. Map webp/heic/avif → jpeg.
           let mime = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim().toLowerCase();
           if (!['image/jpeg', 'image/png'].includes(mime)) mime = 'image/jpeg';
-          photoMap.set(p.id as string, `data:${mime};base64,${b64}`);
-        } catch {
-          // photo unavailable (timeout or network error) — renders as placeholder
+          const dataUri = `data:${mime};base64,${b64}`;
+          photoMap.set(p.id as string, dataUri);
+          console.log(`[Photo] OK ${p.id} — ${buf.byteLength} bytes, mime=${mime}`);
+        } catch (err) {
+          console.log(`[Photo] ERROR ${p.id} — ${err instanceof Error ? err.message : err}`);
         }
       });
     // Limit concurrent fetches to 10
