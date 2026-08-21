@@ -4,6 +4,7 @@
 // Auth: Bearer <user access_token> in Authorization header.
 // @ts-nocheck — Deno HTTP imports (esm.sh, deno.land) are not resolvable by
 // VS Code's TypeScript LSP. This file runs correctly in Deno Deploy.
+/* eslint-disable import/no-unresolved */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
