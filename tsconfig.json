@@ -26,6 +26,10 @@
     "node_modules",
     "admin",
     "website",
-    "superadmin"
+    "superadmin",
+    // Supabase Edge Functions use Deno's runtime with HTTP imports (esm.sh, deno.land).
+    // Excluding this directory prevents VS Code's TypeScript server from trying to
+    // resolve Deno HTTP imports using Node/bundler moduleResolution, which always fails.
+    "supabase/functions"
   ]
 }

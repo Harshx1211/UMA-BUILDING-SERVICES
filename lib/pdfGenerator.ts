@@ -843,6 +843,7 @@ export async function generateJobReport(
     const hasPendingForThisJob = pending.some(i => {
       const op = String(i.operation);
       if (op === 'photo_upload') return false;
+      if (op === 'report_generate') return false;  // PDF task itself, not a data change
       if ((i.retry_count ?? 0) >= PDF_MAX_RETRIES) return false;
       if (!PDF_TABLES.has(i.table_name)) return false;
       return (i.payload ?? '').includes(`"${jobId}"`);
