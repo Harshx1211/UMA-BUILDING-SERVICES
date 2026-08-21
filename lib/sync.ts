@@ -675,9 +675,39 @@ export async function _pushQueue(): Promise<void> {
         // PDF to Storage and updates jobs.report_url server-side. We mirror
         // that URL into local SQLite so the UI updates immediately after sync.
         const { jobId: reportJobId } = payload as { jobId: string };
+
+        // FIX (missing assets in PDF): Before calling the Edge Function, verify
+        // all data-bearing sync items for THIS JOB have already been processed.
+        // The queue is FIFO by created_at, so assets/job_assets added BEFORE
+        // queueReportGeneration should flush first. However, if those items had
+        // retries or the sync cycle started mid-queue, the Edge Function can run
+        // with stale Supabase data and produce a PDF that is missing new assets.
+        // Guard: if any pending items exist for this job, defer this cycle.
+        const PDF_CRITICAL_TABLES = ['assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
+        const allPendingNow = getPendingSyncItems();
+        const blockers = allPendingNow.filter(p =>
+          p.id !== item.id &&
+          PDF_CRITICAL_TABLES.includes(p.table_name) &&
+          (p.payload ?? '').includes(`"${reportJobId}"`)
+        );
+        if (blockers.length > 0) {
+          if (__DEV__) console.warn(
+            `[Sync] report_generate for ${reportJobId} deferred — ${blockers.length} item(s) still pending:`,
+            blockers.map(b => `${b.table_name}/${b.operation}`).join(', ')
+          );
+          // Soft retry: increment counter so it runs next cycle AFTER blockers complete.
+          // The retry limit is MAX_SYNC_RETRIES; a deferral should not permanently fail
+          // this item, so we cap the synthetic error at limit-1.
+          if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
+            incrementSyncRetry(item.id, `Deferred: ${blockers.length} data item(s) pending`, MAX_SYNC_RETRIES);
+          }
+          continue; // skip to next queue item — come back next cycle
+        }
+
         const session = useAuthStore.getState().session;
         if (!session?.access_token) {
           // No session — can't call the Edge Function. Will retry next cycle.
+
           throw new Error('No auth session — report generation deferred');
         }
 

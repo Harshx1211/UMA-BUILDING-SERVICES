@@ -6,13 +6,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { buildPdfDefinition } from './pdfLayout.ts';
+// FIX (performance): Import pdfmake at module top-level so Deno's function
+// instance only downloads these large bundles once (~2MB combined).
+// Previously they were dynamic imports inside serve(), causing a 15-30s cold-start
+// penalty on EVERY request when the Deno runtime recycled the instance.
+import pdfMakeLib from 'https://esm.sh/pdfmake@0.2.10/build/pdfmake.js';
+import pdfFontsLib from 'https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js';
+pdfMakeLib.vfs = pdfFontsLib.pdfMake.vfs;
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-// FIX: per-photo fetch timeout — prevents a single slow image from blocking the function
-const PHOTO_FETCH_TIMEOUT_MS = 8_000;
+// FIX (performance): Reduced from 8000ms — the 8s per-photo timeout meant a
+// site with 20 photos in 2 batches could wait 16s just for timeouts on slow photos.
+// 4s is still generous for Supabase Storage CDN responses.
+const PHOTO_FETCH_TIMEOUT_MS = 4_000;
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -160,14 +169,10 @@ serve(async (req: Request) => {
       company:      company ?? {},
     });
 
-    // ── 5. Generate PDF buffer ────────────────────────────────────────────────
-    // Import pdfmake browser build via esm.sh (works in Deno)
-    const pdfMake = (await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.js')).default;
-    const pdfFonts = (await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js')).default;
-    pdfMake.vfs = pdfFonts.pdfMake.vfs;
-
+    // ── 5. Generate PDF buffer ────────────────────────────────────────────────────
+    // pdfMakeLib is imported at module top-level (see top of file).
     const pdfBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
-      const doc = pdfMake.createPdf(docDef);
+      const doc = pdfMakeLib.createPdf(docDef);
       doc.getBuffer((buf: Uint8Array) => resolve(buf.buffer), reject);
     });
 
