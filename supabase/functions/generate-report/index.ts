@@ -145,7 +145,10 @@ serve(async (req: Request) => {
           for (let i = 0; i < bytes.length; i += CHUNK) {
             b64 += btoa(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
           }
-          const mime = res.headers.get('content-type') ?? 'image/jpeg';
+          // FIX: Strip parameters (e.g. "image/jpeg; charset=utf-8" → "image/jpeg")
+          // pdfmake only supports image/jpeg and image/png. Map webp/heic/avif → jpeg.
+          let mime = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim().toLowerCase();
+          if (!['image/jpeg', 'image/png'].includes(mime)) mime = 'image/jpeg';
           photoMap.set(p.id as string, `data:${mime};base64,${b64}`);
         } catch {
           // photo unavailable (timeout or network error) — renders as placeholder
