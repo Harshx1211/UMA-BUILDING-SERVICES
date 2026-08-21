@@ -1571,7 +1571,7 @@ export function getPendingSyncItems(maxRetries = 5): SyncQueueItem[] {
   try {
     const db = openDatabase();
     return db.getAllSync<SyncQueueItem>(
-      `SELECT * FROM sync_queue WHERE synced = 0 AND retry_count < ? ORDER BY created_at ASC`,
+      `SELECT * FROM sync_queue WHERE synced = 0 AND retry_count < ? ORDER BY CASE WHEN operation = 'report_generate' THEN 1 ELSE 0 END ASC, created_at ASC`,
       [maxRetries],
     );
   } catch (err) {

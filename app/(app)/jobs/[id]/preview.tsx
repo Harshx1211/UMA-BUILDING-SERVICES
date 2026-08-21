@@ -22,7 +22,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useJobsStore } from '@/store/jobsStore';
 import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
-import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
 
 // ─── Poll interval for checking if server finished ─────────────────────────────
 const POLL_MS = 5_000;
@@ -185,6 +185,7 @@ export default function PreviewScreen() {
     // queueReportGeneration clears local report_url first, then queues.
     // Always returns existingUrl:null — signed URLs must never be cached stale.
     queueReportGeneration(jobId);
+    runSync();
 
     elapsedRef.current = setInterval(() => {
       if (isMounted.current) setElapsedS(s => s + 1);
