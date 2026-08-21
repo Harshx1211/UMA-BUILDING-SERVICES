@@ -228,17 +228,21 @@ export default function ReportSummaryScreen() {
       setSignature(getSignatureForJob(jobId));
 
       const pendingSyncs = getPendingSyncItems();
-      // Only tables whose data appears directly in the PDF HTML trigger the banner.
-      // inspection_photos is intentionally excluded: the PDF encodes photos from
-      // local_uri at generation time, so a pending Supabase INSERT for
-      // inspection_photos does NOT make the PDF stale.
+      // Only ACTUAL DATA CHANGES that affect PDF content trigger the banner.
+      // Exclusions:
+      //   photo_upload   — binary task, not PDF content (PDF encodes from local_uri)
+      //   report_generate — this is the PDF job itself (table_name='jobs'), NOT a data
+      //                     change. Without this exclusion, the banner showed every time
+      //                     a PDF was in-flight because the report_generate item matches
+      //                     table_name='jobs' which is in PDF_TABLES.
       const PDF_TABLES = new Set(['job_assets', 'defects', 'signatures', 'jobs']);
       const MAX_RETRIES = 5;
       const hasPending = pendingSyncs.some(item => {
         const op = String(item.operation);
-        if (op === 'photo_upload') return false;            // binary upload task
-        if ((item.retry_count ?? 0) >= MAX_RETRIES) return false; // permanently failed
-        if (!PDF_TABLES.has(item.table_name)) return false; // not PDF-relevant
+        if (op === 'photo_upload') return false;      // binary upload task, not PDF data
+        if (op === 'report_generate') return false;   // PDF generation task itself, not a data change
+        if ((item.retry_count ?? 0) >= MAX_RETRIES) return false; // permanently failed — stale
+        if (!PDF_TABLES.has(item.table_name)) return false;       // not PDF-relevant table
         return (item.payload ?? '').includes(`"${jobId}"`);
       });
       setHasPendingSync(hasPending);

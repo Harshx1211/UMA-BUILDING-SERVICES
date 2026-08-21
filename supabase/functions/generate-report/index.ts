@@ -6,13 +6,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { buildPdfDefinition } from './pdfLayout.ts';
-// FIX (performance): Import pdfmake at module top-level so Deno's function
-// instance only downloads these large bundles once (~2MB combined).
-// Previously they were dynamic imports inside serve(), causing a 15-30s cold-start
-// penalty on EVERY request when the Deno runtime recycled the instance.
-import pdfMakeLib from 'https://esm.sh/pdfmake@0.2.10/build/pdfmake.js';
-import pdfFontsLib from 'https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js';
-pdfMakeLib.vfs = pdfFontsLib.pdfMake.vfs;
+// NOTE: pdfmake is loaded via dynamic import inside the request handler.
+// Deno caches the module after the first import, so subsequent calls within
+// the same function instance resolve instantly from cache.
+// Static top-level imports of esm.sh CJS-converted bundles can fail at module
+// init time due to module structure mismatches — dynamic import is safer here.
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -169,11 +167,20 @@ serve(async (req: Request) => {
       company:      company ?? {},
     });
 
-    // ── 5. Generate PDF buffer ────────────────────────────────────────────────────
-    // pdfMakeLib is imported at module top-level (see top of file).
-    const pdfBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
-      const doc = pdfMakeLib.createPdf(docDef);
-      doc.getBuffer((buf: Uint8Array) => resolve(buf.buffer), reject);
+    // ── 5. Generate PDF buffer ────────────────────────────────────────────────
+    // Dynamic import: Deno caches the module after first load — subsequent calls
+    // within the same function instance resolve instantly without network roundtrip.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfMake = ((await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.js')) as any).default;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfFonts = ((await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js')) as any).default;
+    pdfMake.vfs = pdfFonts.pdfMake.vfs;
+
+    const pdfBuffer: ArrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const doc = pdfMake.createPdf(docDef);
+      // FIX: buf.buffer returns ArrayBufferLike (includes SharedArrayBuffer) but
+      // Uint8Array from pdfmake always uses a plain ArrayBuffer — cast is safe.
+      doc.getBuffer((buf: Uint8Array) => resolve(buf.buffer as ArrayBuffer), reject);
     });
 
     // ── 6. Upload to Supabase Storage ─────────────────────────────────────────

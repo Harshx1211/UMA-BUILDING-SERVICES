@@ -12,7 +12,7 @@ import {
   getDeletedPhotoIds,
   getFailedSyncItems,
   getRecord,
-  retryAllFailedSyncItems,
+  // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';

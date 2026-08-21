@@ -18,5 +18,17 @@
   "css.lint.unknownAtRules": "ignore",
   "search.exclude": {
     "**/node_modules": true
-  }
+  },
+
+  // ── Deno LSP for Supabase Edge Functions ──────────────────────────────────
+  // VS Code's TypeScript server doesn't understand Deno's HTTP imports
+  // (https://esm.sh/..., https://deno.land/...) or the 'Deno' global.
+  // This tells VS Code to use the Deno language server ONLY for files under
+  // supabase/functions, eliminating false-positive 'Cannot find module' and
+  // 'Cannot find name Deno' errors. Requires the 'Deno' VS Code extension.
+  "deno.enablePaths": [
+    "supabase/functions"
+  ],
+  "deno.lint": true,
+  "deno.unstable": false
 }
