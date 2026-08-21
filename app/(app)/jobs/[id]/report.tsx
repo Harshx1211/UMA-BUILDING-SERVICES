@@ -67,7 +67,6 @@ type StatCardProps = {
 
 function StatCard({ icon, iconColor, iconBg, value, label, valueColor }: StatCardProps) {
   const C = useColors();
-  const noMotion = useReducedMotion();
   return (
     <Card variant="default" style={s.statCard} padding={12}>
       <View style={[s.statIconWrap, { backgroundColor: iconBg }]}>

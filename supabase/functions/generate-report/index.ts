@@ -2,6 +2,8 @@
 // Deno Edge Function — server-side AS1851 PDF generation using pdfmake.
 // Invoked by the app at: POST /functions/v1/generate-report
 // Auth: Bearer <user access_token> in Authorization header.
+// @ts-nocheck — Deno HTTP imports (esm.sh, deno.land) are not resolvable by
+// VS Code's TypeScript LSP. This file runs correctly in Deno Deploy.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -170,9 +172,7 @@ serve(async (req: Request) => {
     // ── 5. Generate PDF buffer ────────────────────────────────────────────────
     // Dynamic import: Deno caches the module after first load — subsequent calls
     // within the same function instance resolve instantly without network roundtrip.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfMake = ((await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.js')) as any).default;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfFonts = ((await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js')) as any).default;
     pdfMake.vfs = pdfFonts.pdfMake.vfs;
 
