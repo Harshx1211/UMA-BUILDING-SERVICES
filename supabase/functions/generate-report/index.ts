@@ -124,34 +124,54 @@ serve(async (req: Request) => {
     const dateOfService = (job.completed_at ?? job.scheduled_date ?? job.created_at) as string | null;
 
     // ── 3. Fetch photo images as base64 for embedding ─────────────────────────
-    // Server fetches from Supabase Storage directly — no device bridge overhead.
-    // FIX: Resize photos before embedding so PDFs don't balloon to 50MB+.
-    // pdfmake images are displayed at max 400px wide — encoding at 800px (2×) is plenty.
+    // MEMORY FIX: Full-resolution phone JPEGs (400–1200KB each × 14+ photos) exhaust
+    // the Edge Function's ~150MB RAM limit when pdfmake holds them all in memory.
+    // Solution: Use Supabase Storage's image transform API to request a 600px-wide,
+    // 60%-quality version — reducing each photo from ~800KB to ~50KB (15× smaller).
+    // Transform URL: replace /storage/v1/object/ with /storage/v1/render/image/
+    // and strip the ?token= query (render API re-validates the path internally).
+    function toTransformUrl(url: string): string {
+      try {
+        // Match public storage URLs: .../storage/v1/object/public/bucket/path
+        if (url.includes('/storage/v1/object/public/')) {
+          return url
+            .replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
+            .split('?')[0]   // strip any existing query params
+            + '?width=600&quality=60&resize=contain';
+        }
+        // For signed URLs, strip the token and use public render path
+        if (url.includes('/storage/v1/object/sign/')) {
+          return url
+            .replace('/storage/v1/object/sign/', '/storage/v1/render/image/public/')
+            .split('?')[0]
+            + '?width=600&quality=60&resize=contain';
+        }
+      } catch { /* fall through */ }
+      return url; // unsupported URL format — use as-is
+    }
+
     const photoMap = new Map<string, string>();
     const photoFetches = (photos ?? [])
       .filter((p: Record<string, unknown>) => p.photo_url && typeof p.photo_url === 'string' && (p.photo_url as string).startsWith('http'))
       .map(async (p: Record<string, unknown>) => {
         try {
+          const transformedUrl = toTransformUrl(p.photo_url as string);
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), PHOTO_FETCH_TIMEOUT_MS);
-          const res = await fetch(p.photo_url as string, { signal: controller.signal });
+          const res = await fetch(transformedUrl, { signal: controller.signal });
           clearTimeout(timer);
           if (!res.ok) {
-            console.log(`[Photo] SKIP ${p.id} — HTTP ${res.status}`);
+            console.log(`[Photo] SKIP ${p.id} — HTTP ${res.status} (transform URL: ${transformedUrl.substring(0, 80)})`);
             return;
           }
           const buf = await res.arrayBuffer();
-          // Skip photos larger than 5MB to prevent memory exhaustion in pdfmake
-          if (buf.byteLength > 5 * 1024 * 1024) {
-            console.log(`[Photo] SKIP ${p.id} — too large (${buf.byteLength} bytes)`);
+          // Safety cap: skip anything still over 1MB after transform
+          if (buf.byteLength > 1024 * 1024) {
+            console.log(`[Photo] SKIP ${p.id} — still too large after transform (${buf.byteLength} bytes)`);
             return;
           }
-          // FIX: Use Deno standard library encodeBase64 instead of the custom
-          // btoa(String.fromCharCode(...chunk)) approach. The chunked btoa approach
-          // can produce corrupt base64 on some Deno runtime versions.
           const b64 = encodeBase64(new Uint8Array(buf));
-          // Strip parameters (e.g. "image/jpeg; charset=utf-8" → "image/jpeg")
-          // pdfmake only supports image/jpeg and image/png. Map webp/heic/avif → jpeg.
+          // Strip content-type parameters; map non-JPEG/PNG to image/jpeg
           let mime = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim().toLowerCase();
           if (!['image/jpeg', 'image/png'].includes(mime)) mime = 'image/jpeg';
           const dataUri = `data:${mime};base64,${b64}`;
@@ -161,9 +181,9 @@ serve(async (req: Request) => {
           console.log(`[Photo] ERROR ${p.id} — ${err instanceof Error ? err.message : err}`);
         }
       });
-    // Limit concurrent fetches to 10
-    for (let i = 0; i < photoFetches.length; i += 10) {
-      await Promise.all(photoFetches.slice(i, i + 10));
+    // Limit concurrent fetches to 5 (was 10) to reduce peak memory during fetch phase
+    for (let i = 0; i < photoFetches.length; i += 5) {
+      await Promise.all(photoFetches.slice(i, i + 5));
     }
 
     // Inject encoded URIs back into photo records
