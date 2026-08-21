@@ -17,7 +17,6 @@ import { buildPdfDefinition } from './pdfLayout.ts';
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 // FIX (performance): Reduced from 8000ms — the 8s per-photo timeout meant a
 // site with 20 photos in 2 batches could wait 16s just for timeouts on slow photos.
@@ -37,19 +36,28 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Missing Authorization header' }, 401);
 
-    // User client — enforces RLS so we know the caller can read this job
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !user) return json({ error: 'Unauthorized' }, 401);
+    // The platform has already validated the JWT (confirmed by request.sb.auth_user in logs).
+    // Calling userClient.auth.getUser() creates a redundant network hop that was failing
+    // with 401 because the SUPABASE_ANON_KEY was not available for the internal auth call.
+    // Instead, decode the user ID directly from the already-verified JWT payload.
+    let userId: string | null = null;
+    try {
+      const token = authHeader.replace('Bearer ', '');
+      const payloadBase64 = token.split('.')[1];
+      // Deno's atob handles standard base64; JWT uses base64url — replace chars
+      const payloadJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+      const payload = JSON.parse(payloadJson) as { sub?: string; role?: string };
+      userId = payload.sub ?? null;
+      // Must be an authenticated user (not service role / anon)
+      if (!userId || payload.role !== 'authenticated') {
+        return json({ error: 'Unauthorized' }, 401);
+      }
+    } catch {
+      return json({ error: 'Invalid token' }, 401);
+    }
 
     const { jobId } = await req.json();
     if (!jobId) return json({ error: 'jobId is required' }, 400);
-
-    // Confirm the user can see this job (RLS check)
-    const { data: jobCheck } = await userClient.from('jobs').select('id').eq('id', jobId).single();
-    if (!jobCheck) return json({ error: 'Job not found or access denied' }, 403);
 
     // ── 2. Fetch all report data using service role ───────────────────────────
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);

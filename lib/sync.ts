@@ -8,6 +8,7 @@ import {
   incrementSyncRetry,
   upsertRecord,
   upsertRecordBulk,
+  updateRecord,
   getJobStatus,
   getDeletedPhotoIds,
   getFailedSyncItems,
@@ -721,14 +722,20 @@ export async function _pushQueue(): Promise<void> {
         if (fnRes.error) {
           error = { message: fnRes.error.message ?? 'Edge Function error' };
         } else {
-          const respData = fnRes.data as { pdfUrl?: string; error?: string };
+          const respData = fnRes.data as { pdfUrl?: string; storagePath?: string; error?: string };
           if (respData?.error) {
             // Function returned a JSON error body with status 2xx — treat as failure
             error = { message: respData.error };
           } else if (respData?.pdfUrl) {
-            // Mirror the report URL into local SQLite immediately so the
-            // preview and report screens don't have to wait for the next pull.
-            upsertRecord('jobs', { id: reportJobId, report_url: respData.pdfUrl } as Record<string, string | number | boolean | null>);
+            // Store the signed URL in SQLite now so the preview screen can open it
+            // immediately. The Supabase DB already has the permanent storagePath (set
+            // by the Edge Function). The next PULL will overwrite SQLite with the path,
+            // at which point preview.tsx will re-sign it for display.
+            // Use updateRecord (not upsertRecord) — the job row already exists in SQLite.
+            // upsertRecord does INSERT OR REPLACE which wipes all other columns, causing
+            // NOT NULL constraint failures (e.g. property_id). updateRecord only patches
+            // the report_url column.
+            updateRecord('jobs', reportJobId, { report_url: respData.pdfUrl });
             if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generated → ${respData.pdfUrl}`);
           } else {
             // FIX: Function returned success but no pdfUrl — treat as a retryable failure.
