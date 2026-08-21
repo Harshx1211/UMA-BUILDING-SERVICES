@@ -124,64 +124,41 @@ serve(async (req: Request) => {
     const dateOfService = (job.completed_at ?? job.scheduled_date ?? job.created_at) as string | null;
 
     // ── 3. Fetch photo images as base64 for embedding ─────────────────────────
-    // MEMORY FIX: Full-resolution phone JPEGs (400–1200KB each × 14+ photos) exhaust
-    // the Edge Function's ~150MB RAM limit when pdfmake holds them all in memory.
-    // Solution: Use Supabase Storage's image transform API to request a 600px-wide,
-    // 60%-quality version — reducing each photo from ~800KB to ~50KB (15× smaller).
-    // Transform URL: replace /storage/v1/object/ with /storage/v1/render/image/
-    // and strip the ?token= query (render API re-validates the path internally).
-    function toTransformUrl(url: string): string {
-      try {
-        // Match public storage URLs: .../storage/v1/object/public/bucket/path
-        if (url.includes('/storage/v1/object/public/')) {
-          return url
-            .replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
-            .split('?')[0]   // strip any existing query params
-            + '?width=600&quality=60&resize=contain';
-        }
-        // For signed URLs, strip the token and use public render path
-        if (url.includes('/storage/v1/object/sign/')) {
-          return url
-            .replace('/storage/v1/object/sign/', '/storage/v1/render/image/public/')
-            .split('?')[0]
-            + '?width=600&quality=60&resize=contain';
-        }
-      } catch { /* fall through */ }
-      return url; // unsupported URL format — use as-is
-    }
-
+    // NOTE: Supabase Storage image transformation (/render/image/) returns 403
+    // on free-tier projects — it requires the paid "Image Transformations" add-on.
+    // Strategy: fetch original URLs but skip any individual photo larger than 600KB.
+    // From profiling: the 4 photos >600KB (up to 1.18MB) push pdfmake over the
+    // 150MB Edge Function memory limit. The remaining 10 photos (47–487KB) are fine.
     const photoMap = new Map<string, string>();
     const photoFetches = (photos ?? [])
       .filter((p: Record<string, unknown>) => p.photo_url && typeof p.photo_url === 'string' && (p.photo_url as string).startsWith('http'))
       .map(async (p: Record<string, unknown>) => {
         try {
-          const transformedUrl = toTransformUrl(p.photo_url as string);
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), PHOTO_FETCH_TIMEOUT_MS);
-          const res = await fetch(transformedUrl, { signal: controller.signal });
+          const res = await fetch(p.photo_url as string, { signal: controller.signal });
           clearTimeout(timer);
           if (!res.ok) {
-            console.log(`[Photo] SKIP ${p.id} — HTTP ${res.status} (transform URL: ${transformedUrl.substring(0, 80)})`);
+            console.log(`[Photo] SKIP ${p.id} — HTTP ${res.status}`);
             return;
           }
           const buf = await res.arrayBuffer();
-          // Safety cap: skip anything still over 1MB after transform
-          if (buf.byteLength > 1024 * 1024) {
-            console.log(`[Photo] SKIP ${p.id} — still too large after transform (${buf.byteLength} bytes)`);
+          // Skip photos > 600KB — large phone JPEGs blow the 150MB Edge Function
+          // memory limit when pdfmake holds all images simultaneously in RAM.
+          if (buf.byteLength > 600 * 1024) {
+            console.log(`[Photo] SKIP ${p.id} — too large (${Math.round(buf.byteLength / 1024)}KB > 600KB cap)`);
             return;
           }
           const b64 = encodeBase64(new Uint8Array(buf));
-          // Strip content-type parameters; map non-JPEG/PNG to image/jpeg
           let mime = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim().toLowerCase();
           if (!['image/jpeg', 'image/png'].includes(mime)) mime = 'image/jpeg';
-          const dataUri = `data:${mime};base64,${b64}`;
-          photoMap.set(p.id as string, dataUri);
-          console.log(`[Photo] OK ${p.id} — ${buf.byteLength} bytes, mime=${mime}`);
+          photoMap.set(p.id as string, `data:${mime};base64,${b64}`);
+          console.log(`[Photo] OK ${p.id} — ${Math.round(buf.byteLength / 1024)}KB`);
         } catch (err) {
           console.log(`[Photo] ERROR ${p.id} — ${err instanceof Error ? err.message : err}`);
         }
       });
-    // Limit concurrent fetches to 5 (was 10) to reduce peak memory during fetch phase
+    // Batch in groups of 5 to limit peak memory during fetch phase
     for (let i = 0; i < photoFetches.length; i += 5) {
       await Promise.all(photoFetches.slice(i, i + 5));
     }
