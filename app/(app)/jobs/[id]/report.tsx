@@ -27,8 +27,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
 import type { Defect, Signature } from '@/types';
-import { queueReportGeneration } from '@/lib/pdfGenerator';
-import { runSync } from '@/lib/sync';
+import { useReportGeneration } from '@/hooks/useReportGeneration';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -266,21 +265,28 @@ export default function ReportSummaryScreen() {
     loadData();
   }, [loadData]);
 
-  // Queues generation and stays on this screen — the tech gets a toast, not a
-  // forced trip to a "Generating…" screen. The job detail screen's bottom bar
-  // (and this screen's "Regenerate" banner via hasPendingSync) picks up the
-  // result once it's done; "Open PDF"/"Preview Draft Report" below still
-  // navigate to /preview since those are explicit "show me the PDF" taps.
-  const handleGenerateReport = useCallback(() => {
-    if (!jobId) return;
-    queueReportGeneration(jobId);
-    runSync();
-    Toast.show({
-      type: 'info',
-      text1: 'Generating Report',
-      text2: "We'll let you know as soon as it's ready — you can keep working.",
-    });
-  }, [jobId]);
+  // Shared with the job detail screen and /preview — all three poll the same
+  // GET /report-status endpoint through this hook, so they always agree on
+  // whether a report is generating instead of showing conflicting states.
+  // Queues generation and stays on this screen: a toast confirms it, not a
+  // forced trip to a "Generating…" screen. "Open PDF"/"Preview Draft Report"
+  // below still navigate to /preview since those are explicit "show me the
+  // PDF" taps, not generation triggers.
+  const {
+    status: genStatus,
+    elapsedS: genElapsedS,
+    pdfUrl: genPdfUrl,
+    generate: handleGenerateReport,
+  } = useReportGeneration(jobId, { hasExistingReport: !!job?.report_url });
+
+  // The hook persists report_url to SQLite itself; mirror it into this
+  // screen's local job state too so the bottom bar flips to "Open PDF"
+  // immediately instead of waiting for the next reload.
+  useEffect(() => {
+    if (genStatus === 'completed' && genPdfUrl) {
+      setJob(p => (p && p.report_url !== genPdfUrl) ? { ...p, report_url: genPdfUrl } : p);
+    }
+  }, [genStatus, genPdfUrl]);
 
   if (isLoading) {
     return (
@@ -552,7 +558,21 @@ export default function ReportSummaryScreen() {
 
       {/* ── Bottom Action Bar ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {isCompleted && job.report_url ? (
+        {genStatus === 'generating' ? (
+          <Button
+            title={`Generating Report… ${genElapsedS}s`}
+            icon="cloud-upload-outline"
+            variant="secondary"
+            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+          />
+        ) : genStatus === 'failed' ? (
+          <Button
+            title="Retry Generating Report"
+            icon="refresh"
+            variant="primary"
+            onPress={handleGenerateReport}
+          />
+        ) : isCompleted && job.report_url ? (
           // When inspection data changed since last PDF: hide Download, show Regenerate only
           hasPendingSync ? (
             <Button

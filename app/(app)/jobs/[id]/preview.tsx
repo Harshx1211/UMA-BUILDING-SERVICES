@@ -14,20 +14,16 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useReportGeneration } from '@/hooks/useReportGeneration';
 import { useJobsStore } from '@/store/jobsStore';
 import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
-import { runSync } from '@/lib/sync';
-
-// ─── Poll interval for checking if server finished ─────────────────────────────
-const POLL_MS = 5_000;
 
 // ─── Screen states ─────────────────────────────────────────────────────────────
-type ScreenState = 'queuing' | 'pending' | 'ready' | 'downloading' | 'error';
+type ScreenState = 'pending' | 'ready' | 'downloading' | 'error';
 
 // ─── Pending animation view ────────────────────────────────────────────────────
 function PendingView({
@@ -151,144 +147,52 @@ export default function PreviewScreen() {
 
   const job = jobs.find(j => j.id === jobId);
 
-  const [screenState, setScreenState] = useState<ScreenState>('queuing');
-  const [pdfUrl, setPdfUrl]           = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [elapsedS, setElapsedS]       = useState(0);
-  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
-
-  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isMounted    = useRef(true);
-  // Real generation start time (ms, from the server's report_generation_status
-  // row) — lets elapsed time survive remounts/app restarts instead of resetting
-  // to 0 every time this screen is reopened while a generation is still running.
-  const startedAtMs  = useRef<number | null>(null);
-
+  const isMounted = useRef(true);
   useEffect(() => {
     isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-      if (pollRef.current)    clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    return () => { isMounted.current = false; };
   }, []);
 
-  // ── Poll the report-generator service for real status ──────────────────
-  // This screen is a pure viewer of server-side generation state, not the
-  // trigger — generation is normally queued from the job screen's "Generate
-  // Report" button (which no longer navigates here automatically). If this
-  // screen is opened before anything was queued (e.g. the "Draft Preview"
-  // entry point, or a direct deep link), the first poll comes back
-  // 'not_started' and it queues generation itself as a fallback so those
-  // flows keep working unchanged.
-  //
-  // `forceRegenerate` re-queues even if the server already has a result —
-  // used by "Try Again" after a failure, where simply observing would poll
-  // the same 'failed' status forever.
-  const startPolling = useCallback((opts?: { forceRegenerate?: boolean }) => {
-    if (!jobId) return;
-    setErrorMsg(null);
-    setElapsedS(0);
-    setScreenState('pending');
-    startedAtMs.current = null;
+  // Shared with the job detail and report summary screens — all three poll
+  // the exact same GET /report-status endpoint through this hook, so they
+  // always agree on whether a report is generating instead of showing
+  // conflicting states. This screen is a pure viewer: it never assumes
+  // generation was already triggered elsewhere. If it's opened before
+  // anything was queued (e.g. the "Draft Preview" entry point, or a direct
+  // deep link), the hook's own resume-check queues it as a fallback so those
+  // flows keep working unchanged. `hasExistingReport: false` is deliberate —
+  // this screen always waits for a fresh, real status rather than
+  // short-circuiting on a possibly-stale cached report_url.
+  const {
+    status: genStatus,
+    elapsedS,
+    pdfUrl,
+    error: errorMsg,
+    generate,
+  } = useReportGeneration(jobId, { hasExistingReport: false });
 
-    if (pollRef.current)    clearInterval(pollRef.current);
-    if (elapsedRef.current) clearInterval(elapsedRef.current);
+  const screenState: ScreenState =
+    genStatus === 'completed' ? (isDownloading ? 'downloading' : 'ready') :
+    genStatus === 'failed'    ? 'error' :
+    'pending';
 
-    elapsedRef.current = setInterval(() => {
-      if (isMounted.current && startedAtMs.current != null) {
-        setElapsedS(Math.max(0, Math.round((Date.now() - startedAtMs.current) / 1000)));
-      }
-    }, 1000);
-
-    let triggered = false;
-    if (opts?.forceRegenerate) {
-      triggered = true;
-      startedAtMs.current = Date.now();
-      queueReportGeneration(jobId);
-      runSync();
-    }
-
-    // Polling check — asks the report-generator service directly whether
-    // generation has finished, rather than local SQLite/sync-queue state.
-    // This is fully decoupled from the sync queue: the queue item only kicks
-    // generation off, it doesn't reflect how the generation itself turns out.
-    const check = async () => {
-      if (!isMounted.current) return;
-      let result;
-      try {
-        result = await pollReportStatus(jobId);
-      } catch (e) {
-        // Network hiccup or the service is briefly unreachable — just retry
-        // on the next tick rather than surfacing an error immediately.
-        if (__DEV__) console.warn('[Preview] pollReportStatus failed, will retry:', e);
-        return;
-      }
-      if (!isMounted.current) return;
-
-      if (result.status === 'not_started') {
-        if (!triggered) {
-          triggered = true;
-          startedAtMs.current = Date.now();
-          queueReportGeneration(jobId);
-          runSync();
-        }
-        return;
-      }
-
-      if (result.status === 'generating') {
-        if (result.startedAt) startedAtMs.current = new Date(result.startedAt).getTime();
-        else if (startedAtMs.current == null) startedAtMs.current = Date.now();
-        return;
-      }
-
-      if (result.status === 'completed') {
-        clearInterval(pollRef.current!);
-        clearInterval(elapsedRef.current!);
-        setPdfUrl(result.pdfUrl);
-        setScreenState('ready');
-        if (job?.status === JobStatus.Completed) {
-          updateJobStatus(jobId, JobStatus.Completed);
-          Toast.show({ type: 'success', text1: 'Report Ready', text2: 'Admin can now access this report.' });
-        } else {
-          Toast.show({ type: 'info', text1: 'Report Ready', text2: 'Tap Share to send.' });
-        }
-        return;
-      }
-
-      if (result.status === 'failed') {
-        clearInterval(pollRef.current!);
-        clearInterval(elapsedRef.current!);
-        setErrorMsg(result.error);
-        setScreenState('error');
-      }
-    };
-
-    pollRef.current = setInterval(() => { void check(); }, POLL_MS);
-    // Kick off an immediate check too, so a fast generation doesn't wait a
-    // full POLL_MS before the first look.
-    void check();
-
-    return () => {
-      clearInterval(pollRef.current!);
-      clearInterval(elapsedRef.current!);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
-
+  // Mirror the job-completed toast/status-store update the old inline poller
+  // did — purely cosmetic/defensive at this point since job.status is set to
+  // Completed independently of report generation, but harmless to keep.
+  const notifiedCompletedRef = useRef(false);
   useEffect(() => {
-    const cleanup = startPolling();
-    return () => { cleanup?.(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+    if (genStatus === 'completed' && !notifiedCompletedRef.current && jobId) {
+      notifiedCompletedRef.current = true;
+      if (job?.status === JobStatus.Completed) updateJobStatus(jobId, JobStatus.Completed);
+    }
+  }, [genStatus, job?.status, jobId, updateJobStatus]);
 
 
   // ── Download and share ───────────────────────────────────────────────────────
   const handleDownloadShare = useCallback(async () => {
     if (!pdfUrl || isDownloading) return;
     setIsDownloading(true);
-    setScreenState('downloading');
     try {
       const localPath = `${FileSystem.cacheDirectory}report_${jobId}.pdf`;
       const { uri } = await FileSystem.downloadAsync(pdfUrl, localPath);
@@ -306,10 +210,7 @@ export default function PreviewScreen() {
       console.error('[Preview] Share failed:', e);
       Alert.alert('Share Failed', 'Could not download or share the report. Please try again.');
     } finally {
-      if (isMounted.current) {
-        setIsDownloading(false);
-        setScreenState('ready');
-      }
+      if (isMounted.current) setIsDownloading(false);
     }
   }, [pdfUrl, jobId, job, isDownloading]);
 
@@ -348,7 +249,7 @@ export default function PreviewScreen() {
         }
       />
 
-      {(screenState === 'queuing' || screenState === 'pending') && (
+      {screenState === 'pending' && (
         <PendingView
           primaryColor={C.primary}
           textColor={C.text}
@@ -368,7 +269,7 @@ export default function PreviewScreen() {
             {errorMsg ?? 'Could not generate report. Please try again.'}
           </Text>
           <TouchableOpacity
-            onPress={() => startPolling({ forceRegenerate: true })}
+            onPress={() => generate()}
             style={[styles.secondaryBtn, { backgroundColor: C.primary + '18', borderRadius: 10, paddingHorizontal: 24 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />

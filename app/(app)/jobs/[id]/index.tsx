@@ -24,13 +24,7 @@ import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
-import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
-import { runSync } from '@/lib/sync';
-
-// ─── Report generation status (polled, not stored locally) ────────────────
-type GenStatus = 'idle' | 'generating' | 'completed' | 'failed';
-
-const GEN_POLL_MS = 5_000;
+import { useReportGeneration } from '@/hooks/useReportGeneration';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -149,25 +143,28 @@ export default function JobDetailScreen() {
   const [completionCountdown, setCompletionCountdown] = useState(5);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Report generation status — polled directly from the report-generator
-  // service, not stored locally. Tapping "Generate Report" queues the job and
-  // stays on this screen (no forced navigation); this poll is what lets the
-  // button reflect "Generating…" and flip to "View Report" on its own once
-  // the server finishes, without the user having to go check manually.
-  const [genStatus, setGenStatus] = useState<GenStatus>('idle');
-  const [genElapsedS, setGenElapsedS] = useState(0);
-  const genStartedAtMs = useRef<number | null>(null);
-  const genPollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const genElapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const genNotifiedRef = useRef(false);
-
   useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-      if (genPollRef.current)    clearInterval(genPollRef.current);
-      if (genElapsedRef.current) clearInterval(genElapsedRef.current);
-    };
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, []);
+
+  // Report generation status — shared with report.tsx and preview.tsx so all
+  // three screens reflect the exact same server-polled state instead of
+  // drifting out of sync with each other.
+  const {
+    status: genStatus,
+    elapsedS: genElapsedS,
+    pdfUrl: genPdfUrl,
+    generate: handleGenerateReport,
+  } = useReportGeneration(job?.id, { hasExistingReport: !!job?.report_url });
+
+  // The hook persists report_url to SQLite itself; mirror it into this
+  // screen's local job state too so the bottom button flips to "View Report"
+  // without waiting for the next full reload.
+  useEffect(() => {
+    if (genStatus === 'completed' && genPdfUrl) {
+      setJob(p => (p && p.report_url !== genPdfUrl) ? { ...p, report_url: genPdfUrl } : p);
+    }
+  }, [genStatus, genPdfUrl]);
 
   // ── Data loading ──────────────────────────────────────────────────────
   const loadJob = useCallback(async () => {
@@ -333,106 +330,6 @@ export default function JobDetailScreen() {
       ]
     );
   };
-
-  // ── Report generation: trigger + poll, no forced navigation ─────────────
-  // Tapping "Generate Report" used to navigate to a dedicated full-screen
-  // "Generating…" view. Now it queues the job and stays right here — the
-  // button itself reflects progress ("Generating Report… 12s") via this poll,
-  // and the tech can keep working on other jobs while it finishes.
-  const stopGenPolling = useCallback(() => {
-    if (genPollRef.current)    clearInterval(genPollRef.current);
-    if (genElapsedRef.current) clearInterval(genElapsedRef.current);
-  }, []);
-
-  const pollGenerationStatus = useCallback((targetJobId: string, opts?: { oneShot?: boolean }) => {
-    stopGenPolling();
-    genElapsedRef.current = setInterval(() => {
-      if (genStartedAtMs.current != null) {
-        setGenElapsedS(Math.max(0, Math.round((Date.now() - genStartedAtMs.current) / 1000)));
-      }
-    }, 1000);
-
-    const check = async () => {
-      let result;
-      try {
-        result = await pollReportStatus(targetJobId);
-      } catch (e) {
-        if (__DEV__) console.warn('[JobDetail] pollReportStatus failed, will retry:', e);
-        return;
-      }
-
-      if (result.status === 'not_started') {
-        // Nothing queued yet — normal for a completed job before the tech
-        // has tapped "Generate Report". Don't burn a background interval
-        // forever for a job that may never be generated; handleGenerateReport
-        // starts a fresh (continuous) poll when the button is actually tapped.
-        if (opts?.oneShot) stopGenPolling();
-        return;
-      }
-
-      if (result.status === 'generating') {
-        setGenStatus('generating');
-        if (result.startedAt) genStartedAtMs.current = new Date(result.startedAt).getTime();
-        else if (genStartedAtMs.current == null) genStartedAtMs.current = Date.now();
-        return;
-      }
-
-      if (result.status === 'completed') {
-        stopGenPolling();
-        setGenStatus('completed');
-        const now = new Date().toISOString();
-        updateRecord('jobs', targetJobId, { report_url: result.pdfUrl, updated_at: now });
-        setJob(p => p ? { ...p, report_url: result.pdfUrl } : p);
-        if (!genNotifiedRef.current) {
-          genNotifiedRef.current = true;
-          Toast.show({ type: 'success', text1: 'Report Ready', text2: 'Tap View Report to open it.' });
-        }
-        return;
-      }
-
-      if (result.status === 'failed') {
-        stopGenPolling();
-        setGenStatus('failed');
-        if (!genNotifiedRef.current) {
-          genNotifiedRef.current = true;
-          Toast.show({ type: 'error', text1: 'Report Generation Failed', text2: result.error });
-        }
-      }
-    };
-
-    genPollRef.current = setInterval(() => { void check(); }, GEN_POLL_MS);
-    void check();
-  }, [stopGenPolling]);
-
-  const handleGenerateReport = useCallback(() => {
-    if (!job) return;
-    genNotifiedRef.current = false;
-    genStartedAtMs.current = Date.now();
-    setGenStatus('generating');
-    setGenElapsedS(0);
-    queueReportGeneration(job.id);
-    runSync();
-    Toast.show({
-      type: 'info',
-      text1: 'Generating Report',
-      text2: "We'll let you know as soon as it's ready — you can keep working.",
-    });
-    pollGenerationStatus(job.id);
-  }, [job, pollGenerationStatus]);
-
-  // Resume polling if this screen is (re)opened on a completed job that has
-  // no report yet — e.g. generation was triggered earlier, the app was
-  // closed, and the tech comes back later to check on it.
-  useEffect(() => {
-    if (!job) return;
-    if (job.status === JobStatus.Completed && !job.report_url) {
-      if (genStatus === 'idle') pollGenerationStatus(job.id, { oneShot: true });
-    } else if (genStatus !== 'idle') {
-      stopGenPolling();
-      setGenStatus(job.report_url ? 'completed' : 'idle');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, job?.status, job?.report_url]);
 
   const handleNavigate = () => {
     if (!job) return;
