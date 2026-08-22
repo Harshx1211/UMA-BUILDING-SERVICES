@@ -12,6 +12,8 @@ import type { Property, Asset } from '@/types';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 
+type ColorsType = ReturnType<typeof useColors>;
+
 function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
   const t = type.toLowerCase();
   if (t.includes('extinguisher'))              return 'fire-extinguisher';
@@ -24,7 +26,7 @@ function assetIconName(type: string): React.ComponentProps<typeof MaterialCommun
   return 'shield-check-outline';
 }
 
-function assetStatusColor(status: string, C: any) {
+function assetStatusColor(status: string, C: ColorsType) {
   return status === AssetStatus.Active ? C.success : C.textTertiary;
 }
 

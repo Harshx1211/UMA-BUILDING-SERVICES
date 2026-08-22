@@ -48,7 +48,7 @@ function StatPill({ icon, value, label, color, bg }: {
   );
 }
 const statPill = StyleSheet.create({
-  wrap:  { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, gap: 4 },
+  wrap:  { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 16, gap: 4 },
   value: { fontSize: 20, fontWeight: '800' },
   label: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3, opacity: 0.75 },
 });
@@ -489,7 +489,7 @@ const s = StyleSheet.create({
   // Inspect CTA
   inspectCta: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 18, padding: 18,
+    borderRadius: 16, padding: 16,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.28, shadowRadius: 12, elevation: 8,
   },
@@ -504,7 +504,7 @@ const s = StyleSheet.create({
   actionBtnLabel:{ fontSize: 13, fontWeight: '700' },
 
   // Alert cards
-  alertCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1.5 },
+  alertCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1.5 },
   alertIconWrap:{ width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   alertTitle:   { fontSize: 13, fontWeight: '700', marginBottom: 3 },
   alertBody:    { fontSize: 12, lineHeight: 18 },
@@ -515,7 +515,7 @@ const s = StyleSheet.create({
   divider: { height: 1, marginHorizontal: -16 },
 
   // Asset rows
-  assetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  assetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   assetIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   assetType:     { fontSize: 14, fontWeight: '700', marginBottom: 1 },
   assetLocation: { fontSize: 12, marginTop: 1 },
@@ -527,7 +527,7 @@ const s = StyleSheet.create({
   statusDot:     { width: 6, height: 6, borderRadius: 3 },
 
   // Job history rows
-  historyRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  historyRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   historyIconWrap:{ width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   historyDate:    { fontSize: 13, fontWeight: '700', marginBottom: 4 },
 

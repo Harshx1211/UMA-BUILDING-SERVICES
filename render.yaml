@@ -1,0 +1,62 @@
+# Render Blueprint — deploys the two pieces the new PDF report system needs:
+# Gotenberg (HTML->PDF rendering) and the report-generator service that talks
+# to it. See services/report-generator/README.md for the full picture.
+#
+# To deploy: push this repo to GitHub, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at this repo. Render will read this file
+# and offer to create both services below.
+#
+# Free-tier note: Render's free web services can make outbound private-network
+# calls but cannot receive them, so true "Gotenberg is never public" isolation
+# needs a paid plan for the gotenberg service specifically. On the free tier,
+# gotenberg gets an unlisted public *.onrender.com URL instead — acceptable to
+# start with since Gotenberg holds no secrets or customer data (it only
+# converts whatever HTML we send it into a PDF). Upgrade its plan later if
+# you want it fully private.
+services:
+  - type: web
+    name: sitetrack-gotenberg
+    runtime: image
+    image:
+      url: docker.io/gotenberg/gotenberg:8
+    plan: free
+    envVars:
+      - key: PORT
+        value: 3000
+
+  - type: web
+    name: sitetrack-report-generator
+    runtime: docker
+    plan: free
+    dockerContext: services/report-generator
+    dockerfilePath: services/report-generator/Dockerfile
+    envVars:
+      # fromService/property:host only returns a bare hostname (no scheme, no
+      # port), which isn't a usable base URL on its own — and per the free-tier
+      # note above, gotenberg needs to be reached via its public URL anyway.
+      # Set this manually after the first deploy: Dashboard -> sitetrack-gotenberg
+      # -> copy its "onrender.com" URL, e.g. https://sitetrack-gotenberg-xxxx.onrender.com
+      - key: GOTENBERG_URL
+        sync: false
+      - key: PORT
+        value: 8080
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: REPORT_BUCKET
+        value: job-reports
+      - key: PHOTO_BUCKET
+        value: job-photos
+      - key: MAX_ASSETS_PER_CHUNK
+        value: "200"
+      - key: GOTENBERG_CONCURRENCY
+        value: "2"
+      - key: GOTENBERG_TIMEOUT_MS
+        value: "60000"
+      - key: CHUNK_RETRY_ATTEMPTS
+        value: "2"
+      - key: PHOTO_SIGNED_URL_TTL_SECONDS
+        value: "1800"

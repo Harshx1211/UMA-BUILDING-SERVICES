@@ -6,7 +6,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import SignatureScreenCanvas from 'react-native-signature-canvas';
+import SignatureScreenCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { upsertRecord, addToSyncQueue, getSignatureForJob } from '@/lib/database';
 import { runSync } from '@/lib/sync';
@@ -19,16 +19,13 @@ import { ScreenHeader, Button, Card } from '@/components/ui';
 import { T } from '@/constants/Colors';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 
-// Canvas lib doesn't export its ref type — capture the minimal surface we use.
-type CanvasRef = { readSignature: () => void; clearSignature: () => void };
-
 export default function SignatureScreen() {
   const C = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
   // ONE canvas ref — we only ever mount one canvas at a time
-  const canvasRef = useRef<CanvasRef | null>(null);
+  const canvasRef = useRef<SignatureViewRef | null>(null);
   // Scroll ref — lock/unlock WITHOUT a state update (zero re-renders mid-draw)
   const scrollRef = useRef<ScrollView>(null);
 
@@ -499,7 +496,7 @@ const s = StyleSheet.create({
   // Step indicator
   stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 4 },
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  stepPillTxt:{ fontSize: 10, fontWeight: '900', color: T.textPrimary, letterSpacing: 1 },
+  stepPillTxt:{ fontSize: 10, fontWeight: '900', color: T.textOnPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
 
   // Field label

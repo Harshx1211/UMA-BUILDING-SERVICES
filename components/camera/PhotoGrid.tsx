@@ -63,8 +63,8 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
           </View>
         )}
         {isPending && (
-          <View style={[s.pendingBadge, { backgroundColor: C.accent, shadowColor: '#000' }]}>
-            <MaterialCommunityIcons name="timer-sand" size={10} color={T.textPrimary} />
+          <View style={[s.pendingBadge, { backgroundColor: C.accent, shadowColor: T.black }]}>
+            <MaterialCommunityIcons name="timer-sand" size={10} color={T.textOnPrimary} />
           </View>
         )}
       </TouchableOpacity>
@@ -120,7 +120,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
-  captionText: { color: T.textPrimary, fontSize: 10 },
+  captionText: { color: T.textOnPrimary, fontSize: 10 },
   pendingBadge: {
     position: 'absolute',
     top: 4,

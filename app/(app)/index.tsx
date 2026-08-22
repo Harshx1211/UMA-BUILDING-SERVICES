@@ -26,6 +26,7 @@ import { Typography } from '@/constants/Typography';
 import { JobStatus } from '@/constants/Enums';
 import type { Job } from '@/types';
 import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow, SkeletonBlock } from '@/components/ui';
+import { SyncStatusBar } from '@/components/SyncStatusBar';
 import { localDateString } from '@/utils/dateHelpers';
 
 // ─── Priority left-bar color (semantic, matches the rule: urgent=danger, high=warning) ──
@@ -201,6 +202,7 @@ export default function HomeScreen() {
       <ScreenHeader
         title={`${greeting()}, ${user?.full_name?.split(' ')[0] ?? 'Technician'}`}
         subtitle={todayStr()}
+        extra={<SyncStatusBar />}
         rightComponent={
           <TouchableOpacity
             style={styles.bellBtn}
@@ -343,7 +345,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   bellBadgeText: {
-    color: T.textPrimary,
+    color: T.textOnPrimary,
     fontSize: 8,
     fontWeight: '800',
   },
@@ -407,6 +409,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: T.border,
     paddingVertical: T.space16,
+    paddingHorizontal: T.space16,
     alignItems: 'center',
     ...cardShadow,
   },

@@ -251,10 +251,10 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                         <MaterialCommunityIcons
                           name={sev.icon}
                           size={20}
-                          color={isActive ? T.textPrimary : colors.active}
+                          color={isActive ? T.textOnPrimary : colors.active}
                         />
-                        <Text style={[s.severityLabel, { color: isActive ? T.textPrimary : C.text }]}>{sev.label}</Text>
-                        <Text style={[s.severityDesc, { color: isActive ? T.textPrimary : C.textTertiary, opacity: isActive ? 0.75 : 1 }]}>
+                        <Text style={[s.severityLabel, { color: isActive ? T.textOnPrimary : C.text }]}>{sev.label}</Text>
+                        <Text style={[s.severityDesc, { color: isActive ? T.textOnPrimary : C.textTertiary, opacity: isActive ? 0.75 : 1 }]}>
                           {sev.desc}
                         </Text>
                       </View>
@@ -403,7 +403,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
                         setPhotos(p => p.filter((_, i) => i !== idx));
                       }}
                     >
-                      <MaterialCommunityIcons name="close" size={11} color={T.textPrimary} />
+                      <MaterialCommunityIcons name="close" size={11} color={T.textOnPrimary} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -532,7 +532,7 @@ const s = StyleSheet.create({
     position: 'absolute', top: -6, right: -6,
     width: 22, height: 22, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.25, shadowRadius: 2, elevation: 3,
+    shadowColor: T.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.25, shadowRadius: 2, elevation: 3,
   },
 
   // Bottom action bar
@@ -542,7 +542,7 @@ const s = StyleSheet.create({
     padding: 20, paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
+    shadowColor: T.black, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
   replaceBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

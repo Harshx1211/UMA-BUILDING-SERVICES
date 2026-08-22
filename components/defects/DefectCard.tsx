@@ -156,9 +156,9 @@ const s = StyleSheet.create({
   card: {
     borderRadius: 16,
     marginHorizontal: 16,
-    marginBottom: 14,
-    padding: 18,
-    borderLeftWidth: 5,
+    marginBottom: 12,
+    padding: 16,
+    borderLeftWidth: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -167,7 +167,7 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   severityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  severityText:  { color: T.textPrimary, fontWeight: '700', fontSize: 11 },
+  severityText:  { color: T.textOnPrimary, fontWeight: '700', fontSize: 11 },
 
   codeBadge: {
     paddingHorizontal: 7, paddingVertical: 3,

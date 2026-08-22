@@ -13,6 +13,7 @@ import { useCatalogueStore } from '@/store/catalogueStore';
 import { supabase } from '@/lib/supabase';
 import { T } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OfflineBanner } from '@/components/OfflineBanner';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -254,6 +255,8 @@ export default function AppLayout() {
         </View>
       </View>
     )}
+
+    <OfflineBanner />
     </>
   );
 }

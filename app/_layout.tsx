@@ -6,7 +6,7 @@ import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Text, AppState, 
 import { Slot, ErrorBoundaryProps } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
+import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 
 import { useAuthStore } from '@/store/authStore';
@@ -19,19 +19,19 @@ import * as ScreenCapture from 'expo-screen-capture';
 SplashScreen.preventAutoHideAsync();
 
 
-// SiteTrack is dark-only — a single theme is used regardless of system preference.
-const paperDarkTheme = {
-  ...MD3DarkTheme,
+// SiteTrack has one light theme — used regardless of system preference.
+const paperTheme = {
+  ...MD3LightTheme,
   colors: {
-    ...MD3DarkTheme.colors,
-    primary:      Colors.dark.primary,
-    secondary:    Colors.dark.accent,
-    background:   Colors.dark.background,
-    surface:      Colors.dark.surface,
-    error:        Colors.dark.error,
-    onPrimary:    Colors.dark.textOnPrimary,
-    onBackground: Colors.dark.text,
-    onSurface:    Colors.dark.text,
+    ...MD3LightTheme.colors,
+    primary:      Colors.theme.primary,
+    secondary:    Colors.theme.accent,
+    background:   Colors.theme.background,
+    surface:      Colors.theme.surface,
+    error:        Colors.theme.error,
+    onPrimary:    Colors.theme.textOnPrimary,
+    onBackground: Colors.theme.text,
+    onSurface:    Colors.theme.text,
   },
 };
 
@@ -108,8 +108,8 @@ export default function RootLayout() {
     }
   }, [isLoading]);
 
-  // Always dark — field service app.
-  const theme = paperDarkTheme;
+  // Single theme — field service app.
+  const theme = paperTheme;
 
   // Show a blank loading screen while session is being restored.
   if (isLoading) {
@@ -117,10 +117,10 @@ export default function RootLayout() {
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
           <PaperProvider theme={theme}>
-            <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
-              <ActivityIndicator color={theme.colors.secondary} size="large" />
+            <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+              <ActivityIndicator color={theme.colors.primary} size="large" />
             </View>
-            <StatusBar style="light" />
+            <StatusBar style="dark" />
           </PaperProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
@@ -132,7 +132,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
           <Slot />
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <Toast />
           {/* iOS app-switcher screenshot shield */}
           {isObscured && (
@@ -153,15 +153,15 @@ export default function RootLayout() {
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: T.backgroundSecondary, padding: 24 }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: T.surface, padding: 24 }}>
       <MaterialCommunityIcons name="alert-circle-outline" size={48} color={T.danger} />
-      <Text style={{ fontSize: 20, fontWeight: '700', color: T.text, marginTop: 16, textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: T.textPrimary, marginTop: 16, textAlign: 'center' }}>Something went wrong</Text>
       <Text style={{ fontSize: 14, color: T.textSecondary, marginTop: 8, textAlign: 'center', marginBottom: 24 }}>An unexpected error occurred while loading this module.</Text>
       <TouchableOpacity 
         onPress={retry}
         style={{ backgroundColor: T.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
       >
-        <Text style={{ color: T.textPrimary, fontWeight: '700' }}>Try Again</Text>
+        <Text style={{ color: T.textOnPrimary, fontWeight: '700' }}>Try Again</Text>
       </TouchableOpacity>
     </View>
   );
@@ -170,7 +170,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   screenshotShield: {
-    backgroundColor: '#0D1B2E',
+    backgroundColor: T.background,
     zIndex: 9999,
   },
 });

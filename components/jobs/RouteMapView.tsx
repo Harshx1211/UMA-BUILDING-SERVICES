@@ -161,7 +161,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
       {/* Marker count badge */}
       {!isLoading && markers.length > 0 && (
         <View style={[s.countBadge, { backgroundColor: C.primary }]}>
-          <MaterialCommunityIcons name="map-marker-multiple" size={14} color={T.textPrimary} />
+          <MaterialCommunityIcons name="map-marker-multiple" size={14} color={T.textOnPrimary} />
           <Text style={s.countText}>{markers.length} jobs</Text>
         </View>
       )}
@@ -194,7 +194,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
             </TouchableOpacity>
             <TouchableOpacity style={[s.openBtn, { backgroundColor: C.accent }]} onPress={() => { setSelectedJob(null); onJobSelect(selectedJob); }}>
               <Text style={s.openBtnText}>Open Job</Text>
-              <MaterialCommunityIcons name="chevron-right" size={16} color={T.textPrimary} />
+              <MaterialCommunityIcons name="chevron-right" size={16} color={T.textOnPrimary} />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -226,7 +226,7 @@ const s = StyleSheet.create({
     backgroundColor: T.surface,
     borderWidth: 2.5,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowColor: T.black, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25, shadowRadius: 4, elevation: 5,
   },
   markerDot: { width: 12, height: 12, borderRadius: 6 },
@@ -236,17 +236,17 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowColor: T.black, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
   },
-  countText: { fontSize: 12, fontWeight: '700', color: T.textPrimary },
+  countText: { fontSize: 12, fontWeight: '700', color: T.textOnPrimary },
 
   jobCard: {
     position: 'absolute', bottom: 16, left: 16, right: 16,
     borderRadius: 16,
     flexDirection: 'row',
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: T.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
@@ -266,5 +266,5 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 7,
     borderRadius: 10,
   },
-  openBtnText: { fontSize: 12, fontWeight: '700', color: T.textPrimary },
+  openBtnText: { fontSize: 12, fontWeight: '700', color: T.textOnPrimary },
 });

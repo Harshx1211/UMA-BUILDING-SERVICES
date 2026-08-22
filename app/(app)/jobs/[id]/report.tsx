@@ -19,6 +19,7 @@ import {
   getPendingSyncItems,
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -629,7 +630,7 @@ const s = StyleSheet.create({
   checkTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
   checkSub: { fontSize: 12, fontWeight: '500' },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  actionBtnTxt: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  actionBtnTxt: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', color: T.textOnPrimary },
 
   // Table
   emptyTable: { padding: 24, alignItems: 'center' },
@@ -647,7 +648,7 @@ const s = StyleSheet.create({
   // Defect Card
   defectCard: { flexDirection: 'row' },
   defectStripe: { width: 4 },
-  defectContent: { flex: 1, padding: 14 },
+  defectContent: { flex: 1, padding: 16 },
   defectHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   sevBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   sevBadgeTxt: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },

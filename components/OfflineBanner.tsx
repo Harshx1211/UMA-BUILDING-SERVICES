@@ -87,13 +87,13 @@ export function OfflineBanner() {
       bg:   C.primary,
       icon: 'sync' as const,
       text: 'Syncing changes with cloud...',
-      textColor: T.textPrimary,
+      textColor: T.textOnPrimary,
     },
     synced: {
       bg:   C.success,
       icon: 'cloud-check-outline' as const,
       text: 'All changes synced successfully',
-      textColor: T.textPrimary,
+      textColor: T.textOnPrimary,
     },
     hidden: {
       bg:   'transparent',

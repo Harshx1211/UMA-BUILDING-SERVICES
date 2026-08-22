@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Alert, Platform,
+  Alert, Platform, TextInput,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -104,12 +104,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const isFailed  = result === InspectionResult.Fail;
   const isNT      = result === InspectionResult.NotTested;
 
-  const cardAccentColor = isPassed ? C.success : isFailed ? C.error : isNT ? C.textTertiary : C.border;
-  const cardBg = isPassed ? C.successLight : isFailed ? C.errorLight : C.surface;
+  const cardAccentColor = isPassed ? C.success : isFailed ? C.error : isNT ? C.textTertiary : C.borderStrong;
 
   return (
     <Animated.View entering={index < 12 ? FadeInDown.delay(index * 40).duration(300) : undefined} style={s.cardWrapper}>
-      <View style={[s.assetCard, { backgroundColor: cardBg, borderColor: cardAccentColor }, cardShadow]}>
+      <View style={[s.assetCard, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: cardAccentColor }, cardShadow]}>
         <View style={s.cardInner}>
           <View style={s.cardHeader}>
             <View style={[s.assetIconWrap, {
@@ -269,6 +268,7 @@ export default function AssetInspectionScreen() {
   const store = useInspectionStore();
 
   const [filter, setFilter] = useState<string>('All');
+  const [search, setSearch] = useState<string>('');
   const [showAddAsset, setShowAddAsset] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetWithResult | null>(null);
   const [propertyId, setPropertyId]  = useState<string>('');
@@ -310,14 +310,27 @@ export default function AssetInspectionScreen() {
   }, [jobId]);
 
   const filteredAssets = useMemo(() => {
+    let list = store.assets;
     switch (filter) {
-      case 'Passed':    return store.assets.filter(a => a.result === InspectionResult.Pass);
-      case 'Failed':    return store.assets.filter(a => a.result === InspectionResult.Fail);
-      case 'N/T':       return store.assets.filter(a => a.result === InspectionResult.NotTested);
-      case 'Remaining': return store.assets.filter(a => a.result === null);
-      default:          return store.assets;
+      case 'Passed':    list = list.filter(a => a.result === InspectionResult.Pass); break;
+      case 'Failed':    list = list.filter(a => a.result === InspectionResult.Fail); break;
+      case 'N/T':       list = list.filter(a => a.result === InspectionResult.NotTested); break;
+      case 'Remaining': list = list.filter(a => a.result === null); break;
     }
-  }, [store.assets, filter]);
+
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(a =>
+        formatAssetType(a.asset_type).toLowerCase().includes(q) ||
+        (a.variant ?? '').toLowerCase().includes(q) ||
+        (a.location_on_site ?? '').toLowerCase().includes(q) ||
+        (a.asset_ref ?? '').toLowerCase().includes(q) ||
+        (a.serial_number ?? '').toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [store.assets, filter, search]);
 
   // Decision #2: mark all uninspected assets as not_tested before completing.
   // This runs synchronously before navigation — the store's updateAssetResult
@@ -549,6 +562,25 @@ export default function AssetInspectionScreen() {
                 )}
               </View>
             </View>
+            <View style={s.searchWrap}>
+              <View style={[s.searchBar, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <MaterialCommunityIcons name="magnify" size={16} color={C.textTertiary} style={{ marginRight: 6 }} />
+                <TextInput
+                  style={[s.searchInput, { color: C.text }]}
+                  placeholder="Search by type, location, or ref…"
+                  placeholderTextColor={C.textTertiary}
+                  value={search}
+                  onChangeText={setSearch}
+                  maxLength={80}
+                  autoCorrect={false}
+                />
+                {search.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+                    <MaterialCommunityIcons name="close-circle" size={16} color={C.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
             <View style={s.filterWrap}>
               <FilterPills options={filterOptions} activeIndex={filterOptions.findIndex(o => o.label === filter)} onSelect={(idx) => setFilter(filterOptions[idx].label)} variant="dark" />
             </View>
@@ -567,9 +599,11 @@ export default function AssetInspectionScreen() {
             </View>
           ) : (
             <View style={s.emptyState}>
-              <MaterialCommunityIcons name="check-circle-outline" size={40} color={C.success} />
-              <Text style={[s.emptyTitle, { color: C.text }]}>All Clear</Text>
-              <Text style={[s.emptySub, { color: C.textSecondary }]}>No assets match this filter.</Text>
+              <MaterialCommunityIcons name={search ? 'text-search' : 'check-circle-outline'} size={40} color={search ? C.textTertiary : C.success} />
+              <Text style={[s.emptyTitle, { color: C.text }]}>{search ? 'No Matches' : 'All Clear'}</Text>
+              <Text style={[s.emptySub, { color: C.textSecondary }]}>
+                {search ? `No assets match "${search}".` : 'No assets match this filter.'}
+              </Text>
             </View>
           )
         }
@@ -634,10 +668,13 @@ const s = StyleSheet.create({
   formInfoLabel:   { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
   formInfoValue:   { fontSize: 14, fontWeight: '700' },
   formInfoDivider: { width: 1, marginHorizontal: 16, alignSelf: 'stretch' },
+  searchWrap:  { paddingHorizontal: 16, paddingTop: 12 },
+  searchBar:   { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  searchInput: { flex: 1, fontSize: 14 },
   filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
-  cardWrapper: { marginHorizontal: 16, marginBottom: 14 },
-  assetCard:   { borderRadius: 16, borderWidth: 1 },
-  cardInner:   { padding: 18 },
+  cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
+  assetCard:   { borderRadius: 16, borderWidth: 1, borderLeftWidth: 4 },
+  cardInner:   { padding: 16 },
   cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   assetIconWrap:   { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   assetType:       { fontSize: 16, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },

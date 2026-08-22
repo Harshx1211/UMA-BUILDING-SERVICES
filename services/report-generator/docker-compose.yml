@@ -1,0 +1,19 @@
+services:
+  report-generator:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      GOTENBERG_URL: http://gotenberg:3000
+    depends_on:
+      - gotenberg
+
+  # Gotenberg is only ever reached over this internal compose network — it has
+  # no published port here, matching the production design where it's never
+  # exposed publicly (see Fly.io/Render deploy notes in README.md).
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=false"

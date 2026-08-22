@@ -289,6 +289,99 @@ export default function SiteInspectScreen() {
     action();
   }, []);
 
+  // ── Derived counts ───────────────────────────────────────
+  // NOTE: declared here (ahead of handleComplete/filtered below) because
+  // saveInspection needs it and handleBackPress needs saveInspection —
+  // both are read in a useCallback dependency array further down, which
+  // is evaluated synchronously on every render, so they must already be
+  // initialized by this point or React throws a TDZ ReferenceError.
+  const counts = useMemo(() => {
+    const vals = Object.values(results);
+    return {
+      passed:    vals.filter(r => r.result === InspectionResult.Pass).length,
+      failed:    vals.filter(r => r.result === InspectionResult.Fail).length,
+      nt:        vals.filter(r => r.result === InspectionResult.NotTested).length,
+      remaining: vals.filter(r => r.result === null).length,
+      inspected: vals.filter(r => r.result !== null).length,
+      total:     assets.length,
+    };
+  }, [results, assets]);
+
+  // ── Complete & save ──────────────────────────────────────
+  const saveInspection = useCallback(async () => {
+    if (!property || !user) return;
+    setIsSaving(true);
+    try {
+      const now   = new Date().toISOString();
+      // FIX: Use localDateString() for the job's scheduled_date.
+      // new Date().toISOString().slice(0,10) is UTC — before ~10am AEST
+      // this writes yesterday's date as the on-site job's scheduled_date,
+      // creating a job record that appears to have happened the day before.
+      const today = localDateString();
+      const jobId = generateUUID();
+
+      // 1. Create completed job
+      const jobPayload = {
+        id: jobId, property_id: property.id, assigned_to: user.id,
+        job_type: JobType.RoutineService, status: JobStatus.Completed,
+        scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
+        notes: 'On-site inspection form submitted via SiteTrack mobile app.',
+        created_at: now, updated_at: now,
+      };
+      upsertRecord('jobs', jobPayload as RecordData);
+      addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
+
+      // 2. Save job_assets records
+      // DECISION #2: assets the tech did not explicitly inspect are auto-marked
+      // as not_tested. Never silently skip them — a missing record = missing compliance data.
+      for (const asset of assets) {
+        const r = results[asset.id];
+        const resolvedResult = r?.result ?? InspectionResult.NotTested;
+        const jaId = generateUUID();
+        const jaPayload = {
+          id: jaId, job_id: jobId, asset_id: asset.id,
+          result: resolvedResult, checklist_data: null,
+          is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
+          defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
+          technician_notes: null, actioned_at: now,
+        };
+        upsertRecord('job_assets', jaPayload as RecordData);
+        addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
+
+        // 3. Auto-create defect if failed with reason
+        if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
+          const dId = generateUUID();
+          const dPayload = {
+            id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
+            description: r.defectReason.trim(), severity: DefectSeverity.Major,
+            status: 'open', photos: '[]', created_at: now,
+          };
+          upsertRecord('defects', dPayload as RecordData);
+          addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
+        }
+      }
+
+      // 4. Update property compliance
+      const compliance = counts.failed > 0 ? 'non_compliant' : 'compliant';
+      upsertRecord('properties', { id: property.id, compliance_status: compliance, updated_at: now });
+      addToSyncQueue('properties', property.id, SyncOperation.Update,
+        { compliance_status: compliance, updated_at: now });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Inspection Saved',
+        text2: 'Generating your report…',
+      });
+      // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace
+      navigateAway(() => router.replace(`/jobs/${jobId}/report` as never));
+    } catch (err) {
+      console.error('[SiteInspect] save error:', err);
+      Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [property, user, assets, results, counts, navigateAway]);
+
   const handleBackPress = useCallback(() => {
     if (!hasProgress) return false; // let navigation proceed normally
     Alert.alert(
@@ -372,19 +465,6 @@ export default function SiteInspectScreen() {
     });
   }, []);
 
-  // ── Derived counts ───────────────────────────────────────
-  const counts = useMemo(() => {
-    const vals = Object.values(results);
-    return {
-      passed:    vals.filter(r => r.result === InspectionResult.Pass).length,
-      failed:    vals.filter(r => r.result === InspectionResult.Fail).length,
-      nt:        vals.filter(r => r.result === InspectionResult.NotTested).length,
-      remaining: vals.filter(r => r.result === null).length,
-      inspected: vals.filter(r => r.result !== null).length,
-      total:     assets.length,
-    };
-  }, [results, assets]);
-
   const fillPct = counts.total > 0 ? (counts.inspected / counts.total) * 100 : 0;
   const allDone = counts.remaining === 0 && counts.total > 0;
 
@@ -418,80 +498,6 @@ export default function SiteInspectScreen() {
       saveInspection();
     }
   };
-
-  const saveInspection = useCallback(async () => {
-    if (!property || !user) return;
-    setIsSaving(true);
-    try {
-      const now   = new Date().toISOString();
-      // FIX: Use localDateString() for the job's scheduled_date.
-      // new Date().toISOString().slice(0,10) is UTC — before ~10am AEST
-      // this writes yesterday's date as the on-site job's scheduled_date,
-      // creating a job record that appears to have happened the day before.
-      const today = localDateString();
-      const jobId = generateUUID();
-
-      // 1. Create completed job
-      const jobPayload = {
-        id: jobId, property_id: property.id, assigned_to: user.id,
-        job_type: JobType.RoutineService, status: JobStatus.Completed,
-        scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
-        notes: 'On-site inspection form submitted via SiteTrack mobile app.',
-        created_at: now, updated_at: now,
-      };
-      upsertRecord('jobs', jobPayload as RecordData);
-      addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
-
-      // 2. Save job_assets records
-      // DECISION #2: assets the tech did not explicitly inspect are auto-marked
-      // as not_tested. Never silently skip them — a missing record = missing compliance data.
-      for (const asset of assets) {
-        const r = results[asset.id];
-        const resolvedResult = r?.result ?? InspectionResult.NotTested;
-        const jaId = generateUUID();
-        const jaPayload = {
-          id: jaId, job_id: jobId, asset_id: asset.id,
-          result: resolvedResult, checklist_data: null,
-          is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
-          defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
-          technician_notes: null, actioned_at: now,
-        };
-        upsertRecord('job_assets', jaPayload as RecordData);
-        addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
-
-        // 3. Auto-create defect if failed with reason
-        if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
-          const dId = generateUUID();
-          const dPayload = {
-            id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
-            description: r.defectReason.trim(), severity: DefectSeverity.Major,
-            status: 'open', photos: '[]', created_at: now,
-          };
-          upsertRecord('defects', dPayload as RecordData);
-          addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
-        }
-      }
-
-      // 4. Update property compliance
-      const compliance = counts.failed > 0 ? 'non_compliant' : 'compliant';
-      upsertRecord('properties', { id: property.id, compliance_status: compliance, updated_at: now });
-      addToSyncQueue('properties', property.id, SyncOperation.Update,
-        { compliance_status: compliance, updated_at: now });
-
-      Toast.show({
-        type: 'success',
-        text1: 'Inspection Saved',
-        text2: 'Generating your report…',
-      });
-      // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace
-      navigateAway(() => router.replace(`/jobs/${jobId}/report` as never));
-    } catch (err) {
-      console.error('[SiteInspect] save error:', err);
-      Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [property, user, assets, results, counts]);
 
   // ── Render item ──────────────────────────────────────────
   const renderItem = useCallback(({ item, index }: { item: Asset; index: number }) => (

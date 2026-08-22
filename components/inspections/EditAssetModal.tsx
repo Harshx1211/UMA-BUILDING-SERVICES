@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { updateRecord, addToSyncQueue } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import type { Asset } from '@/types';
@@ -209,6 +210,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
+    shadowColor: T.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   }
 });

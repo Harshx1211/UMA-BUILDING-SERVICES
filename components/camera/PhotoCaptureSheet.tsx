@@ -124,6 +124,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
         addPhoto({
           job_id: jobId,
+          company_id: useAuthStore.getState().user?.company_id ?? null,
           asset_id: assetId === '' ? null : assetId,
           defect_id: null,
           photo_url: destUri,
@@ -176,7 +177,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
             />
             <View style={s.cameraOverlay}>
               <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
-                <MaterialCommunityIcons name="camera-flip" size={24} color={T.textPrimary} />
+                <MaterialCommunityIcons name="camera-flip" size={24} color={T.textOnPrimary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={cycleFlash} style={[
                 s.camBtn,
@@ -226,9 +227,9 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
               <MaterialCommunityIcons
                 name="link-off"
                 size={13}
-                color={assetId === '' ? T.textPrimary : C.textSecondary}
+                color={assetId === '' ? T.textOnPrimary : C.textSecondary}
               />
-              <Text style={[s.assetChipTxt, { color: assetId === '' ? T.textPrimary : C.textSecondary }]}>
+              <Text style={[s.assetChipTxt, { color: assetId === '' ? T.textOnPrimary : C.textSecondary }]}>
                 None
               </Text>
             </TouchableOpacity>
@@ -250,14 +251,14 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
                   <MaterialCommunityIcons
                     name="shield-check-outline"
                     size={13}
-                    color={isSelected ? T.textPrimary : C.textSecondary}
+                    color={isSelected ? T.textOnPrimary : C.textSecondary}
                   />
                   <View>
-                    <Text style={[s.assetChipTxt, { color: isSelected ? T.textPrimary : C.text }]} numberOfLines={1}>
+                    <Text style={[s.assetChipTxt, { color: isSelected ? T.textOnPrimary : C.text }]} numberOfLines={1}>
                       {a.asset_type}
                     </Text>
                     {a.location_on_site ? (
-                      <Text style={[s.assetChipSub, { color: isSelected ? T.textPrimary : C.textTertiary, opacity: isSelected ? 0.75 : 1 }]} numberOfLines={1}>
+                      <Text style={[s.assetChipSub, { color: isSelected ? T.textOnPrimary : C.textTertiary, opacity: isSelected ? 0.75 : 1 }]} numberOfLines={1}>
                         {a.location_on_site}
                       </Text>
                     ) : null}
@@ -270,7 +271,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
         <TouchableOpacity style={s.captureBtnInner} onPress={takePicture} activeOpacity={0.7}>
           <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight }]}>
-             <MaterialCommunityIcons name="camera" size={32} color={T.textPrimary} />
+             <MaterialCommunityIcons name="camera" size={32} color={T.textOnPrimary} />
           </View>
         </TouchableOpacity>
 
@@ -286,7 +287,7 @@ const s = StyleSheet.create({
   doneBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20 },
   doneText: { fontWeight: '800', fontSize: 14 },
   content: { paddingBottom: 64 },
-  cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: '#000', overflow: 'hidden' },
+  cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: T.black, overflow: 'hidden' },
   camera: { flex: 1 },
   cameraOverlay: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
   camBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },

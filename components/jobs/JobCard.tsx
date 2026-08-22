@@ -34,7 +34,7 @@ function parseTime(hhmm: string): string {
 function StartAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
   return (
     <TouchableOpacity style={[sw.startAction, { backgroundColor: C.success }]} onPress={onPress} activeOpacity={0.85}>
-      <MaterialCommunityIcons name="play-circle-outline" size={22} color={T.textPrimary} />
+      <MaterialCommunityIcons name="play-circle-outline" size={22} color={T.textOnPrimary} />
       <Text style={sw.actionLabel}>Start</Text>
     </TouchableOpacity>
   );
@@ -44,7 +44,7 @@ StartAction.displayName = 'StartAction';
 function CancelAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeof useColors> }) {
   return (
     <TouchableOpacity style={[sw.cancelAction, { backgroundColor: C.error }]} onPress={onPress} activeOpacity={0.85}>
-      <MaterialCommunityIcons name="close-circle-outline" size={22} color={T.textPrimary} />
+      <MaterialCommunityIcons name="close-circle-outline" size={22} color={T.textOnPrimary} />
       <Text style={sw.actionLabel}>Cancel</Text>
     </TouchableOpacity>
   );
@@ -54,7 +54,7 @@ CancelAction.displayName = 'CancelAction';
 const sw = StyleSheet.create({
   startAction:  { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginLeft: 8, gap: 4 },
   cancelAction: { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginRight: 8, gap: 4 },
-  actionLabel:  { fontSize: 11, fontWeight: '700', color: T.textPrimary },
+  actionLabel:  { fontSize: 11, fontWeight: '700', color: T.textOnPrimary },
 });
 
 // ─── Main card ───────────────────────────────
@@ -213,12 +213,12 @@ export const JobCard = React.memo(function JobCard({
 
 const s = StyleSheet.create({
   card: {
-    borderRadius: 18,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'stretch',
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#0D1526',
+    shadowColor: T.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 14,

@@ -218,7 +218,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // Previously, offline photos were permanently lost on forced logout.
         const { processPhotoQueue } = await import('@/lib/photoUpload');
         const { _pushQueue } = await import('@/lib/sync');
-        const currentUserId = get().user?.id ?? session?.user.id ?? '';
+        const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
 
         for (let i = 0; i < 5; i++) {
           await processPhotoQueue(currentUserId);

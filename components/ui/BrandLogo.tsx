@@ -23,7 +23,7 @@ interface BrandLogoProps {
   tagline?: string;
   /** Pass false to hide the wordmark + tagline (mark-only mode) */
   showWordmark?: boolean;
-  /** Text color for wordmark — defaults to T.textPrimary (white) */
+  /** Text color for wordmark — defaults to T.textPrimary */
   textColor?: string;
 }
 
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   },
   letters: {
     fontWeight: '800',
-    color: T.textPrimary,
+    color: T.textOnPrimary,
     letterSpacing: 2,
   },
   wordmark: {

@@ -200,6 +200,16 @@ const s = StyleSheet.create({
     width: 8, height: 8, borderRadius: 4,
   },
 
+  iconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardBody:   { flex: 1, gap: 2 },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  cardTitle:  { fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  cardTime:   { fontSize: 11, flexShrink: 0 },
+  cardMsg:    { fontSize: 13, lineHeight: 18 },
+
   clearBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     marginTop: 8, paddingVertical: 12,

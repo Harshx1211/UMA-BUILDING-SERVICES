@@ -13,6 +13,7 @@ import { getJobById } from '@/lib/database';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
+import type { Defect } from '@/types';
 
 export default function DefectsScreen() {
   const C = useColors();

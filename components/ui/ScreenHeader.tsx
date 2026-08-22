@@ -17,6 +17,8 @@ interface Props {
   /** @deprecated — kept for API compatibility, no longer renders curves */
   curved?: boolean;
   eyebrow?: string;
+  /** Optional extra row under the subtitle — e.g. a sync status readout */
+  extra?: React.ReactNode;
 }
 
 export function ScreenHeader({
@@ -25,6 +27,7 @@ export function ScreenHeader({
   rightComponent,
   showBack = false,
   eyebrow,
+  extra,
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
@@ -67,6 +70,7 @@ export function ScreenHeader({
               {subtitle}
             </Text>
           ) : null}
+          {extra ? <View style={styles.extra}>{extra}</View> : null}
         </View>
 
         {rightComponent ? (
@@ -117,6 +121,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     marginTop: 1,
+  },
+  extra: {
+    marginTop: 4,
   },
   right: {
     alignItems: 'center',

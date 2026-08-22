@@ -16,6 +16,7 @@ import { formatAssetType } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+type ColorsType = ReturnType<typeof useColors>;
 
 type ServiceRecord = {
   id: string;
@@ -31,13 +32,13 @@ type ServiceRecord = {
 };
 
 // ── Result config — vectors only, no emoji ──────────────────────────────────
-const RESULT_CONFIG: Record<InspectionResult, { icon: MCIconName; color: (C: any) => string; label: string }> = {
+const RESULT_CONFIG: Record<InspectionResult, { icon: MCIconName; color: (C: ColorsType) => string; label: string }> = {
   [InspectionResult.Pass]:      { icon: 'check-circle',          color: (C) => C.successDark || C.success, label: 'Pass' },
   [InspectionResult.Fail]:      { icon: 'close-circle',          color: (C) => C.errorDark  || C.error,   label: 'Fail' },
   [InspectionResult.NotTested]: { icon: 'checkbox-blank-outline', color: (C) => C.textTertiary,            label: 'Not Tested' },
 };
 
-const getSeverityConfig = (C: any): Record<DefectSeverity, { color: string }> => ({
+const getSeverityConfig = (C: ColorsType): Record<DefectSeverity, { color: string }> => ({
   [DefectSeverity.Critical]: { color: C.error },
   [DefectSeverity.Major]:    { color: C.warning },
   [DefectSeverity.Minor]:    { color: C.info },
@@ -51,7 +52,7 @@ function InfoRow({
   label: string;
   value: string;
   mono?: boolean;
-  C: any;
+  C: ColorsType;
 }) {
   return (
     <View style={s.infoRow}>

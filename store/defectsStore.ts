@@ -26,7 +26,7 @@ interface DefectsState {
 
   loadDefects: (jobId: string) => void;
   loadAllDefects: (statusFilter?: string) => void;
-  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'status'>) => string | null;
+  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'updated_at' | 'status' | 'company_id'>) => string | null;
   updateDefect: (defectId: string, updates: Partial<Defect>) => void;
   updateDefectStatus: (defectId: string, status: DefectStatus) => void;
   deleteDefect: (defectId: string) => void;
@@ -88,17 +88,19 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       // FIX: inject company_id so the sync-queue INSERT satisfies Supabase RLS.
       const companyId = useAuthStore.getState().user?.company_id ?? null;
 
+      const nowIso = new Date().toISOString();
       const payload: Defect = {
         ...defectWithoutPhotos,
         photos: photos || [], // keep for memory
         id,
+        company_id: companyId,
         status: DefectStatus.Open,
-        created_at: new Date().toISOString(),
+        created_at: nowIso,
+        updated_at: nowIso,
       };
 
       const dbPayload = {
         ...payload,
-        company_id: companyId,
         photos: JSON.stringify(photos || []), // save actual photos to SQLite
         defect_code: payload.defect_code ?? null,
         quote_price: payload.quote_price ?? null,

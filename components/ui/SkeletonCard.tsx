@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View, ViewStyle, DimensionValue } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { cardShadow } from './Card';
 
 interface SkeletonBlockProps {
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginHorizontal: 16,
     marginBottom: 12,
-    shadowColor: '#0D1526',
+    shadowColor: T.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
     shadowRadius: 10,

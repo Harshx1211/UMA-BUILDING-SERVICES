@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
+import type { NavigationAction } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -184,7 +185,7 @@ export default function JobDetailScreen() {
 
   // Warn before leaving if there are unsaved notes
   useEffect(() => {
-    const unsub = navigation.addListener('beforeRemove', (e: any) => {
+    const unsub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data: { action: NavigationAction } }) => {
       if (!isEditingNotes) return; // no unsaved changes
       e.preventDefault();
       Alert.alert(

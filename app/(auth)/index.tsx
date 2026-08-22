@@ -28,7 +28,7 @@ export default function SplashScreen() {
   }, [isLoading, isAuthenticated]);
 
   return (
-    <View style={[styles.container, { backgroundColor: T.primary }]}>
+    <View style={[styles.container, { backgroundColor: T.background }]}>
       {/* ── Logo ─────────────────── */}
       <Animated.View entering={noMotion ? undefined : FadeIn.duration(600)} style={styles.content}>
         <BrandLogo size="large" textColor={T.textPrimary} />

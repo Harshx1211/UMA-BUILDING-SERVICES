@@ -1,9 +1,9 @@
 // SyncStatusBar — shows last sync time, pending count, manual sync trigger,
 // and a user-visible alert when data permanently fails to reach the server.
-// Accepts a `light` prop when rendered on dark (navy) backgrounds.
 import { useEffect, useState, useCallback } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getSyncStatus,
   runSync,
@@ -18,12 +18,7 @@ import type { SyncStatus } from '@/types';
 
 const POLL_MS = 30_000;
 
-interface Props {
-  /** Pass true when the bar sits on a dark/navy background */
-  light?: boolean;
-}
-
-export function SyncStatusBar({ light = false }: Props) {
+export function SyncStatusBar() {
   const { isOnline } = useNetworkStatus();
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -50,13 +45,19 @@ export function SyncStatusBar({ light = false }: Props) {
   // Offers "Retry Now" and "Dismiss" options.
   useEffect(() => {
     if (!failureAlert) return;
-    const { failedCount, tables, lastError } = failureAlert;
+    const { failedCount, tables, lastError, terminalCount } = failureAlert;
+    // Terminal failures (bad data, permission denial) won't fix themselves by
+    // retrying — say so plainly instead of implying "just tap retry" will help.
+    const terminalNote = terminalCount > 0
+      ? `\n\n${terminalCount} of these ${terminalCount > 1 ? 'have' : 'has'} a data or permission problem and won't succeed just by retrying — it needs to be reviewed.`
+      : '';
     Alert.alert(
       'Sync Failed',
       `${failedCount} item${failedCount > 1 ? 's' : ''} could not be saved to the server.\n\n` +
       `Affected: ${tables.join(', ')}\n` +
-      `Reason: ${lastError}\n\n` +
-      'Your data is safe on this device. Tap "Retry Now" to try again.',
+      `Reason: ${lastError}` +
+      terminalNote +
+      '\n\nYour data is safe on this device. Tap "Retry Now" to try again.',
       [
         {
           text: 'Retry Now',
@@ -93,12 +94,12 @@ export function SyncStatusBar({ light = false }: Props) {
   // ── Dot colour ──────────────────────────────────────────
   const hasFailures = (status?.failedCount ?? 0) > 0;
   const dotColor = !isOnline
-    ? (light ? 'rgba(255,255,255,0.4)' : T.textMuted)
+    ? T.textMuted
     : hasFailures
-      ? (light ? '#FCA5A5' : T.danger)      // red — permanent failures
+      ? T.danger      // red — permanent failures
       : (status?.pendingCount ?? 0) > 0
-        ? (light ? '#FCD34D' : T.warning)   // amber — pending
-        : (light ? '#6EE7B7' : T.success);  // green — all good
+        ? T.warning   // amber — pending
+        : T.success;  // green — all good
 
   // ── Label ────────────────────────────────────────────────
   let label = 'Never synced';
@@ -115,17 +116,15 @@ export function SyncStatusBar({ light = false }: Props) {
       const diffMs = Date.now() - syncDate.getTime();
       const mins  = Math.floor(diffMs / 60_000);
       const hours = Math.floor(diffMs / 3_600_000);
-      if (mins < 2)         label = 'Just now';
-      else if (mins < 60)   label = `${mins} min ago`;
-      else if (hours < 24)  label = `${hours} hr ago`;
-      else                  label = syncDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      if (mins < 2)         label = 'Synced just now';
+      else if (mins < 60)   label = `Synced ${mins} min ago`;
+      else if (hours < 24)  label = `Synced ${hours} hr ago`;
+      else                  label = `Synced ${syncDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
     }
     if ((status.pendingCount ?? 0) > 0) label += ` · ${status.pendingCount} pending`;
   }
 
-  const textColor = hasFailures
-    ? (light ? '#FCA5A5' : T.danger)
-    : light ? 'rgba(255,255,255,0.7)' : T.textMuted;
+  const textColor = hasFailures ? T.danger : T.textMuted;
 
   return (
     <TouchableOpacity
@@ -137,6 +136,7 @@ export function SyncStatusBar({ light = false }: Props) {
       style={styles.container}
       activeOpacity={0.7}
     >
+      <MaterialCommunityIcons name="cloud-sync-outline" size={13} color={T.textMuted} />
       <View style={[styles.dot, { backgroundColor: dotColor }]} />
       <Text style={[styles.label, { color: textColor }]}>{label}</Text>
     </TouchableOpacity>
@@ -144,7 +144,7 @@ export function SyncStatusBar({ light = false }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 4, paddingVertical: 4 },
+  container: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   dot:       { width: 7, height: 7, borderRadius: 4 },
   label:     { fontSize: 11, fontWeight: '500' },
 });

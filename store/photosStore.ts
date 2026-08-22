@@ -70,7 +70,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       };
 
       // 1. Persist locally with the file:// URI immediately (offline-safe)
-      insertRecord('inspection_photos', newPhoto as Record<string, string | number | boolean | null>);
+      insertRecord('inspection_photos', newPhoto as unknown as Record<string, string | number | boolean | null>);
 
       // 2. Queue the binary upload — processPhotoQueue in sync.ts handles this.
       //    BUG 8 FIX: do NOT also queue a SyncOperation.Insert here with the local file:// URI

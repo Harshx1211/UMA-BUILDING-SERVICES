@@ -4,6 +4,7 @@ import React from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 export interface FilterPillOption {
   label: string;
@@ -56,7 +57,7 @@ export function FilterPills({ options, activeIndex, onSelect, style, variant = '
                     backgroundColor: isDark ? C.surface : C.surface,
                     borderColor: isDark ? C.border : 'transparent',
                     borderWidth: isDark ? 1 : 0,
-                    shadowColor: '#0D1526',
+                    shadowColor: T.black,
                     shadowOffset: { width: 0, height: 1 },
                     shadowOpacity: 0.08,
                     shadowRadius: 4,

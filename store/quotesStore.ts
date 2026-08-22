@@ -12,6 +12,7 @@ import {
 import { SyncOperation, QuoteStatus } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useInventoryStore } from './inventoryStore';
+import { useAuthStore } from './authStore';
 import { generateUUID } from '@/utils/uuid';
 
 // ─── Helper — extract a message from an unknown catch value ─
@@ -75,13 +76,14 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
       const id = generateUUID();
       const payload: Quote = {
         id,
+        company_id: useAuthStore.getState().user?.company_id ?? null,
         job_id: jobId,
         status: QuoteStatus.Draft,
         total_amount: 0,
         created_at: new Date().toISOString(),
       };
-      insertRecord('quotes', payload as Record<string, string | number | boolean | null>);
-      addToSyncQueue('quotes', id, SyncOperation.Insert, payload as Record<string, string | number | boolean | null>);
+      insertRecord('quotes', payload as unknown as Record<string, string | number | boolean | null>);
+      addToSyncQueue('quotes', id, SyncOperation.Insert, payload as unknown as Record<string, string | number | boolean | null>);
       set({ currentQuote: payload, items: [], error: null });
     } catch (err: unknown) {
       console.error('[QuotesStore] createDraftQuote error:', err);
@@ -121,15 +123,17 @@ export const useQuotesStore = create<QuotesState>((set, get) => ({
       const id = generateUUID();
       const payload: QuoteItem = {
         id,
+        company_id: useAuthStore.getState().user?.company_id ?? null,
         quote_id: currentQuote.id,
         inventory_item_id: inventoryItemId,
         defect_id: defectId,
         quantity,
         unit_price: unitPrice,
+        item_name: null,
       };
 
-      insertRecord('quote_items', payload as Record<string, string | number | boolean | null>);
-      addToSyncQueue('quote_items', id, SyncOperation.Insert, payload as Record<string, string | number | boolean | null>);
+      insertRecord('quote_items', payload as unknown as Record<string, string | number | boolean | null>);
+      addToSyncQueue('quote_items', id, SyncOperation.Insert, payload as unknown as Record<string, string | number | boolean | null>);
 
       const newItems = [...items, payload];
       // Round to 2 decimal places to prevent floating-point accumulation errors

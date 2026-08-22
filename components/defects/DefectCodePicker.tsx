@@ -81,9 +81,9 @@ function CategoryPill({
       <MaterialCommunityIcons
         name={icon as MCIconName}
         size={13}
-        color={isActive ? T.textPrimary : C.textSecondary}
+        color={isActive ? T.textOnPrimary : C.textSecondary}
       />
-      <Text style={[s.catPillTxt, { color: isActive ? T.textPrimary : C.textSecondary }]}>
+      <Text style={[s.catPillTxt, { color: isActive ? T.textOnPrimary : C.textSecondary }]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -271,7 +271,7 @@ export default function DefectCodePicker({ visible, onSelect, onClose }: DefectC
             renderItem={({ item }) => (
               <CategoryPill
                 label={item}
-                icon={item === 'All' ? 'format-list-bulleted' : CATEGORY_ICONS[item as DefectCategory]}
+                icon={item === 'All' ? 'format-list-bulleted' : (CATEGORY_ICONS[item as DefectCategory] as MCIconName)}
                 isActive={activeCategory === item}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

@@ -20,6 +20,7 @@ import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
+import { classifySyncError } from '@/lib/syncErrors';
 
 /** Re-exported for convenience — UI components only need to import from sync.ts */
 export { retryAllFailedSyncItems } from '@/lib/database';
@@ -96,6 +97,12 @@ export interface SyncFailureAlert {
   tables: string[];
   /** Last error message from the most-recently failed item */
   lastError: string;
+  /**
+   * How many of the failed items are terminal — a real data/permission
+   * problem that will never succeed on its own, as opposed to a transient
+   * error that simply exhausted its retry budget while an outage was ongoing.
+   */
+  terminalCount: number;
 }
 type SyncFailureListener = (alert: SyncFailureAlert) => void;
 const _failureListeners = new Set<SyncFailureListener>();
@@ -304,6 +311,7 @@ export async function runSync(userId?: string): Promise<boolean> {
         failedCount: failedItems.length,
         tables: [...new Set(failedItems.map(i => i.table_name))],
         lastError: failedItems[0]?.last_error ?? 'Unknown error',
+        terminalCount: failedItems.filter(i => i.is_terminal === 1).length,
       });
     }
 
@@ -613,7 +621,7 @@ export async function _pushQueue(): Promise<void> {
   for (const item of pending) {
     try {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
-      let error: { message: string } | null = null;
+      let error: { message: string; code?: string } | null = null;
 
       // Ensure defects photos is an array, not a stringified array
       if (item.table_name === 'defects' && typeof payload.photos === 'string') {
@@ -670,11 +678,15 @@ export async function _pushQueue(): Promise<void> {
         error = result.error;
 
       } else if (item.operation === SyncOperation.ReportGenerate) {
-        // ── Server-side PDF generation via Supabase Edge Function ────────────
-        // The payload contains { jobId }. We call the generate-report function
-        // with the user's session token. On success, the function uploads the
-        // PDF to Storage and updates jobs.report_url server-side. We mirror
-        // that URL into local SQLite so the UI updates immediately after sync.
+        // ── Server-side PDF generation via the report-generator service ──────
+        // The payload contains { jobId }. We call the standalone report-generator
+        // service (Node + self-hosted Gotenberg — see services/report-generator/)
+        // with the user's session token. It replaced the old Supabase Edge
+        // Function, which used pdfmake and hit a hard ~150MB memory ceiling that
+        // made it unreliable at real-world scale (500-unit / 1000-asset sites).
+        // On success it uploads the PDF to Storage and updates jobs.report_url
+        // server-side; we mirror that URL into local SQLite so the UI updates
+        // immediately after sync.
         const { jobId: reportJobId } = payload as { jobId: string };
 
         // FIX (missing assets in PDF): Before calling the Edge Function, verify
@@ -712,19 +724,36 @@ export async function _pushQueue(): Promise<void> {
           throw new Error('No auth session — report generation deferred');
         }
 
-        if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling generate-report Edge Function for job ${reportJobId}`);
+        const reportServiceUrl = process.env.EXPO_PUBLIC_REPORT_SERVICE_URL;
+        if (!reportServiceUrl) {
+          throw new Error('EXPO_PUBLIC_REPORT_SERVICE_URL is not configured — report generation deferred');
+        }
 
-        const fnRes = await supabase.functions.invoke('generate-report', {
-          body: { jobId: reportJobId },
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling report-generator service for job ${reportJobId}`);
 
-        if (fnRes.error) {
-          error = { message: fnRes.error.message ?? 'Edge Function error' };
+        let respData: { pdfUrl?: string; storagePath?: string; error?: string } | null = null;
+        try {
+          const httpRes = await fetch(`${reportServiceUrl}/generate-report`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ jobId: reportJobId }),
+          });
+          respData = await httpRes.json().catch(() => null);
+          if (!httpRes.ok && !respData?.error) {
+            error = { message: `report-generator returned HTTP ${httpRes.status}` };
+          }
+        } catch (fetchErr) {
+          error = { message: fetchErr instanceof Error ? fetchErr.message : 'Network error calling report-generator' };
+        }
+
+        if (error) {
+          // fall through — already set above
         } else {
-          const respData = fnRes.data as { pdfUrl?: string; storagePath?: string; error?: string };
           if (respData?.error) {
-            // Function returned a JSON error body with status 2xx — treat as failure
+            // Service returned a JSON error body — treat as failure.
             error = { message: respData.error };
           } else if (respData?.pdfUrl) {
             // Store the signed URL in SQLite now so the preview screen can open it
@@ -746,11 +775,26 @@ export async function _pushQueue(): Promise<void> {
       }
 
       if (error) {
-        console.warn(
-          `[UMA BUILDING SERVICES Sync] PUSH failed (retry ${(item.retry_count ?? 0) + 1}/${MAX_SYNC_RETRIES}) for item ${item.id} (${item.table_name}/${item.operation}): ${error.message}`
-        );
-        // Increment retry counter; marks synced=-1 when limit is reached
-        incrementSyncRetry(item.id, error.message, MAX_SYNC_RETRIES);
+        const { retryable, isDuplicate } = classifySyncError(error);
+
+        if (isDuplicate && item.operation === SyncOperation.Insert) {
+          // The row already exists server-side — a previous push attempt
+          // actually succeeded, but the client never saw the confirmation
+          // (dropped connection, app killed mid-request). The goal of this
+          // queue item — get this row onto the server — is already met.
+          markSyncItemComplete(item.id);
+          if (__DEV__) console.log(
+            `[SiteTrack Sync] PUSH: item ${item.id} (${item.table_name}) already exists server-side — treating as complete`
+          );
+        } else {
+          console.warn(
+            `[UMA BUILDING SERVICES Sync] PUSH failed (retry ${(item.retry_count ?? 0) + 1}/${MAX_SYNC_RETRIES}) for item ${item.id} (${item.table_name}/${item.operation}): ${error.message}`
+          );
+          // Retryable errors get exponential backoff; terminal ones (bad data,
+          // permission denial) fail immediately instead of burning all 5 attempts
+          // rediscovering the same non-fixable error.
+          incrementSyncRetry(item.id, error.message, MAX_SYNC_RETRIES, !retryable);
+        }
       } else if (error === null && (
         item.operation === SyncOperation.Insert ||
         item.operation === SyncOperation.Update ||

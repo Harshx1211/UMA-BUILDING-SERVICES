@@ -50,7 +50,7 @@ const STATUS_COLORS: Record<DefectStatus, string> = {
 type ColorsType = ReturnType<typeof useColors>;
 
 // ─── Defect Row Card ─────────────────────────────────────────────────────────────
-function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: () => void; C: ColorsType }) {
+const DefectRow = React.memo(function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: () => void; C: ColorsType }) {
   const sevColor = SEVERITY_COLORS[defect.severity as DefectSeverity] ?? C.textSecondary;
   const statusColor = STATUS_COLORS[defect.status as DefectStatus] ?? C.textSecondary;
   const codeInfo = defect.defect_code ? findDefectCode(defect.defect_code) : null;
@@ -109,7 +109,7 @@ function DefectRow({ defect, onPress, C }: { defect: ExtendedDefect; onPress: ()
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 // ─── Filter pill ─────────────────────────────────────────────────────────────
 function FilterPill({ label, isActive, color, onPress, C }: {
@@ -289,7 +289,7 @@ const s = StyleSheet.create({
 
   defectRow: {
     borderRadius: 16, borderWidth: 1, borderLeftWidth: 4,
-    padding: 14, marginBottom: 10,
+    padding: 16, marginBottom: 12,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,

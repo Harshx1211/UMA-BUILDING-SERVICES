@@ -1,0 +1,115 @@
+import { BASE_STYLE, COLORS } from './theme';
+import { esc, fmtDate } from './helpers';
+import { groupByCategory } from '../data/categoryGrouping';
+import { ReportData } from '../types';
+import { AssetTypeDefinition } from '../types';
+
+/**
+ * Cover page. Adapted from the reference report's grid to fields SiteTrack
+ * actually has — there's no "Client"/"Task"/"Authorisation ref" concept in this
+ * schema, so we use Property / Site Contact / Job Reference / Date of Service
+ * instead of inventing data that doesn't exist.
+ *
+ * Likewise the severity summary shows the 3 real severities this schema
+ * supports (critical/major/minor) rather than the reference's 5 categories —
+ * "non-conformance"/"recommendation"/"informational" aren't concepts this app
+ * tracks, and fabricating zero-filled tiles for them would misrepresent the data.
+ */
+export function renderCover(
+  data: ReportData,
+  assetTypesByValue: Map<string, AssetTypeDefinition>,
+): string {
+  const { job, company, assets, defects, reportId, dateOfService } = data;
+  const property = job.property;
+
+  const severityCounts = { critical: 0, major: 0, minor: 0 };
+  for (const d of defects) severityCounts[d.severity]++;
+
+  const categoryGroups = groupByCategory(
+    assets,
+    (a) => a.asset_type,
+    assetTypesByValue,
+  );
+
+  const scopeRows = categoryGroups
+    .map((g) => `<li>${esc(g.label)} (${g.items.length})</li>`)
+    .join('');
+
+  // Servicing summary: category -> asset type -> quantity
+  const servicingRows = categoryGroups
+    .flatMap((g) => {
+      const byType = new Map<string, number>();
+      for (const a of g.items) byType.set(a.asset_type, (byType.get(a.asset_type) ?? 0) + 1);
+      return [...byType.entries()].map(
+        ([type, qty]) => `
+          <tr>
+            <td>${esc(g.label)}</td>
+            <td>${esc(assetTypesByValue.get(type)?.full_label ?? type)}</td>
+            <td style="text-align:right">${qty}</td>
+          </tr>`,
+      );
+    })
+    .join('');
+
+  const tiles = [
+    { label: 'Critical Defects', count: severityCounts.critical, color: COLORS.SEVERITY.critical.text, bg: COLORS.SEVERITY.critical.bg },
+    { label: 'Major Defects', count: severityCounts.major, color: COLORS.SEVERITY.major.text, bg: COLORS.SEVERITY.major.bg },
+    { label: 'Minor Defects', count: severityCounts.minor, color: COLORS.SEVERITY.minor.text, bg: COLORS.SEVERITY.minor.bg },
+  ];
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
+<body>
+  <div class="page">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        ${company.logo_url
+          ? `<img src="${esc(company.logo_url)}" alt="" style="height:36px;width:auto;object-fit:contain" />`
+          : ''}
+        <div>
+          <div style="font-size:18px;font-weight:900;color:${COLORS.NAVY}">${esc(company.name ?? 'Company Name')}</div>
+          ${company.abn ? `<div style="font-size:9px;color:${COLORS.MUTED}">ABN: ${esc(company.abn)}</div>` : ''}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:16px;font-weight:800;color:${COLORS.ORANGE}">Service Report ${esc(reportId)}</div>
+      </div>
+    </div>
+
+    <div class="section-bar">Job Details</div>
+    <div class="card" style="display:flex">
+      ${infoCell('Property', property?.name)}
+      ${infoCell('Site Contact', property?.site_contact_name)}
+      ${infoCell('Job Reference', reportId)}
+      ${infoCell('Date of Service', fmtDate(dateOfService))}
+    </div>
+
+    <div class="section-bar" style="margin-top:18px">Scope of Works</div>
+    <div class="card" style="padding:12px 16px">
+      <ul style="margin:0;padding-left:18px">${scopeRows || '<li>No assets in scope</li>'}</ul>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px">
+      ${tiles.map((t) => `
+        <div style="flex:1;background:${t.bg};border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:900;color:${t.color}">${t.count}</div>
+          <div style="font-size:9.5px;font-weight:700;color:${t.color}">${t.label}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="section-bar" style="margin-top:18px">Servicing Summary</div>
+    <table class="card">
+      <thead><tr><th>Service</th><th>Asset</th><th style="text-align:right">Quantity</th></tr></thead>
+      <tbody>${servicingRows || '<tr><td colspan="3">No assets recorded</td></tr>'}</tbody>
+    </table>
+  </div>
+</body></html>`;
+}
+
+function infoCell(label: string, value: string | null | undefined): string {
+  return `
+    <div style="flex:1;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
+      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${esc(label)}</div>
+      <div style="font-size:11px;font-weight:600">${esc(value) || '—'}</div>
+    </div>`;
+}

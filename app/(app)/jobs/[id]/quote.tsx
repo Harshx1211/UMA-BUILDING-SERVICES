@@ -33,7 +33,7 @@ const SEV: Record<DefectSeverity, { color: (C: ColorsType) => string; label: str
 };
 
 // ─── Single defect row (read-only) ────────────────────────────────────
-function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: ColorsType }) {
+const DefectRow = React.memo(function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: ColorsType }) {
   const hasPrice = defect.quote_price != null && Number(defect.quote_price) > 0;
   return (
     <View style={[dr.row, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: color }]}>
@@ -54,14 +54,14 @@ function DefectRow({ defect, color, C }: { defect: Defect; color: string; C: Col
       )}
     </View>
   );
-}
+});
 
 const dr = StyleSheet.create({
   row: {
-    borderRadius: 12, borderWidth: 1, borderLeftWidth: 4,
-    paddingVertical: 12, paddingHorizontal: 14,
+    borderRadius: 16, borderWidth: 1, borderLeftWidth: 4,
+    paddingVertical: 16, paddingHorizontal: 16,
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   desc:     { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   sub:      { fontSize: 11 },
@@ -232,7 +232,7 @@ const s = StyleSheet.create({
   groupTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
 
   totalCard: {
-    borderRadius: 14, borderWidth: 1,
+    borderRadius: 16, borderWidth: 1,
     padding: 16, marginTop: 12,
   },
   totalRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

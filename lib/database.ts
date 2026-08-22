@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 31;
+const CURRENT_SCHEMA_VERSION = 32;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -228,15 +228,17 @@ export function initializeSchema(): void {
     );
 
     CREATE TABLE IF NOT EXISTS sync_queue (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name  TEXT NOT NULL,
-      record_id   TEXT NOT NULL,
-      operation   TEXT NOT NULL,
-      payload     TEXT NOT NULL,
-      synced      INTEGER NOT NULL DEFAULT 0,
-      retry_count INTEGER NOT NULL DEFAULT 0,
-      last_error  TEXT,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name    TEXT NOT NULL,
+      record_id     TEXT NOT NULL,
+      operation     TEXT NOT NULL,
+      payload       TEXT NOT NULL,
+      synced        INTEGER NOT NULL DEFAULT 0,
+      retry_count   INTEGER NOT NULL DEFAULT 0,
+      last_error    TEXT,
+      next_retry_at TEXT,
+      is_terminal   INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- Tombstone table: permanently records photo IDs that the technician has deleted.
@@ -1118,6 +1120,33 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '31')`);
   }
 
+  // Migration 32: Sync reliability — exponential backoff + terminal-error classification.
+  //
+  // WHY: Previously every failed sync item retried on the very next 60s cycle no
+  // matter why it failed, and a non-retryable error (bad data, permission denial)
+  // was treated identically to a transient network blip — both just incremented
+  // the same counter until the 5-retry budget ran out. next_retry_at lets the
+  // engine back off (so a real outage doesn't get hammered every cycle) and
+  // is_terminal lets it recognise "this will never succeed" immediately instead
+  // of wasting all 5 attempts finding that out.
+  if (currentVersion < 32) {
+    const addSyncQueueCol = (ddl: string, label: string) => {
+      try {
+        db.runSync(`ALTER TABLE sync_queue ADD COLUMN ${ddl};`);
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 32: added sync_queue.${label}`);
+      } catch (err: unknown) {
+        const msg = String(err);
+        if (!msg.includes('duplicate column')) {
+          console.error(`[UMA BUILDING SERVICES DB] Migration 32 (sync_queue.${label}) failed:`, msg);
+        }
+      }
+    };
+    addSyncQueueCol('next_retry_at TEXT', 'next_retry_at');
+    addSyncQueueCol('is_terminal INTEGER NOT NULL DEFAULT 0', 'is_terminal');
+    currentVersion = 32;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1348,10 +1377,13 @@ export function resetStaleFailedSyncItems(cooldownMs: number = 24 * 60 * 60 * 10
   try {
     const db = openDatabase();
     const cutoff = new Date(Date.now() - cooldownMs).toISOString();
+    // is_terminal = 0 only: a terminal failure (bad data, permission denial) will
+    // fail the exact same way on a blind retry — it needs a real fix, not another
+    // attempt. Only genuinely-transient exhausted items get an automatic reset.
     const result = db.runSync(
       `UPDATE sync_queue
-       SET synced = 0, retry_count = 0, last_error = NULL
-       WHERE synced = -1 AND created_at < ?`,
+       SET synced = 0, retry_count = 0, last_error = NULL, next_retry_at = NULL
+       WHERE synced = -1 AND is_terminal = 0 AND created_at < ?`,
       [cutoff],
     );
     if (__DEV__ && result.changes > 0) {
@@ -1372,8 +1404,10 @@ export function resetStaleFailedSyncItems(cooldownMs: number = 24 * 60 * 60 * 10
 export function retryAllFailedSyncItems(): number {
   try {
     const db = openDatabase();
+    // Explicit user action — reset terminal items too (the user may have just
+    // fixed whatever caused the permission/validation error).
     const result = db.runSync(
-      `UPDATE sync_queue SET synced = 0, retry_count = 0, last_error = NULL WHERE synced = -1`,
+      `UPDATE sync_queue SET synced = 0, retry_count = 0, last_error = NULL, next_retry_at = NULL, is_terminal = 0 WHERE synced = -1`,
     );
     if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Manually retried ${result.changes} failed sync item(s)`);
     return result.changes;
@@ -1570,9 +1604,13 @@ export function getDeletedPhotoIds(): Set<string> {
 export function getPendingSyncItems(maxRetries = 5): SyncQueueItem[] {
   try {
     const db = openDatabase();
+    const now = new Date().toISOString();
     return db.getAllSync<SyncQueueItem>(
-      `SELECT * FROM sync_queue WHERE synced = 0 AND retry_count < ? ORDER BY CASE WHEN operation = 'report_generate' THEN 1 ELSE 0 END ASC, created_at ASC`,
-      [maxRetries],
+      `SELECT * FROM sync_queue
+       WHERE synced = 0 AND retry_count < ?
+         AND (next_retry_at IS NULL OR next_retry_at <= ?)
+       ORDER BY CASE WHEN operation = 'report_generate' THEN 1 ELSE 0 END ASC, created_at ASC`,
+      [maxRetries, now],
     );
   } catch (err) {
     console.error('[UMA BUILDING SERVICES DB] getPendingSyncItems error:', err);
@@ -1610,12 +1648,23 @@ export function markSyncItemComplete(id: number): void {
 
 /**
  * Increments the retry_count for a failed sync item and records the error message.
- * After MAX_SYNC_RETRIES failures, the item is marked synced = -1 (permanently failed).
+ *
+ * - Terminal errors (isTerminal=true — bad data, permission denial, a broken
+ *   reference) are marked permanently failed immediately. No amount of
+ *   retrying fixes a non-retryable error, so there's no point burning the
+ *   retry budget rediscovering that 5 times.
+ * - Retryable errors get an exponential backoff with jitter (1m, 2m, 4m, 8m,
+ *   capped at 30m) via next_retry_at, so a real outage doesn't get hammered
+ *   on every single 60s sync cycle. After maxRetries, it's marked permanently
+ *   failed the same as before (but NOT flagged terminal — resetStaleFailedSyncItems
+ *   will still give it a fresh chance later, since it might just need the
+ *   outage to end).
  */
 export function incrementSyncRetry(
   id: number,
   errorMessage: string,
   maxRetries = 5,
+  isTerminal = false,
 ): void {
   try {
     const db = openDatabase();
@@ -1626,8 +1675,21 @@ export function incrementSyncRetry(
     if (!item) return;
 
     const newCount = (item.retry_count ?? 0) + 1;
+
+    if (isTerminal) {
+      db.runSync(
+        `UPDATE sync_queue SET retry_count = ?, last_error = ?, synced = -1, is_terminal = 1 WHERE id = ?`,
+        [newCount, errorMessage, id],
+      );
+      console.warn(
+        `[UMA BUILDING SERVICES DB] Sync item ${id} failed permanently (non-retryable): ${errorMessage}`,
+      );
+      return;
+    }
+
     if (newCount >= maxRetries) {
-      // Permanently mark as failed — will not be retried
+      // Permanently mark as failed — will not be retried automatically
+      // (resetStaleFailedSyncItems can still give it a fresh chance later).
       db.runSync(
         `UPDATE sync_queue SET retry_count = ?, last_error = ?, synced = -1 WHERE id = ?`,
         [newCount, errorMessage, id],
@@ -1636,9 +1698,15 @@ export function incrementSyncRetry(
         `[UMA BUILDING SERVICES DB] Sync item ${id} permanently failed after ${newCount} retries: ${errorMessage}`,
       );
     } else {
+      const baseMs = 60_000;       // 1 minute
+      const capMs  = 30 * 60_000;  // 30 minutes
+      const backoffMs = Math.min(capMs, baseMs * Math.pow(2, newCount - 1));
+      const jitterMs  = Math.floor(Math.random() * backoffMs * 0.2); // ±20% jitter
+      const nextRetryAt = new Date(Date.now() + backoffMs + jitterMs).toISOString();
+
       db.runSync(
-        `UPDATE sync_queue SET retry_count = ?, last_error = ? WHERE id = ?`,
-        [newCount, errorMessage, id],
+        `UPDATE sync_queue SET retry_count = ?, last_error = ?, next_retry_at = ? WHERE id = ?`,
+        [newCount, errorMessage, nextRetryAt, id],
       );
     }
   } catch (err) {

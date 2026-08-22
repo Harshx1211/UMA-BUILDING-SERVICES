@@ -164,7 +164,8 @@ export interface Defect {
   id: string;
   company_id: string | null;
   job_id: string;
-  asset_id: string;
+  /** Null for "unlinked" defects not tied to a tracked asset. */
+  asset_id: string | null;
   property_id: string;
   description: string;
   severity: DefectSeverity;
@@ -281,6 +282,8 @@ export interface SyncQueueItem {
   synced: number;                     // 0=pending, 1=done, -1=permanently failed
   retry_count: number;                // incremented on each failed push attempt
   last_error: string | null;          // last error message from a failed push
+  next_retry_at: string | null;       // exponential-backoff gate — not retried before this time
+  is_terminal: number;                // 1 = failed with a non-retryable error (bad data/permission), not just exhausted retries
   created_at: string;
 }
 

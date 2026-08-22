@@ -13,44 +13,18 @@
 | Add columns after an update | [Adding Future Migrations](#adding-future-migrations) |
 | Understand the local SQLite schema | [SQLite Schema](#local-sqlite-schema) |
 | Debug a sync issue | [Sync Architecture](#sync-architecture) |
-| Run the seed data | `docs/dummy-data.sql` |
-| **Live Supabase confirmed schema** | `supabase/schema.sql` |
-| **All historical migrations (idempotent)** | `docs/supabase_migrations.sql` |
+| **Live Supabase schema reference** | `supabase/schema.sql` (paste a fresh export here when it changes) |
 
 ---
 
 ## Fresh Setup (New Project)
 
-> ✅ **Live project (April 2026):** All migrations are already applied. No action needed.
-> Only follow these steps when setting up a **brand new** Supabase project.
-
-Run these in order in **Supabase SQL Editor** (`Dashboard → SQL Editor → New Query`):
-
-### Step 1 — Core schema
-
-Paste and run **`supabase/schema.sql`** — the canonical, fully-confirmed schema.
-
-This is derived from the actual live Supabase dump (April 2026) and creates:
-- All 13 tables with correct constraints
-- All RLS policies
-- All performance indexes
-- `updated_at` triggers on `jobs` and `properties`
-
-> ✅ This file already includes `assets.variant`, `assets.asset_ref`, `job_assets.checklist_data`,
-> `job_assets.is_compliant`, `users.push_token`, and the `notifications` table.
-> **No separate migration needed for a fresh project.**
-
-### Step 2 — Storage bucket (manual)
-
-SQL cannot create Storage buckets. Do this in the dashboard:
-
-1. **Dashboard → Storage → New Bucket**
-2. Name: **`job-photos`** | Public: ✅ | Allowed MIME: `image/jpeg, image/png`
-3. Run **`docs/supabase_migrations.sql`** §3 for the Storage RLS policies
-
-### Step 3 — Historical migrations (for reference)
-
-Run **`docs/supabase_migrations.sql`** — all sections are idempotent and won't double-apply anything. Safe to run even if Step 1 already covered it.
+> ⚠️ **This section is stale** (last confirmed April 2026, pre multi-tenant rework — it
+> predates `company_id`, `defect_codes`, `asset_type_definitions`, `quotes`, `audit_logs`,
+> and several other tables). The old step-by-step migration files it used to point to have
+> been deleted since they were already applied and just caused confusion. Until this section
+> is refreshed against a real schema dump, treat **`supabase/schema.sql`** as the source of
+> truth once it's populated — see the instructions in that file for how to refresh it.
 
 ---
 
@@ -99,9 +73,13 @@ Run **`docs/supabase_migrations.sql`** — all sections are idempotent and won't
 
 ## Supabase Migration History
 
-> ✅ **All migrations below are confirmed APPLIED on the live project (April 2026 schema dump).**
-
-All migrations are consolidated in **`docs/supabase_migrations.sql`**.
+> ⚠️ This table only covers migrations up to April 2026. Everything since (multi-tenant
+> `company_id` rework, `defect_codes`/`asset_type_definitions`/`inventory_items`/`quotes`
+> catalogue, `audit_logs`, signature columns, storage RLS hardening) happened via one-off
+> SQL patch files that have since been deleted — they were already applied live and were
+> kept only as scratch history, not a real migration log. There is currently no single
+> up-to-date narrative of schema history; `supabase/schema.sql` is the place to look for
+> what's actually live right now.
 
 | § | Migration | Applied | Tables/Columns Changed |
 |---|-----------|---------|------------------------|
@@ -121,10 +99,9 @@ When you add a new column or table:
 3. Update `types/index.ts` if the column maps to a TypeScript interface
 
 **In Supabase:**
-1. Append a new `§ N — YOUR CHANGE` section to `docs/supabase_migrations.sql`
-2. Run it in the SQL Editor
-3. Also add the column to `supabase/schema.sql` so it stays canonical
-4. Update the version table above and the SQLite version table below
+1. Run the change directly in the SQL Editor
+2. Refresh `supabase/schema.sql` afterward so it stays a true mirror of the live DB
+3. Update the version table above and the SQLite version table below
 
 ---
 

@@ -12,12 +12,14 @@ import { T } from '@/constants/Colors';
 import { ChecklistItem } from '@/constants/Checklists';
 import { Card, Button } from '@/components/ui';
 
+type ChecklistAnswers = Record<string, unknown>;
+
 interface ChecklistModalProps {
   visible: boolean;
   assetType: string;
   items: ChecklistItem[];
-  initialData: any;
-  onSave: (data: any, isCompliant: boolean) => void;
+  initialData: ChecklistAnswers | null;
+  onSave: (data: ChecklistAnswers, isCompliant: boolean) => void;
   onCancel: () => void;
 }
 
@@ -26,14 +28,14 @@ export default function ChecklistModal({
 }: ChecklistModalProps) {
   const C = useColors();
   const insets = useSafeAreaInsets();
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (visible && initialData) setAnswers(initialData);
+    if (visible && initialData) setAnswers(initialData as Record<string, boolean>);
     else if (visible)            setAnswers({});
   }, [visible, initialData]);
 
-  const handleToggle = (id: string, currentValue: any) => {
+  const handleToggle = (id: string, currentValue: boolean | undefined) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // BUG 9 FIX: 3-state cycle: undefined (unanswered) → true (pass) → false (fail) → undefined
     let next: boolean | undefined;
@@ -161,7 +163,7 @@ export default function ChecklistModal({
                 <View style={[s.questionNum, {
                   backgroundColor: isPassed ? C.success : isFailed ? C.error : C.backgroundTertiary,
                 }]}>
-                  <Text style={[s.questionNumTxt, { color: isAnswered ? T.textPrimary : C.textTertiary }]}>
+                  <Text style={[s.questionNumTxt, { color: isAnswered ? T.textOnPrimary : C.textTertiary }]}>
                     {String(idx + 1).padStart(2, '0')}
                   </Text>
                 </View>
@@ -196,7 +198,7 @@ export default function ChecklistModal({
                   <MaterialCommunityIcons
                     name={isPassed ? 'check' : isFailed ? 'close' : 'minus'}
                     size={18}
-                    color={isAnswered ? T.textPrimary : C.textTertiary}
+                    color={isAnswered ? T.textOnPrimary : C.textTertiary}
                   />
                 </View>
                 </View>
@@ -277,6 +279,6 @@ const s = StyleSheet.create({
     padding: 20, paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
+    shadowColor: T.black, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10,
   },
 });

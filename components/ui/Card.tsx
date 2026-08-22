@@ -19,7 +19,7 @@ import { T } from '@/constants/Colors';
 // We use a very subtle shadow and 0 elevation to prevent Android's Material Design
 // from automatically adding a white "elevation overlay" tint to our dark cards.
 export const cardShadow = {
-  shadowColor: '#000',
+  shadowColor: T.black,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.1,
   shadowRadius: 8,

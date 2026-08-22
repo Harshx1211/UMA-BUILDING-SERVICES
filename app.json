@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sitetrack",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -19,7 +19,7 @@
     "android": {
       "package": "com.sitetrack.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1B2D4F",
+        "backgroundColor": "#111D3F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -59,10 +59,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#1B2D4F",
-          "dark": {
-            "backgroundColor": "#0D1B2E"
-          }
+          "backgroundColor": "#F7F9FB"
         }
       ],
       [
@@ -81,7 +78,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#1B2D4F",
+          "color": "#111D3F",
           "sounds": []
         }
       ]

@@ -446,6 +446,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
     usePhotosStore.getState().addPhoto({
       job_id: currentJobId,
+      company_id: useAuthStore.getState().user?.company_id ?? null,
       asset_id: assetId,
       defect_id: null,
       photo_url: photoUri,

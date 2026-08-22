@@ -121,7 +121,7 @@ export function queuePhotoUpload(
     console.warn('[PhotoUpload] queuePhotoUpload called without recordId — skipping queue');
     return;
   }
-  const payload = { localUri, jobId, assetId, recordId, defectId };
+  const payload = { localUri, jobId, assetId: assetId ?? null, recordId, defectId: defectId ?? null };
   addToSyncQueue('inspection_photos', recordId, 'photo_upload', payload);
 }
 

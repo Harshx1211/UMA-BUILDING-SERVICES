@@ -27,6 +27,7 @@
     "admin",
     "website",
     "superadmin",
-    "supabase/functions"
+    "supabase/functions",
+    "services"
   ]
 }

@@ -82,7 +82,7 @@ export default function ForgotPasswordScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons name="arrow-left" size={20} color={T.textPrimary} />
+            <MaterialCommunityIcons name="arrow-left" size={20} color={T.textOnPrimary} />
           </TouchableOpacity>
           <Text style={styles.heroTitle}>Reset Password</Text>
           <Text style={styles.heroSub}>Enter your email to receive a reset link</Text>
@@ -96,7 +96,7 @@ export default function ForgotPasswordScreen() {
           {banner?.type === 'success' ? (
             <View style={styles.successCard}>
               <View style={[styles.successIcon, { backgroundColor: C.success }]}>
-                <MaterialCommunityIcons name="check-circle" size={36} color={T.textPrimary} />
+                <MaterialCommunityIcons name="check-circle" size={36} color={T.textOnPrimary} />
               </View>
               <Text style={[styles.successTitle, { color: C.text }]}>Email Sent!</Text>
               <Text style={[styles.successBody, { color: C.textSecondary }]}>{banner.message}</Text>
@@ -124,7 +124,7 @@ export default function ForgotPasswordScreen() {
                 textContentType="emailAddress"
                 returnKeyType="send"
                 onSubmitEditing={handleSendReset}
-                editable={!isLoading}
+                disabled={isLoading}
                 maxLength={254}
                 error={emailError}
                 leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textSecondary} />}
@@ -169,11 +169,11 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: T.textPrimary,
+    color: T.textOnPrimary,
   },
   heroSub: {
     fontSize: 14,
-    color: T.textPrimary,
+    color: T.textOnPrimary,
     opacity: 0.65,
   },
 

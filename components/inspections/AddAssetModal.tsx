@@ -209,8 +209,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   <View key={s2} style={s.stepItem}>
                     <View style={[s.stepDot, { backgroundColor: isActive ? C.primary : isDone ? C.success : C.backgroundTertiary, borderColor: isActive ? C.primary : isDone ? C.success : C.border, borderWidth: 1 }]}>
                       {isDone
-                        ? <MaterialCommunityIcons name="check" size={12} color={T.textPrimary} />
-                        : <Text style={[s.stepNum, { color: isActive ? T.textPrimary : C.textTertiary }]}>{i + 1}</Text>
+                        ? <MaterialCommunityIcons name="check" size={12} color={T.textOnPrimary} />
+                        : <Text style={[s.stepNum, { color: isActive ? T.textOnPrimary : C.textTertiary }]}>{i + 1}</Text>
                       }
                     </View>
                     <Text style={[s.stepLabel, { color: isActive ? C.primary : C.textTertiary }]}>
@@ -247,7 +247,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                     <View style={[s.typeIconWrap, {
                       backgroundColor: selectedType === t.value ? t.color : C.backgroundTertiary,
                     }]}>
-                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? T.textPrimary : t.color} />
+                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? T.textOnPrimary : t.color} />
                     </View>
                     <Text style={[s.typeLabel, { color: selectedType === t.value ? t.color : C.text }]}>{t.label}</Text>
                     <MaterialCommunityIcons
@@ -494,7 +494,7 @@ const s = StyleSheet.create({
 
   // Type grid
   typeScroll: { padding: 16, paddingBottom: 40 },
-  typeGrid:   { gap: 10 },
+  typeGrid:   { gap: 12 },
   typeCard: {
     flexDirection: 'row', alignItems: 'center',
     gap: 14,
@@ -556,10 +556,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     borderTopWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
+    shadowColor: T.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   },
   saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, height: 54 },
-  saveBtnTxt: { color: T.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  saveBtnTxt: { color: T.textOnPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
   cancelBtn:  { paddingHorizontal: 12 },
   cancelBtnTxt: { fontSize: 15, fontWeight: '800' },
 });
