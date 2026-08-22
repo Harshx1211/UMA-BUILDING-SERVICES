@@ -3,14 +3,15 @@ import { esc, fmtDate, fmtDateTime } from './helpers';
 import { ReportData } from '../types';
 
 /**
- * Lists every technician who logged time on the job (per the user's decision),
- * each with their worked date range and accreditation fields. The `signatures`
- * table has a hard UNIQUE(job_id) constraint — it can only ever store one
- * technician signature per job — so only the job's assigned technician (the one
- * who actually captured `tech_signature_url` in the app) shows a signature
- * image; every other technician who logged time is listed by name/date/
- * accreditation only. This was an explicit, confirmed trade-off, not an
- * oversight — see the plan doc's "Multi-tech signoff" decision.
+ * Lists the job's assigned technician (always present — see
+ * data/fetchReportData.ts) plus any other technician who separately logged
+ * time on the job, each with their worked date range and accreditation
+ * fields. The `signatures` table has a hard UNIQUE(job_id) constraint — it
+ * can only ever store one technician signature per job — so only the job's
+ * assigned technician (the one who actually captured `tech_signature_url` in
+ * the app) shows a signature image; every other technician is listed by
+ * name/date/accreditation only. This was an explicit, confirmed trade-off,
+ * not an oversight — see the plan doc's "Multi-tech signoff" decision.
  */
 export function renderSignoff(data: ReportData): string {
   const { job, signature, timeLogUsers } = data;

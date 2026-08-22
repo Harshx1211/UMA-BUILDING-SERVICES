@@ -75,12 +75,14 @@ export const BASE_STYLE = `
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 9.5px; font-weight: 700; color: ${COLORS.SLATE}; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 10px; background: ${COLORS.BORDER_LIGHT}; }
   td { padding: 8px 10px; border-top: 1px solid ${COLORS.BORDER}; vertical-align: top; }
-  .thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.BORDER}; }
+  /* 44px thumbnails were confirmed too small to make out in a real printed
+     report — bumped to a size where a defect is actually recognizable. */
+  .thumb { width: 110px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.BORDER}; }
   .thumb-missing {
-    width: 44px; height: 44px; border-radius: 6px; display: flex; align-items: center;
+    width: 110px; height: 110px; border-radius: 6px; display: flex; align-items: center;
     justify-content: center; background: ${COLORS.PHOTO_UNAVAIL_BG};
     border: 1px dashed ${COLORS.PHOTO_UNAVAIL_BORDER}; color: ${COLORS.PHOTO_UNAVAIL_TEXT};
-    font-size: 8px; text-align: center; line-height: 1.2;
+    font-size: 10px; text-align: center; line-height: 1.3;
   }
   .defect-card { display: flex; margin-top: 8px; border-radius: 8px; overflow: hidden; }
   .defect-bar { width: 4px; flex-shrink: 0; }

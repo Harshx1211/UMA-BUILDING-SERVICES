@@ -112,33 +112,51 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     .eq('job_id', jobId)
     .maybeSingle();
 
-  // One row per distinct technician who logged time on this job (per user's
-  // confirmed answer — signoff lists everyone who worked it, not just assigned_to).
+  // One row per distinct technician who worked this job. Time-tracking
+  // (clocking in/out) is a separate, optional feature from actually
+  // performing the inspection — a job with no time_logs rows (tech never
+  // clocked in) still has the technician who did the whole job recorded on
+  // `jobs.assigned_to`. Relying on time_logs alone meant a job with no time
+  // entries showed NO technician at all on the signoff, which is what "tech
+  // details not reflecting" was — always include the assigned technician
+  // first, then any additional technicians who logged time (matching the
+  // user's confirmed "everyone who worked it" decision as a supplement).
   const userIds = [...new Set(timeLogs.map((t) => t.user_id))];
-  let timeLogUsers: ReportData['timeLogUsers'] = [];
-  if (userIds.length > 0) {
+  const extraUserIds = userIds.filter((id) => id !== job.assigned_to);
+  let usersById = new Map<string, JobUser>();
+  if (extraUserIds.length > 0) {
     const { data: users } = await db
       .from('users')
       .select('id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry')
-      .in('id', userIds);
-    const usersById = new Map<string, JobUser>((users ?? []).map((u: JobUser) => [u.id, u]));
+      .in('id', extraUserIds);
+    usersById = new Map<string, JobUser>((users ?? []).map((u: JobUser) => [u.id, u]));
+  }
 
-    timeLogUsers = userIds
-      .map((uid) => {
-        const sessions = timeLogs.filter((t) => t.user_id === uid);
-        const firstClockIn = sessions
-          .map((s) => s.clock_in)
-          .sort()[0];
-        const clockOuts = sessions.map((s) => s.clock_out).filter(Boolean) as string[];
-        const lastClockOut = clockOuts.length === sessions.length
-          ? clockOuts.sort().at(-1)!
-          : null; // still has an open session — don't claim a false "finished at" time
-        const user = usersById.get(uid);
-        if (!user) return null;
-        return { user, firstClockIn, lastClockOut };
-      })
-      .filter((x): x is ReportData['timeLogUsers'][number] => x !== null)
-      .sort((a, b) => a.firstClockIn.localeCompare(b.firstClockIn));
+  const sessionsFor = (uid: string) => timeLogs.filter((t) => t.user_id === uid);
+  const rangeFor = (sessions: TimeLog[]): { firstClockIn: string; lastClockOut: string | null } | null => {
+    if (sessions.length === 0) return null;
+    const firstClockIn = sessions.map((s) => s.clock_in).sort()[0];
+    const clockOuts = sessions.map((s) => s.clock_out).filter(Boolean) as string[];
+    const lastClockOut = clockOuts.length === sessions.length ? clockOuts.sort().at(-1)! : null;
+    return { firstClockIn, lastClockOut };
+  };
+
+  const timeLogUsers: ReportData['timeLogUsers'] = [];
+  if (job.assigned_user) {
+    const assignedRange = rangeFor(sessionsFor(job.assigned_to));
+    timeLogUsers.push({
+      user: job.assigned_user as JobUser,
+      // No time_logs for the assigned tech is common (time-tracking is
+      // optional) — fall back to the job's own dates rather than an empty cell.
+      firstClockIn: assignedRange?.firstClockIn ?? job.completed_at ?? job.scheduled_date,
+      lastClockOut: assignedRange?.lastClockOut ?? job.completed_at ?? null,
+    });
+  }
+  for (const uid of extraUserIds) {
+    const user = usersById.get(uid);
+    const range = rangeFor(sessionsFor(uid));
+    if (!user || !range) continue;
+    timeLogUsers.push({ user, firstClockIn: range.firstClockIn, lastClockOut: range.lastClockOut });
   }
 
   const approvedQuote = quotes.find((q) => q.status === 'approved') ?? null;

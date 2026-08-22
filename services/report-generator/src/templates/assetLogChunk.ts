@@ -41,11 +41,17 @@ export function renderAssetLogChunk(
         <td>
           <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
           ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
-          ${photoRow(photos, signedPhotoUrls, 3)}
         </td>
         <td>${esc(asset.location_on_site) || '—'}</td>
         <td style="text-align:right">${resultPill(asset.result)}</td>
       </tr>`);
+
+    // Photos get their own full-width row rather than being squeezed into the
+    // narrow "Asset" column — at a size where a defect is actually visible
+    // (see .thumb in theme.ts), 2-3 of them don't fit in a 3-column cell.
+    if (photos.length > 0) {
+      parts.push(`<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>`);
+    }
 
     if (assetDefects.length > 0) {
       parts.push(`<tr><td colspan="3" style="padding:0;border-top:none">`);
