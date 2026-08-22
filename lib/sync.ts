@@ -8,7 +8,6 @@ import {
   incrementSyncRetry,
   upsertRecord,
   upsertRecordBulk,
-  updateRecord,
   getJobStatus,
   getDeletedPhotoIds,
   getFailedSyncItems,
@@ -731,7 +730,14 @@ export async function _pushQueue(): Promise<void> {
 
         if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling report-generator service for job ${reportJobId}`);
 
-        let respData: { pdfUrl?: string; storagePath?: string; error?: string } | null = null;
+        // The service now responds immediately once generation is safely queued
+        // (202) rather than blocking for the entire Chromium render — a
+        // multi-minute request was too fragile to hold open over a mobile
+        // network. This sync item is "done" once the job is accepted; actual
+        // completion/failure is discovered separately by app/(app)/jobs/[id]/
+        // preview.tsx polling GET /report-status, which is fully decoupled
+        // from this sync queue.
+        let respData: { status?: string; error?: string } | null = null;
         try {
           const httpRes = await fetch(`${reportServiceUrl}/generate-report`, {
             method: 'POST',
@@ -742,35 +748,17 @@ export async function _pushQueue(): Promise<void> {
             body: JSON.stringify({ jobId: reportJobId }),
           });
           respData = await httpRes.json().catch(() => null);
-          if (!httpRes.ok && !respData?.error) {
-            error = { message: `report-generator returned HTTP ${httpRes.status}` };
+          // 202 = newly queued. 409 = another request already has this job
+          // generating (e.g. a retried sync cycle) — also fine, not an error.
+          if (!httpRes.ok && httpRes.status !== 409) {
+            error = { message: respData?.error ?? `report-generator returned HTTP ${httpRes.status}` };
           }
         } catch (fetchErr) {
           error = { message: fetchErr instanceof Error ? fetchErr.message : 'Network error calling report-generator' };
         }
 
-        if (error) {
-          // fall through — already set above
-        } else {
-          if (respData?.error) {
-            // Service returned a JSON error body — treat as failure.
-            error = { message: respData.error };
-          } else if (respData?.pdfUrl) {
-            // Store the signed URL in SQLite now so the preview screen can open it
-            // immediately. The Supabase DB already has the permanent storagePath (set
-            // by the Edge Function). The next PULL will overwrite SQLite with the path,
-            // at which point preview.tsx will re-sign it for display.
-            // Use updateRecord (not upsertRecord) — the job row already exists in SQLite.
-            // upsertRecord does INSERT OR REPLACE which wipes all other columns, causing
-            // NOT NULL constraint failures (e.g. property_id). updateRecord only patches
-            // the report_url column.
-            updateRecord('jobs', reportJobId, { report_url: respData.pdfUrl });
-            if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generated → ${respData.pdfUrl}`);
-          } else {
-            // FIX: Function returned success but no pdfUrl — treat as a retryable failure.
-            // Previously this silently marked the item complete, losing the report forever.
-            error = { message: 'Edge Function returned no pdfUrl — will retry' };
-          }
+        if (!error && __DEV__) {
+          console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generation queued for job ${reportJobId} (${respData?.status ?? 'accepted'})`);
         }
       }
 

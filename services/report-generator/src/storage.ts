@@ -30,3 +30,19 @@ export async function uploadReport(
 
   return { storagePath, signedUrl: signedData.signedUrl };
 }
+
+/**
+ * Signs an already-uploaded report's storage path — used by GET
+ * /report-status so the app can get a fresh, usable URL directly from the
+ * status poll once generation completes, without a separate round-trip.
+ */
+export async function signExistingReport(db: SupabaseClient, jobId: string): Promise<string | null> {
+  const { data: job } = await db.from('jobs').select('report_url').eq('id', jobId).single();
+  if (!job?.report_url) return null;
+
+  const { data: signedData, error } = await db.storage
+    .from(config.reportBucket)
+    .createSignedUrl(job.report_url, 60 * 60);
+  if (error || !signedData?.signedUrl) return null;
+  return signedData.signedUrl;
+}

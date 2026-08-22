@@ -834,6 +834,41 @@ export function hasReportUrl(jobId: string): boolean {
   return !!(getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url);
 }
 
+// ─── Async generation status polling ───────────────────────────────────────────
+//
+// Report generation now runs in the background on the report-generator service
+// (POST /generate-report responds as soon as the job is queued, not once the
+// PDF is done — a multi-minute request was too fragile to hold open over a
+// mobile network for large sites). This polls the service directly for real
+// completion/failure, fully decoupled from the local sync queue: the sync
+// queue item is only responsible for kicking generation off, never for
+// reporting how it turned out.
+
+export type ReportStatusResult =
+  | { status: 'not_started' | 'generating' }
+  | { status: 'completed'; pdfUrl: string }
+  | { status: 'failed'; error: string };
+
+export async function pollReportStatus(jobId: string): Promise<ReportStatusResult> {
+  const reportServiceUrl = process.env.EXPO_PUBLIC_REPORT_SERVICE_URL;
+  if (!reportServiceUrl) {
+    throw new Error('EXPO_PUBLIC_REPORT_SERVICE_URL is not configured');
+  }
+  const session = useAuthStore.getState().session;
+  if (!session?.access_token) {
+    throw new Error('No auth session');
+  }
+
+  const res = await fetch(`${reportServiceUrl}/report-status?jobId=${encodeURIComponent(jobId)}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error ?? `report-status returned HTTP ${res.status}`);
+  }
+  return data as ReportStatusResult;
+}
+
 // ─── Legacy on-device export (kept for reference — no longer called by preview.tsx) ──
 
 export async function generateJobReport(

@@ -4,11 +4,22 @@ const STALE_LOCK_MS = 10 * 60 * 1000; // a crashed generation shouldn't lock a j
 
 export type LockResult = { acquired: true } | { acquired: false; reason: string };
 
+export interface GenerationStatus {
+  status: 'not_started' | 'generating' | 'completed' | 'failed';
+  lastError: string | null;
+}
+
 /**
  * Idempotency guard — a retried request (network hiccup, user double-tapping
  * "Generate Report") must not spin up a second full Gotenberg pipeline for the
- * same job. Table: report_generation_status(job_id PK, status, updated_at) —
- * see the migration in supabase/migrations/.
+ * same job. Table: report_generation_status(job_id PK, status, last_error,
+ * updated_at) — see the migrations in supabase/migrations/.
+ *
+ * This table doubles as the async status the mobile app polls (see
+ * GET /report-status in index.ts) — the request that kicks off generation
+ * responds immediately once this lock is acquired, rather than holding the
+ * HTTP connection open for the entire generation, which turned out to be
+ * fragile on mobile networks for anything but the smallest jobs.
  */
 export async function tryAcquireLock(db: SupabaseClient, jobId: string): Promise<LockResult> {
   const { data: existing } = await db
@@ -27,7 +38,7 @@ export async function tryAcquireLock(db: SupabaseClient, jobId: string): Promise
 
   const { error } = await db
     .from('report_generation_status')
-    .upsert({ job_id: jobId, status: 'generating', updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+    .upsert({ job_id: jobId, status: 'generating', last_error: null, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
 
   if (error) return { acquired: false, reason: `Failed to acquire generation lock: ${error.message}` };
   return { acquired: true };
@@ -37,8 +48,20 @@ export async function markGenerationResult(
   db: SupabaseClient,
   jobId: string,
   status: 'completed' | 'failed',
+  lastError: string | null = null,
 ): Promise<void> {
   await db
     .from('report_generation_status')
-    .upsert({ job_id: jobId, status, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+    .upsert({ job_id: jobId, status, last_error: lastError, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+}
+
+export async function getGenerationStatus(db: SupabaseClient, jobId: string): Promise<GenerationStatus> {
+  const { data } = await db
+    .from('report_generation_status')
+    .select('status, last_error')
+    .eq('job_id', jobId)
+    .maybeSingle();
+
+  if (!data) return { status: 'not_started', lastError: null };
+  return { status: data.status, lastError: data.last_error ?? null };
 }

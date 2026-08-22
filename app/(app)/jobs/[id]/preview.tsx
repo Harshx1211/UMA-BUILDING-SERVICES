@@ -14,15 +14,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { queueReportGeneration, getOrRefreshReportUrl, hasReportUrl } from '@/lib/pdfGenerator';
-import { getFailedSyncItems } from '@/lib/database';
+import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
 import { ScreenHeader, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useJobsStore } from '@/store/jobsStore';
 import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
-import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
+import { runSync } from '@/lib/sync';
 
 // ─── Poll interval for checking if server finished ─────────────────────────────
 const POLL_MS = 5_000;
@@ -191,18 +190,27 @@ export default function PreviewScreen() {
       if (isMounted.current) setElapsedS(s => s + 1);
     }, 1000);
 
-    // Polling check — async because getOrRefreshReportUrl may call Supabase
-    // Storage to re-sign a raw storage path returned by the PULL.
+    // Polling check — asks the report-generator service directly whether
+    // generation has finished, rather than local SQLite/sync-queue state.
+    // This is fully decoupled from the sync queue: the queue item only kicks
+    // generation off, it doesn't reflect how the generation itself turns out.
     const check = async () => {
       if (!isMounted.current) return;
-      // Fast synchronous pre-check: is there anything stored at all?
-      if (!hasReportUrl(jobId)) return;
-      // Full async check: ensures we have a proper signed https:// URL
-      const url = await getOrRefreshReportUrl(jobId);
-      if (url && isMounted.current) {
+      let result;
+      try {
+        result = await pollReportStatus(jobId);
+      } catch (e) {
+        // Network hiccup or the service is briefly unreachable — just retry
+        // on the next tick rather than surfacing an error immediately.
+        if (__DEV__) console.warn('[Preview] pollReportStatus failed, will retry:', e);
+        return;
+      }
+      if (!isMounted.current) return;
+
+      if (result.status === 'completed') {
         clearInterval(pollRef.current!);
         clearInterval(elapsedRef.current!);
-        setPdfUrl(url);
+        setPdfUrl(result.pdfUrl);
         setScreenState('ready');
         if (job?.status === JobStatus.Completed) {
           updateJobStatus(jobId, JobStatus.Completed);
@@ -210,31 +218,21 @@ export default function PreviewScreen() {
         } else {
           Toast.show({ type: 'info', text1: 'Report Ready', text2: 'Tap Share to send.' });
         }
+      } else if (result.status === 'failed') {
+        clearInterval(pollRef.current!);
+        clearInterval(elapsedRef.current!);
+        setErrorMsg(result.error);
+        setScreenState('error');
       }
+      // 'not_started' / 'generating' — keep polling
     };
 
     pollRef.current = setInterval(() => { void check(); }, POLL_MS);
-
-    const onSync = () => {
-      // Check for failure: if item reached MAX retries, surface error instead of spinning
-      const failed = getFailedSyncItems().filter(i => {
-        if (i.operation !== 'report_generate') return false;
-        try { return (JSON.parse(i.payload ?? '{}') as { jobId?: string }).jobId === jobId; }
-        catch { return false; }
-      });
-      if (failed.length > 0 && isMounted.current) {
-        clearInterval(pollRef.current!);
-        clearInterval(elapsedRef.current!);
-        setErrorMsg('Report generation failed after multiple retries. Check your connection and try again.');
-        setScreenState('error');
-        return;
-      }
-      void check();
-    };
-    onSyncComplete(onSync);
+    // Kick off an immediate check too, so a fast generation doesn't wait a
+    // full POLL_MS before the first look.
+    void check();
 
     return () => {
-      offSyncComplete(onSync);
       clearInterval(pollRef.current!);
       clearInterval(elapsedRef.current!);
     };
