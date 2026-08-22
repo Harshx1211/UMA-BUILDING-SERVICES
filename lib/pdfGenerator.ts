@@ -845,7 +845,8 @@ export function hasReportUrl(jobId: string): boolean {
 // reporting how it turned out.
 
 export type ReportStatusResult =
-  | { status: 'not_started' | 'generating' }
+  | { status: 'not_started' }
+  | { status: 'generating'; startedAt: string | null }
   | { status: 'completed'; pdfUrl: string }
   | { status: 'failed'; error: string };
 

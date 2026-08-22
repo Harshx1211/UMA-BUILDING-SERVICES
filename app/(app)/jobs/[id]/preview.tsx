@@ -157,9 +157,13 @@ export default function PreviewScreen() {
   const [elapsedS, setElapsedS]       = useState(0);
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
 
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isMounted  = useRef(true);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMounted    = useRef(true);
+  // Real generation start time (ms, from the server's report_generation_status
+  // row) — lets elapsed time survive remounts/app restarts instead of resetting
+  // to 0 every time this screen is reopened while a generation is still running.
+  const startedAtMs  = useRef<number | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -170,25 +174,41 @@ export default function PreviewScreen() {
     };
   }, []);
 
-  // ── Queue the generation on mount (or on explicit retry) ──────────────────
-  const startGeneration = useCallback(() => {
+  // ── Poll the report-generator service for real status ──────────────────
+  // This screen is a pure viewer of server-side generation state, not the
+  // trigger — generation is normally queued from the job screen's "Generate
+  // Report" button (which no longer navigates here automatically). If this
+  // screen is opened before anything was queued (e.g. the "Draft Preview"
+  // entry point, or a direct deep link), the first poll comes back
+  // 'not_started' and it queues generation itself as a fallback so those
+  // flows keep working unchanged.
+  //
+  // `forceRegenerate` re-queues even if the server already has a result —
+  // used by "Try Again" after a failure, where simply observing would poll
+  // the same 'failed' status forever.
+  const startPolling = useCallback((opts?: { forceRegenerate?: boolean }) => {
     if (!jobId) return;
     setErrorMsg(null);
     setElapsedS(0);
     setScreenState('pending');
+    startedAtMs.current = null;
 
-    // Clear stale intervals before starting fresh
     if (pollRef.current)    clearInterval(pollRef.current);
     if (elapsedRef.current) clearInterval(elapsedRef.current);
 
-    // queueReportGeneration clears local report_url first, then queues.
-    // Always returns existingUrl:null — signed URLs must never be cached stale.
-    queueReportGeneration(jobId);
-    runSync();
-
     elapsedRef.current = setInterval(() => {
-      if (isMounted.current) setElapsedS(s => s + 1);
+      if (isMounted.current && startedAtMs.current != null) {
+        setElapsedS(Math.max(0, Math.round((Date.now() - startedAtMs.current) / 1000)));
+      }
     }, 1000);
+
+    let triggered = false;
+    if (opts?.forceRegenerate) {
+      triggered = true;
+      startedAtMs.current = Date.now();
+      queueReportGeneration(jobId);
+      runSync();
+    }
 
     // Polling check — asks the report-generator service directly whether
     // generation has finished, rather than local SQLite/sync-queue state.
@@ -207,6 +227,22 @@ export default function PreviewScreen() {
       }
       if (!isMounted.current) return;
 
+      if (result.status === 'not_started') {
+        if (!triggered) {
+          triggered = true;
+          startedAtMs.current = Date.now();
+          queueReportGeneration(jobId);
+          runSync();
+        }
+        return;
+      }
+
+      if (result.status === 'generating') {
+        if (result.startedAt) startedAtMs.current = new Date(result.startedAt).getTime();
+        else if (startedAtMs.current == null) startedAtMs.current = Date.now();
+        return;
+      }
+
       if (result.status === 'completed') {
         clearInterval(pollRef.current!);
         clearInterval(elapsedRef.current!);
@@ -218,13 +254,15 @@ export default function PreviewScreen() {
         } else {
           Toast.show({ type: 'info', text1: 'Report Ready', text2: 'Tap Share to send.' });
         }
-      } else if (result.status === 'failed') {
+        return;
+      }
+
+      if (result.status === 'failed') {
         clearInterval(pollRef.current!);
         clearInterval(elapsedRef.current!);
         setErrorMsg(result.error);
         setScreenState('error');
       }
-      // 'not_started' / 'generating' — keep polling
     };
 
     pollRef.current = setInterval(() => { void check(); }, POLL_MS);
@@ -240,7 +278,7 @@ export default function PreviewScreen() {
   }, [jobId]);
 
   useEffect(() => {
-    const cleanup = startGeneration();
+    const cleanup = startPolling();
     return () => { cleanup?.(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -330,7 +368,7 @@ export default function PreviewScreen() {
             {errorMsg ?? 'Could not generate report. Please try again.'}
           </Text>
           <TouchableOpacity
-            onPress={() => startGeneration()}
+            onPress={() => startPolling({ forceRegenerate: true })}
             style={[styles.secondaryBtn, { backgroundColor: C.primary + '18', borderRadius: 10, paddingHorizontal: 24 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />

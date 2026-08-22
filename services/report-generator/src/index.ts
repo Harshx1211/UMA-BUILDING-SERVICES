@@ -108,7 +108,11 @@ app.get('/report-status', async (req, res) => {
     return res.json({ status: 'failed', error: status.lastError ?? 'Report generation failed.' });
   }
 
-  return res.json({ status: status.status }); // 'generating' | 'not_started'
+  if (status.status === 'generating') {
+    return res.json({ status: 'generating', startedAt: status.updatedAt });
+  }
+
+  return res.json({ status: status.status }); // 'not_started'
 });
 
 app.listen(config.port, () => {

@@ -18,6 +18,7 @@ import {
   getRecord,
   getPendingSyncItems,
 } from '@/lib/database';
+import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -26,6 +27,8 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
 import type { Defect, Signature } from '@/types';
+import { queueReportGeneration } from '@/lib/pdfGenerator';
+import { runSync } from '@/lib/sync';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -262,6 +265,22 @@ export default function ReportSummaryScreen() {
     setRefreshing(true);
     loadData();
   }, [loadData]);
+
+  // Queues generation and stays on this screen — the tech gets a toast, not a
+  // forced trip to a "Generating…" screen. The job detail screen's bottom bar
+  // (and this screen's "Regenerate" banner via hasPendingSync) picks up the
+  // result once it's done; "Open PDF"/"Preview Draft Report" below still
+  // navigate to /preview since those are explicit "show me the PDF" taps.
+  const handleGenerateReport = useCallback(() => {
+    if (!jobId) return;
+    queueReportGeneration(jobId);
+    runSync();
+    Toast.show({
+      type: 'info',
+      text1: 'Generating Report',
+      text2: "We'll let you know as soon as it's ready — you can keep working.",
+    });
+  }, [jobId]);
 
   if (isLoading) {
     return (
@@ -540,7 +559,7 @@ export default function ReportSummaryScreen() {
               title="Regenerate Report"
               icon="refresh"
               variant="primary"
-              onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+              onPress={handleGenerateReport}
             />
           ) : (
             <View style={s.bottomBtnRow}>
@@ -568,7 +587,13 @@ export default function ReportSummaryScreen() {
             title={readyToGenerate ? "Generate Report PDF" : "Preview Draft Report"}
             icon={readyToGenerate ? "file-pdf-box" : "file-eye-outline"}
             variant={readyToGenerate ? "primary" : "secondary"}
-            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+            onPress={() => {
+              if (readyToGenerate) {
+                handleGenerateReport();
+              } else {
+                router.push(`/jobs/${jobId}/preview` as never);
+              }
+            }}
           />
         )}
       </View>

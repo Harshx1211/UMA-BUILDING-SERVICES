@@ -7,6 +7,12 @@ export type LockResult = { acquired: true } | { acquired: false; reason: string 
 export interface GenerationStatus {
   status: 'not_started' | 'generating' | 'completed' | 'failed';
   lastError: string | null;
+  /** When the current status was last set — for 'generating', this is the
+   * real generation start time (tryAcquireLock is the only thing that sets
+   * status to 'generating'), letting the client show accurate elapsed time
+   * that survives app restarts and revisiting the screen, instead of a local
+   * timer that resets to 0 every time the polling screen remounts. */
+  updatedAt: string | null;
 }
 
 /**
@@ -58,10 +64,10 @@ export async function markGenerationResult(
 export async function getGenerationStatus(db: SupabaseClient, jobId: string): Promise<GenerationStatus> {
   const { data } = await db
     .from('report_generation_status')
-    .select('status, last_error')
+    .select('status, last_error, updated_at')
     .eq('job_id', jobId)
     .maybeSingle();
 
-  if (!data) return { status: 'not_started', lastError: null };
-  return { status: data.status, lastError: data.last_error ?? null };
+  if (!data) return { status: 'not_started', lastError: null, updatedAt: null };
+  return { status: data.status, lastError: data.last_error ?? null, updatedAt: data.updated_at ?? null };
 }
