@@ -19,7 +19,7 @@ app.post('/generate-report', async (req, res) => {
 
   let userId: string;
   try {
-    userId = verifyAccessToken(req.headers.authorization);
+    userId = await verifyAccessToken(db, req.headers.authorization);
   } catch (err) {
     const status = err instanceof AuthError ? err.status : 401;
     return res.status(status).json({ error: err instanceof Error ? err.message : 'Unauthorized' });

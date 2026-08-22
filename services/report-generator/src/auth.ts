@@ -1,16 +1,9 @@
-import jwt from 'jsonwebtoken';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { config } from './config';
 
 export class AuthError extends Error {
   constructor(message: string, public status: number) {
     super(message);
   }
-}
-
-interface SupabaseJwtPayload {
-  sub?: string;
-  role?: string;
 }
 
 /**
@@ -23,26 +16,28 @@ interface SupabaseJwtPayload {
  * before the function ever runs) — it never checked job ownership, so any
  * logged-in user could trigger report generation for any jobId.
  *
- * This service sits outside that gateway, so we must both verify the signature
- * ourselves (via SUPABASE_JWT_SECRET) and check ownership explicitly.
+ * This service sits outside that gateway, so it must verify the token itself.
+ * That's delegated to Supabase's own SDK (`auth.getUser(token)`) rather than
+ * hand-rolling JWT signature verification against a fixed secret: this
+ * project's JWT signing was rotated from a legacy shared HS256 secret to
+ * asymmetric ECC (P-256) signing keys, and letting Supabase's own client
+ * validate the token means this keeps working transparently across whichever
+ * key type actually signed a given token (old tokens still verify against the
+ * legacy key until they expire; new ones verify against the current key) —
+ * a hand-rolled `jwt.verify(token, staticSecret)` would silently reject every
+ * token issued after a future rotation like this one already happened once.
  */
-export function verifyAccessToken(authHeader: string | undefined): string {
+export async function verifyAccessToken(db: SupabaseClient, authHeader: string | undefined): Promise<string> {
   if (!authHeader?.startsWith('Bearer ')) {
     throw new AuthError('Missing or malformed Authorization header', 401);
   }
   const token = authHeader.slice('Bearer '.length);
 
-  let payload: SupabaseJwtPayload;
-  try {
-    payload = jwt.verify(token, config.supabaseJwtSecret) as SupabaseJwtPayload;
-  } catch {
+  const { data, error } = await db.auth.getUser(token);
+  if (error || !data.user) {
     throw new AuthError('Invalid or expired token', 401);
   }
-
-  if (!payload.sub || payload.role !== 'authenticated') {
-    throw new AuthError('Token is not an authenticated user session', 401);
-  }
-  return payload.sub;
+  return data.user.id;
 }
 
 /** Throws AuthError(403) if the caller's company doesn't own the job. */

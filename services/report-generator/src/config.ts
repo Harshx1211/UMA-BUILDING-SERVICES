@@ -14,7 +14,6 @@ function intEnv(name: string, fallback: number): number {
 export const config = {
   supabaseUrl: required('SUPABASE_URL'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
-  supabaseJwtSecret: required('SUPABASE_JWT_SECRET'),
 
   gotenbergUrl: process.env.GOTENBERG_URL ?? 'http://gotenberg:3000',
   reportBucket: process.env.REPORT_BUCKET ?? 'job-reports',
