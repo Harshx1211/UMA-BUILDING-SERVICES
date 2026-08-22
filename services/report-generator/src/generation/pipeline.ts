@@ -10,6 +10,8 @@ import { renderUnlinkedDefects } from '../templates/unlinkedDefects';
 import { renderRepairs } from '../templates/repairs';
 import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
+import { BASE_STYLE } from '../templates/theme';
+import { extractBody } from '../templates/helpers';
 import { uploadReport } from '../storage';
 import { AssetTypeDefinition, Defect } from '../types';
 
@@ -44,61 +46,91 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   }
 
   const chunks = buildAssetLogChunks(data.assets, assetTypesByValue, config.maxAssetsPerChunk);
-
-  // Build every document's HTML up front (cheap, pure string work — never the
-  // bottleneck), then render each through Gotenberg with bounded concurrency so
-  // a 1000-asset job doesn't fire dozens of simultaneous Chromium jobs at a
-  // single free-tier instance (see config.gotenbergConcurrency).
-  const documents: Array<{ name: string; html: string }> = [];
-  documents.push({ name: '00_cover', html: renderCover(data, assetTypesByValue) });
-
-  chunks.forEach((chunk, i) => {
-    const html = renderAssetLogChunk(
-      chunk,
-      defectsByAsset,
-      data.photosByAsset,
-      data.photosByDefect,
-      data.signedPhotoUrls,
-    );
-    documents.push({ name: `01_asset_log_${String(i).padStart(4, '0')}`, html });
-  });
-
-  const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls);
-  if (unlinkedHtml) documents.push({ name: '02_unlinked_defects', html: unlinkedHtml });
-
-  const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls);
-  if (repairsHtml) documents.push({ name: '03_repairs', html: repairsHtml });
-
-  documents.push({ name: '04_signoff', html: renderSignoff(data) });
-
   const footerTemplate = buildFooterTemplate(data.company);
 
-  let rendered: Array<{ name: string; buffer: Buffer }>;
-  try {
-    rendered = await mapWithConcurrency(documents, config.gotenbergConcurrency, async (doc) => ({
-      name: `${doc.name}.pdf`,
-      buffer: await convertHtmlToPdf(doc.html, doc.name, {
-        headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
-        footerTemplateHtml: footerTemplate,
-      }),
-    }));
-  } catch (err) {
-    // Never publish a partial report — abort the whole generation with a clear
-    // error rather than silently omitting whatever section failed to render.
-    throw new ReportGenerationError(
-      `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-    );
-  }
-
-  rendered.sort((a, b) => a.name.localeCompare(b.name));
+  const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls);
+  const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls);
 
   let merged: Buffer;
-  try {
-    merged = rendered.length === 1 ? rendered[0].buffer : await mergePdfs(rendered);
-  } catch (err) {
-    throw new ReportGenerationError(
-      `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-    );
+
+  // Fast path: when everything fits in a single chunk (true for the large
+  // majority of real jobs — chunking only exists for the 1000+ asset case),
+  // combine every section into ONE HTML document and make exactly one
+  // Gotenberg call instead of N separate render round-trips plus a merge
+  // call. Each of those round-trips carries its own Chromium page-load
+  // overhead, which is what made the very first real end-to-end test slower
+  // than it needed to be for a ~10-asset job.
+  if (chunks.length <= 1) {
+    const sections = [
+      renderCover(data, assetTypesByValue),
+      ...(chunks[0]
+        ? [renderAssetLogChunk(chunks[0], defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls)]
+        : []),
+      ...(unlinkedHtml ? [unlinkedHtml] : []),
+      ...(repairsHtml ? [repairsHtml] : []),
+      renderSignoff(data),
+    ];
+    const combinedHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
+<body>${sections.map(extractBody).join('')}</body></html>`;
+
+    try {
+      merged = await convertHtmlToPdf(combinedHtml, 'combined', {
+        headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
+        footerTemplateHtml: footerTemplate,
+      });
+    } catch (err) {
+      throw new ReportGenerationError(
+        `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  } else {
+    // Large-job path: chunk-and-merge, so no single Chromium render ever has
+    // to lay out more than config.maxAssetsPerChunk rows at once.
+    const documents: Array<{ name: string; html: string }> = [];
+    documents.push({ name: '00_cover', html: renderCover(data, assetTypesByValue) });
+
+    chunks.forEach((chunk, i) => {
+      const html = renderAssetLogChunk(
+        chunk,
+        defectsByAsset,
+        data.photosByAsset,
+        data.photosByDefect,
+        data.signedPhotoUrls,
+      );
+      documents.push({ name: `01_asset_log_${String(i).padStart(4, '0')}`, html });
+    });
+
+    if (unlinkedHtml) documents.push({ name: '02_unlinked_defects', html: unlinkedHtml });
+    if (repairsHtml) documents.push({ name: '03_repairs', html: repairsHtml });
+    documents.push({ name: '04_signoff', html: renderSignoff(data) });
+
+    let rendered: Array<{ name: string; buffer: Buffer }>;
+    try {
+      rendered = await mapWithConcurrency(documents, config.gotenbergConcurrency, async (doc) => ({
+        name: `${doc.name}.pdf`,
+        buffer: await convertHtmlToPdf(doc.html, doc.name, {
+          headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
+          footerTemplateHtml: footerTemplate,
+        }),
+      }));
+    } catch (err) {
+      // Never publish a partial report — abort the whole generation with a
+      // clear error rather than silently omitting whatever section failed.
+      throw new ReportGenerationError(
+        `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    rendered.sort((a, b) => a.name.localeCompare(b.name));
+
+    try {
+      merged = await mergePdfs(rendered);
+    } catch (err) {
+      throw new ReportGenerationError(
+        `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   const { storagePath, signedUrl } = await uploadReport(db, jobId, merged);

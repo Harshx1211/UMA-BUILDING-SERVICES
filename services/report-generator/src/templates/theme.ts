@@ -85,4 +85,12 @@ export const BASE_STYLE = `
   .defect-card { display: flex; margin-top: 8px; border-radius: 8px; overflow: hidden; }
   .defect-bar { width: 4px; flex-shrink: 0; }
   .defect-body { flex: 1; padding: 10px 12px; }
+
+  /* Print pagination: keep one table row or one defect card intact rather
+     than splitting it across a page boundary. Deliberately NOT applied to
+     .card generally — the big multi-row asset-log tables also use that
+     class, and forcing a whole long table to avoid breaking would push it
+     onto a fresh page instead, producing worse blank-space gaps than the
+     row-level split it's meant to prevent. */
+  tr, .defect-card { break-inside: avoid; page-break-inside: avoid; }
 `;

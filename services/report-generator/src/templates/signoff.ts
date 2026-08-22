@@ -18,7 +18,7 @@ export function renderSignoff(data: ReportData): string {
   const rows = timeLogUsers
     .map((t) => {
       const isSigner = t.user.id === job.assigned_to;
-      const sigCell = isSigner && signature?.tech_signature_url
+      const sigCell = isSigner && signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE'
         ? `<img src="${esc(signature.tech_signature_url)}" style="max-height:36px" alt="signature" />`
         : `<span style="color:${COLORS.MUTED}">—</span>`;
       // esc() each part individually and join with a raw entity — joining first
@@ -39,6 +39,16 @@ export function renderSignoff(data: ReportData): string {
     })
     .join('');
 
+  // 'UNAVAILABLE' is a real sentinel value the app writes (see
+  // app/(app)/jobs/[id]/signature.tsx) when a technician records that the
+  // client wasn't present to sign — not a broken/missing value. Rendering it
+  // as <img src="UNAVAILABLE"> produces a broken-image icon; show the actual
+  // reason instead, same as the legacy on-device template did.
+  const clientUnavailable = signature?.signature_url === 'UNAVAILABLE';
+  const clientSigCell = clientUnavailable
+    ? `<span style="font-style:italic;color:${COLORS.MUTED}">Client unavailable to sign</span>`
+    : `<img src="${esc(signature!.signature_url)}" style="max-height:44px" alt="signature" />`;
+
   const clientSignoff = signature
     ? `
     <div class="card" style="margin-top:14px;padding:12px 14px">
@@ -48,7 +58,7 @@ export function renderSignoff(data: ReportData): string {
           <div style="font-weight:700">${esc(signature.signed_by_name)}</div>
           <div style="font-size:9.5px;color:${COLORS.MUTED}">${fmtDate(signature.signed_at)}</div>
         </div>
-        <img src="${esc(signature.signature_url)}" style="max-height:44px" alt="signature" />
+        ${clientSigCell}
       </div>
     </div>`
     : '';
