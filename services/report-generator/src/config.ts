@@ -23,7 +23,7 @@ export const config = {
   // measure against real scale tests, adjust via env without a code change.
   maxAssetsPerChunk: intEnv('MAX_ASSETS_PER_CHUNK', 200),
   gotenbergConcurrency: intEnv('GOTENBERG_CONCURRENCY', 2),
-  gotenbergTimeoutMs: intEnv('GOTENBERG_TIMEOUT_MS', 60_000),
+  gotenbergTimeoutMs: intEnv('GOTENBERG_TIMEOUT_MS', 200_000),
   chunkRetryAttempts: intEnv('CHUNK_RETRY_ATTEMPTS', 2),
   photoSignedUrlTtlSeconds: intEnv('PHOTO_SIGNED_URL_TTL_SECONDS', 1800),
 

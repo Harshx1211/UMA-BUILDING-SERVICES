@@ -20,6 +20,13 @@ services:
     image:
       url: docker.io/gotenberg/gotenberg:8
     plan: free
+    # Gotenberg's own default request timeout is 30s — confirmed too short on
+    # Render's free tier (0.1 shared CPU), where even a small 10-asset render
+    # exceeded it ("HTTP 503: The request exceeded the time limit"). Raised to
+    # 180s; keep GOTENBERG_TIMEOUT_MS on the report-generator service (below)
+    # higher than this so our own client-side abort never fires first and
+    # masks Gotenberg's real error with a generic network-timeout instead.
+    dockerCommand: gotenberg --api-timeout=180s
     envVars:
       - key: PORT
         value: 3000
@@ -53,7 +60,7 @@ services:
       - key: GOTENBERG_CONCURRENCY
         value: "2"
       - key: GOTENBERG_TIMEOUT_MS
-        value: "60000"
+        value: "200000"
       - key: CHUNK_RETRY_ATTEMPTS
         value: "2"
       - key: PHOTO_SIGNED_URL_TTL_SECONDS
