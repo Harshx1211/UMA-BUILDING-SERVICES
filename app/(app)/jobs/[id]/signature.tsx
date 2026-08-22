@@ -24,8 +24,14 @@ export default function SignatureScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
-  // ONE canvas ref — we only ever mount one canvas at a time
-  const canvasRef = useRef<SignatureViewRef | null>(null);
+  // Two SEPARATE refs, one per step — react-native-signature-canvas has a
+  // known issue where the second SignatureCanvas instance on a screen stops
+  // responding to touch if it shares a ref with the first (confirmed: the
+  // technician canvas worked, the client canvas showed a blank, unresponsive
+  // white box). Only one of the two is ever mounted at a time, but each needs
+  // its own distinct ref object for the library to initialize it correctly.
+  const techCanvasRef = useRef<SignatureViewRef | null>(null);
+  const clientCanvasRef = useRef<SignatureViewRef | null>(null);
   // Scroll ref — lock/unlock WITHOUT a state update (zero re-renders mid-draw)
   const scrollRef = useRef<ScrollView>(null);
 
@@ -37,6 +43,8 @@ export default function SignatureScreen() {
   const [isEditing, setIsEditing]   = useState(false);
   const [step, setStep]             = useState<'tech' | 'client'>('tech');
   const [techSigBase64, setTechSigBase64] = useState<string | null>(null);
+
+  const canvasRef = step === 'tech' ? techCanvasRef : clientCanvasRef;
 
   const existingRecordId = useRef<string | null>(null);
   // Safety timer ref — never stored on the canvas ref
@@ -324,7 +332,7 @@ export default function SignatureScreen() {
           {showCanvas && step === 'tech' && (
             <>
               <SignatureScreenCanvas
-                ref={canvasRef}
+                ref={techCanvasRef}
                 onOK={handleOK}
                 onEmpty={() => { setSaving(false); setSigError('Please draw a signature first.'); }}
                 onBegin={handleBegin}
@@ -392,7 +400,7 @@ export default function SignatureScreen() {
               {isClientStep && (
                 <>
                   <SignatureScreenCanvas
-                    ref={canvasRef}
+                    ref={clientCanvasRef}
                     onOK={handleOK}
                     onEmpty={() => { setSaving(false); setSigError('Please draw the client signature.'); }}
                     onBegin={handleBegin}
