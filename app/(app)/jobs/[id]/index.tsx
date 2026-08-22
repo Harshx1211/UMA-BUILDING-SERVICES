@@ -374,6 +374,11 @@ export default function JobDetailScreen() {
   const isCompleted  = job.status === JobStatus.Completed;
   const isCancelled  = job.status === JobStatus.Cancelled;
   const isScheduled  = job.status === JobStatus.Scheduled;
+  // Derived directly from the hook's live status every render — not from
+  // job.report_url alone, which depends on a separate effect having already
+  // mirrored it into local state. This way the button can never show a
+  // report as missing when the hook already knows it's done.
+  const hasReport    = genStatus === 'completed' || !!job.report_url;
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -773,7 +778,7 @@ export default function JobDetailScreen() {
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, borderTopWidth: 1, shadowColor: C.shadow }]}>
         <Button
           title={
-            isCompleted && job?.report_url               ? 'View Report' :
+            isCompleted && hasReport                      ? 'View Report' :
             isCompleted && genStatus === 'generating'     ? `Generating Report… ${genElapsedS}s` :
             isCompleted && genStatus === 'failed'         ? 'Retry Generating Report' :
             isCompleted                                   ? 'Generate Report' :
@@ -783,7 +788,7 @@ export default function JobDetailScreen() {
           variant={isCompleted ? 'secondary' : 'primary'}
           disabled={isScheduled || isCancelled}
           onPress={() => {
-            if (isCompleted && job?.report_url) {
+            if (isCompleted && hasReport) {
               router.push(`/jobs/${id}/report` as never);
             } else if (isCompleted && genStatus === 'generating') {
               // Already running — hop to the live status view instead of
@@ -800,7 +805,7 @@ export default function JobDetailScreen() {
           icon={
             <MaterialCommunityIcons
               name={
-                isCompleted && job?.report_url           ? 'file-check-outline' :
+                isCompleted && hasReport                  ? 'file-check-outline' :
                 isCompleted && genStatus === 'generating' ? 'cloud-upload-outline' :
                 isCompleted && genStatus === 'failed'     ? 'refresh' :
                 isCompleted                                ? 'file-chart-outline' :

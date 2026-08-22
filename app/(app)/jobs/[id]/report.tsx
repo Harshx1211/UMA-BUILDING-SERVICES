@@ -326,6 +326,11 @@ export default function ReportSummaryScreen() {
   const hasSignature     = !!signature?.signature_url;
   const readyToGenerate  = isFullyInspected && hasSignature;
   const isCompleted      = job.status === 'completed';
+  // Derived directly from the hook's live status every render — not from
+  // job.report_url alone, which depends on a separate effect having already
+  // mirrored it into local state. This way the bottom bar can never show a
+  // report as missing when the hook already knows it's done.
+  const hasReport        = genStatus === 'completed' || !!job.report_url;
 
   // F5: Technician Info (for top banner)
   // Retrieve the technician's name from SQLite `users` table instead of hardcoding
@@ -572,7 +577,7 @@ export default function ReportSummaryScreen() {
             variant="primary"
             onPress={handleGenerateReport}
           />
-        ) : isCompleted && job.report_url ? (
+        ) : isCompleted && hasReport ? (
           // When inspection data changed since last PDF: hide Download, show Regenerate only
           hasPendingSync ? (
             <Button
