@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAllPaged } from './paginate';
 import { parseCategory } from './categoryGrouping';
-import { signPhotoUrls } from '../photos/signPhotoUrls';
+import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
 import { config } from '../config';
 import {
   Asset,
@@ -104,7 +104,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     }
   }
 
-  const signedPhotoUrls = await signPhotoUrls(db, photos, config.photoBucket);
+  const signedPhotoUrls = await prepareInlinePhotos(db, photos, config.photoBucket);
 
   const { data: signature } = await db
     .from('signatures')

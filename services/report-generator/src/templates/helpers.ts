@@ -41,12 +41,13 @@ export function resultPill(result: 'pass' | 'fail' | 'not_tested' | null): strin
 }
 
 /**
- * Renders an inline photo. If this photo's id has no entry in `signedUrls` (the
- * signing call failed, or the underlying object was deleted), we render an
- * explicit "photo unavailable" placeholder box instead of silently omitting the
- * image — the old Edge Function template dropped failed photos with no trace at
- * all, which meant a technician had no way to know their evidence photo never
- * made it into a compliance report they're legally relying on.
+ * Renders an inline photo. If this photo's id has no entry in `signedUrls`
+ * (the download/resize failed, or the underlying object was deleted), we
+ * render an explicit "photo unavailable" placeholder box instead of silently
+ * omitting the image — the old Edge Function template dropped failed photos
+ * with no trace at all, which meant a technician had no way to know their
+ * evidence photo never made it into a compliance report they're legally
+ * relying on.
  */
 export function photoTag(photo: InspectionPhoto, signedUrls: Map<string, string>): string {
   const url = signedUrls.get(photo.id);

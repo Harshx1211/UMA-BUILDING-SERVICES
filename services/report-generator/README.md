@@ -15,9 +15,16 @@ photo embedding blowing a ~150MB memory ceiling, forcing a 600KB per-photo
 cap with photos silently dropped and no placeholder shown). This service:
 
 - Renders real HTML/CSS (matches the reference report far more precisely).
-- Never embeds photo bytes — it signs Storage URLs and lets Chromium fetch
-  images itself during rendering, so photo count doesn't grow this service's
-  memory usage.
+- Photos are resized server-side (`sharp`, bounded concurrency — see
+  `src/photos/prepareInlinePhotos.ts`) and embedded as small inline JPEG data
+  URIs, rather than signing the original's Storage URL and letting Chromium
+  fetch it directly. That was the first design here, and real end-to-end
+  testing showed it was the actual bottleneck: Chromium was downloading a
+  full multi-MB phone-camera original for every photo, over a heavily
+  CPU/bandwidth-throttled free-tier container, on every single generation.
+  Resizing down first (a few tens of KB instead of several MB, one photo at a
+  time, discarded immediately after) turned out both faster and no less safe
+  memory-wise than the old approach.
 - Splits large asset logs into bounded chunks (`MAX_ASSETS_PER_CHUNK`),
   renders each independently, and merges them — so a 1000-asset site doesn't
   become one giant, fragile render.

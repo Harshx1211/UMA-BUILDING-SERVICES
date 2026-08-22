@@ -156,7 +156,12 @@ export interface ReportData {
   defects: Defect[];
   photosByAsset: Map<string, InspectionPhoto[]>;
   photosByDefect: Map<string, InspectionPhoto[]>;
-  signedPhotoUrls: Map<string, string>; // inspection_photos.id -> signed URL
+  // inspection_photos.id -> small inline "data:image/jpeg;base64,..." URI
+  // (resized server-side — see photos/prepareInlinePhotos.ts). Named
+  // signedPhotoUrls for historical reasons (an earlier design signed the
+  // original's Storage URL and let Chromium fetch it directly; that turned
+  // out to be the actual generation-time bottleneck in real testing).
+  signedPhotoUrls: Map<string, string>;
   signature: Signature | null;
   timeLogUsers: Array<{
     user: JobUser;

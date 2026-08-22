@@ -63,5 +63,3 @@ services:
         value: "200000"
       - key: CHUNK_RETRY_ATTEMPTS
         value: "2"
-      - key: PHOTO_SIGNED_URL_TTL_SECONDS
-        value: "1800"
