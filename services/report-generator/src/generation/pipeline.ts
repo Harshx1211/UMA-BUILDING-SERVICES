@@ -3,7 +3,7 @@ import { config } from '../config';
 import { fetchReportData } from '../data/fetchReportData';
 import { buildAssetLogChunks } from '../data/chunking';
 import { mapWithConcurrency } from '../concurrency';
-import { convertHtmlToPdf, mergePdfs } from '../gotenberg/client';
+import { convertHtmlToPdf, mergePdfs, waitForGotenbergReady } from '../gotenberg/client';
 import { renderCover } from '../templates/cover';
 import { renderAssetLogChunk } from '../templates/assetLogChunk';
 import { renderUnlinkedDefects } from '../templates/unlinkedDefects';
@@ -27,6 +27,19 @@ export interface PipelineResult {
 
 export async function generateReport(db: SupabaseClient, jobId: string): Promise<PipelineResult> {
   const started = Date.now();
+
+  // Kick off Gotenberg's cold-start check in parallel with the data fetch
+  // below rather than after it — on Render's free tier, Gotenberg is often
+  // asleep by the time a report is requested, and its cold boot (30-60s+)
+  // can otherwise dwarf the actual data-fetch time. Not awaited yet; picked
+  // up again just before the first real convert call.
+  const gotenbergReady = waitForGotenbergReady().catch((err) => {
+    // Don't fail generation on the warm-up check alone — the real convert
+    // call still gets its own retries and will surface a proper error if
+    // Gotenberg is genuinely unreachable, not just slow to wake up.
+    console.warn(`[generate-report] Gotenberg warm-up check: ${err instanceof Error ? err.message : err}`);
+  });
+
   const data = await fetchReportData(db, jobId);
 
   const { data: assetTypeDefRows } = await db
@@ -50,6 +63,11 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 
   const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls);
   const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls);
+
+  // By now the data fetch (and Gotenberg's cold-start window, if it needed
+  // one) have had time to overlap; this resolves instantly if Gotenberg was
+  // already warm.
+  await gotenbergReady;
 
   let merged: Buffer;
 

@@ -2,6 +2,12 @@ import { config } from '../config';
 
 export class GotenbergError extends Error {}
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const RETRY_BASE_DELAY_MS = 4_000;
+
 async function withRetries<T>(label: string, attempts: number, fn: () => Promise<T>): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -11,9 +17,53 @@ async function withRetries<T>(label: string, attempts: number, fn: () => Promise
       lastErr = err;
       // eslint-disable-next-line no-console
       console.warn(`[gotenberg] ${label} failed (attempt ${attempt}/${attempts}): ${err instanceof Error ? err.message : err}`);
+      // Previously retried with zero delay — back-to-back attempts land within
+      // milliseconds of each other, which is useless against a Render free-tier
+      // cold start (the container can take 30-60s+ to actually start listening,
+      // during which every request just hits Render's own 502 page). A short
+      // backoff at least gives a marginal cold-boot time to catch up; the real
+      // fix for that specific case is waitForGotenbergReady() below, called
+      // once up front before any conversion work starts.
+      if (attempt < attempts) await sleep(RETRY_BASE_DELAY_MS * attempt);
     }
   }
   throw new GotenbergError(`${label} failed after ${attempts} attempt(s): ${lastErr instanceof Error ? lastErr.message : lastErr}`);
+}
+
+const WARMUP_MAX_WAIT_MS = 90_000;
+const WARMUP_POLL_INTERVAL_MS = 3_000;
+
+/**
+ * Blocks (with a patient, dedicated retry loop) until Gotenberg responds to
+ * its health check, or gives up after WARMUP_MAX_WAIT_MS.
+ *
+ * Render's free tier spins a web service down after ~15 minutes with no
+ * inbound traffic. Gotenberg only gets hit when a report is actually being
+ * generated, so on the first generation after a quiet spell it's routinely
+ * cold — and the *first* request to a cold Render service gets a 502 from
+ * Render's own proxy (not from Gotenberg, which hasn't even started yet),
+ * confirmed by the "no logs for the past hour" on the Gotenberg service
+ * itself: the container genuinely wasn't running yet when that request hit.
+ * Call this once, up front, before any real conversion work — ideally
+ * concurrently with the data fetch, so the cold-boot wait overlaps work
+ * that's happening anyway instead of adding pure dead time.
+ */
+export async function waitForGotenbergReady(maxWaitMs = WARMUP_MAX_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  let lastErr: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${config.gotenbergUrl}/health`, { method: 'GET' });
+      if (res.ok) return;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      lastErr = err;
+    }
+    await sleep(WARMUP_POLL_INTERVAL_MS);
+  }
+  throw new GotenbergError(
+    `Gotenberg did not become ready within ${maxWaitMs}ms: ${lastErr instanceof Error ? lastErr.message : lastErr}`,
+  );
 }
 
 async function postForm(path: string, form: FormData): Promise<Buffer> {
