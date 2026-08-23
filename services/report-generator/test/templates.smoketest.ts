@@ -75,7 +75,7 @@ const data: ReportData = {
     property: { id: 'p1', name: '1-9 Buckingham Rd', address: '1-9 Buckingham Rd', suburb: 'Killara', state: 'NSW', postcode: '2071', site_contact_name: 'Raquel', site_contact_phone: null },
     assigned_user: { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' },
   },
-  company: { id: 'c1', name: 'UMA Building Services', abn: '51602019081', address: null, phone: '0404226789', contact_email: 'info@uma.example', logo_url: null },
+  company: { id: 'c1', name: 'UMA Building Services', abn: '51602019081', address: null, phone: '0404226789', contact_email: 'info@uma.example', logo_url: null, accreditations: 'FPAA101D Certified' },
   assets,
   defects,
   photosByAsset,
@@ -143,6 +143,13 @@ if (/Section 15\b/.test(ycrHtml)) {
   throw new Error('FAIL: yearlyConditionReport — fabricated "Section 15" appeared in output');
 }
 console.log('OK: yearlyConditionReport checklist ticks real Sections only, no fabricated "Section 15"');
+
+// Phase 5: Signoff shows the company's accreditations line when set.
+const signoffHtml = docs.find(([name]) => name === 'signoff')![1];
+if (!signoffHtml.includes('FPAA101D Certified')) {
+  throw new Error('FAIL: signoff — expected company.accreditations to render when set');
+}
+console.log('OK: signoff renders Company Accreditations line');
 
 for (const [name, html] of docs) {
   assertBalanced(html, name, 'html');

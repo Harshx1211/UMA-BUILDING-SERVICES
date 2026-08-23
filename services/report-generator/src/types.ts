@@ -15,6 +15,7 @@ export interface Company {
   phone: string | null;
   contact_email: string | null;
   logo_url: string | null;
+  accreditations: string | null;
 }
 
 export interface Property {

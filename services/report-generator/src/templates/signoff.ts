@@ -14,7 +14,17 @@ import { ReportData } from '../types';
  * not an oversight — see the plan doc's "Multi-tech signoff" decision.
  */
 export function renderSignoff(data: ReportData): string {
-  const { job, signature, timeLogUsers } = data;
+  const { job, company, signature, timeLogUsers } = data;
+
+  // Matches the reference report's footer line — optional, so a company that
+  // hasn't set one (companies.accreditations is nullable) just omits the row
+  // rather than showing a blank "—" line every time.
+  const accreditationsRow = company.accreditations
+    ? `
+    <div class="card" style="margin-top:6px;padding:8px 12px;font-size:9px;color:${COLORS.MUTED}">
+      <strong style="color:${COLORS.SLATE}">Company Accreditations:</strong> ${esc(company.accreditations)}
+    </div>`
+    : '';
 
   const rows = timeLogUsers
     .map((t) => {
@@ -78,6 +88,7 @@ export function renderSignoff(data: ReportData): string {
     Maintenance has been carried out in accordance with applicable fire safety compliance
     requirements for the relevant jurisdiction.
   </div>
+  ${accreditationsRow}
   <table class="card" style="margin-top:10px">
     <thead><tr><th>Technician</th><th>Date/Time</th><th>Accreditations</th><th>Signature</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="4">No time logged against this job</td></tr>`}</tbody>

@@ -56,6 +56,7 @@ CREATE TABLE public.companies (
   appearance_settings jsonb DEFAULT '{"theme": "Light", "primary_color": "#1B2D4F"}'::jsonb,
   custom_sidebar_label text,
   custom_sidebar_url text,
+  accreditations text,
   CONSTRAINT companies_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.users (
