@@ -122,16 +122,3 @@ export function sanitizeForHtml(
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
 }
-
-/**
- * Sanitizes a value for display in the UI (TextInput default value,
- * Text component label). Does NOT HTML-encode — just strips injection
- * patterns and trims to a generous length.
- */
-export function sanitizeForDisplay(
-  value: string | null | undefined,
-  maxLength: number = MAX_LENGTHS.notes,
-): string {
-  if (!value) return '';
-  return stripHtml(value).substring(0, maxLength);
-}

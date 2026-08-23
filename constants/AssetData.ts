@@ -271,16 +271,6 @@ export const ASSET_TYPE_MAP: Record<string, AssetTypeDefinition> = Object.fromEn
   ASSET_TYPES.map((t) => [t.value, t])
 );
 
-/** Returns the inspection routine string for a given asset type value */
-export function getInspectionRoutine(assetType: string): string {
-  return ASSET_TYPE_MAP[assetType]?.inspectionRoutine ?? 'General Inspection (Annual)';
-}
-
-/** Returns the variant list for a given asset type value */
-export function getVariantsForType(assetType: string): string[] {
-  return ASSET_TYPE_MAP[assetType]?.variants ?? [];
-}
-
 /** Returns icon name for a given asset type value */
 export function getAssetTypeIcon(assetType: string): IconName {
   // Exact match first
@@ -299,9 +289,4 @@ export function getAssetTypeIcon(assetType: string): IconName {
   if (t.includes('mcp') || t.includes('call'))  return 'alarm-light';
   if (t.includes('detect'))                     return 'smoke-detector';
   return 'shield-check-outline';
-}
-
-/** Returns accent colour for a given asset type value */
-export function getAssetTypeColor(assetType: string): string {
-  return ASSET_TYPE_MAP[assetType]?.color ?? '#6B7280';
 }

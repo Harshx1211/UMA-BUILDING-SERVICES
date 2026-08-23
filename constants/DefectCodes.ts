@@ -781,11 +781,6 @@ export function findDefectCode(code: string): DefectCode | undefined {
   return DEFECT_CODES.find(d => d.code.toLowerCase() === code.toLowerCase());
 }
 
-/** Get all codes in a specific category */
-export function getDefectsByCategory(category: DefectCategory): DefectCode[] {
-  return DEFECT_CODES.filter(d => d.category === category);
-}
-
 /** Search codes by code string or description */
 export function searchDefectCodes(query: string): DefectCode[] {
   const q = query.toLowerCase().trim();

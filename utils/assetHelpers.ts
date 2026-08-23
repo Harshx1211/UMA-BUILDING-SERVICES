@@ -4,8 +4,8 @@
  * one source of truth.
  */
 
-import { getAssetTypeIcon, ASSET_TYPE_MAP } from '@/constants/AssetData';
-export { getInspectionRoutine, getVariantsForType, getAssetTypeIcon, getAssetTypeColor } from '@/constants/AssetData';
+import { ASSET_TYPE_MAP } from '@/constants/AssetData';
+export { getAssetTypeIcon } from '@/constants/AssetData';
 
 // ─── formatAssetType ──────────────────────────────────────────────────────────
 
@@ -33,32 +33,3 @@ export function formatAssetType(assetType: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
-
-// ─── getAssetEmoji ────────────────────────────────────────────────────────────
-
-/**
- * Maps an asset_type to a representative emoji for use in PDF reports
- * and text-only contexts. Falls back to 🔥 for unknown types.
- */
-export function getAssetEmoji(assetType: string): string {
-  const t = (assetType ?? '').toLowerCase();
-  if (t.includes('extinguisher'))                      return '🧯';
-  if (t.includes('sprinkler'))                         return '💧';
-  if (t.includes('exit sign') || t.includes('exit'))  return '🚪';
-  if (t.includes('emergency') && t.includes('light')) return '🔦';
-  if (t.includes('emergency'))                         return '⚡';
-  if (t.includes('fire detection') || t.includes('detector') || t.includes('smoke')) return '🔔';
-  if (t.includes('fire door') || t.includes('door'))  return '🚪';
-  if (t.includes('hose'))                              return '🚿';
-  if (t.includes('hydrant'))                           return '🔴';
-  if (t.includes('mcp') || t.includes('call point') || t.includes('manual call')) return '🆘';
-  return '🔥';
-}
-
-// ─── getAssetIconName (re-export with legacy compatibility) ───────────────────
-
-/**
- * Returns a MaterialCommunityIcons icon name for the given asset type.
- * Handles both official type values from AssetData.ts and legacy freeform strings.
- */
-export { getAssetTypeIcon as getAssetIconName };
