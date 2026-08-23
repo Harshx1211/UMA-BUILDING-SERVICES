@@ -52,12 +52,13 @@ const assets: AssetWithResult[] = [
   { id: 'a1', property_id: 'p1', asset_type: 'extinguisher', variant: 'DCP 4.5KG', asset_ref: '001', location_on_site: 'Level 1 Lobby', serial_number: null, result: 'fail', defect_reason: 'Past service life', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
   { id: 'a2', property_id: 'p1', asset_type: 'smoke_alarm', variant: null, asset_ref: 'A101', location_on_site: 'Unit A101', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
   { id: 'a3', property_id: 'p1', asset_type: 'hose_reel', variant: '36m - 25mm', asset_ref: '015', location_on_site: 'AG lobby', serial_number: null, result: 'not_tested', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
-  { id: 'a4', property_id: 'p1', asset_type: 'exit_light', variant: 'Box (Wall Mount)', asset_ref: 'E5', location_on_site: 'Level 5', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a4', property_id: 'p1', asset_type: 'exit_light', variant: 'Box (Wall Mount)', asset_ref: 'E5', location_on_site: 'Level 5', serial_number: null, result: 'fail', defect_reason: 'Not illuminating', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
 ];
 
 const defects: Defect[] = [
   { id: 'd1', job_id: 'j1', asset_id: 'a1', description: 'Asset has reached or past the last year of its service life.', severity: 'non_conformance', status: 'open', defect_code: 'sl', quote_price: 45, created_at: new Date().toISOString(), updated_at: null },
   { id: 'd2', job_id: 'j1', asset_id: null, description: 'Unlinked general observation', severity: 'non_critical', status: 'repaired', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
+  { id: 'd3', job_id: 'j1', asset_id: 'a4', description: 'Lamp not illuminating', severity: 'critical', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
 ];
 
 const photosByAsset = new Map<string, InspectionPhoto[]>([
@@ -91,7 +92,7 @@ const data: ReportData = {
   dateOfService: '2026-08-01',
 };
 
-const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]]]);
+const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]], ['a4', [defects[2]]]]);
 const chunks = buildAssetLogChunks(assets, byValue, 200);
 
 // buildAssetLogChunks re-derives officialSection per group (not from the asset's
@@ -116,6 +117,18 @@ const docs = [
   ['yearlyConditionReport', renderYearlyConditionReport(data, byValue)],
   ['signoff', renderSignoff(data)],
 ] as const;
+
+// Phase 4: defect cards in the asset log should show "AS 1851-2012 Section 10"
+// on the extinguisher's card (real Section) and never fabricate a Section
+// reference on the exit-light's card ("15" isn't real).
+const chunkHtml = docs.filter(([name]) => name.startsWith('chunk')).map(([, html]) => html).join('');
+if (!chunkHtml.includes('AS 1851-2012 Section 10')) {
+  throw new Error('FAIL: assetLogChunk — expected extinguisher defect card to show "AS 1851-2012 Section 10"');
+}
+if (chunkHtml.includes('AS 1851-2012 Section 15')) {
+  throw new Error('FAIL: assetLogChunk — fabricated "AS 1851-2012 Section 15" appeared on a defect card');
+}
+console.log('OK: assetLogChunk defect cards show verified Section refs only');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections

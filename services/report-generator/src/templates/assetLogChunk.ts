@@ -56,7 +56,7 @@ export function renderAssetLogChunk(
     if (assetDefects.length > 0) {
       parts.push(`<tr><td colspan="3" style="padding:0;border-top:none">`);
       for (const defect of assetDefects) {
-        parts.push(renderDefectCard(defect, photosByDefect, signedPhotoUrls));
+        parts.push(renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection));
       }
       parts.push(`</td></tr>`);
     }
@@ -81,6 +81,12 @@ export function renderDefectCard(
   defect: Defect,
   photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
+  // AS1851 Clause 1.16 requires routine service records to "clearly reference
+  // the relevant section of AS 1851-2012" — verified via categoryGrouping.ts's
+  // officialSectionFor(), so a defect on an out-of-range category (e.g. "15")
+  // never gets a fabricated Section number. Unlinked defects have no asset and
+  // so no Section to reference — defaults to null.
+  officialSection: number | null = null,
 ): string {
   const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
@@ -94,7 +100,7 @@ export function renderDefectCard(
       <div class="defect-bar" style="background:${sev.text}"></div>
       <div class="defect-body">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}</span>
+          <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
           <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)}</span>
         </div>
         <div style="margin-top:4px">${esc(defect.description)}</div>
