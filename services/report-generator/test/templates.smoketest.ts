@@ -13,7 +13,21 @@ import { renderUnlinkedDefects } from '../src/templates/unlinkedDefects';
 import { renderRepairs } from '../src/templates/repairs';
 import { renderSignoff } from '../src/templates/signoff';
 import { buildAssetLogChunks } from '../src/data/chunking';
+import { parseCategory } from '../src/data/categoryGrouping';
 import { AssetTypeDefinition, AssetWithResult, Defect, InspectionPhoto, ReportData } from '../src/types';
+
+// AS1851's real Section list stops at 14 — "15 - Emergency escape lighting" is an
+// industry convention (matches the reference report), not a real Section, so it
+// must come back with officialSection: null rather than a fabricated "15".
+const numbered = parseCategory('04 - Fire Hydrant Systems (Annual)');
+if (numbered.officialSection !== 4) {
+  throw new Error(`FAIL: parseCategory — expected officialSection 4 for a real Section, got ${numbered.officialSection}`);
+}
+const unofficial = parseCategory('15 - Emergency escape lighting and exit signs (Annual)');
+if (unofficial.officialSection !== null || unofficial.number !== 15) {
+  throw new Error(`FAIL: parseCategory — expected number 15 but officialSection null, got number=${unofficial.number} officialSection=${unofficial.officialSection}`);
+}
+console.log('OK: parseCategory officialSection lookup (real Section verified, fake "15" correctly rejected)');
 
 function assertBalanced(html: string, name: string, tag: string) {
   const open = (html.match(new RegExp(`<${tag}(\\s|>)`, 'g')) ?? []).length;
@@ -29,13 +43,15 @@ const assetTypes: AssetTypeDefinition[] = [
   { value: 'extinguisher', label: 'Extinguisher', full_label: 'Fire Extinguisher - Portable', inspection_routine: '10 - Portable and Wheeled Fire Extinguishers (Annual)' },
   { value: 'smoke_alarm', label: 'Smoke Alarm', full_label: 'Smoke Alarm (SOU)', inspection_routine: '06 - Smoke and Heat Alarms (SOU) (Annual)' },
   { value: 'hose_reel', label: 'Fire Hose Reel', full_label: 'Fire Hose Reel', inspection_routine: '09 - Fire Hose Reels (Annual)' },
+  { value: 'exit_light', label: 'Exit Light', full_label: 'Emergency - Exit Signs', inspection_routine: '15 - Emergency escape lighting and exit signs (Annual)' },
 ];
 const byValue = new Map(assetTypes.map((t) => [t.value, t]));
 
 const assets: AssetWithResult[] = [
-  { id: 'a1', property_id: 'p1', asset_type: 'extinguisher', variant: 'DCP 4.5KG', asset_ref: '001', location_on_site: 'Level 1 Lobby', serial_number: null, result: 'fail', defect_reason: 'Past service life', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null },
-  { id: 'a2', property_id: 'p1', asset_type: 'smoke_alarm', variant: null, asset_ref: 'A101', location_on_site: 'Unit A101', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null },
-  { id: 'a3', property_id: 'p1', asset_type: 'hose_reel', variant: '36m - 25mm', asset_ref: '015', location_on_site: 'AG lobby', serial_number: null, result: 'not_tested', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null },
+  { id: 'a1', property_id: 'p1', asset_type: 'extinguisher', variant: 'DCP 4.5KG', asset_ref: '001', location_on_site: 'Level 1 Lobby', serial_number: null, result: 'fail', defect_reason: 'Past service life', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a2', property_id: 'p1', asset_type: 'smoke_alarm', variant: null, asset_ref: 'A101', location_on_site: 'Unit A101', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a3', property_id: 'p1', asset_type: 'hose_reel', variant: '36m - 25mm', asset_ref: '015', location_on_site: 'AG lobby', serial_number: null, result: 'not_tested', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a4', property_id: 'p1', asset_type: 'exit_light', variant: 'Box (Wall Mount)', asset_ref: 'E5', location_on_site: 'Level 5', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
 ];
 
 const defects: Defect[] = [
@@ -76,6 +92,20 @@ const data: ReportData = {
 
 const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]]]);
 const chunks = buildAssetLogChunks(assets, byValue, 200);
+
+// buildAssetLogChunks re-derives officialSection per group (not from the asset's
+// own categoryOfficialSection field) — verify that path too: extinguisher (real
+// Section 10) should carry it through, exit_light ("15") should not.
+const allRows = chunks.flatMap((c) => c.rows);
+const extRow = allRows.find((r) => r.asset.id === 'a1');
+const exitRow = allRows.find((r) => r.asset.id === 'a4');
+if (extRow?.officialSection !== 10) {
+  throw new Error(`FAIL: buildAssetLogChunks — expected officialSection 10 for extinguisher row, got ${extRow?.officialSection}`);
+}
+if (exitRow?.officialSection !== null) {
+  throw new Error(`FAIL: buildAssetLogChunks — expected officialSection null for "15" exit-light row, got ${exitRow?.officialSection}`);
+}
+console.log('OK: buildAssetLogChunks officialSection threaded correctly per row');
 
 const docs = [
   ['cover', renderCover(data, byValue)],

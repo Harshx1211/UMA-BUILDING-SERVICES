@@ -84,6 +84,8 @@ export interface AssetWithResult extends Asset {
   /** Resolved category label, e.g. "04 - Fire Hydrant Systems". See categoryGrouping.ts. */
   categoryLabel: string;
   categoryNumber: number | null;
+  /** `categoryNumber`, but only when it's a real AS1851 Section 2-14 — null otherwise. */
+  categoryOfficialSection: number | null;
 }
 
 export interface Defect {

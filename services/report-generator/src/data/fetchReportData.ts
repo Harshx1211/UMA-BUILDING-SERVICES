@@ -86,6 +86,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
       actioned_at: latest?.actioned_at ?? null,
       categoryLabel: parsed.label,
       categoryNumber: parsed.number,
+      categoryOfficialSection: parsed.officialSection,
     };
   });
 

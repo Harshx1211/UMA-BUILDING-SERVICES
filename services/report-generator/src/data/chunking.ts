@@ -4,6 +4,10 @@ import { AssetTypeDefinition, AssetWithResult } from '../types';
 export interface AssetLogRow {
   asset: AssetWithResult;
   categoryLabel: string;
+  /** The category's number, but only when it's a real AS1851 Section 2-14 — see
+   * categoryGrouping.ts's officialSectionFor(). Null for unverified/out-of-range
+   * category numbers (e.g. the "15" emergency-lighting convention). */
+  officialSection: number | null;
   /** True only for the very first row of this category across the WHOLE ordered
    * list (not just within one chunk) — lets a chunk tell whether it's opening a
    * category for the first time or continuing one that started in a previous
@@ -37,7 +41,7 @@ export function buildAssetLogChunks(
       return (a.asset_ref ?? '').localeCompare(b.asset_ref ?? '');
     });
     sorted.forEach((asset, i) => {
-      ordered.push({ asset, categoryLabel: group.label, isFirstInCategory: i === 0 });
+      ordered.push({ asset, categoryLabel: group.label, officialSection: group.officialSection, isFirstInCategory: i === 0 });
     });
   }
 
