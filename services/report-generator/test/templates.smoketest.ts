@@ -65,8 +65,9 @@ const data: ReportData = {
   signedPhotoUrls,
   signature: { id: 's1', job_id: 'j1', signature_url: 'https://signed.example.com/sig.png', tech_signature_url: 'https://signed.example.com/techsig.png', signed_by_name: 'Raquel', signed_at: new Date().toISOString() },
   timeLogUsers: [
-    { user: { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' }, firstClockIn: new Date().toISOString(), lastClockOut: new Date().toISOString() },
-    { user: { id: 'u2', full_name: 'Rutvi Patel', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null }, firstClockIn: new Date().toISOString(), lastClockOut: null },
+    { user: { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' }, firstClockIn: new Date().toISOString(), lastClockOut: new Date().toISOString(), hasRealSession: true },
+    { user: { id: 'u2', full_name: 'Rutvi Patel', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null }, firstClockIn: new Date().toISOString(), lastClockOut: null, hasRealSession: true },
+    { user: { id: 'u3', full_name: 'No-Session Tech', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null }, firstClockIn: new Date().toISOString(), lastClockOut: null, hasRealSession: false },
   ],
   approvedQuote: { id: 'q1', job_id: 'j1', status: 'approved', total_amount: 45, items: [{ id: 'qi1', defect_id: 'd2', quantity: 1, unit_price: 45, item_name: 'New extinguisher', inventory_item: null }] },
   reportId: 'R-00001',

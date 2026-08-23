@@ -33,7 +33,13 @@ export function renderSignoff(data: ReportData): string {
       return `
         <tr>
           <td>${esc(t.user.full_name)}</td>
-          <td>${fmtDateTime(t.firstClockIn)}${t.lastClockOut ? ` &ndash; ${fmtDateTime(t.lastClockOut)}` : ' (session open)'}</td>
+          <td>${fmtDateTime(t.firstClockIn)}${
+            t.lastClockOut
+              ? ` &ndash; ${fmtDateTime(t.lastClockOut)}`
+              : t.hasRealSession
+                ? ' (session open)'
+                : ''
+          }</td>
           <td>${accreditations}</td>
           <td>${sigCell}</td>
         </tr>`;

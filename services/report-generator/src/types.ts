@@ -167,6 +167,12 @@ export interface ReportData {
     user: JobUser;
     firstClockIn: string;
     lastClockOut: string | null;
+    // True only when firstClockIn/lastClockOut came from real time_logs
+    // rows. When a technician never used clock-in/out, these fall back to
+    // the job's own date (see fetchReportData.ts) — that's a single
+    // reference date, not an open clock session, and the two must render
+    // differently (see templates/signoff.ts).
+    hasRealSession: boolean;
   }>;
   approvedQuote: Quote | null;
   reportId: string;

@@ -150,13 +150,14 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
       // optional) — fall back to the job's own dates rather than an empty cell.
       firstClockIn: assignedRange?.firstClockIn ?? job.completed_at ?? job.scheduled_date,
       lastClockOut: assignedRange?.lastClockOut ?? job.completed_at ?? null,
+      hasRealSession: assignedRange !== null,
     });
   }
   for (const uid of extraUserIds) {
     const user = usersById.get(uid);
     const range = rangeFor(sessionsFor(uid));
     if (!user || !range) continue;
-    timeLogUsers.push({ user, firstClockIn: range.firstClockIn, lastClockOut: range.lastClockOut });
+    timeLogUsers.push({ user, firstClockIn: range.firstClockIn, lastClockOut: range.lastClockOut, hasRealSession: true });
   }
 
   const approvedQuote = quotes.find((q) => q.status === 'approved') ?? null;
