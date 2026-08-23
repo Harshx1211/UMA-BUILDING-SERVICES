@@ -8,6 +8,7 @@ import { renderCover } from '../templates/cover';
 import { renderAssetLogChunk } from '../templates/assetLogChunk';
 import { renderUnlinkedDefects } from '../templates/unlinkedDefects';
 import { renderRepairs } from '../templates/repairs';
+import { renderYearlyConditionReport } from '../templates/yearlyConditionReport';
 import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
 import { BASE_STYLE } from '../templates/theme';
@@ -86,6 +87,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
         : []),
       ...(unlinkedHtml ? [unlinkedHtml] : []),
       ...(repairsHtml ? [repairsHtml] : []),
+      renderYearlyConditionReport(data, assetTypesByValue),
       renderSignoff(data),
     ];
     const combinedHtml = `<!DOCTYPE html>
@@ -121,7 +123,8 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 
     if (unlinkedHtml) documents.push({ name: '02_unlinked_defects', html: unlinkedHtml });
     if (repairsHtml) documents.push({ name: '03_repairs', html: repairsHtml });
-    documents.push({ name: '04_signoff', html: renderSignoff(data) });
+    documents.push({ name: '04_yearly_condition_report', html: renderYearlyConditionReport(data, assetTypesByValue) });
+    documents.push({ name: '05_signoff', html: renderSignoff(data) });
 
     let rendered: Array<{ name: string; buffer: Buffer }>;
     try {

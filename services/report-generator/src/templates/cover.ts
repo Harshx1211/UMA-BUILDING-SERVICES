@@ -1,5 +1,5 @@
 import { BASE_STYLE, COLORS } from './theme';
-import { esc, fmtDate } from './helpers';
+import { esc, fmtDate, infoCell } from './helpers';
 import { groupByCategory } from '../data/categoryGrouping';
 import { ReportData } from '../types';
 import { AssetTypeDefinition } from '../types';
@@ -105,12 +105,4 @@ export function renderCover(
     </table>
   </div>
 </body></html>`;
-}
-
-function infoCell(label: string, value: string | null | undefined): string {
-  return `
-    <div style="flex:1;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
-      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${esc(label)}</div>
-      <div style="font-size:11px;font-weight:600">${esc(value) || '—'}</div>
-    </div>`;
 }

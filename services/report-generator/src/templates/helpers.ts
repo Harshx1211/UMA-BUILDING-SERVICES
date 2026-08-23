@@ -78,3 +78,13 @@ export function extractBody(html: string): string {
   const match = /<body>([\s\S]*)<\/body>/.exec(html);
   return match ? match[1] : html;
 }
+
+/** A labelled value cell for the info-strip rows used on cover.ts and
+ * yearlyConditionReport.ts (Report Details / Service Provider Details etc). */
+export function infoCell(label: string, value: string | null | undefined): string {
+  return `
+    <div style="flex:1;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
+      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${esc(label)}</div>
+      <div style="font-size:11px;font-weight:600">${esc(value) || '—'}</div>
+    </div>`;
+}

@@ -11,6 +11,7 @@ import { renderCover } from '../src/templates/cover';
 import { renderAssetLogChunk } from '../src/templates/assetLogChunk';
 import { renderUnlinkedDefects } from '../src/templates/unlinkedDefects';
 import { renderRepairs } from '../src/templates/repairs';
+import { renderYearlyConditionReport } from '../src/templates/yearlyConditionReport';
 import { renderSignoff } from '../src/templates/signoff';
 import { buildAssetLogChunks } from '../src/data/chunking';
 import { parseCategory } from '../src/data/categoryGrouping';
@@ -112,8 +113,23 @@ const docs = [
   ...chunks.map((c, i) => [`chunk${i}`, renderAssetLogChunk(c, defectsByAsset, photosByAsset, photosByDefect, signedPhotoUrls)] as const),
   ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
   ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls) ?? '(null — no repairs, unexpected here)'],
+  ['yearlyConditionReport', renderYearlyConditionReport(data, byValue)],
   ['signoff', renderSignoff(data)],
 ] as const;
+
+// The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
+// emergency-lighting convention) — the checklist lists all 13 real Sections
+// (2-14) but should only tick exactly those three, and must never fabricate
+// a "Section 15" checkbox anywhere in the page.
+const ycrHtml = docs.find(([name]) => name === 'yearlyConditionReport')![1];
+const checkedCount = (ycrHtml.match(/&#10003;/g) ?? []).length;
+if (checkedCount !== 3) {
+  throw new Error(`FAIL: yearlyConditionReport — expected exactly 3 ticked Sections (6, 9, 10), found ${checkedCount}`);
+}
+if (/Section 15\b/.test(ycrHtml)) {
+  throw new Error('FAIL: yearlyConditionReport — fabricated "Section 15" appeared in output');
+}
+console.log('OK: yearlyConditionReport checklist ticks real Sections only, no fabricated "Section 15"');
 
 for (const [name, html] of docs) {
   assertBalanced(html, name, 'html');
