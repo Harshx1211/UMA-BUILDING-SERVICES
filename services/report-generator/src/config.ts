@@ -24,7 +24,7 @@ export const config = {
   maxAssetsPerChunk: intEnv('MAX_ASSETS_PER_CHUNK', 200),
   gotenbergConcurrency: intEnv('GOTENBERG_CONCURRENCY', 2),
   gotenbergTimeoutMs: intEnv('GOTENBERG_TIMEOUT_MS', 200_000),
-  chunkRetryAttempts: intEnv('CHUNK_RETRY_ATTEMPTS', 2),
+  chunkRetryAttempts: intEnv('CHUNK_RETRY_ATTEMPTS', 3),
 
   port: intEnv('PORT', 8080),
 } as const;
