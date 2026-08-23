@@ -548,7 +548,9 @@ export default function ReportSummaryScreen() {
                 title="Open PDF"
                 icon="file-eye-outline"
                 variant="primary"
-                onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+                // mode=view: nothing changed since this report was made —
+                // just show it, don't burn a full regeneration to view it again.
+                onPress={() => router.push(`/jobs/${jobId}/preview?mode=view` as never)}
                 style={{ flex: 1 }}
               />
               <Button

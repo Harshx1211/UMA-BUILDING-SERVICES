@@ -20,7 +20,7 @@ export type ReportGenStatus = 'idle' | 'generating' | 'completed' | 'failed';
  */
 export function useReportGeneration(
   jobId: string | undefined,
-  opts?: { hasExistingReport?: boolean },
+  opts?: { hasExistingReport?: boolean; forceOnMount?: boolean },
 ) {
   const [status, setStatus] = useState<ReportGenStatus>('idle');
   const [elapsedS, setElapsedS] = useState(0);
@@ -127,14 +127,24 @@ export function useReportGeneration(
     poll(jobId);
   }, [jobId, poll]);
 
-  // Resume-on-mount: if generation was already queued elsewhere (or from an
-  // earlier session) pick it up without re-triggering a duplicate run. Skips
-  // entirely once a report already exists — nothing to resume.
+  // On mount: either always start a fresh generation (forceOnMount — used by
+  // "Generate"/"Draft Preview"/"Regenerate", which all mean "make me a
+  // current PDF"), or just resume-watch an already-in-flight one without
+  // re-triggering (used when merely viewing an existing report). Without
+  // forceOnMount, tapping "Regenerate" on a job that already has a completed
+  // report would just re-show that same old result — the server's status
+  // row still says 'completed' from last time, so a passive resume-check
+  // never realizes a fresh run was actually being asked for.
   useEffect(() => {
-    if (!jobId || opts?.hasExistingReport) return;
+    if (!jobId) return;
+    if (opts?.forceOnMount) {
+      generate();
+      return;
+    }
+    if (opts?.hasExistingReport) return;
     if (status === 'idle') poll(jobId, { oneShot: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId, opts?.hasExistingReport]);
+  }, [jobId, opts?.hasExistingReport, opts?.forceOnMount]);
 
   return { status, elapsedS, pdfUrl, error, generate, stopPolling: stop };
 }

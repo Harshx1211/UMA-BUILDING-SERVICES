@@ -142,7 +142,7 @@ function ReadyView({
 export default function PreviewScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
-  const { id: jobId } = useLocalSearchParams<{ id: string }>();
+  const { id: jobId, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const { updateJobStatus, jobs } = useJobsStore();
 
   const job = jobs.find(j => j.id === jobId);
@@ -154,23 +154,25 @@ export default function PreviewScreen() {
     return () => { isMounted.current = false; };
   }, []);
 
-  // Shared with the job detail and report summary screens — all three poll
-  // the exact same GET /report-status endpoint through this hook, so they
-  // always agree on whether a report is generating instead of showing
-  // conflicting states. This screen is a pure viewer: it never assumes
-  // generation was already triggered elsewhere. If it's opened before
-  // anything was queued (e.g. the "Draft Preview" entry point, or a direct
-  // deep link), the hook's own resume-check queues it as a fallback so those
-  // flows keep working unchanged. `hasExistingReport: false` is deliberate —
-  // this screen always waits for a fresh, real status rather than
-  // short-circuiting on a possibly-stale cached report_url.
+  // The one place that tracks report generation. Every "make me a PDF"
+  // button (Generate Report, Draft Preview, Regenerate) navigates here and
+  // this screen always starts a fresh generation on mount (forceOnMount) —
+  // without that, tapping Regenerate on a job that already has a completed
+  // report would just silently re-show that same old PDF, since the
+  // server's last-known status is already 'completed' and nothing would
+  // otherwise realize a new run was actually being asked for.
+  //
+  // "Open PDF" (viewing an already-current report, nothing changed since it
+  // was made) navigates here with ?mode=view instead — that's the one case
+  // that should NOT trigger a wasteful re-generation, just check the current
+  // status and show it.
   const {
     status: genStatus,
     elapsedS,
     pdfUrl,
     error: errorMsg,
     generate,
-  } = useReportGeneration(jobId, { hasExistingReport: false });
+  } = useReportGeneration(jobId, { forceOnMount: mode !== 'view' });
 
   const screenState: ScreenState =
     genStatus === 'completed' ? (isDownloading ? 'downloading' : 'ready') :
