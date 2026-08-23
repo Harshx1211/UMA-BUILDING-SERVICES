@@ -4,6 +4,7 @@ import type { Defect } from '@/types';
 import {
   getDefectsForJob,
   getAllDefects,
+  getJobById,
   insertRecord,
   updateRecord,
   deleteRecord,
@@ -12,7 +13,7 @@ import {
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
 } from '@/lib/database';
-import { DefectStatus, SyncOperation } from '@/constants/Enums';
+import { DefectStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
 import { queuePhotoUpload } from '@/lib/photoUpload';
 import { useAuthStore } from '@/store/authStore';
@@ -81,8 +82,20 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
   addDefect: (defectData) => {
     try {
       set({ isSaving: true, error: null });
+
+      // Defense-in-depth: same "Continue Working is the only way back into edit
+      // mode" invariant as store/inspectionStore.ts's updateAssetResult — a
+      // completed job's report is treated as final.
+      if (defectData.job_id) {
+        const job = getJobById<{ status: string }>(defectData.job_id);
+        if (job?.status === JobStatus.Completed) {
+          set({ isSaving: false });
+          throw new Error('This job is completed — tap "Continue Working" to make changes.');
+        }
+      }
+
       const id = generateUUID();
-      
+
       const { photos, ...defectWithoutPhotos } = defectData;
 
       // FIX: inject company_id so the sync-queue INSERT satisfies Supabase RLS.

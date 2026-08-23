@@ -114,7 +114,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
       Toast.show({ type: 'error', text1: 'Photos required', text2: 'Critical defects need visual evidence.' });
       return;
     }
-    addDefect({
+    const id = addDefect({
       job_id: jobId, property_id: propertyId,
       // FIX: use null for unlinked defects, not the string 'unlinked'.
       // 'unlinked' is not a valid UUID and fails Supabase FK constraints on sync.
@@ -124,6 +124,18 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
       defect_code: selectedCode?.code ?? null,
       quote_price: selectedCode?.quote_price ?? null,
     });
+    // FIX: addDefect's return value was previously ignored — the sheet closed
+    // and showed "Defect logged" unconditionally, even on failure (e.g. the
+    // job-completed guard below rejecting the write), silently losing the
+    // defect while telling the tech it worked.
+    if (!id) {
+      Toast.show({
+        type: 'error',
+        text1: 'Could not save defect',
+        text2: useDefectsStore.getState().error ?? 'Please try again.',
+      });
+      return;
+    }
     sheetRef.current?.close();
     onSaved();
     Toast.show({ type: 'success', text1: 'Defect logged' });

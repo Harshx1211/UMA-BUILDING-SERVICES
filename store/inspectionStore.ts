@@ -34,7 +34,7 @@ import {
   recordDeletedPhoto,
   openDatabase,
 } from '@/lib/database';
-import { SyncOperation, InspectionResult, DefectStatus, DefectSeverity } from '@/constants/Enums';
+import { SyncOperation, InspectionResult, DefectStatus, DefectSeverity, JobStatus } from '@/constants/Enums';
 import { usePhotosStore } from '@/store/photosStore';
 import { useAuthStore } from '@/store/authStore';
 import { useDefectsStore } from '@/store/defectsStore';
@@ -164,6 +164,18 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       set({ isSaving: true, error: null });
       const { assets, currentJobId } = get();
       if (!currentJobId) throw new Error('No active job');
+
+      // Defense-in-depth: a completed job's report is treated as final, and
+      // "Continue Working" (which resets status + clears the stale report_url)
+      // is the only sanctioned way back into edit mode. inspect.tsx already
+      // blocks entry for a completed job, but guard the actual write here too
+      // so no other/future call site can silently change data behind a report
+      // that's supposed to be locked.
+      const job = getJobById<{ status: string }>(currentJobId);
+      if (job?.status === JobStatus.Completed) {
+        set({ isSaving: false });
+        throw new Error('This job is completed — tap "Continue Working" to make changes.');
+      }
 
       const assetIndex = assets.findIndex(a => a.id === assetId);
       if (assetIndex === -1) throw new Error('Asset not found');

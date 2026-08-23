@@ -534,37 +534,30 @@ export default function ReportSummaryScreen() {
       {/* ── Bottom Action Bar ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
         {isCompleted && job.report_url ? (
-          // When inspection data changed since last PDF: hide Download, show Regenerate only
-          hasPendingSync ? (
+          // A completed job's data can only change via "Continue Working" on the
+          // job detail screen, which resets status to in_progress AND clears
+          // report_url — so a Completed job that still has a report_url is
+          // guaranteed to be current. No need to guess via sync-queue state
+          // (that used to gate Regenerate-vs-Open here and was a real source of
+          // "the PDF doesn't reflect what I just changed" bugs).
+          <View style={s.bottomBtnRow}>
             <Button
-              title="Regenerate Report"
-              icon="refresh"
+              title="Open PDF"
+              icon="file-eye-outline"
               variant="primary"
-              onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+              // mode=view: the report is guaranteed current — just show it,
+              // don't burn a full regeneration to view it again.
+              onPress={() => router.push(`/jobs/${jobId}/preview?mode=view` as never)}
+              style={{ flex: 1 }}
             />
-          ) : (
-            <View style={s.bottomBtnRow}>
-              <Button
-                title="Open PDF"
-                icon="file-eye-outline"
-                variant="primary"
-                // mode=view: nothing changed since this report was made —
-                // just show it, don't burn a full regeneration to view it again.
-                onPress={() => router.push(`/jobs/${jobId}/preview?mode=view` as never)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Refresh"
-                icon="refresh"
-                variant="secondary"
-                // FIX: Refresh re-checks local sync state without re-generating PDF.
-                // Previously this was a duplicate of "Open PDF" — both navigated
-                // to /preview, which was confusing and wasted the user's time.
-                onPress={onRefresh}
-                style={{ flex: 1 }}
-              />
-            </View>
-          )
+            <Button
+              title="Refresh"
+              icon="refresh"
+              variant="secondary"
+              onPress={onRefresh}
+              style={{ flex: 1 }}
+            />
+          </View>
         ) : (
           <Button
             title={readyToGenerate ? "Generate Report PDF" : "Preview Draft Report"}

@@ -9,7 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, FilterPills, Button } from '@/components/ui';
-import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation } from '@/constants/Enums';
+import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
@@ -279,8 +279,24 @@ export default function AssetInspectionScreen() {
 
   useEffect(() => {
     if (jobId) {
-      const job = getJobById<{ property_id: string; property_name: string | null; scheduled_date: string }>(jobId);
+      const job = getJobById<{ property_id: string; property_name: string | null; scheduled_date: string; status: string }>(jobId);
       if (job) {
+        // A completed job's report is treated as final — the only sanctioned way
+        // back into edit mode is "Continue Working" on the job detail screen,
+        // which resets status to in_progress AND clears the stale report_url.
+        // Without this gate, a tech could reach this screen some other way
+        // (deep link, back-navigation) and silently change job_assets/results
+        // while the job still reads "Completed" with an old report_url pointing
+        // at a PDF that no longer reflects the data.
+        if (job.status === JobStatus.Completed) {
+          Toast.show({
+            type: 'info',
+            text1: 'Job already completed',
+            text2: 'Tap "Continue Working" on the job screen to make changes.',
+          });
+          router.back();
+          return;
+        }
         setPropertyId(job.property_id);
         setJobTitle(job.property_name ?? '');
         setJobDate(job.scheduled_date ?? '');
