@@ -24,7 +24,6 @@ import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
-import { useReportGeneration } from '@/hooks/useReportGeneration';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -146,25 +145,6 @@ export default function JobDetailScreen() {
   useEffect(() => {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, []);
-
-  // Report generation status — shared with report.tsx and preview.tsx so all
-  // three screens reflect the exact same server-polled state instead of
-  // drifting out of sync with each other.
-  const {
-    status: genStatus,
-    elapsedS: genElapsedS,
-    pdfUrl: genPdfUrl,
-    generate: handleGenerateReport,
-  } = useReportGeneration(job?.id, { hasExistingReport: !!job?.report_url });
-
-  // The hook persists report_url to SQLite itself; mirror it into this
-  // screen's local job state too so the bottom button flips to "View Report"
-  // without waiting for the next full reload.
-  useEffect(() => {
-    if (genStatus === 'completed' && genPdfUrl) {
-      setJob(p => (p && p.report_url !== genPdfUrl) ? { ...p, report_url: genPdfUrl } : p);
-    }
-  }, [genStatus, genPdfUrl]);
 
   // ── Data loading ──────────────────────────────────────────────────────
   const loadJob = useCallback(async () => {
@@ -374,11 +354,6 @@ export default function JobDetailScreen() {
   const isCompleted  = job.status === JobStatus.Completed;
   const isCancelled  = job.status === JobStatus.Cancelled;
   const isScheduled  = job.status === JobStatus.Scheduled;
-  // Derived directly from the hook's live status every render — not from
-  // job.report_url alone, which depends on a separate effect having already
-  // mirrored it into local state. This way the button can never show a
-  // report as missing when the hook already knows it's done.
-  const hasReport    = genStatus === 'completed' || !!job.report_url;
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -778,39 +753,27 @@ export default function JobDetailScreen() {
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, borderTopWidth: 1, shadowColor: C.shadow }]}>
         <Button
           title={
-            isCompleted && hasReport                      ? 'View Report' :
-            isCompleted && genStatus === 'generating'     ? `Generating Report… ${genElapsedS}s` :
-            isCompleted && genStatus === 'failed'         ? 'Retry Generating Report' :
-            isCompleted                                   ? 'Generate Report' :
-            isInProgress                                  ? 'Draft Preview' :
+            isCompleted && job?.report_url ? 'View Report' :
+            isCompleted                    ? 'Generate Report' :
+            isInProgress                   ? 'Draft Preview' :
             'Report Not Available'
           }
           variant={isCompleted ? 'secondary' : 'primary'}
           disabled={isScheduled || isCancelled}
           onPress={() => {
-            if (isCompleted && hasReport) {
+            if (isCompleted && job?.report_url) {
               router.push(`/jobs/${id}/report` as never);
-            } else if (isCompleted && genStatus === 'generating') {
-              // Already running — hop to the live status view instead of
-              // re-triggering a duplicate generation.
-              router.push(`/jobs/${id}/preview` as never);
-            } else if (isCompleted && genStatus === 'failed') {
-              handleGenerateReport();
-            } else if (isCompleted) {
-              handleGenerateReport();
-            } else if (isInProgress) {
+            } else if (isCompleted || isInProgress) {
+              // Both "Generate Report" and "Draft Preview" land on the same
+              // screen, which handles queuing generation (if needed) and
+              // shows a live "Generating… Xs" → "Ready" view — one place
+              // that tracks progress, instead of every screen trying to.
               router.push(`/jobs/${id}/preview` as never);
             }
           }}
           icon={
             <MaterialCommunityIcons
-              name={
-                isCompleted && hasReport                  ? 'file-check-outline' :
-                isCompleted && genStatus === 'generating' ? 'cloud-upload-outline' :
-                isCompleted && genStatus === 'failed'     ? 'refresh' :
-                isCompleted                                ? 'file-chart-outline' :
-                'file-eye-outline'
-              }
+              name={isCompleted && job?.report_url ? 'file-check-outline' : isCompleted ? 'file-chart-outline' : 'file-eye-outline'}
               size={20}
               color={(isScheduled || isCancelled) ? C.textTertiary : C.textOnPrimary}
             />

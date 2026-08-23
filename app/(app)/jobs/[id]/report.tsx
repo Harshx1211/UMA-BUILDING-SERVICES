@@ -27,7 +27,6 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity } from '@/constants/Enums';
 import type { Defect, Signature } from '@/types';
-import { useReportGeneration } from '@/hooks/useReportGeneration';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -265,29 +264,6 @@ export default function ReportSummaryScreen() {
     loadData();
   }, [loadData]);
 
-  // Shared with the job detail screen and /preview — all three poll the same
-  // GET /report-status endpoint through this hook, so they always agree on
-  // whether a report is generating instead of showing conflicting states.
-  // Queues generation and stays on this screen: a toast confirms it, not a
-  // forced trip to a "Generating…" screen. "Open PDF"/"Preview Draft Report"
-  // below still navigate to /preview since those are explicit "show me the
-  // PDF" taps, not generation triggers.
-  const {
-    status: genStatus,
-    elapsedS: genElapsedS,
-    pdfUrl: genPdfUrl,
-    generate: handleGenerateReport,
-  } = useReportGeneration(jobId, { hasExistingReport: !!job?.report_url });
-
-  // The hook persists report_url to SQLite itself; mirror it into this
-  // screen's local job state too so the bottom bar flips to "Open PDF"
-  // immediately instead of waiting for the next reload.
-  useEffect(() => {
-    if (genStatus === 'completed' && genPdfUrl) {
-      setJob(p => (p && p.report_url !== genPdfUrl) ? { ...p, report_url: genPdfUrl } : p);
-    }
-  }, [genStatus, genPdfUrl]);
-
   if (isLoading) {
     return (
       <View style={[s.screen, s.center, { backgroundColor: C.background }]}>
@@ -326,12 +302,6 @@ export default function ReportSummaryScreen() {
   const hasSignature     = !!signature?.signature_url;
   const readyToGenerate  = isFullyInspected && hasSignature;
   const isCompleted      = job.status === 'completed';
-  // Derived directly from the hook's live status every render — not from
-  // job.report_url alone, which depends on a separate effect having already
-  // mirrored it into local state. This way the bottom bar can never show a
-  // report as missing when the hook already knows it's done.
-  const hasReport        = genStatus === 'completed' || !!job.report_url;
-
   // F5: Technician Info (for top banner)
   // Retrieve the technician's name from SQLite `users` table instead of hardcoding
   const techRecord = getRecord<{ full_name: string }>('users', job.assigned_to);
@@ -563,28 +533,14 @@ export default function ReportSummaryScreen() {
 
       {/* ── Bottom Action Bar ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
-        {genStatus === 'generating' ? (
-          <Button
-            title={`Generating Report… ${genElapsedS}s`}
-            icon="cloud-upload-outline"
-            variant="secondary"
-            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
-          />
-        ) : genStatus === 'failed' ? (
-          <Button
-            title="Retry Generating Report"
-            icon="refresh"
-            variant="primary"
-            onPress={handleGenerateReport}
-          />
-        ) : isCompleted && hasReport ? (
+        {isCompleted && job.report_url ? (
           // When inspection data changed since last PDF: hide Download, show Regenerate only
           hasPendingSync ? (
             <Button
               title="Regenerate Report"
               icon="refresh"
               variant="primary"
-              onPress={handleGenerateReport}
+              onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
             />
           ) : (
             <View style={s.bottomBtnRow}>
@@ -612,13 +568,7 @@ export default function ReportSummaryScreen() {
             title={readyToGenerate ? "Generate Report PDF" : "Preview Draft Report"}
             icon={readyToGenerate ? "file-pdf-box" : "file-eye-outline"}
             variant={readyToGenerate ? "primary" : "secondary"}
-            onPress={() => {
-              if (readyToGenerate) {
-                handleGenerateReport();
-              } else {
-                router.push(`/jobs/${jobId}/preview` as never);
-              }
-            }}
+            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
           />
         )}
       </View>
