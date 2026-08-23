@@ -89,7 +89,7 @@ function pillCell(result: string | null): Record<string, unknown> {
 }
 
 function defectSeverityColor(sev: string): string {
-  return sev === 'critical' ? '#DC2626' : sev === 'minor' ? '#CA8A04' : '#D97706';
+  return sev === 'critical' ? '#DC2626' : sev === 'non_conformance' ? '#CA8A04' : '#D97706';
 }
 
 // Safe image element — returns null if url is falsy so we can filter it out
@@ -290,7 +290,7 @@ export async function buildPdfDefinition(data: any): Promise<any> {
 
     // deno-lint-ignore no-explicit-any
     for (const d of defects) {
-      const sevColor = defectSeverityColor(d.severity ?? 'major');
+      const sevColor = defectSeverityColor(d.severity ?? 'non_critical');
       // deno-lint-ignore no-explicit-any
       const defPhotos = (photosByDefect.get(d.id) ?? []).slice(0, 6);
       // deno-lint-ignore no-explicit-any

@@ -31,6 +31,7 @@ import {
   TechUser,
   TimeLog,
 } from "@/types";
+import { DefectSeverity } from "@/constants/Enums";
 import { formatAssetType } from "@/utils/assetHelpers";
 // FIX: shared constant so we can tell an actually-failed photo apart from a
 // real one. Previously FALLBACK_IMG was only defined in pdfGenerator.ts, so
@@ -724,9 +725,9 @@ function buildPage1(data: ReportData): string {
     `;
   }
 
-  const cntCrit = defects.filter((d) => d.severity === "critical").length;
-  const cntMaj = defects.filter((d) => d.severity === "major").length;
-  const cntMin = defects.filter((d) => d.severity === "minor").length;
+  const cntCrit = defects.filter((d) => d.severity === DefectSeverity.Critical).length;
+  const cntMaj = defects.filter((d) => d.severity === DefectSeverity.NonCritical).length;
+  const cntMin = defects.filter((d) => d.severity === DefectSeverity.NonConformance).length;
 
   // Group assets by type
   type G = { svc: string; ast: string; cnt: number };
@@ -936,11 +937,11 @@ function buildDefectBox(
   }
 
   if (defect) {
-    const isCrit = defect.severity === "critical";
-    const isMin = defect.severity === "minor";
+    const isCrit = defect.severity === DefectSeverity.Critical;
+    const isMin = defect.severity === DefectSeverity.NonConformance;
     const cls = isCrit ? "crit" : isMin ? "min" : "";
-    // AS1851-2012 defect classification labels
-    const classLabel = isCrit ? "Class A" : isMin ? "Class C" : "Class B";
+    // AS1851-2012 Clause 1.5.6 defect classification labels
+    const classLabel = isCrit ? "Critical Defect" : isMin ? "Non-conformance" : "Non-critical Defect";
     const typeLabel = isCrit
       ? "Critical Defect (System Inoperative)"
       : isMin

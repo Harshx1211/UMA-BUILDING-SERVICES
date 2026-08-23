@@ -1,5 +1,6 @@
 import type { JoinedJob, Defect } from '@/types';
 import { sanitizeForHtml, MAX_LENGTHS } from '@/utils/sanitize';
+import { DefectSeverity } from '@/constants/Enums';
 
 export interface QuoteReportData {
   job: JoinedJob;
@@ -151,9 +152,9 @@ export function generateQuoteHtml(data: QuoteReportData): string {
   const refNum      = shortId(job.id, 6);
   const dateStr     = fmtDateShort(new Date().toISOString());
 
-  const crit = defects.filter(d => d.severity === 'critical');
-  const maj  = defects.filter(d => d.severity === 'major');
-  const min  = defects.filter(d => d.severity === 'minor');
+  const crit = defects.filter(d => d.severity === DefectSeverity.Critical);
+  const maj  = defects.filter(d => d.severity === DefectSeverity.NonCritical);
+  const min  = defects.filter(d => d.severity === DefectSeverity.NonConformance);
 
   const renderGroup = (title: string, items: Defect[], cls: string) => {
     if (items.length === 0) return '';
@@ -211,8 +212,8 @@ export function generateQuoteHtml(data: QuoteReportData): string {
       <div class="sec-bar">Proposed Works</div>
       <div class="tbl-wrap">
         ${renderGroup('Immediate / Critical Repairs', crit, 'crit')}
-        ${renderGroup('Major Defect Remediation', maj, 'maj')}
-        ${renderGroup('Minor Defect Remediation', min, 'min')}
+        ${renderGroup('Non-critical Defect Remediation', maj, 'maj')}
+        ${renderGroup('Non-conformance Remediation', min, 'min')}
         
         ${defects.length === 0 ? '<div style="padding:20px;text-align:center;color:#64748B;font-size:12px;">No items in quote</div>' : ''}
 

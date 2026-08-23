@@ -40,9 +40,9 @@ export default function DefectsScreen() {
 
   const filteredDefects = useMemo(() => {
     let list = store.defects;
-    if (filter === 'Critical')   list = list.filter(d => d.severity === DefectSeverity.Critical);
-    if (filter === 'Major')      list = list.filter(d => d.severity === DefectSeverity.Major);
-    if (filter === 'Minor')      list = list.filter(d => d.severity === DefectSeverity.Minor);
+    if (filter === 'Critical')        list = list.filter(d => d.severity === DefectSeverity.Critical);
+    if (filter === 'Non-critical')    list = list.filter(d => d.severity === DefectSeverity.NonCritical);
+    if (filter === 'Non-conformance') list = list.filter(d => d.severity === DefectSeverity.NonConformance);
     if (filter === 'Open')       list = list.filter(d => d.status === DefectStatus.Open);
     if (filter === 'Quoted')     list = list.filter(d => d.status === DefectStatus.Quoted);
     if (filter === 'Monitoring') list = list.filter(d => d.status === DefectStatus.Monitoring);
@@ -64,7 +64,7 @@ export default function DefectsScreen() {
   }
 
   // BUG 30 FIX: added Monitoring + Quoted so all DefectStatus values are filterable
-  const filterOpts = ['All', 'Critical', 'Major', 'Minor', 'Open', 'Quoted', 'Monitoring', 'Resolved'];
+  const filterOpts = ['All', 'Critical', 'Non-critical', 'Non-conformance', 'Open', 'Quoted', 'Monitoring', 'Resolved'];
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>

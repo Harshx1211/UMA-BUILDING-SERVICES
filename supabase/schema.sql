@@ -164,7 +164,7 @@ CREATE TABLE public.defects (
   asset_id uuid NOT NULL,
   property_id uuid NOT NULL,
   description text NOT NULL,
-  severity text NOT NULL CHECK (severity = ANY (ARRAY['minor'::text, 'major'::text, 'critical'::text])),
+  severity text NOT NULL CHECK (severity = ANY (ARRAY['non_conformance'::text, 'non_critical'::text, 'critical'::text])),
   status text NOT NULL DEFAULT 'open'::text CHECK (status = ANY (ARRAY['open'::text, 'quoted'::text, 'repaired'::text, 'monitoring'::text])),
   defect_code text,
   quote_price numeric,

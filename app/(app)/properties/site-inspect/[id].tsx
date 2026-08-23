@@ -353,7 +353,7 @@ export default function SiteInspectScreen() {
           const dId = generateUUID();
           const dPayload = {
             id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
-            description: r.defectReason.trim(), severity: DefectSeverity.Major,
+            description: r.defectReason.trim(), severity: DefectSeverity.NonCritical,
             status: 'open', photos: '[]', created_at: now,
           };
           upsertRecord('defects', dPayload as RecordData);

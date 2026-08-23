@@ -35,9 +35,9 @@ type SeverityFilter = 'all' | DefectSeverity;
 type StatusFilter = 'all' | DefectStatus;
 
 const SEVERITY_COLORS: Record<DefectSeverity, string> = {
-  [DefectSeverity.Critical]: T.danger,
-  [DefectSeverity.Major]:    T.primary,
-  [DefectSeverity.Minor]:    T.warning,
+  [DefectSeverity.Critical]:       T.danger,
+  [DefectSeverity.NonCritical]:    T.primary,
+  [DefectSeverity.NonConformance]: T.warning,
 };
 
 const STATUS_COLORS: Record<DefectStatus, string> = {
@@ -188,8 +188,8 @@ export default function GlobalDefectsScreen() {
         >
           <FilterPill label="All Severity" isActive={severityFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter('all'); }} C={C} />
           <FilterPill label="Critical" isActive={severityFilter === DefectSeverity.Critical} color={SEVERITY_COLORS[DefectSeverity.Critical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Critical); }} C={C} />
-          <FilterPill label="Major" isActive={severityFilter === DefectSeverity.Major} color={SEVERITY_COLORS[DefectSeverity.Major]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Major); }} C={C} />
-          <FilterPill label="Minor" isActive={severityFilter === DefectSeverity.Minor} color={SEVERITY_COLORS[DefectSeverity.Minor]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Minor); }} C={C} />
+          <FilterPill label="Non-critical" isActive={severityFilter === DefectSeverity.NonCritical} color={SEVERITY_COLORS[DefectSeverity.NonCritical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.NonCritical); }} C={C} />
+          <FilterPill label="Non-conformance" isActive={severityFilter === DefectSeverity.NonConformance} color={SEVERITY_COLORS[DefectSeverity.NonConformance]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.NonConformance); }} C={C} />
         </ScrollView>
 
         <ScrollView

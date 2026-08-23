@@ -37,10 +37,11 @@ export enum InspectionResult {
   NotTested = 'not_tested',
 }
 
-/** How critical a recorded defect is */
+/** AS1851-2012 Clause 1.5.6 classification of a recorded defect — these three terms
+ * (not "minor"/"major") are the standard's actual language. */
 export enum DefectSeverity {
-  Minor = 'minor',
-  Major = 'major',
+  NonConformance = 'non_conformance',
+  NonCritical = 'non_critical',
   Critical = 'critical',
 }
 

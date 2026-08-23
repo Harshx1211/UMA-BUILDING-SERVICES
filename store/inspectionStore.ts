@@ -330,7 +330,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
         if (existingDefects.length === 0) {
           const defectId = generateUUID();
-          const resolvedSeverity = severity ?? DefectSeverity.Major;
+          const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
           const resolvedPhotos = savedPhotoUris.length > 0
             ? JSON.stringify(savedPhotoUris)
             : '[]';
@@ -373,7 +373,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           const existingId = existingDefects[0].id;
           const updates: Record<string, string | number | null> = {
             description: defectReason,
-            severity: severity ?? DefectSeverity.Major,
+            severity: severity ?? DefectSeverity.NonCritical,
           };
 
           // Replace defect.photos with the COMPLETE current desired set.

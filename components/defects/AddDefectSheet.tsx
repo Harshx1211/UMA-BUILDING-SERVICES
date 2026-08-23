@@ -30,9 +30,9 @@ export interface AddDefectSheetRef { open: () => void; close: () => void; }
 
 // ─── Severity config ──────────────────────────────────────────
 const SEV_CFG: { value: DefectSeverity; label: string; icon: MCIconName; color: string; desc: string }[] = [
-  { value: DefectSeverity.Minor,    label: 'Minor',    icon: 'alert-circle-outline', color: T.info,    desc: 'No immediate safety risk' },
-  { value: DefectSeverity.Major,    label: 'Major',    icon: 'alert',                color: T.warning, desc: 'Needs attention soon' },
-  { value: DefectSeverity.Critical, label: 'Critical', icon: 'alert-octagon',        color: T.danger,  desc: 'Immediate safety risk' },
+  { value: DefectSeverity.NonConformance, label: 'Non-conformance', icon: 'alert-circle-outline', color: T.info,    desc: "Doesn't affect system operation" },
+  { value: DefectSeverity.NonCritical,    label: 'Non-critical',    icon: 'alert',                color: T.warning, desc: 'Not likely to critically affect operation' },
+  { value: DefectSeverity.Critical,       label: 'Critical',        icon: 'alert-octagon',        color: T.danger,  desc: 'Renders the system inoperative' },
 ];
 
 // ─── Component ────────────────────────────────────────────────
@@ -42,7 +42,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
   const { addDefect } = useDefectsStore();
 
   const [step,         setStep]         = useState<1|2|3>(1);
-  const [severity,     setSeverity]     = useState<DefectSeverity>(DefectSeverity.Minor);
+  const [severity,     setSeverity]     = useState<DefectSeverity>(DefectSeverity.NonConformance);
   const [assetId,      setAssetId]      = useState('');
   const [description,  setDescription]  = useState('');
   const [photos,       setPhotos]       = useState<string[]>([]);
@@ -54,7 +54,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
   useEffect(() => { setAssets(getAssetsForProperty(propertyId)); }, [propertyId]);
 
   const reset = () => {
-    setStep(1); setSeverity(DefectSeverity.Minor); setAssetId('');
+    setStep(1); setSeverity(DefectSeverity.NonConformance); setAssetId('');
     setDescription(''); setPhotos([]); setSelectedCode(null); setDescError(false);
   };
 

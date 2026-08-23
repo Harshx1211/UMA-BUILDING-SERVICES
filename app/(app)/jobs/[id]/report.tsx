@@ -54,9 +54,9 @@ type ExtendedDefect = Defect & {
 };
 
 const SEVERITY_CONFIG: Record<string, { color: (C: ReturnType<typeof useColors>) => string; label: string; icon: MCIcon }> = {
-  [DefectSeverity.Critical]: { color: (C) => C.error, label: 'Critical',       icon: 'alert-circle' },
-  [DefectSeverity.Major]:    { color: (C) => C.warning, label: 'Major',           icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: (C) => C.info, label: 'Non-conformance', icon: 'information' },
+  [DefectSeverity.Critical]:       { color: (C) => C.error,   label: 'Critical',         icon: 'alert-circle' },
+  [DefectSeverity.NonCritical]:    { color: (C) => C.warning, label: 'Non-critical',     icon: 'alert' },
+  [DefectSeverity.NonConformance]: { color: (C) => C.info,    label: 'Non-conformance',  icon: 'information' },
 };
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
@@ -139,11 +139,11 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
 // C2: Uses ExtendedDefect type — no `as any` needed for joined fields
 function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; index: number; colors: ReturnType<typeof useColors> }) {
   const noMotion = useReducedMotion();
-  const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
+  const sev = SEVERITY_CONFIG[defect.severity as DefectSeverity] ?? SEVERITY_CONFIG[DefectSeverity.NonConformance];
   const isOpen = !defect.status || defect.status === 'open';
   // M7: severity badge bg derived from color token to be dark-mode safe
-  const sevBg  = defect.severity === DefectSeverity.Critical ? C.errorLight
-               : defect.severity === DefectSeverity.Major    ? C.warningLight
+  const sevBg  = defect.severity === DefectSeverity.Critical    ? C.errorLight
+               : defect.severity === DefectSeverity.NonCritical ? C.warningLight
                : C.infoLight;
 
   return (

@@ -27,9 +27,9 @@ type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ─── Severity colour palette ──────────────────────────────────────────
 const SEV: Record<DefectSeverity, { color: (C: ColorsType) => string; label: string; icon: MCIconName }> = {
-  [DefectSeverity.Critical]: { color: (C) => C.error,   label: 'Critical / Immediate', icon: 'alert-octagon' },
-  [DefectSeverity.Major]:    { color: (C) => C.warning, label: 'Major Defects',         icon: 'alert' },
-  [DefectSeverity.Minor]:    { color: (C) => C.info,    label: 'Minor Defects',         icon: 'alert-circle-outline' },
+  [DefectSeverity.Critical]:       { color: (C) => C.error,   label: 'Critical / Immediate', icon: 'alert-octagon' },
+  [DefectSeverity.NonCritical]:    { color: (C) => C.warning, label: 'Non-critical Defects', icon: 'alert' },
+  [DefectSeverity.NonConformance]: { color: (C) => C.info,    label: 'Non-conformances',     icon: 'alert-circle-outline' },
 };
 
 // ─── Single defect row (read-only) ────────────────────────────────────
@@ -90,9 +90,9 @@ export default function QuoteScreen() {
 
   // Group defects by severity
   const grouped = useMemo(() => ({
-    critical: store.defects.filter(d => d.severity === DefectSeverity.Critical),
-    major:    store.defects.filter(d => d.severity === DefectSeverity.Major),
-    minor:    store.defects.filter(d => d.severity === DefectSeverity.Minor),
+    critical:        store.defects.filter(d => d.severity === DefectSeverity.Critical),
+    nonCritical:     store.defects.filter(d => d.severity === DefectSeverity.NonCritical),
+    nonConformance:  store.defects.filter(d => d.severity === DefectSeverity.NonConformance),
   }), [store.defects]);
 
   // Running total from admin-set prices
@@ -103,10 +103,10 @@ export default function QuoteScreen() {
 
   const hasDefects = store.defects.length > 0;
 
-  const renderGroup = (key: 'critical' | 'major' | 'minor', delay: number) => {
+  const renderGroup = (key: 'critical' | 'nonCritical' | 'nonConformance', delay: number) => {
     const defects = grouped[key];
     if (defects.length === 0) return null;
-    const cfg = SEV[key === 'critical' ? DefectSeverity.Critical : key === 'major' ? DefectSeverity.Major : DefectSeverity.Minor];
+    const cfg = SEV[key === 'critical' ? DefectSeverity.Critical : key === 'nonCritical' ? DefectSeverity.NonCritical : DefectSeverity.NonConformance];
     const groupColor = cfg.color(C);
     return (
       <Animated.View key={key} entering={noMotion ? undefined : FadeInDown.delay(delay).duration(340)}>
@@ -180,9 +180,9 @@ export default function QuoteScreen() {
           </Animated.View>
 
           {/* Defect groups */}
-          {renderGroup('critical', 60)}
-          {renderGroup('major',    90)}
-          {renderGroup('minor',    120)}
+          {renderGroup('critical',       60)}
+          {renderGroup('nonCritical',    90)}
+          {renderGroup('nonConformance', 120)}
 
           {/* Total footer */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(150).duration(340)}>

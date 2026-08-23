@@ -93,9 +93,9 @@ export function getSeverityColors(severity: string): { text: string; bg: string;
   switch (severity) {
     case 'critical':
       return { text: COLORS.SEVERITY_CRITICAL, bg: COLORS.DEFECT_CRIT_BG, border: COLORS.RED_BORDER };
-    case 'major':
+    case 'non_critical':
       return { text: COLORS.SEVERITY_MAJOR, bg: COLORS.DEFECT_MAJ_BG, border: COLORS.AMBER_BORDER };
-    case 'minor':
+    case 'non_conformance':
       return { text: COLORS.SEVERITY_MINOR, bg: COLORS.DEFECT_MIN_BG, border: COLORS.AMBER_BORDER };
     default:
       return { text: COLORS.SEVERITY_MAJOR, bg: COLORS.DEFECT_MAJ_BG, border: COLORS.AMBER_BORDER };

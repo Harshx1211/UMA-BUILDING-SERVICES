@@ -10,10 +10,11 @@ import { AssetTypeDefinition } from '../types';
  * schema, so we use Property / Site Contact / Job Reference / Date of Service
  * instead of inventing data that doesn't exist.
  *
- * Likewise the severity summary shows the 3 real severities this schema
- * supports (critical/major/minor) rather than the reference's 5 categories —
- * "non-conformance"/"recommendation"/"informational" aren't concepts this app
- * tracks, and fabricating zero-filled tiles for them would misrepresent the data.
+ * The severity summary shows AS1851-2012 Clause 1.5.6's three real
+ * classifications — critical defect / non-critical defect / non-conformance —
+ * rather than the reference's 5 tiles; "recommendation"/"informational" aren't
+ * concepts this app tracks, and fabricating zero-filled tiles for them would
+ * misrepresent the data.
  */
 export function renderCover(
   data: ReportData,
@@ -22,7 +23,7 @@ export function renderCover(
   const { job, company, assets, defects, reportId, dateOfService } = data;
   const property = job.property;
 
-  const severityCounts = { critical: 0, major: 0, minor: 0 };
+  const severityCounts = { critical: 0, non_critical: 0, non_conformance: 0 };
   for (const d of defects) severityCounts[d.severity]++;
 
   const categoryGroups = groupByCategory(
@@ -53,8 +54,8 @@ export function renderCover(
 
   const tiles = [
     { label: 'Critical Defects', count: severityCounts.critical, color: COLORS.SEVERITY.critical.text, bg: COLORS.SEVERITY.critical.bg },
-    { label: 'Major Defects', count: severityCounts.major, color: COLORS.SEVERITY.major.text, bg: COLORS.SEVERITY.major.bg },
-    { label: 'Minor Defects', count: severityCounts.minor, color: COLORS.SEVERITY.minor.text, bg: COLORS.SEVERITY.minor.bg },
+    { label: 'Non-critical Defects', count: severityCounts.non_critical, color: COLORS.SEVERITY.non_critical.text, bg: COLORS.SEVERITY.non_critical.bg },
+    { label: 'Non-conformances', count: severityCounts.non_conformance, color: COLORS.SEVERITY.non_conformance.text, bg: COLORS.SEVERITY.non_conformance.bg },
   ];
 
   return `<!DOCTYPE html>

@@ -25,16 +25,16 @@ type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ─── Severity config ─────────────────────────────────────────
 const SEVERITIES: { value: DefectSeverity; label: string; icon: MCIconName; desc: string }[] = [
-  { value: DefectSeverity.Minor,    label: 'Minor',    icon: 'alert-circle-outline', desc: 'Can be deferred' },
-  { value: DefectSeverity.Major,    label: 'Major',    icon: 'alert',                desc: 'Action within 30 days' },
-  { value: DefectSeverity.Critical, label: 'Critical', icon: 'alert-octagon',        desc: 'Immediate action required' },
+  { value: DefectSeverity.NonConformance, label: 'Non-conformance', icon: 'alert-circle-outline', desc: "Doesn't affect system operation" },
+  { value: DefectSeverity.NonCritical,    label: 'Non-critical',    icon: 'alert',                desc: 'Action within 30 days' },
+  { value: DefectSeverity.Critical,       label: 'Critical',        icon: 'alert-octagon',        desc: 'Immediate action required' },
 ];
 
 function getSeverityColors(severity: DefectSeverity, C: ColorsType) {
   switch (severity) {
-    case DefectSeverity.Minor:    return { active: C.info,    light: C.infoLight,    dark: C.infoDark };
-    case DefectSeverity.Major:    return { active: C.warning, light: C.warningLight, dark: C.warningDark };
-    case DefectSeverity.Critical: return { active: C.error,   light: C.errorLight,   dark: C.errorDark };
+    case DefectSeverity.NonConformance: return { active: C.info,    light: C.infoLight,    dark: C.infoDark };
+    case DefectSeverity.NonCritical:    return { active: C.warning, light: C.warningLight, dark: C.warningDark };
+    case DefectSeverity.Critical:       return { active: C.error,   light: C.errorLight,   dark: C.errorDark };
   }
 }
 
@@ -64,7 +64,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
   const [defectReason,    setDefectReason]    = useState('');
   const [notes,           setNotes]           = useState('');
   const [photos,          setPhotos]          = useState<string[]>([]);
-  const [severity,        setSeverity]        = useState<DefectSeverity>(DefectSeverity.Minor);
+  const [severity,        setSeverity]        = useState<DefectSeverity>(DefectSeverity.NonConformance);
   const [reasonError,     setReasonError]     = useState(false);
   const [pickerVisible,   setPickerVisible]   = useState(false);
   const [selectedCode,    setSelectedCode]    = useState<DefectCode | null>(null);
@@ -75,7 +75,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
       setDefectReason(asset.defect_reason || '');
       setNotes(asset.technician_notes || '');
       setPhotos([...(asset.photos || [])]);
-      setSeverity(DefectSeverity.Minor);
+      setSeverity(DefectSeverity.NonConformance);
       setReasonError(false);
       setSelectedCode(null);
       setSuggestedPrice(null);
@@ -95,7 +95,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
       setReasonError(false);
       // Auto-suggest severity based on price/category
       if (code.category === 'Alarm' || (code.quote_price && code.quote_price >= 300)) {
-        setSeverity(DefectSeverity.Major);
+        setSeverity(DefectSeverity.NonCritical);
       }
     }
   };

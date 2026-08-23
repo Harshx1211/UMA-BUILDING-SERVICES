@@ -1445,8 +1445,8 @@ export function getDefectsForJob<T = RecordData>(jobId: string): T[] {
        WHERE d.job_id = ?
        ORDER BY CASE d.severity
          WHEN 'critical' THEN 1
-         WHEN 'major' THEN 2
-         WHEN 'minor' THEN 3
+         WHEN 'non_critical' THEN 2
+         WHEN 'non_conformance' THEN 3
          ELSE 4
        END ASC`,
       [jobId],

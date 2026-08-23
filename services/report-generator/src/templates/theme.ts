@@ -31,8 +31,8 @@ export const COLORS = {
 
   SEVERITY: {
     critical: { text: '#DC2626', bg: '#FFFAFA', border: '#FCA5A5' },
-    major: { text: '#D97706', bg: '#FFFCF5', border: '#FCD34D' },
-    minor: { text: '#CA8A04', bg: '#FEFCE8', border: '#FCD34D' },
+    non_critical: { text: '#D97706', bg: '#FFFCF5', border: '#FCD34D' },
+    non_conformance: { text: '#CA8A04', bg: '#FEFCE8', border: '#FCD34D' },
   } as Record<string, { text: string; bg: string; border: string }>,
 
   PILL: {

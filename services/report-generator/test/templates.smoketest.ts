@@ -39,8 +39,8 @@ const assets: AssetWithResult[] = [
 ];
 
 const defects: Defect[] = [
-  { id: 'd1', job_id: 'j1', asset_id: 'a1', description: 'Asset has reached or past the last year of its service life.', severity: 'minor', status: 'open', defect_code: 'sl', quote_price: 45, created_at: new Date().toISOString(), updated_at: null },
-  { id: 'd2', job_id: 'j1', asset_id: null, description: 'Unlinked general observation', severity: 'major', status: 'repaired', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
+  { id: 'd1', job_id: 'j1', asset_id: 'a1', description: 'Asset has reached or past the last year of its service life.', severity: 'non_conformance', status: 'open', defect_code: 'sl', quote_price: 45, created_at: new Date().toISOString(), updated_at: null },
+  { id: 'd2', job_id: 'j1', asset_id: null, description: 'Unlinked general observation', severity: 'non_critical', status: 'repaired', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
 ];
 
 const photosByAsset = new Map<string, InspectionPhoto[]>([

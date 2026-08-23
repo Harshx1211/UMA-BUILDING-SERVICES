@@ -2,7 +2,8 @@
 // Kept as a plain, dependency-free copy since this service is deployed
 // independently and shouldn't reach across into the Expo app's source tree.
 
-export type DefectSeverity = 'minor' | 'major' | 'critical';
+// AS1851-2012 Clause 1.5.6's three actual defect classifications.
+export type DefectSeverity = 'non_conformance' | 'non_critical' | 'critical';
 export type DefectStatus = 'open' | 'quoted' | 'repaired' | 'monitoring';
 export type JobAssetResult = 'pass' | 'fail' | 'not_tested' | null;
 

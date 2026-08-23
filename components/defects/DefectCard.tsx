@@ -23,17 +23,17 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
   const borderColor = useMemo(() => {
     switch (defect.severity) {
       case DefectSeverity.Critical: return C.error;
-      case DefectSeverity.Major: return C.warning;
-      case DefectSeverity.Minor: return C.info;
+      case DefectSeverity.NonCritical: return C.warning;
+      case DefectSeverity.NonConformance: return C.info;
       default: return C.border;
     }
   }, [defect.severity, C]);
 
   const severityBadge = useMemo(() => {
     switch (defect.severity) {
-      case DefectSeverity.Critical: return { text: 'Critical', bg: C.error };
-      case DefectSeverity.Major:    return { text: 'Major',    bg: C.warning };
-      case DefectSeverity.Minor:    return { text: 'Minor',    bg: C.info };
+      case DefectSeverity.Critical:       return { text: 'Critical', bg: C.error };
+      case DefectSeverity.NonCritical:    return { text: 'Non-critical', bg: C.warning };
+      case DefectSeverity.NonConformance: return { text: 'Non-conformance', bg: C.info };
       default: return { text: 'Unknown', bg: C.border };
     }
   }, [defect.severity, C]);

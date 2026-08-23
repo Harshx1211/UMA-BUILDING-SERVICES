@@ -68,12 +68,22 @@ export function renderAssetLogChunk(
 <body><div class="page">${parts.join('')}</div></body></html>`;
 }
 
+// AS1851-2012 Clause 1.5.6's own wording — a non-conformance is explicitly
+// NOT a defect ("missing information or incorrect feature... does not affect
+// system operation"), so it must not be labelled "... defect" like the other two.
+const SEVERITY_BADGE: Record<string, string> = {
+  critical: 'Critical Defect',
+  non_critical: 'Non-critical Defect',
+  non_conformance: 'Non-conformance',
+};
+
 export function renderDefectCard(
   defect: Defect,
   photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
 ): string {
-  const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.minor;
+  const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
+  const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
   const photos = photosByDefect.get(defect.id) ?? [];
   const quoteBadge = defect.quote_price != null
     ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Quote: $${Number(defect.quote_price).toFixed(2)}</span>`
@@ -84,7 +94,7 @@ export function renderDefectCard(
       <div class="defect-bar" style="background:${sev.text}"></div>
       <div class="defect-body">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(defect.severity)} defect${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}</span>
+          <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}</span>
           <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)}</span>
         </div>
         <div style="margin-top:4px">${esc(defect.description)}</div>

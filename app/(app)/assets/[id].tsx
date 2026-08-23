@@ -39,9 +39,9 @@ const RESULT_CONFIG: Record<InspectionResult, { icon: MCIconName; color: (C: Col
 };
 
 const getSeverityConfig = (C: ColorsType): Record<DefectSeverity, { color: string }> => ({
-  [DefectSeverity.Critical]: { color: C.error },
-  [DefectSeverity.Major]:    { color: C.warning },
-  [DefectSeverity.Minor]:    { color: C.info },
+  [DefectSeverity.Critical]:       { color: C.error },
+  [DefectSeverity.NonCritical]:    { color: C.warning },
+  [DefectSeverity.NonConformance]: { color: C.info },
 });
 
 // ── InfoRow — uses MaterialCommunityIcons, no emoji ──────────────────────────

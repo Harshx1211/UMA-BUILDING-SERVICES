@@ -50,9 +50,9 @@ type FullDefect = {
 };
 
 const SEVERITY_CONFIG: Record<DefectSeverity, { color: string; label: string; icon: MCIconName; bg: string }> = {
-  [DefectSeverity.Critical]: { color: T.danger,  label: 'Critical', icon: 'alert-octagon',        bg: T.dangerBg  },
-  [DefectSeverity.Major]:    { color: T.warning, label: 'Major',    icon: 'alert',                bg: T.warningBg },
-  [DefectSeverity.Minor]:    { color: T.info,    label: 'Minor',    icon: 'alert-circle-outline', bg: T.infoBg    },
+  [DefectSeverity.Critical]:       { color: T.danger,  label: 'Critical',         icon: 'alert-octagon',        bg: T.dangerBg  },
+  [DefectSeverity.NonCritical]:    { color: T.warning, label: 'Non-critical',     icon: 'alert',                bg: T.warningBg },
+  [DefectSeverity.NonConformance]: { color: T.info,    label: 'Non-conformance',  icon: 'alert-circle-outline', bg: T.infoBg    },
 };
 
 const STATUS_COLORS: Record<DefectStatus, string> = {
@@ -129,7 +129,7 @@ export default function DefectDetailScreen() {
     );
   }
 
-  const sev        = SEVERITY_CONFIG[defect.severity] ?? SEVERITY_CONFIG[DefectSeverity.Minor];
+  const sev        = SEVERITY_CONFIG[defect.severity] ?? SEVERITY_CONFIG[DefectSeverity.NonConformance];
   const statusColor = STATUS_COLORS[defect.status as DefectStatus] ?? C.textSecondary;
   const codeInfo   = defect.defect_code ? findDefectCode(defect.defect_code) : null;
 
