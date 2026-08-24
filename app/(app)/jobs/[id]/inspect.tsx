@@ -23,11 +23,21 @@ import { COMPLIANCE_CHECKLISTS, GENERIC_CHECKLIST } from '@/constants/Checklists
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
+import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { useCatalogueStore } from '@/store/catalogueStore';
+
+const ALL = 'All';
+
+type AssetTagRow = { id: string; name: string };
+type AssetTagAssignmentRow = { asset_id: string; tag_id: string };
+type ListRow =
+  | { kind: 'header'; label: string; count: number }
+  | { kind: 'asset'; asset: AssetWithResult };
 
 
 function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
@@ -275,6 +285,20 @@ export default function AssetInspectionScreen() {
   const [jobTitle, setJobTitle]    = useState<string>('');
   const [jobDate, setJobDate]     = useState<string>('');
 
+  // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [routineFilter, setRoutineFilter]     = useState<string>(ALL);
+  const [assetTypeFilter, setAssetTypeFilter] = useState<string>(ALL);
+  const [tagFilter, setTagFilter]             = useState<string>(ALL);
+  const [locationFilter, setLocationFilter]   = useState<string>(ALL);
+  const [groupBy, setGroupBy]                 = useState<GroupBy>('asset');
+  const [sortBy, setSortBy]                   = useState<SortBy>('label');
+  const [sortAsc, setSortAsc]                 = useState(true);
+  const [allTags, setAllTags]                 = useState<AssetTagRow[]>([]);
+  const [tagsByAssetId, setTagsByAssetId]     = useState<Map<string, string[]>>(new Map());
+
+  const { assetTypes: catalogueAssetTypes } = useCatalogueStore();
+
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -325,6 +349,63 @@ export default function AssetInspectionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
+  // asset_type -> inspection_routine, e.g. "10 - Portable and Wheeled Fire
+  // Extinguishers (Annual)" — the same category grouping the PDF report
+  // uses, resolved client-side here for the Routines filter/group.
+  const routineByType = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of catalogueAssetTypes) m.set(t.value, t.inspectionRoutine || 'Other');
+    return m;
+  }, [catalogueAssetTypes]);
+
+  // Tags don't change per inspection tap (only via Edit Asset), so only
+  // re-derive when the asset SET changes — not on every store.assets update.
+  const assetIdsKey = store.assets.map(a => a.id).join(',');
+  useEffect(() => {
+    if (store.assets.length === 0) { setAllTags([]); setTagsByAssetId(new Map()); return; }
+    const tags = queryRecords<AssetTagRow>('asset_tags');
+    setAllTags(tags);
+    const tagNameById = new Map(tags.map(t => [t.id, t.name]));
+    const assignments = queryRecords<AssetTagAssignmentRow>('asset_tag_assignments');
+    const map = new Map<string, string[]>();
+    for (const a of assignments) {
+      const name = tagNameById.get(a.tag_id);
+      if (!name) continue;
+      const list = map.get(a.asset_id) ?? [];
+      list.push(name);
+      map.set(a.asset_id, list);
+    }
+    setTagsByAssetId(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetIdsKey]);
+
+  const routineOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of store.assets) set.add(routineByType.get(a.asset_type) || 'Other');
+    return [ALL, ...Array.from(set).sort()];
+  }, [store.assets, routineByType]);
+
+  const assetTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of store.assets) set.add(formatAssetType(a.asset_type));
+    return [ALL, ...Array.from(set).sort()];
+  }, [store.assets]);
+
+  const tagOptions = useMemo(() => [ALL, ...allTags.map(t => t.name).sort()], [allTags]);
+
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of store.assets) if (a.location_on_site) set.add(a.location_on_site);
+    return [ALL, ...Array.from(set).sort()];
+  }, [store.assets]);
+
+  const activeFilterCount = [routineFilter, assetTypeFilter, tagFilter, locationFilter].filter(v => v !== ALL).length;
+
+  const resetFilters = () => {
+    setRoutineFilter(ALL); setAssetTypeFilter(ALL); setTagFilter(ALL); setLocationFilter(ALL);
+    setGroupBy('asset'); setSortBy('label'); setSortAsc(true);
+  };
+
   const filteredAssets = useMemo(() => {
     let list = store.assets;
     switch (filter) {
@@ -333,6 +414,11 @@ export default function AssetInspectionScreen() {
       case 'N/T':       list = list.filter(a => a.result === InspectionResult.NotTested); break;
       case 'Remaining': list = list.filter(a => a.result === null); break;
     }
+
+    if (routineFilter !== ALL) list = list.filter(a => (routineByType.get(a.asset_type) || 'Other') === routineFilter);
+    if (assetTypeFilter !== ALL) list = list.filter(a => formatAssetType(a.asset_type) === assetTypeFilter);
+    if (locationFilter !== ALL) list = list.filter(a => a.location_on_site === locationFilter);
+    if (tagFilter !== ALL) list = list.filter(a => (tagsByAssetId.get(a.id) ?? []).includes(tagFilter));
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -345,8 +431,36 @@ export default function AssetInspectionScreen() {
       );
     }
 
+    list = [...list].sort((a, b) => {
+      const cmp = sortBy === 'location'
+        ? (a.location_on_site ?? '').localeCompare(b.location_on_site ?? '')
+        : formatAssetType(a.asset_type).localeCompare(formatAssetType(b.asset_type)) || (a.asset_ref ?? '').localeCompare(b.asset_ref ?? '');
+      return sortAsc ? cmp : -cmp;
+    });
+
     return list;
-  }, [store.assets, filter, search]);
+  }, [store.assets, filter, search, routineFilter, assetTypeFilter, locationFilter, tagFilter, routineByType, tagsByAssetId, sortBy, sortAsc]);
+
+  // Grouped-by-routine rows for the FlatList, when that's selected — a
+  // synthetic header row interleaved with assets, not a SectionList, so the
+  // existing FlatList perf tuning (removeClippedSubviews etc.) still applies.
+  const listData = useMemo((): ListRow[] => {
+    if (groupBy !== 'routine') return filteredAssets.map(asset => ({ kind: 'asset', asset }));
+    const buckets = new Map<string, AssetWithResult[]>();
+    for (const asset of filteredAssets) {
+      const routine = routineByType.get(asset.asset_type) || 'Other';
+      const list = buckets.get(routine) ?? [];
+      list.push(asset);
+      buckets.set(routine, list);
+    }
+    const rows: ListRow[] = [];
+    for (const routine of [...buckets.keys()].sort()) {
+      const items = buckets.get(routine)!;
+      rows.push({ kind: 'header', label: routine, count: items.length });
+      for (const asset of items) rows.push({ kind: 'asset', asset });
+    }
+    return rows;
+  }, [filteredAssets, groupBy, routineByType]);
 
   // Decision #2: mark all uninspected assets as not_tested before completing.
   // This runs synchronously before navigation — the store's updateAssetResult
@@ -481,9 +595,19 @@ export default function AssetInspectionScreen() {
     );
   }, [jobId, store]);
 
-  const renderItem = useCallback(({ item, index }: { item: AssetWithResult; index: number }) => (
-    <AssetCard asset={item} index={index} jobId={jobId as string} onEdit={setEditingAsset} onClone={handleClone} onDelete={handleDelete} />
-  ), [jobId, handleClone, handleDelete]);
+  const renderItem = useCallback(({ item, index }: { item: ListRow; index: number }) => {
+    if (item.kind === 'header') {
+      return (
+        <View style={[s.routineHeader, { backgroundColor: C.backgroundSecondary, borderColor: C.border }]}>
+          <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={1}>{item.label}</Text>
+          <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count}</Text>
+        </View>
+      );
+    }
+    return (
+      <AssetCard asset={item.asset} index={index} jobId={jobId as string} onEdit={setEditingAsset} onClone={handleClone} onDelete={handleDelete} />
+    );
+  }, [jobId, handleClone, handleDelete, C]);
 
   const fillPct = store.progress.total > 0 ? (store.progress.inspected / store.progress.total) * 100 : 0;
 
@@ -535,8 +659,8 @@ export default function AssetInspectionScreen() {
 
       <FlatList
         ref={listRef}
-        data={filteredAssets}
-        keyExtractor={i => i.id}
+        data={listData}
+        keyExtractor={i => i.kind === 'header' ? `header-${i.label}` : i.asset.id}
         contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
@@ -597,8 +721,21 @@ export default function AssetInspectionScreen() {
                 )}
               </View>
             </View>
-            <View style={s.filterWrap}>
-              <FilterPills options={filterOptions} activeIndex={filterOptions.findIndex(o => o.label === filter)} onSelect={(idx) => setFilter(filterOptions[idx].label)} variant="dark" />
+            <View style={[s.filterWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+              <View style={{ flex: 1 }}>
+                <FilterPills options={filterOptions} activeIndex={filterOptions.findIndex(o => o.label === filter)} onSelect={(idx) => setFilter(filterOptions[idx].label)} variant="dark" />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(true)}
+                style={[s.filterBtn, { backgroundColor: C.surface, borderColor: activeFilterCount > 0 ? C.primary : C.border }]}
+              >
+                <MaterialCommunityIcons name="tune-variant" size={18} color={activeFilterCount > 0 ? C.primary : C.textSecondary} />
+                {activeFilterCount > 0 && (
+                  <View style={[s.filterBadge, { backgroundColor: C.accent }]}>
+                    <Text style={s.filterBadgeTxt}>{activeFilterCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         }
@@ -662,6 +799,30 @@ export default function AssetInspectionScreen() {
           if (jobId) store.loadAssetsForInspection(jobId);
         }}
       />
+      <InspectionFilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        routineOptions={routineOptions}
+        routineFilter={routineFilter}
+        onRoutineChange={setRoutineFilter}
+        assetTypeOptions={assetTypeOptions}
+        assetTypeFilter={assetTypeFilter}
+        onAssetTypeChange={setAssetTypeFilter}
+        tagOptions={tagOptions}
+        tagFilter={tagFilter}
+        onTagChange={setTagFilter}
+        locationOptions={locationOptions}
+        locationFilter={locationFilter}
+        onLocationChange={setLocationFilter}
+        groupBy={groupBy}
+        onGroupByChange={setGroupBy}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
+        sortAsc={sortAsc}
+        onToggleSortDirection={() => setSortAsc(v => !v)}
+        activeCount={activeFilterCount}
+        onReset={resetFilters}
+      />
     </View>
   );
 }
@@ -688,6 +849,12 @@ const s = StyleSheet.create({
   searchBar:   { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14 },
   filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
+  filterBtn: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  filterBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  filterBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
+  routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
+  routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
   cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
   assetCard:   { borderRadius: 16, borderWidth: 1, borderLeftWidth: 4 },
   cardInner:   { padding: 16 },
