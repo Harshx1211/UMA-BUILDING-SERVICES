@@ -10,30 +10,19 @@ import { TocSectionEntry } from '../data/tableOfContents';
  */
 export function renderTableOfContents(
   categoryEntries: TocSectionEntry[],
-  tailEntries: Array<{ label: string; page: number }>,
+  tailEntries: TocSectionEntry[],
 ): string {
   const pageLabel = (e: TocSectionEntry) =>
     e.startPage === e.endPage ? `Page ${e.startPage}` : `Pages ${e.startPage}–${e.endPage}`;
 
-  const categoryRows = categoryEntries
-    .map(
-      (e) => `
+  const row = (e: TocSectionEntry) => `
       <tr>
         <td>${esc(e.label)}</td>
         <td style="text-align:right;font-variant-numeric:tabular-nums">${pageLabel(e)}</td>
-      </tr>`,
-    )
-    .join('');
+      </tr>`;
 
-  const tailRows = tailEntries
-    .map(
-      (e) => `
-      <tr>
-        <td>${esc(e.label)}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">Page ${e.page}</td>
-      </tr>`,
-    )
-    .join('');
+  const categoryRows = categoryEntries.map(row).join('');
+  const tailRows = tailEntries.map(row).join('');
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>

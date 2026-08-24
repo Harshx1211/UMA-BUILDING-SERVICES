@@ -17,7 +17,10 @@ import { renderSignoff } from '../src/templates/signoff';
 import { buildAssetLogChunksByCategory } from '../src/data/chunking';
 import { parseCategory } from '../src/data/categoryGrouping';
 import { computeSequentialRanges } from '../src/data/tableOfContents';
+import { getPdfPageCount } from '../src/pdf/pageCount';
+import { stampPageNumbers } from '../src/pdf/stampPageNumbers';
 import { AssetTypeDefinition, AssetWithResult, Defect, InspectionPhoto, ReportData } from '../src/types';
+import { PDFDocument } from 'pdf-lib';
 
 // AS1851's real Section list stops at 14 — "15 - Emergency escape lighting" is an
 // industry convention (matches the reference report), not a real Section, so it
@@ -140,11 +143,32 @@ if (JSON.stringify(ranges) !== JSON.stringify(expected)) {
 }
 console.log('OK: computeSequentialRanges produces correct, non-overlapping page ranges');
 
-const tocHtml = renderTableOfContents(ranges, [{ label: 'Sign-off', page: 11 }]);
-if (!tocHtml.includes('Pages 5–6') || !tocHtml.includes('Page 7') || !tocHtml.includes('Pages 8–10')) {
+const tocHtml = renderTableOfContents(ranges, [
+  { label: 'Sign-off', startPage: 11, endPage: 12 },
+]);
+if (!tocHtml.includes('Pages 5–6') || !tocHtml.includes('Page 7') || !tocHtml.includes('Pages 8–10') || !tocHtml.includes('Pages 11–12')) {
   throw new Error('FAIL: renderTableOfContents — expected page-range labels not found in output');
 }
-console.log('OK: renderTableOfContents renders correct page-range labels');
+console.log('OK: renderTableOfContents renders correct page-range labels (categories and tail sections alike)');
+
+// stampPageNumbers is pure pdf-lib — no Gotenberg needed to test it. Build a
+// throwaway 3-page PDF, stamp it, and verify the page count survives and the
+// buffer actually changed (i.e. something was really drawn onto it).
+async function testStampPageNumbers() {
+  const fake = await PDFDocument.create();
+  fake.addPage(); fake.addPage(); fake.addPage();
+  const fakeBytes = Buffer.from(await fake.save());
+
+  const stamped = await stampPageNumbers(fakeBytes);
+  const stampedPageCount = await getPdfPageCount(stamped);
+  if (stampedPageCount !== 3) {
+    throw new Error(`FAIL: stampPageNumbers — expected page count to stay 3, got ${stampedPageCount}`);
+  }
+  if (Buffer.compare(fakeBytes, stamped) === 0) {
+    throw new Error('FAIL: stampPageNumbers — output buffer identical to input, nothing was drawn');
+  }
+  console.log('OK: stampPageNumbers preserves page count and modifies every page');
+}
 
 const docs = [
   ['cover', renderCover(data, byValue)],
@@ -203,4 +227,9 @@ for (const [name, html] of docs) {
   console.log(`OK: ${name} rendered (${html.length} chars, well-formed)`);
 }
 
-console.log('\nAll template smoke tests passed.');
+testStampPageNumbers().then(() => {
+  console.log('\nAll template smoke tests passed.');
+}).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -6,6 +6,7 @@ import { computeSequentialRanges } from '../data/tableOfContents';
 import { mapWithConcurrency } from '../concurrency';
 import { convertHtmlToPdf, mergePdfs, waitForGotenbergReady } from '../gotenberg/client';
 import { getPdfPageCount } from '../pdf/pageCount';
+import { stampPageNumbers } from '../pdf/stampPageNumbers';
 import { renderCover } from '../templates/cover';
 import { renderAssetLogChunk } from '../templates/assetLogChunk';
 import { renderTableOfContents } from '../templates/tableOfContents';
@@ -164,10 +165,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
       ? categoryRanges[categoryRanges.length - 1].endPage
       : assetLogFirstPage - 1;
     const tailRanges = computeSequentialRanges(tailSectionsForToc, lastCategoryEnd + 1);
-    return renderTableOfContents(
-      categoryRanges,
-      tailRanges.map((r) => ({ label: r.label, page: r.startPage })),
-    );
+    return renderTableOfContents(categoryRanges, tailRanges);
   };
 
   let indexRendered: { buffer: Buffer; pageCount: number };
@@ -202,6 +200,11 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   let merged: Buffer;
   try {
     merged = await mergePdfs(files);
+    // Each section above rendered as its own separate PDF, so Gotenberg's
+    // own page-number placeholders (left out of the footer template
+    // entirely — see headerFooter.ts) couldn't know the report's real page
+    // count. Stamp the correct "Page X of Y" now that it's known.
+    merged = await stampPageNumbers(merged);
   } catch (err) {
     throw new ReportGenerationError(
       `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
