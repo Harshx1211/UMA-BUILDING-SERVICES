@@ -20,34 +20,53 @@ export interface AssetLogChunk {
   rows: AssetLogRow[];
 }
 
+export interface CategoryAssetLog {
+  label: string;
+  number: number | null;
+  officialSection: number | null;
+  /** Almost always exactly one chunk — only splits further when a single
+   * category alone exceeds maxPerChunk (the 1000+-assets-of-one-type case). */
+  chunks: AssetLogChunk[];
+}
+
 /**
  * Orders every asset by category (numbered categories first, ascending; unnumbered
- * types under "Other") then by asset type and reference, and splits the result into
- * fixed-size chunks — the actual scale fix for 1000+ asset sites: a single Chromium
- * render never has to lay out more than `maxPerChunk` rows (plus their photos) at
- * once, regardless of how large the site is. See config.maxAssetsPerChunk.
+ * types under "Other"), then by asset type and reference, and groups them one
+ * category at a time. Each category is rendered as its own PDF document in the
+ * pipeline (see generation/pipeline.ts) so its exact page count can be measured
+ * afterward — the only reliable way to build a page-accurate report index, since
+ * a category is never split across an artificial fixed-size chunk boundary here.
+ *
+ * A category only produces more than one chunk in the rare case that it alone
+ * exceeds maxPerChunk assets — the original scale fix for 1000+ asset sites
+ * (a single Chromium render never has to lay out more than maxPerChunk rows,
+ * plus their photos, at once) still applies within a category.
  */
-export function buildAssetLogChunks(
+export function buildAssetLogChunksByCategory(
   assets: AssetWithResult[],
   assetTypesByValue: Map<string, AssetTypeDefinition>,
   maxPerChunk: number,
-): AssetLogChunk[] {
+): CategoryAssetLog[] {
   const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue);
 
-  const ordered: AssetLogRow[] = [];
-  for (const group of categoryGroups) {
+  return categoryGroups.map((group) => {
     const sorted = [...group.items].sort((a, b) => {
       if (a.asset_type !== b.asset_type) return a.asset_type.localeCompare(b.asset_type);
       return (a.asset_ref ?? '').localeCompare(b.asset_ref ?? '');
     });
-    sorted.forEach((asset, i) => {
-      ordered.push({ asset, categoryLabel: group.label, officialSection: group.officialSection, isFirstInCategory: i === 0 });
-    });
-  }
 
-  const chunks: AssetLogChunk[] = [];
-  for (let i = 0; i < ordered.length; i += maxPerChunk) {
-    chunks.push({ index: chunks.length, rows: ordered.slice(i, i + maxPerChunk) });
-  }
-  return chunks;
+    const chunks: AssetLogChunk[] = [];
+    for (let i = 0; i < sorted.length; i += maxPerChunk) {
+      const slice = sorted.slice(i, i + maxPerChunk);
+      const rows: AssetLogRow[] = slice.map((asset, j) => ({
+        asset,
+        categoryLabel: group.label,
+        officialSection: group.officialSection,
+        isFirstInCategory: i === 0 && j === 0,
+      }));
+      chunks.push({ index: chunks.length, rows });
+    }
+
+    return { label: group.label, number: group.number, officialSection: group.officialSection, chunks };
+  });
 }

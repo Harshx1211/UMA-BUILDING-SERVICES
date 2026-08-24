@@ -1,18 +1,19 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import { fetchReportData } from '../data/fetchReportData';
-import { buildAssetLogChunks } from '../data/chunking';
+import { buildAssetLogChunksByCategory } from '../data/chunking';
+import { computeSequentialRanges } from '../data/tableOfContents';
 import { mapWithConcurrency } from '../concurrency';
 import { convertHtmlToPdf, mergePdfs, waitForGotenbergReady } from '../gotenberg/client';
+import { getPdfPageCount } from '../pdf/pageCount';
 import { renderCover } from '../templates/cover';
 import { renderAssetLogChunk } from '../templates/assetLogChunk';
+import { renderTableOfContents } from '../templates/tableOfContents';
 import { renderUnlinkedDefects } from '../templates/unlinkedDefects';
 import { renderRepairs } from '../templates/repairs';
 import { renderYearlyConditionReport } from '../templates/yearlyConditionReport';
 import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
-import { BASE_STYLE } from '../templates/theme';
-import { extractBody } from '../templates/helpers';
 import { uploadReport } from '../storage';
 import { AssetTypeDefinition, Defect } from '../types';
 
@@ -24,6 +25,28 @@ export interface PipelineResult {
   assetCount: number;
   chunkCount: number;
   durationMs: number;
+}
+
+// Human-facing labels for the tail sections' Index entries — the internal
+// document names below are just merge-order sort keys, not display text.
+const TAIL_LABELS: Record<string, string> = {
+  unlinked_defects: 'Additional Observations',
+  repairs: 'Repairs & Quotation',
+  yearly_condition_report: 'Yearly Condition Report (Appendix E)',
+  signoff: 'Sign-off',
+};
+
+async function renderAndCount(
+  html: string,
+  label: string,
+  footerTemplate: string,
+): Promise<{ buffer: Buffer; pageCount: number }> {
+  const buffer = await convertHtmlToPdf(html, label, {
+    headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
+    footerTemplateHtml: footerTemplate,
+  });
+  const pageCount = await getPdfPageCount(buffer);
+  return { buffer, pageCount };
 }
 
 export async function generateReport(db: SupabaseClient, jobId: string): Promise<PipelineResult> {
@@ -59,99 +82,130 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     defectsByAsset.set(d.asset_id, list);
   }
 
-  const chunks = buildAssetLogChunks(data.assets, assetTypesByValue, config.maxAssetsPerChunk);
+  const categoryLogs = buildAssetLogChunksByCategory(data.assets, assetTypesByValue, config.maxAssetsPerChunk);
   const footerTemplate = buildFooterTemplate(data.company);
 
   const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls);
   const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls);
+  const ycrHtml = renderYearlyConditionReport(data, assetTypesByValue);
+  const signoffHtml = renderSignoff(data);
+
+  const tailDocs: Array<{ key: string; html: string }> = [
+    ...(unlinkedHtml ? [{ key: 'unlinked_defects', html: unlinkedHtml }] : []),
+    ...(repairsHtml ? [{ key: 'repairs', html: repairsHtml }] : []),
+    { key: 'yearly_condition_report', html: ycrHtml },
+    { key: 'signoff', html: signoffHtml },
+  ];
 
   // By now the data fetch (and Gotenberg's cold-start window, if it needed
   // one) have had time to overlap; this resolves instantly if Gotenberg was
   // already warm.
   await gotenbergReady;
 
-  let merged: Buffer;
+  // ── Every top-level section (cover, each category, each tail section) gets
+  // its own Gotenberg render so its exact page count is knowable via pdf-lib
+  // afterward — the only reliable way to build a page-accurate Index, since
+  // Chromium's own pagination can't be predicted from the source HTML alone.
+  // This trades away the old "one combined render for small jobs" fast path;
+  // config.gotenbergConcurrency controls how many of these run in parallel.
+  let coverRendered: { buffer: Buffer; pageCount: number };
+  let categoryRendered: Array<{ label: string; buffers: Buffer[]; pageCount: number }>;
+  let tailRendered: Array<{ key: string; buffer: Buffer; pageCount: number }>;
 
-  // Fast path: when everything fits in a single chunk (true for the large
-  // majority of real jobs — chunking only exists for the 1000+ asset case),
-  // combine every section into ONE HTML document and make exactly one
-  // Gotenberg call instead of N separate render round-trips plus a merge
-  // call. Each of those round-trips carries its own Chromium page-load
-  // overhead, which is what made the very first real end-to-end test slower
-  // than it needed to be for a ~10-asset job.
-  if (chunks.length <= 1) {
-    const sections = [
-      renderCover(data, assetTypesByValue),
-      ...(chunks[0]
-        ? [renderAssetLogChunk(chunks[0], defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls)]
-        : []),
-      ...(unlinkedHtml ? [unlinkedHtml] : []),
-      ...(repairsHtml ? [repairsHtml] : []),
-      renderYearlyConditionReport(data, assetTypesByValue),
-      renderSignoff(data),
-    ];
-    const combinedHtml = `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body>${sections.map(extractBody).join('')}</body></html>`;
+  try {
+    coverRendered = await renderAndCount(renderCover(data, assetTypesByValue), 'cover', footerTemplate);
 
-    try {
-      merged = await convertHtmlToPdf(combinedHtml, 'combined', {
-        headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
-        footerTemplateHtml: footerTemplate,
-      });
-    } catch (err) {
-      throw new ReportGenerationError(
-        `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+    categoryRendered = await mapWithConcurrency(categoryLogs, config.gotenbergConcurrency, async (cat) => {
+      const chunkResults = await Promise.all(
+        cat.chunks.map((chunk) =>
+          renderAndCount(
+            renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls),
+            `asset_log_${cat.label}`,
+            footerTemplate,
+          ),
+        ),
       );
-    }
-  } else {
-    // Large-job path: chunk-and-merge, so no single Chromium render ever has
-    // to lay out more than config.maxAssetsPerChunk rows at once.
-    const documents: Array<{ name: string; html: string }> = [];
-    documents.push({ name: '00_cover', html: renderCover(data, assetTypesByValue) });
-
-    chunks.forEach((chunk, i) => {
-      const html = renderAssetLogChunk(
-        chunk,
-        defectsByAsset,
-        data.photosByAsset,
-        data.photosByDefect,
-        data.signedPhotoUrls,
-      );
-      documents.push({ name: `01_asset_log_${String(i).padStart(4, '0')}`, html });
+      return {
+        label: cat.label,
+        buffers: chunkResults.map((r) => r.buffer),
+        pageCount: chunkResults.reduce((sum, r) => sum + r.pageCount, 0),
+      };
     });
 
-    if (unlinkedHtml) documents.push({ name: '02_unlinked_defects', html: unlinkedHtml });
-    if (repairsHtml) documents.push({ name: '03_repairs', html: repairsHtml });
-    documents.push({ name: '04_yearly_condition_report', html: renderYearlyConditionReport(data, assetTypesByValue) });
-    documents.push({ name: '05_signoff', html: renderSignoff(data) });
+    tailRendered = await mapWithConcurrency(tailDocs, config.gotenbergConcurrency, async (doc) => {
+      const r = await renderAndCount(doc.html, doc.key, footerTemplate);
+      return { key: doc.key, buffer: r.buffer, pageCount: r.pageCount };
+    });
+  } catch (err) {
+    throw new ReportGenerationError(
+      `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+    );
+  }
 
-    let rendered: Array<{ name: string; buffer: Buffer }>;
-    try {
-      rendered = await mapWithConcurrency(documents, config.gotenbergConcurrency, async (doc) => ({
-        name: `${doc.name}.pdf`,
-        buffer: await convertHtmlToPdf(doc.html, doc.name, {
-          headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
-          footerTemplateHtml: footerTemplate,
-        }),
-      }));
-    } catch (err) {
-      // Never publish a partial report — abort the whole generation with a
-      // clear error rather than silently omitting whatever section failed.
-      throw new ReportGenerationError(
-        `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-      );
-    }
+  // ── Build the Index. Pass 1 renders it with a placeholder page-count
+  // assumption purely to measure the Index's OWN page count — that
+  // measurement only depends on how many rows/labels it has to print, not on
+  // the specific numbers shown, so it's stable regardless of the placeholder.
+  // Pass 2 then renders the real, final version using that measured length,
+  // so the page numbers it prints are correct. Two renders, but the only way
+  // for the Index to correctly account for its own length without guessing.
+  const tailSectionsForToc = tailRendered.map((r) => ({
+    label: TAIL_LABELS[r.key] ?? r.key,
+    pageCount: r.pageCount,
+  }));
 
-    rendered.sort((a, b) => a.name.localeCompare(b.name));
+  const buildIndexHtml = (indexPageCount: number) => {
+    const assetLogFirstPage = coverRendered.pageCount + indexPageCount + 1;
+    const categoryRanges = computeSequentialRanges(
+      categoryRendered.map((c) => ({ label: c.label, pageCount: c.pageCount })),
+      assetLogFirstPage,
+    );
+    const lastCategoryEnd = categoryRanges.length > 0
+      ? categoryRanges[categoryRanges.length - 1].endPage
+      : assetLogFirstPage - 1;
+    const tailRanges = computeSequentialRanges(tailSectionsForToc, lastCategoryEnd + 1);
+    return renderTableOfContents(
+      categoryRanges,
+      tailRanges.map((r) => ({ label: r.label, page: r.startPage })),
+    );
+  };
 
-    try {
-      merged = await mergePdfs(rendered);
-    } catch (err) {
-      throw new ReportGenerationError(
-        `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-      );
-    }
+  let indexRendered: { buffer: Buffer; pageCount: number };
+  try {
+    const draft = await renderAndCount(buildIndexHtml(0), 'index_draft', footerTemplate);
+    indexRendered = await renderAndCount(buildIndexHtml(draft.pageCount), 'index', footerTemplate);
+  } catch (err) {
+    throw new ReportGenerationError(
+      `Rendering the report index failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+    );
+  }
+
+  // Gotenberg merges in the lexical order of filenames — asset-log entries
+  // are zero-padded per category/chunk so they always sort right after the
+  // Index regardless of how many categories exist, and tail sections are
+  // numbered high enough (90+) to always sort after every asset-log entry.
+  const files: Array<{ name: string; buffer: Buffer }> = [
+    { name: '00_cover.pdf', buffer: coverRendered.buffer },
+    { name: '01_index.pdf', buffer: indexRendered.buffer },
+  ];
+  categoryRendered.forEach((cat, ci) => {
+    cat.buffers.forEach((buffer, bi) => {
+      files.push({ name: `02_asset_log_${String(ci).padStart(3, '0')}_${String(bi).padStart(3, '0')}.pdf`, buffer });
+    });
+  });
+  const TAIL_ORDER = ['unlinked_defects', 'repairs', 'yearly_condition_report', 'signoff'];
+  tailRendered
+    .slice()
+    .sort((a, b) => TAIL_ORDER.indexOf(a.key) - TAIL_ORDER.indexOf(b.key))
+    .forEach((r, i) => files.push({ name: `9${i}_${r.key}.pdf`, buffer: r.buffer }));
+
+  let merged: Buffer;
+  try {
+    merged = await mergePdfs(files);
+  } catch (err) {
+    throw new ReportGenerationError(
+      `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+    );
   }
 
   const { storagePath, signedUrl } = await uploadReport(db, jobId, merged);
@@ -160,7 +214,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     storagePath,
     signedUrl,
     assetCount: data.assets.length,
-    chunkCount: chunks.length,
+    chunkCount: categoryRendered.reduce((sum, c) => sum + c.buffers.length, 0),
     durationMs: Date.now() - started,
   };
 }

@@ -67,18 +67,6 @@ export function photoRow(photos: InspectionPhoto[], signedUrls: Map<string, stri
   return `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">${tags}${more}</div>`;
 }
 
-/**
- * Pulls the <body>...</body> inner content out of a template's full HTML
- * document. Used to stitch several sections into one combined page (see
- * generation/pipeline.ts) — each render*() function returns a complete,
- * independently-valid HTML document so it can also be rendered standalone
- * when a report is large enough to need per-section chunking.
- */
-export function extractBody(html: string): string {
-  const match = /<body>([\s\S]*)<\/body>/.exec(html);
-  return match ? match[1] : html;
-}
-
 /** A labelled value cell for the info-strip rows used on cover.ts and
  * yearlyConditionReport.ts (Report Details / Service Provider Details etc). */
 export function infoCell(label: string, value: string | null | undefined): string {

@@ -9,12 +9,14 @@
 // 'undefined'") is what would have caught it, so that's what this asserts.
 import { renderCover } from '../src/templates/cover';
 import { renderAssetLogChunk } from '../src/templates/assetLogChunk';
+import { renderTableOfContents } from '../src/templates/tableOfContents';
 import { renderUnlinkedDefects } from '../src/templates/unlinkedDefects';
 import { renderRepairs } from '../src/templates/repairs';
 import { renderYearlyConditionReport } from '../src/templates/yearlyConditionReport';
 import { renderSignoff } from '../src/templates/signoff';
-import { buildAssetLogChunks } from '../src/data/chunking';
+import { buildAssetLogChunksByCategory } from '../src/data/chunking';
 import { parseCategory } from '../src/data/categoryGrouping';
+import { computeSequentialRanges } from '../src/data/tableOfContents';
 import { AssetTypeDefinition, AssetWithResult, Defect, InspectionPhoto, ReportData } from '../src/types';
 
 // AS1851's real Section list stops at 14 — "15 - Emergency escape lighting" is an
@@ -93,25 +95,63 @@ const data: ReportData = {
 };
 
 const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]], ['a4', [defects[2]]]]);
-const chunks = buildAssetLogChunks(assets, byValue, 200);
+const categoryLogs = buildAssetLogChunksByCategory(assets, byValue, 200);
 
-// buildAssetLogChunks re-derives officialSection per group (not from the asset's
-// own categoryOfficialSection field) — verify that path too: extinguisher (real
-// Section 10) should carry it through, exit_light ("15") should not.
-const allRows = chunks.flatMap((c) => c.rows);
+// Four assets in four different categories (Sections 6, 9, 10, plus the fake
+// "15") should produce four separate category groups, each with exactly one
+// chunk (well under maxPerChunk=200) — same-type assets never scattered
+// across groups, which is the whole point of clubbing by category.
+if (categoryLogs.length !== 4) {
+  throw new Error(`FAIL: buildAssetLogChunksByCategory — expected 4 category groups, got ${categoryLogs.length}`);
+}
+if (categoryLogs.some((c) => c.chunks.length !== 1)) {
+  throw new Error('FAIL: buildAssetLogChunksByCategory — expected exactly one chunk per category at this scale');
+}
+console.log('OK: buildAssetLogChunksByCategory groups four distinct categories, one chunk each');
+
+// buildAssetLogChunksByCategory re-derives officialSection per group (not from
+// the asset's own categoryOfficialSection field) — verify that path too:
+// extinguisher (real Section 10) should carry it through, exit_light ("15")
+// should not.
+const allRows = categoryLogs.flatMap((c) => c.chunks.flatMap((chunk) => chunk.rows));
 const extRow = allRows.find((r) => r.asset.id === 'a1');
 const exitRow = allRows.find((r) => r.asset.id === 'a4');
 if (extRow?.officialSection !== 10) {
-  throw new Error(`FAIL: buildAssetLogChunks — expected officialSection 10 for extinguisher row, got ${extRow?.officialSection}`);
+  throw new Error(`FAIL: buildAssetLogChunksByCategory — expected officialSection 10 for extinguisher row, got ${extRow?.officialSection}`);
 }
 if (exitRow?.officialSection !== null) {
-  throw new Error(`FAIL: buildAssetLogChunks — expected officialSection null for "15" exit-light row, got ${exitRow?.officialSection}`);
+  throw new Error(`FAIL: buildAssetLogChunksByCategory — expected officialSection null for "15" exit-light row, got ${exitRow?.officialSection}`);
 }
-console.log('OK: buildAssetLogChunks officialSection threaded correctly per row');
+console.log('OK: buildAssetLogChunksByCategory officialSection threaded correctly per row');
+
+// computeSequentialRanges is pure arithmetic (no rendering involved) — verify
+// it turns measured page counts into correct, non-overlapping page ranges.
+const ranges = computeSequentialRanges(
+  [{ label: 'A', pageCount: 2 }, { label: 'B', pageCount: 1 }, { label: 'C', pageCount: 3 }],
+  5,
+);
+const expected = [
+  { label: 'A', startPage: 5, endPage: 6 },
+  { label: 'B', startPage: 7, endPage: 7 },
+  { label: 'C', startPage: 8, endPage: 10 },
+];
+if (JSON.stringify(ranges) !== JSON.stringify(expected)) {
+  throw new Error(`FAIL: computeSequentialRanges — expected ${JSON.stringify(expected)}, got ${JSON.stringify(ranges)}`);
+}
+console.log('OK: computeSequentialRanges produces correct, non-overlapping page ranges');
+
+const tocHtml = renderTableOfContents(ranges, [{ label: 'Sign-off', page: 11 }]);
+if (!tocHtml.includes('Pages 5–6') || !tocHtml.includes('Page 7') || !tocHtml.includes('Pages 8–10')) {
+  throw new Error('FAIL: renderTableOfContents — expected page-range labels not found in output');
+}
+console.log('OK: renderTableOfContents renders correct page-range labels');
 
 const docs = [
   ['cover', renderCover(data, byValue)],
-  ...chunks.map((c, i) => [`chunk${i}`, renderAssetLogChunk(c, defectsByAsset, photosByAsset, photosByDefect, signedPhotoUrls)] as const),
+  ['tableOfContents', tocHtml],
+  ...categoryLogs.flatMap((cat, ci) =>
+    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, photosByDefect, signedPhotoUrls)] as const),
+  ),
   ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
   ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls) ?? '(null — no repairs, unexpected here)'],
   ['yearlyConditionReport', renderYearlyConditionReport(data, byValue)],
@@ -121,7 +161,7 @@ const docs = [
 // Phase 4: defect cards in the asset log should show "AS 1851-2012 Section 10"
 // on the extinguisher's card (real Section) and never fabricate a Section
 // reference on the exit-light's card ("15" isn't real).
-const chunkHtml = docs.filter(([name]) => name.startsWith('chunk')).map(([, html]) => html).join('');
+const chunkHtml = docs.filter(([name]) => name.includes('_chunk')).map(([, html]) => html).join('');
 if (!chunkHtml.includes('AS 1851-2012 Section 10')) {
   throw new Error('FAIL: assetLogChunk — expected extinguisher defect card to show "AS 1851-2012 Section 10"');
 }
