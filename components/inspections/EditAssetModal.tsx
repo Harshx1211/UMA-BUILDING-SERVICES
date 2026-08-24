@@ -10,9 +10,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { updateRecord, addToSyncQueue } from '@/lib/database';
+import { updateRecord, addToSyncQueue, queryRecords, deleteRecord, upsertRecord } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
+import { useAuthStore } from '@/store/authStore';
+import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
+
+interface AssetTag { id: string; name: string; }
+interface AssetTagAssignment { id: string; asset_id: string; tag_id: string; }
 
 interface EditAssetModalProps {
   visible: boolean;
@@ -32,6 +37,10 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ location?: string }>({});
 
+  const [allTags, setAllTags] = useState<AssetTag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [initialAssignments, setInitialAssignments] = useState<AssetTagAssignment[]>([]);
+
   useEffect(() => {
     if (visible && asset) {
       setLocation(asset.location_on_site || '');
@@ -39,8 +48,16 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       setSerialNumber(asset.serial_number || '');
       setNotes(asset.description || '');
       setErrors({});
+
+      setAllTags(queryRecords<AssetTag>('asset_tags').sort((a, b) => a.name.localeCompare(b.name)));
+      const current = queryRecords<AssetTagAssignment>('asset_tag_assignments', { asset_id: asset.id });
+      setSelectedTagIds(current.map(a => a.tag_id));
+      setInitialAssignments(current);
     }
   }, [visible, asset]);
+
+  const toggleTag = (tagId: string) =>
+    setSelectedTagIds(prev => prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]);
 
   const handleClose = () => {
     onClose();
@@ -66,7 +83,24 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
 
       updateRecord('assets', asset.id, payload);
       addToSyncQueue('assets', asset.id, SyncOperation.Update, payload);
-      
+
+      // Tag changes — only write what actually changed, not the whole set.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const initialTagIds = initialAssignments.map(a => a.tag_id);
+      const addedTagIds = selectedTagIds.filter(id => !initialTagIds.includes(id));
+      const removedAssignments = initialAssignments.filter(a => !selectedTagIds.includes(a.tag_id));
+
+      for (const tagId of addedTagIds) {
+        const assignmentId = generateUUID();
+        const assignmentPayload = { id: assignmentId, asset_id: asset.id, tag_id: tagId, company_id: companyId };
+        upsertRecord('asset_tag_assignments', assignmentPayload);
+        addToSyncQueue('asset_tag_assignments', assignmentId, SyncOperation.Insert, assignmentPayload);
+      }
+      for (const removed of removedAssignments) {
+        deleteRecord('asset_tag_assignments', removed.id);
+        addToSyncQueue('asset_tag_assignments', removed.id, SyncOperation.Delete, { id: removed.id });
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAssetEdited();
     } catch (err) {
@@ -145,6 +179,30 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                 />
               </View>
 
+              {/* Tags */}
+              {allTags.length > 0 && (
+                <View style={s.field}>
+                  <Text style={[s.fieldLabel, { color: C.text }]}>Tags</Text>
+                  <View style={s.tagWrap}>
+                    {allTags.map(tag => {
+                      const selected = selectedTagIds.includes(tag.id);
+                      return (
+                        <TouchableOpacity
+                          key={tag.id}
+                          onPress={() => toggleTag(tag.id)}
+                          style={[
+                            s.tagChip,
+                            { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary : C.backgroundTertiary },
+                          ]}
+                        >
+                          <Text style={[s.tagChipText, { color: selected ? '#fff' : C.textSecondary }]}>{tag.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               {/* Notes */}
               <View style={[s.field, { marginBottom: 0 }]}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
@@ -204,6 +262,9 @@ const s = StyleSheet.create({
   errorTxt: { fontSize: 12, fontWeight: '800', flex: 1 },
   input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
+  tagWrap:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tagChip:  { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  tagChipText: { fontSize: 13, fontWeight: '700' },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', gap: 12,
