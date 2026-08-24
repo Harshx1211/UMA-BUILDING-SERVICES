@@ -6,6 +6,7 @@ import {
   Platform,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,7 +17,8 @@ import {
   getDefectsForJob,
   getSignatureForJob,
   getRecord,
-  getPendingSyncItems,
+  updateRecord,
+  addToSyncQueue,
 } from '@/lib/database';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
@@ -25,7 +27,8 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
-import { DefectSeverity } from '@/constants/Enums';
+import { DefectSeverity, JobStatus, SyncOperation } from '@/constants/Enums';
+import { useJobsStore } from '@/store/jobsStore';
 import type { Defect, Signature } from '@/types';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -207,12 +210,12 @@ export default function ReportSummaryScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
+  const { updateJobStatus } = useJobsStore();
 
   const [job, setJob]             = useState<JobWithProperty | null>(null);
   const [assets, setAssets]       = useState<ReportAsset[]>([]);
   const [defects, setDefects]     = useState<ExtendedDefect[]>([]);
   const [signature, setSignature] = useState<Signature | null>(null);
-  const [hasPendingSync, setHasPendingSync] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -227,27 +230,6 @@ export default function ReportSummaryScreen() {
       setAssets(a);
       setDefects(getDefectsForJob<ExtendedDefect>(jobId));
       setSignature(getSignatureForJob(jobId));
-
-      const pendingSyncs = getPendingSyncItems();
-      // Only ACTUAL DATA CHANGES that affect PDF content trigger the banner.
-      // Exclusions:
-      //   photo_upload   — binary task, not PDF content (PDF encodes from local_uri)
-      //   report_generate — this is the PDF job itself (table_name='jobs'), NOT a data
-      //                     change. Without this exclusion, the banner showed every time
-      //                     a PDF was in-flight because the report_generate item matches
-      //                     table_name='jobs' which is in PDF_TABLES.
-      const PDF_TABLES = new Set(['job_assets', 'defects', 'signatures', 'jobs']);
-      const MAX_RETRIES = 5;
-      const hasPending = pendingSyncs.some(item => {
-        const op = String(item.operation);
-        if (op === 'photo_upload') return false;      // binary upload task, not PDF data
-        if (op === 'report_generate') return false;   // PDF generation task itself, not a data change
-        if ((item.retry_count ?? 0) >= MAX_RETRIES) return false; // permanently failed — stale
-        if (!PDF_TABLES.has(item.table_name)) return false;       // not PDF-relevant table
-        return (item.payload ?? '').includes(`"${jobId}"`);
-      });
-      setHasPendingSync(hasPending);
-
     } catch (e) {
       console.error('[ReportSummary] load error:', e);
     } finally {
@@ -310,6 +292,43 @@ export default function ReportSummaryScreen() {
     day: 'numeric', month: 'long', year: 'numeric'
   });
 
+  // Generating a report and completing the job are one action, not two —
+  // there's no state where a job is "completed" without a report, or a
+  // report without the job being marked done. Validate the same two
+  // requirements Job Detail's own completion flow enforces, mark the job
+  // Completed if it isn't already, then go generate.
+  const handleGenerate = () => {
+    if (!isFullyInspected) {
+      Alert.alert(
+        'Inspection Incomplete',
+        'All assets must have a result (Pass, Fail, or Not Tested) before generating the report.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Inspection', onPress: () => router.push(`/jobs/${job.id}/inspect` as never) },
+        ],
+      );
+      return;
+    }
+    if (!hasSignature) {
+      Alert.alert(
+        'Signature Required',
+        'A client signature is required before generating the report. Please capture a signature first.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Go to Signature', onPress: () => router.push(`/jobs/${job.id}/signature` as never) },
+        ],
+      );
+      return;
+    }
+    if (!isCompleted) {
+      const now = new Date().toISOString();
+      updateRecord('jobs', job.id, { status: JobStatus.Completed, updated_at: now });
+      addToSyncQueue('jobs', job.id, SyncOperation.Update, { status: JobStatus.Completed, updated_at: now });
+      updateJobStatus(job.id, JobStatus.Completed);
+    }
+    router.push(`/jobs/${job.id}/preview` as never);
+  };
+
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
@@ -358,23 +377,6 @@ export default function ReportSummaryScreen() {
             </View>
           </Card>
         </Animated.View>
-
-        {/* ── Pending Data Changes Warning Banner ── */}
-        {hasPendingSync && (
-          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(340)}>
-            <View style={[s.warningBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
-              <MaterialCommunityIcons name="cloud-sync-outline" size={24} color={C.warningDark} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: C.warningDark, marginBottom: 2 }}>
-                  Inspection Data Not Yet in PDF
-                </Text>
-                <Text style={{ fontSize: 12, color: C.warningDark, lineHeight: 16 }}>
-                  Results or signatures were recorded after the last PDF was generated. Tap Regenerate to update it.
-                </Text>
-              </View>
-            </View>
-          </Animated.View>
-        )}
 
         {/* ── Warning if completed job lacks signature (data corruption edge case) ── */}
         {isCompleted && !hasSignature && (
@@ -560,10 +562,10 @@ export default function ReportSummaryScreen() {
           </View>
         ) : (
           <Button
-            title={readyToGenerate ? "Generate Report PDF" : "Preview Draft Report"}
-            icon={readyToGenerate ? "file-pdf-box" : "file-eye-outline"}
-            variant={readyToGenerate ? "primary" : "secondary"}
-            onPress={() => router.push(`/jobs/${jobId}/preview` as never)}
+            title="Generate Report"
+            icon="file-pdf-box"
+            variant="primary"
+            onPress={handleGenerate}
           />
         )}
       </View>

@@ -755,27 +755,30 @@ export default function JobDetailScreen() {
           title={
             isCompleted && job?.report_url ? 'View Report' :
             isCompleted                    ? 'Generate Report' :
-            isInProgress                   ? 'Draft Preview' :
             'Report Not Available'
           }
           variant={isCompleted ? 'secondary' : 'primary'}
-          disabled={isScheduled || isCancelled}
+          // Report actions only exist once the job is completed — completing
+          // it (via Report Summary's Generate Report, or Complete Job here)
+          // is what unlocks this. No mid-inspection "draft preview" shortcut:
+          // there's exactly one way to get a report, at the end.
+          disabled={!isCompleted}
           onPress={() => {
-            if (isCompleted && job?.report_url) {
-              router.push(`/jobs/${id}/report` as never);
-            } else if (isCompleted || isInProgress) {
-              // Both "Generate Report" and "Draft Preview" land on the same
-              // screen, which handles queuing generation (if needed) and
-              // shows a live "Generating… Xs" → "Ready" view — one place
-              // that tracks progress, instead of every screen trying to.
+            if (!isCompleted) return;
+            if (job?.report_url) {
+              // Report is guaranteed current — a completed job only ever
+              // loses its report_url via "Continue Working", which also
+              // reopens the job. Just show it, don't burn a regeneration.
+              router.push(`/jobs/${id}/preview?mode=view` as never);
+            } else {
               router.push(`/jobs/${id}/preview` as never);
             }
           }}
           icon={
             <MaterialCommunityIcons
-              name={isCompleted && job?.report_url ? 'file-check-outline' : isCompleted ? 'file-chart-outline' : 'file-eye-outline'}
+              name={isCompleted && job?.report_url ? 'file-check-outline' : 'file-chart-outline'}
               size={20}
-              color={(isScheduled || isCancelled) ? C.textTertiary : C.textOnPrimary}
+              color={!isCompleted ? C.textTertiary : C.textOnPrimary}
             />
           }
           style={{ height: 52, borderRadius: 26 }}
