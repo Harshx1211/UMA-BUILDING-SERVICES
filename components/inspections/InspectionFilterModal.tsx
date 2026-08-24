@@ -3,7 +3,7 @@ import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform } from 
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, FilterPills } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 
@@ -42,13 +42,35 @@ interface Props {
   onReset: () => void;
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+function Section({ icon, label, children }: { icon: IconName; label: string; children: React.ReactNode }) {
   const C = useColors();
   return (
     <View style={s.section}>
-      <Text style={[s.sectionLabel, { color: C.text }]}>{label}</Text>
-      {children}
+      <View style={s.sectionHeader}>
+        <MaterialCommunityIcons name={icon} size={15} color={C.textTertiary} />
+        <Text style={[s.sectionLabel, { color: C.textSecondary }]}>{label}</Text>
+      </View>
+      <View style={s.chipWrap}>{children}</View>
     </View>
+  );
+}
+
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const C = useColors();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.75}
+      style={[
+        s.chip,
+        { backgroundColor: active ? C.primary : C.background, borderColor: active ? C.primary : C.border },
+      ]}
+    >
+      {active && <MaterialCommunityIcons name="check" size={13} color="#fff" style={{ marginRight: 4 }} />}
+      <Text style={[s.chipText, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -65,43 +87,46 @@ export default function InspectionFilterModal({
   const C = useColors();
   const insets = useSafeAreaInsets();
 
-  const pillsFor = (options: string[], value: string, onChange: (v: string) => void) => (
-    <FilterPills
-      options={options.map(o => ({ label: o }))}
-      activeIndex={options.findIndex(o => o === value)}
-      onSelect={(idx) => onChange(options[idx])}
-      variant="dark"
-    />
-  );
+  const chipsFor = (options: string[], value: string, onChange: (v: string) => void) =>
+    options.map(o => <Chip key={o} label={o} active={o === value} onPress={() => onChange(o)} />);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[s.container, { backgroundColor: C.background }]}>
         <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomWidth: 1, borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={onClose} style={[s.headerIconBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={22} color={C.text} />
-          </TouchableOpacity>
-          <Text style={[s.headerTitle, { color: C.text }]}>Filters</Text>
-          <TouchableOpacity onPress={onReset} disabled={activeCount === 0} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-            <Text style={[s.resetTxt, { color: activeCount === 0 ? C.textTertiary : C.error }]}>Reset</Text>
-          </TouchableOpacity>
+          <View style={s.headerLeft}>
+            <View style={[s.headerIconCircle, { backgroundColor: C.primary + '1A' }]}>
+              <MaterialCommunityIcons name="tune-variant" size={17} color={C.primary} />
+            </View>
+            <Text style={[s.headerTitle, { color: C.text }]}>Filters</Text>
+          </View>
+          <View style={s.headerRight}>
+            <TouchableOpacity onPress={onReset} disabled={activeCount === 0} hitSlop={12}>
+              <Text style={[s.resetTxt, { color: activeCount === 0 ? C.textTertiary : C.error }]}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={[s.headerIconBtn, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]} hitSlop={10}>
+              <MaterialCommunityIcons name="close" size={20} color={C.text} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
           {routineOptions.length > 2 && (
-            <Section label="Routines">{pillsFor(routineOptions, routineFilter, onRoutineChange)}</Section>
+            <Section icon="clipboard-list-outline" label="Routines">{chipsFor(routineOptions, routineFilter, onRoutineChange)}</Section>
           )}
           {assetTypeOptions.length > 2 && (
-            <Section label="Asset Types">{pillsFor(assetTypeOptions, assetTypeFilter, onAssetTypeChange)}</Section>
+            <Section icon="shape-outline" label="Asset Types">{chipsFor(assetTypeOptions, assetTypeFilter, onAssetTypeChange)}</Section>
           )}
           {tagOptions.length > 2 && (
-            <Section label="Asset Tags">{pillsFor(tagOptions, tagFilter, onTagChange)}</Section>
+            <Section icon="tag-multiple-outline" label="Asset Tags">{chipsFor(tagOptions, tagFilter, onTagChange)}</Section>
           )}
           {locationOptions.length > 2 && (
-            <Section label="Location">{pillsFor(locationOptions, locationFilter, onLocationChange)}</Section>
+            <Section icon="map-marker-outline" label="Location">{chipsFor(locationOptions, locationFilter, onLocationChange)}</Section>
           )}
 
-          <Section label="Group By">
+          <View style={[s.divider, { backgroundColor: C.border }]} />
+
+          <Section icon="format-list-group" label="Group By">
             <View style={s.segmentRow}>
               {(['asset', 'routine'] as const).map(opt => {
                 const active = groupBy === opt;
@@ -109,8 +134,9 @@ export default function InspectionFilterModal({
                   <TouchableOpacity
                     key={opt}
                     onPress={() => onGroupByChange(opt)}
-                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.backgroundTertiary }]}
+                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
+                    <MaterialCommunityIcons name={opt === 'asset' ? 'cube-outline' : 'clipboard-list-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
                     <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
                       {opt === 'asset' ? 'Asset' : 'Routine'}
                     </Text>
@@ -120,7 +146,7 @@ export default function InspectionFilterModal({
             </View>
           </Section>
 
-          <Section label="Sort By">
+          <Section icon="sort" label="Sort By">
             <View style={s.segmentRow}>
               {(['label', 'location'] as const).map(opt => {
                 const active = sortBy === opt;
@@ -128,8 +154,9 @@ export default function InspectionFilterModal({
                   <TouchableOpacity
                     key={opt}
                     onPress={() => onSortByChange(opt)}
-                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.backgroundTertiary }]}
+                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
+                    <MaterialCommunityIcons name={opt === 'label' ? 'text' : 'map-marker-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
                     <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
                       {opt === 'label' ? 'Asset Label' : 'Location'}
                     </Text>
@@ -138,7 +165,7 @@ export default function InspectionFilterModal({
               })}
               <TouchableOpacity
                 onPress={onToggleSortDirection}
-                style={[s.segmentBtn, { flex: 0, width: 44, borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
+                style={[s.segmentBtn, { flex: 0, width: 44, borderColor: C.border, backgroundColor: C.background }]}
               >
                 <MaterialCommunityIcons name={sortAsc ? 'sort-ascending' : 'sort-descending'} size={18} color={C.textSecondary} />
               </TouchableOpacity>
@@ -158,20 +185,35 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 18,
+    paddingHorizontal: 20, paddingBottom: 16,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerIconCircle: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
   },
   headerIconBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
-  resetTxt: { fontSize: 14, fontWeight: '700' },
-  body: { padding: 16, paddingBottom: 40, gap: 4 },
-  section: { marginBottom: 20 },
-  sectionLabel: { fontSize: 13, fontWeight: '800', marginBottom: 8, letterSpacing: -0.1 },
+  headerTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.4 },
+  resetTxt: { fontSize: 13, fontWeight: '700' },
+  body: { padding: 20, paddingBottom: 40 },
+  section: { marginBottom: 22 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  sectionLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 999, borderWidth: 1,
+  },
+  chipText: { fontSize: 13, fontWeight: '600' },
+  divider: { height: 1, marginBottom: 22 },
   segmentRow: { flexDirection: 'row', gap: 8 },
-  segmentBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
   segmentTxt: { fontSize: 13, fontWeight: '700' },
   bottomBar: {
     paddingHorizontal: 20, paddingTop: 14,

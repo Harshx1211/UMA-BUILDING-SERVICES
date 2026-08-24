@@ -727,14 +727,19 @@ export default function AssetInspectionScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => setShowFilterModal(true)}
-                style={[s.filterBtn, { backgroundColor: C.surface, borderColor: activeFilterCount > 0 ? C.primary : C.border }]}
+                activeOpacity={0.8}
+                style={[
+                  s.filterBtn,
+                  {
+                    backgroundColor: activeFilterCount > 0 ? C.primary : C.surface,
+                    borderColor: activeFilterCount > 0 ? C.primary : C.border,
+                  },
+                ]}
               >
-                <MaterialCommunityIcons name="tune-variant" size={18} color={activeFilterCount > 0 ? C.primary : C.textSecondary} />
-                {activeFilterCount > 0 && (
-                  <View style={[s.filterBadge, { backgroundColor: C.accent }]}>
-                    <Text style={s.filterBadgeTxt}>{activeFilterCount}</Text>
-                  </View>
-                )}
+                <MaterialCommunityIcons name="tune-variant" size={15} color={activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary} />
+                <Text style={[s.filterBtnTxt, { color: activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary }]}>
+                  Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -849,9 +854,8 @@ const s = StyleSheet.create({
   searchBar:   { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14 },
   filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
-  filterBtn: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  filterBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  filterBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  filterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
+  filterBtnTxt: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
   routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
   routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
