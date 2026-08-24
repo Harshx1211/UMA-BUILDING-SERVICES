@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 32;
+const CURRENT_SCHEMA_VERSION = 33;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -152,6 +152,16 @@ export function initializeSchema(): void {
       report_url     TEXT,
       FOREIGN KEY (property_id) REFERENCES properties(id),
       FOREIGN KEY (assigned_to) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS job_technicians (
+      id         TEXT PRIMARY KEY NOT NULL,
+      company_id TEXT,
+      job_id     TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (job_id)  REFERENCES jobs(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS job_assets (
@@ -1147,6 +1157,36 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32')`);
   }
 
+  // Migration 33: job_technicians — flat multi-technician job assignment,
+  // mirroring the same table added server-side (see
+  // supabase/migrations/20260824020000_job_technicians.sql). The bootstrap
+  // CREATE TABLE IF NOT EXISTS above already creates this for a device on
+  // this version already, so this block is here purely for the same
+  // version-tracking/logging consistency every other migration follows —
+  // both statements are idempotent regardless of ordering.
+  if (currentVersion < 33) {
+    try {
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS job_technicians (
+          id         TEXT PRIMARY KEY NOT NULL,
+          company_id TEXT,
+          job_id     TEXT NOT NULL,
+          user_id    TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (job_id)  REFERENCES jobs(id),
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_technicians_job_id  ON job_technicians(job_id);
+        CREATE INDEX IF NOT EXISTS idx_job_technicians_user_id ON job_technicians(user_id);
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 33: added job_technicians table');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 33 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 33;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '33')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1293,12 +1333,18 @@ export function queryRecordsIn<T = RecordData>(
 // Domain-specific helpers
 // ─────────────────────────────────────────────
 
-/** Returns all non-cancelled jobs assigned to the given technician, ordered by scheduled date */
+/**
+ * Returns all non-cancelled jobs assigned to the given technician, ordered
+ * by scheduled date. "Assigned" means present in job_technicians — a flat
+ * list, no primary tech — OR (fallback) jobs.assigned_to, which still
+ * covers any job synced down before this device ever pulled job_technicians
+ * rows for it. DISTINCT guards against a job matching both.
+ */
 export function getJobsForTechnician<T = RecordData>(userId: string): T[] {
   try {
     const db = openDatabase();
     return db.getAllSync<T>(
-      `SELECT j.*, p.name AS property_name, p.address AS property_address,
+      `SELECT DISTINCT j.*, p.name AS property_name, p.address AS property_address,
               p.suburb AS property_suburb, p.state AS property_state,
               p.postcode AS property_postcode,
               p.compliance_status AS property_compliance_status,
@@ -1306,10 +1352,13 @@ export function getJobsForTechnician<T = RecordData>(userId: string): T[] {
               p.access_notes, p.hazard_notes, p.site_note
        FROM jobs j
        LEFT JOIN properties p ON j.property_id = p.id
-       WHERE j.assigned_to = ?
-         AND j.status != 'cancelled'
+       WHERE j.status != 'cancelled'
+         AND (
+           j.assigned_to = ?
+           OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?)
+         )
        ORDER BY j.scheduled_date ASC, j.priority DESC`,
-      [userId],
+      [userId, userId],
     );
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getJobsForTechnician(${userId}) error:`, err);

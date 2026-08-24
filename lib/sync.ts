@@ -337,14 +337,30 @@ export async function runSync(userId?: string): Promise<boolean> {
 
 /** Pulls all jobs assigned to the user and the related properties/assets */
 async function _pullJobs(userId: string, _lastSynced: string | null): Promise<void> {
+  // "Assigned to this technician" now means job_technicians membership (a
+  // flat crew list, no primary) OR the legacy assigned_to column — the
+  // latter kept as a fallback for any job whose job_technicians rows
+  // haven't been created yet. See supabase/migrations/20260824020000_job_technicians.sql.
+  const { data: assignedRows, error: assignedError } = await supabase
+    .from('job_technicians')
+    .select('job_id')
+    .eq('user_id', userId);
+  if (assignedError) {
+    console.error('[UMA BUILDING SERVICES Sync] PULL job_technicians (own) error:', assignedError.message);
+  }
+  const assignedJobIds = (assignedRows ?? []).map((r) => r.job_id as string);
+
   // Always pull all non-cancelled jobs for this technician.
   // Using a simple filter (no lastSynced delta) guarantees we never silently
   // drop jobs due to clock skew, timezone edge-cases, or status transitions.
   // The result set is small (one technician's workload) so this is fine.
+  const orFilter = assignedJobIds.length > 0
+    ? `assigned_to.eq.${userId},id.in.(${assignedJobIds.join(',')})`
+    : `assigned_to.eq.${userId}`;
   const { data: jobs, error: jobsError } = await supabase
     .from('jobs')
     .select('*')
-    .eq('assigned_to', userId)
+    .or(orFilter)
     .neq('status', 'cancelled');
 
   if (jobsError) {
@@ -455,6 +471,36 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
 
   // Pull job_assets, defects, and inspection_photos for these jobs
   if (jobIds.length > 0) {
+    // Full crew list per job (everyone assigned, not just this user's own
+    // membership) — needed locally so screens can show/name the whole crew.
+    await _pullRelated('job_technicians', 'job_id', jobIds);
+
+    // The crew may include technicians other than this device's own user —
+    // fetch+upsert their user rows too so names resolve locally instead of
+    // showing blank. (This device's own user row is already upserted above.)
+    const { data: crewRows, error: crewError } = await supabase
+      .from('job_technicians')
+      .select('user_id')
+      .in('job_id', jobIds);
+    if (crewError) {
+      console.error('[UMA BUILDING SERVICES Sync] PULL crew user_ids error:', crewError.message);
+    } else if (crewRows && crewRows.length > 0) {
+      const crewUserIds = [...new Set(crewRows.map((r) => r.user_id as string))].filter((id) => id !== userId);
+      if (crewUserIds.length > 0) {
+        const { data: crewUsers, error: crewUsersError } = await supabase
+          .from('users')
+          .select('*')
+          .in('id', crewUserIds);
+        if (crewUsersError) {
+          console.error('[UMA BUILDING SERVICES Sync] PULL crew users error:', crewUsersError.message);
+        } else if (crewUsers) {
+          for (const u of crewUsers) {
+            upsertRecord('users', u as Record<string, string | number | boolean | null>);
+          }
+        }
+      }
+    }
+
     await _pullRelated('job_assets', 'job_id', jobIds);
     await _pullRelated('defects', 'job_id', jobIds);
     // H6: _pullRelated already handles the deleted-photo tombstone internally

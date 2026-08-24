@@ -71,16 +71,19 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       const todayStr = today();
 
       // ── Today's jobs (with property info) ──────────────────
+      // "Assigned" = job_technicians membership (flat list, no primary), OR
+      // (fallback) assigned_to for any job synced before job_technicians
+      // rows existed for it.
       const todayJobRows = db.getAllSync<Job>(
-        `SELECT j.*, p.name AS property_name, p.address AS property_address,
+        `SELECT DISTINCT j.*, p.name AS property_name, p.address AS property_address,
                 p.suburb AS property_suburb, p.state AS property_state
          FROM jobs j
          LEFT JOIN properties p ON j.property_id = p.id
-         WHERE j.assigned_to = ?
+         WHERE (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
            AND j.scheduled_date = ?
            AND j.status != ?
          ORDER BY j.scheduled_time ASC, j.priority DESC`,
-        [userId, todayStr, JobStatus.Cancelled]
+        [userId, userId, todayStr, JobStatus.Cancelled]
       );
 
       // ── Today stats ──────────────────────────────────────────
@@ -92,11 +95,11 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       // ── This week stats ──────────────────────────────────────
       const { start, end } = weekRange();
       const weekRows = db.getAllSync<{ status: string }>(
-        `SELECT status FROM jobs
-         WHERE assigned_to = ?
-           AND scheduled_date BETWEEN ? AND ?
-           AND status != ?`,
-        [userId, start, end, JobStatus.Cancelled]
+        `SELECT DISTINCT j.id, j.status FROM jobs j
+         WHERE (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
+           AND j.scheduled_date BETWEEN ? AND ?
+           AND j.status != ?`,
+        [userId, userId, start, end, JobStatus.Cancelled]
       );
       const weekTotal = weekRows.length;
       const weekCompleted = weekRows.filter((r) => r.status === JobStatus.Completed).length;
@@ -106,9 +109,10 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
         `SELECT COUNT(*) as count FROM defects
          WHERE status = 'open'
            AND job_id IN (
-             SELECT id FROM jobs WHERE assigned_to = ?
+             SELECT id FROM jobs j
+             WHERE j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?)
            )`,
-        [userId]
+        [userId, userId]
       );
       const openDefectsCount = defectRow?.count ?? 0;
 
@@ -121,8 +125,10 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed,
            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS in_progress_count,
            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS pending
-         FROM jobs WHERE assigned_to = ? AND status != ?`,
-        [JobStatus.Completed, JobStatus.InProgress, JobStatus.Scheduled, userId, JobStatus.Cancelled]
+         FROM jobs j
+         WHERE (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
+           AND status != ?`,
+        [JobStatus.Completed, JobStatus.InProgress, JobStatus.Scheduled, userId, userId, JobStatus.Cancelled]
       );
       const allTotal      = allStatsRow?.total ?? 0;
       const allCompleted  = allStatsRow?.completed ?? 0;

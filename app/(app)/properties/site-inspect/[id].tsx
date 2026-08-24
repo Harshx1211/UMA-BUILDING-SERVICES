@@ -331,6 +331,14 @@ export default function SiteInspectScreen() {
       upsertRecord('jobs', jobPayload as RecordData);
       addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
 
+      // 1b. Assign the creating technician via job_technicians (the real,
+      // flat assignment list — assigned_to above is kept only as the
+      // legacy fallback column other code still reads).
+      const jobTechId = generateUUID();
+      const jobTechPayload = { id: jobTechId, job_id: jobId, user_id: user.id, created_at: now };
+      upsertRecord('job_technicians', jobTechPayload as RecordData);
+      addToSyncQueue('job_technicians', jobTechId, SyncOperation.Insert, jobTechPayload as RecordData);
+
       // 2. Save job_assets records
       // DECISION #2: assets the tech did not explicitly inspect are auto-marked
       // as not_tested. Never silently skip them — a missing record = missing compliance data.
