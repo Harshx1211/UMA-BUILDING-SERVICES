@@ -54,10 +54,10 @@ const assetTypes: AssetTypeDefinition[] = [
 const byValue = new Map(assetTypes.map((t) => [t.value, t]));
 
 const assets: AssetWithResult[] = [
-  { id: 'a1', property_id: 'p1', asset_type: 'extinguisher', variant: 'DCP 4.5KG', asset_ref: '001', location_on_site: 'Level 1 Lobby', serial_number: null, result: 'fail', defect_reason: 'Past service life', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
-  { id: 'a2', property_id: 'p1', asset_type: 'smoke_alarm', variant: null, asset_ref: 'A101', location_on_site: 'Unit A101', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
-  { id: 'a3', property_id: 'p1', asset_type: 'hose_reel', variant: '36m - 25mm', asset_ref: '015', location_on_site: 'AG lobby', serial_number: null, result: 'not_tested', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
-  { id: 'a4', property_id: 'p1', asset_type: 'exit_light', variant: 'Box (Wall Mount)', asset_ref: 'E5', location_on_site: 'Level 5', serial_number: null, result: 'fail', defect_reason: 'Not illuminating', technician_notes: null, actioned_at: new Date().toISOString(), categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a1', property_id: 'p1', asset_type: 'extinguisher', variant: 'DCP 4.5KG', asset_ref: '001', location_on_site: 'Level 1 Lobby', serial_number: null, result: 'fail', defect_reason: 'Past service life', technician_notes: null, actioned_at: new Date().toISOString(), actionedByName: 'Anup Patel', categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a2', property_id: 'p1', asset_type: 'smoke_alarm', variant: null, asset_ref: 'A101', location_on_site: 'Unit A101', serial_number: null, result: 'pass', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), actionedByName: null, categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a3', property_id: 'p1', asset_type: 'hose_reel', variant: '36m - 25mm', asset_ref: '015', location_on_site: 'AG lobby', serial_number: null, result: 'not_tested', defect_reason: null, technician_notes: null, actioned_at: new Date().toISOString(), actionedByName: null, categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
+  { id: 'a4', property_id: 'p1', asset_type: 'exit_light', variant: 'Box (Wall Mount)', asset_ref: 'E5', location_on_site: 'Level 5', serial_number: null, result: 'fail', defect_reason: 'Not illuminating', technician_notes: null, actioned_at: new Date().toISOString(), actionedByName: null, categoryLabel: '', categoryNumber: null, categoryOfficialSection: null },
 ];
 
 const defects: Defect[] = [
@@ -197,6 +197,18 @@ if (chunkHtml.includes('AS 1851-2012 Section 15')) {
   throw new Error('FAIL: assetLogChunk — fabricated "AS 1851-2012 Section 15" appeared on a defect card');
 }
 console.log('OK: assetLogChunk defect cards show verified Section refs only');
+
+// The extinguisher (a1) has actionedByName set, the other three don't —
+// exactly one "Inspected by" line should render, and it should name the
+// right technician.
+const inspectedByCount = (chunkHtml.match(/Inspected by/g) ?? []).length;
+if (inspectedByCount !== 1) {
+  throw new Error(`FAIL: assetLogChunk — expected exactly 1 "Inspected by" line, found ${inspectedByCount}`);
+}
+if (!chunkHtml.includes('Inspected by Anup Patel')) {
+  throw new Error('FAIL: assetLogChunk — expected "Inspected by Anup Patel" for the extinguisher row');
+}
+console.log('OK: assetLogChunk shows who inspected an asset only when known');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections

@@ -66,6 +66,17 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
   );
 
+  // Resolve actioned_by -> name for every technician who's touched this
+  // job's assets, independent of the current crew (job_technicians) — a
+  // job_assets row's actioned_by should still be attributable even if that
+  // tech is later removed from the job's assignment.
+  const actionedByIds = [...new Set(jobAssets.map((ja) => ja.actioned_by).filter((id): id is string => !!id))];
+  const actionedByNameById = new Map<string, string>();
+  if (actionedByIds.length > 0) {
+    const { data: actionedByUsers } = await db.from('users').select('id, full_name').in('id', actionedByIds);
+    for (const u of actionedByUsers ?? []) actionedByNameById.set(u.id, u.full_name);
+  }
+
   // Merge job_assets result onto each asset — pick the most recently actioned
   // match, not just the first array hit (a job can accumulate multiple
   // job_assets rows per asset over re-inspections).
@@ -84,6 +95,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
       defect_reason: latest?.defect_reason ?? null,
       technician_notes: latest?.technician_notes ?? null,
       actioned_at: latest?.actioned_at ?? null,
+      actionedByName: latest?.actioned_by ? (actionedByNameById.get(latest.actioned_by) ?? null) : null,
       categoryLabel: parsed.label,
       categoryNumber: parsed.number,
       categoryOfficialSection: parsed.officialSection,

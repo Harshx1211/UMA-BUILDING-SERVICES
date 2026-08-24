@@ -54,7 +54,10 @@ export function renderAssetLogChunk(
                 <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
                 ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
               </td>
-              <td style="width:30%">${esc(asset.location_on_site) || '—'}</td>
+              <td style="width:30%">
+                ${esc(asset.location_on_site) || '—'}
+                ${asset.actionedByName ? `<div style="font-size:9px;color:${COLORS.MUTED}">Inspected by ${esc(asset.actionedByName)}</div>` : ''}
+              </td>
               <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}

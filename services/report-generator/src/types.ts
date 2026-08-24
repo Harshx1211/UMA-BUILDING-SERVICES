@@ -64,6 +64,7 @@ export interface JobAsset {
   defect_reason: string | null;
   technician_notes: string | null;
   actioned_at: string | null;
+  actioned_by: string | null;
 }
 
 export interface Asset {
@@ -82,6 +83,9 @@ export interface AssetWithResult extends Asset {
   defect_reason: string | null;
   technician_notes: string | null;
   actioned_at: string | null;
+  /** Resolved from actioned_by via a users lookup in fetchReportData.ts —
+   * null if the row predates job_assets.actioned_by or was never actioned. */
+  actionedByName: string | null;
   /** Resolved category label, e.g. "04 - Fire Hydrant Systems". See categoryGrouping.ts. */
   categoryLabel: string;
   categoryNumber: number | null;
