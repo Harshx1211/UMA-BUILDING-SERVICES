@@ -128,9 +128,11 @@ export interface JobAsset {
   defect_reason: string | null;
   technician_notes: string | null;
   actioned_at: string | null;
+  actioned_by: string | null;
 
-  // Joined relation (populated from JOIN queries)
+  // Joined relations (populated from JOIN queries)
   asset?: Asset;
+  actioned_by_user?: User;
 }
 
 /** A defect identified during an inspection */

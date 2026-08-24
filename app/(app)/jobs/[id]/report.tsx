@@ -20,7 +20,6 @@ import {
   updateRecord,
   addToSyncQueue,
 } from '@/lib/database';
-import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -47,6 +46,7 @@ type ReportAsset = {
   id: string; asset_type: string; location_on_site: string | null;
   result: string | null; defect_reason: string | null;
   technician_notes: string | null; is_compliant: number | boolean;
+  actioned_at: string | null; actioned_by_name: string | null;
 };
 
 // C2: Typed joined fields from getAllDefects SQL so we don't need `as any`
@@ -121,6 +121,13 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
           <Text style={[s.assetLoc, { color: C.textSecondary }]}>
             <MaterialCommunityIcons name="map-marker-outline" size={10} color={C.textSecondary} />{' '}
             {asset.location_on_site}
+          </Text>
+        ) : null}
+        {asset.actioned_by_name ? (
+          <Text style={[s.assetLoc, { color: C.textTertiary }]}>
+            <MaterialCommunityIcons name="account-check-outline" size={10} color={C.textTertiary} />{' '}
+            {asset.actioned_by_name}
+            {asset.actioned_at ? ` · ${new Date(asset.actioned_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
           </Text>
         ) : null}
         {isFail && asset.defect_reason ? (

@@ -351,7 +351,7 @@ export default function SiteInspectScreen() {
           result: resolvedResult, checklist_data: null,
           is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
           defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
-          technician_notes: null, actioned_at: now,
+          technician_notes: null, actioned_at: now, actioned_by: user.id,
         };
         upsertRecord('job_assets', jaPayload as RecordData);
         addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);

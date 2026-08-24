@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 33;
+const CURRENT_SCHEMA_VERSION = 34;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -175,8 +175,10 @@ export function initializeSchema(): void {
       defect_reason    TEXT,
       technician_notes TEXT,
       actioned_at      TEXT,
+      actioned_by      TEXT,
       FOREIGN KEY (job_id)   REFERENCES jobs(id),
-      FOREIGN KEY (asset_id) REFERENCES assets(id)
+      FOREIGN KEY (asset_id) REFERENCES assets(id),
+      FOREIGN KEY (actioned_by) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS defects (
@@ -1187,6 +1189,22 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '33')`);
   }
 
+  // Migration 34: job_assets.actioned_by — who inspected this asset, not
+  // just when. Mirrors supabase/migrations/20260824030000_job_assets_actioned_by.sql.
+  if (currentVersion < 34) {
+    try {
+      db.runSync(`ALTER TABLE job_assets ADD COLUMN actioned_by TEXT;`);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 34: added job_assets.actioned_by');
+    } catch (err: unknown) {
+      const msg = String(err);
+      if (!msg.includes('duplicate column')) {
+        console.error('[UMA BUILDING SERVICES DB] Migration 34 failed:', msg);
+      }
+    }
+    currentVersion = 34;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '34')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1924,7 +1942,9 @@ export function getAssetsWithJobResults<T = RecordData>(
               ja.technician_notes AS inspection_notes,
               ja.checklist_data,
               ja.is_compliant,
-              ja.actioned_at
+              ja.actioned_at,
+              ja.actioned_by,
+              u.full_name AS actioned_by_name
        FROM assets a
        LEFT JOIN (
          SELECT jb.*
@@ -1937,6 +1957,7 @@ export function getAssetsWithJobResults<T = RecordData>(
          ) latest ON jb.asset_id = latest.asset_id AND jb.actioned_at = latest.latest_at
          WHERE jb.job_id = ?
        ) ja ON a.id = ja.asset_id
+       LEFT JOIN users u ON ja.actioned_by = u.id
        WHERE a.property_id = ?
          AND a.status = 'active'
        ORDER BY a.asset_type ASC, COALESCE(a.asset_ref, '') ASC`,

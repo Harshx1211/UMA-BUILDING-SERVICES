@@ -210,6 +210,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         defect_reason: defectReason ?? null,
         technician_notes: notes ?? null,
         actioned_at: new Date().toISOString(),
+        actioned_by: userId || null,
       };
 
       upsertRecord('job_assets', jobAssetPayload);
