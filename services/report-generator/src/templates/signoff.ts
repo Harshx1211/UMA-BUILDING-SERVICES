@@ -6,19 +6,13 @@ import { ReportData } from '../types';
  * Lists every assigned technician (always at least one — see
  * data/fetchReportData.ts) plus any other technician who separately logged
  * time on the job, each with their worked date range and accreditation
- * fields. The `signatures` table has a hard UNIQUE(job_id) constraint — it
- * can only ever store one technician signature per job, and has no record
- * of WHICH crew member captured it. When exactly one technician is
- * assigned that's unambiguous (the original, confirmed design — see the
- * plan doc's "Multi-tech signoff" decision) and their row shows the
- * signature image. When there's a real crew of 2+, attributing it to any
- * one row would just be a guess, so no row claims it — the captured
- * signature still appears, once, in an unattributed note below the table,
- * so it's never silently lost from a compliance document.
+ * fields — "whole site inspected by" this crew. The `signatures` table has
+ * a hard UNIQUE(job_id) constraint — one technician signature per job, with
+ * no record of which specific crew member captured it — so it's shown once,
+ * unconditionally, below the table rather than guessed onto any one row.
  */
 export function renderSignoff(data: ReportData): string {
-  const { job, company, signature, timeLogUsers, assignedUsers } = data;
-  const unambiguousSigner = assignedUsers.length === 1;
+  const { company, signature, timeLogUsers } = data;
 
   // Matches the reference report's footer line — optional, so a company that
   // hasn't set one (companies.accreditations is nullable) just omits the row
@@ -32,10 +26,6 @@ export function renderSignoff(data: ReportData): string {
 
   const rows = timeLogUsers
     .map((t) => {
-      const isSigner = unambiguousSigner && t.user.id === job.assigned_to;
-      const sigCell = isSigner && signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE'
-        ? `<img src="${esc(signature.tech_signature_url)}" style="max-height:36px" alt="signature" />`
-        : `<span style="color:${COLORS.MUTED}">—</span>`;
       // esc() each part individually and join with a raw entity — joining first
       // then escaping the combined string would double-escape the "&" in "&middot;".
       const accreditationParts = [
@@ -55,7 +45,6 @@ export function renderSignoff(data: ReportData): string {
                 : ''
           }</td>
           <td>${accreditations}</td>
-          <td>${sigCell}</td>
         </tr>`;
     })
     .join('');
@@ -71,10 +60,10 @@ export function renderSignoff(data: ReportData): string {
     : `<img src="${esc(signature!.signature_url)}" style="max-height:44px" alt="signature" />`;
 
   const hasRealTechSignature = signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE';
-  const unattributedTechSignature = !unambiguousSigner && hasRealTechSignature
+  const techSignoff = hasRealTechSignature
     ? `
     <div class="card" style="margin-top:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:9px;color:${COLORS.MUTED}">Technician signature captured (not individually attributed — multiple technicians assigned)</span>
+      <span style="font-size:9px;color:${COLORS.MUTED};text-transform:uppercase;font-weight:700">Technician Signature</span>
       <img src="${esc(signature!.tech_signature_url)}" style="max-height:36px" alt="signature" />
     </div>`
     : '';
@@ -103,10 +92,10 @@ export function renderSignoff(data: ReportData): string {
   </div>
   ${accreditationsRow}
   <table class="card" style="margin-top:10px">
-    <thead><tr><th>Technician</th><th>Date/Time</th><th>Accreditations</th><th>Signature</th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="4">No time logged against this job</td></tr>`}</tbody>
+    <thead><tr><th>Technician</th><th>Date/Time</th><th>Accreditations</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="3">No time logged against this job</td></tr>`}</tbody>
   </table>
-  ${unattributedTechSignature}
+  ${techSignoff}
   ${clientSignoff}
 </div></body></html>`;
 }

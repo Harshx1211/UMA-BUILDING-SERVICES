@@ -198,17 +198,13 @@ if (chunkHtml.includes('AS 1851-2012 Section 15')) {
 }
 console.log('OK: assetLogChunk defect cards show verified Section refs only');
 
-// The extinguisher (a1) has actionedByName set, the other three don't —
-// exactly one "Inspected by" line should render, and it should name the
-// right technician.
-const inspectedByCount = (chunkHtml.match(/Inspected by/g) ?? []).length;
-if (inspectedByCount !== 1) {
-  throw new Error(`FAIL: assetLogChunk — expected exactly 1 "Inspected by" line, found ${inspectedByCount}`);
+// Per-asset "inspected by" attribution was deliberately reverted (per-asset
+// clutter wasn't wanted) — the asset log must never show it, only the
+// site-level crew list on the Sign-off page does.
+if (chunkHtml.includes('Inspected by')) {
+  throw new Error('FAIL: assetLogChunk — "Inspected by" should not appear per-asset');
 }
-if (!chunkHtml.includes('Inspected by Anup Patel')) {
-  throw new Error('FAIL: assetLogChunk — expected "Inspected by Anup Patel" for the extinguisher row');
-}
-console.log('OK: assetLogChunk shows who inspected an asset only when known');
+console.log('OK: assetLogChunk does not show per-asset inspector attribution');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections
@@ -231,27 +227,18 @@ if (!signoffHtml.includes('FPAA101D Certified')) {
 }
 console.log('OK: signoff renders Company Accreditations line');
 
-// With a real crew (2+ assignedUsers), no per-row signature attribution is a
-// guess — neither crew member's row should claim the image, but the
-// captured signature must still appear somewhere, unattributed.
-const multiTechSignoffHtml = renderSignoff({
-  ...data,
-  assignedUsers: [
-    { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' },
-    { id: 'u2', full_name: 'Rutvi Patel', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null },
-  ],
-});
-if (!multiTechSignoffHtml.includes('not individually attributed')) {
-  throw new Error('FAIL: signoff — expected the unattributed-signature note when 2+ technicians are assigned');
+// The fixture's timeLogUsers already has 3 technicians — the signature
+// (there's only ever one per job, no record of which crew member captured
+// it) must appear exactly once regardless, not per-row and not guessed
+// onto any particular technician.
+const techSigImgCount = (signoffHtml.match(/techsig\.png/g) ?? []).length;
+if (techSigImgCount !== 1) {
+  throw new Error(`FAIL: signoff — expected the tech signature image to appear exactly once, found ${techSigImgCount}`);
 }
-const multiTechImgCount = (multiTechSignoffHtml.match(/techsig\.png/g) ?? []).length;
-if (multiTechImgCount !== 1) {
-  throw new Error(`FAIL: signoff — expected the tech signature image to appear exactly once (unattributed), found ${multiTechImgCount}`);
+if (!signoffHtml.includes('Anup Patel') || !signoffHtml.includes('Rutvi Patel') || !signoffHtml.includes('No-Session Tech')) {
+  throw new Error('FAIL: signoff — expected every technician in timeLogUsers to have a table row');
 }
-assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'html');
-assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'table');
-assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'div');
-console.log('OK: signoff never guesses which of 2+ assigned technicians signed');
+console.log('OK: signoff lists every technician once each, signature shown exactly once (not per-row)');
 
 for (const [name, html] of docs) {
   assertBalanced(html, name, 'html');
