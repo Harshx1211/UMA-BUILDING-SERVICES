@@ -14,6 +14,10 @@ interface Props {
   visible: boolean;
   onClose: () => void;
 
+  resultOptions: string[];
+  resultFilter: string;
+  onResultChange: (v: string) => void;
+
   routineOptions: string[];
   routineFilter: string;
   onRoutineChange: (v: string) => void;
@@ -76,6 +80,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 export default function InspectionFilterModal({
   visible, onClose,
+  resultOptions, resultFilter, onResultChange,
   routineOptions, routineFilter, onRoutineChange,
   assetTypeOptions, assetTypeFilter, onAssetTypeChange,
   tagOptions, tagFilter, onTagChange,
@@ -111,6 +116,10 @@ export default function InspectionFilterModal({
         </View>
 
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
+          <Section icon="check-decagram-outline" label="Result">{chipsFor(resultOptions, resultFilter, onResultChange)}</Section>
+
+          <View style={[s.divider, { backgroundColor: C.border }]} />
+
           {routineOptions.length > 2 && (
             <Section icon="clipboard-list-outline" label="Routines">{chipsFor(routineOptions, routineFilter, onRoutineChange)}</Section>
           )}

@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { ScreenHeader, FilterPills, Button } from '@/components/ui';
+import { ScreenHeader, Button } from '@/components/ui';
 import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -32,6 +32,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 
 const ALL = 'All';
+const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
 
 type AssetTagRow = { id: string; name: string };
 type AssetTagAssignmentRow = { asset_id: string; tag_id: string };
@@ -399,9 +400,10 @@ export default function AssetInspectionScreen() {
     return [ALL, ...Array.from(set).sort()];
   }, [store.assets]);
 
-  const activeFilterCount = [routineFilter, assetTypeFilter, tagFilter, locationFilter].filter(v => v !== ALL).length;
+  const activeFilterCount = [filter, routineFilter, assetTypeFilter, tagFilter, locationFilter].filter(v => v !== ALL).length;
 
   const resetFilters = () => {
+    setFilter(ALL);
     setRoutineFilter(ALL); setAssetTypeFilter(ALL); setTagFilter(ALL); setLocationFilter(ALL);
     setGroupBy('asset'); setSortBy('label'); setSortAsc(true);
   };
@@ -634,14 +636,6 @@ export default function AssetInspectionScreen() {
     );
   }
 
-  const filterOptions = [
-    { label: 'All',       count: store.assets.length },
-    { label: 'Remaining', count: counts.remaining },
-    { label: 'Passed',    count: counts.passed },
-    { label: 'Failed',    count: counts.failed },
-    { label: 'N/T',       count: counts.nt },
-  ];
-
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
@@ -721,10 +715,7 @@ export default function AssetInspectionScreen() {
                 )}
               </View>
             </View>
-            <View style={[s.filterWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-              <View style={{ flex: 1 }}>
-                <FilterPills options={filterOptions} activeIndex={filterOptions.findIndex(o => o.label === filter)} onSelect={(idx) => setFilter(filterOptions[idx].label)} variant="dark" />
-              </View>
+            <View style={s.filterWrap}>
               <TouchableOpacity
                 onPress={() => setShowFilterModal(true)}
                 activeOpacity={0.8}
@@ -736,10 +727,13 @@ export default function AssetInspectionScreen() {
                   },
                 ]}
               >
-                <MaterialCommunityIcons name="tune-variant" size={15} color={activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary} />
-                <Text style={[s.filterBtnTxt, { color: activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary }]}>
-                  Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
-                </Text>
+                <View style={s.filterBtnLeft}>
+                  <MaterialCommunityIcons name="tune-variant" size={15} color={activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary} />
+                  <Text style={[s.filterBtnTxt, { color: activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary }]}>
+                    {activeFilterCount > 0 ? `Filters · ${activeFilterCount} active` : 'All Assets'}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-down" size={16} color={activeFilterCount > 0 ? C.textOnPrimary : C.textTertiary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -807,6 +801,9 @@ export default function AssetInspectionScreen() {
       <InspectionFilterModal
         visible={showFilterModal}
         onClose={() => setShowFilterModal(false)}
+        resultOptions={RESULT_OPTIONS}
+        resultFilter={filter}
+        onResultChange={setFilter}
         routineOptions={routineOptions}
         routineFilter={routineFilter}
         onRoutineChange={setRoutineFilter}
@@ -854,7 +851,8 @@ const s = StyleSheet.create({
   searchBar:   { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14 },
   filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
-  filterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
+  filterBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 42, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
+  filterBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   filterBtnTxt: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
   routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
