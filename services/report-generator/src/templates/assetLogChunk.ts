@@ -28,7 +28,7 @@ export function renderAssetLogChunk(
       if (lastCategory !== null) parts.push(`</tbody></table>`);
       const suffix = row.isFirstInCategory ? '' : ' (continued)';
       parts.push(`<div class="section-bar" style="margin-top:14px">${esc(row.categoryLabel)}${suffix}</div>`);
-      parts.push(`<table class="card"><thead><tr><th>Asset</th><th>Location</th><th style="text-align:right">Status</th></tr></thead><tbody>`);
+      parts.push(`<table class="card"><thead><tr><th style="width:55%">Asset</th><th style="width:30%">Location</th><th style="width:15%;text-align:right">Status</th></tr></thead><tbody>`);
       lastCategory = row.categoryLabel;
     }
 
@@ -36,30 +36,32 @@ export function renderAssetLogChunk(
     const photos = photosByAsset.get(asset.id) ?? [];
     const assetDefects = defectsByAsset.get(asset.id) ?? [];
 
+    // An asset's info, photos, and defect cards used to be 3 sibling <tr>
+    // elements — theme.ts's `tr { break-inside: avoid }` protects each ONE
+    // individually, but nothing stops a page break landing BETWEEN them,
+    // which is exactly what split an asset's info from its own defect card
+    // across a page boundary in the first real test. Nesting all three in a
+    // sub-table inside a single outer <tr> makes break-inside:avoid protect
+    // the whole record as one atomic unit — explicit widths on both the
+    // outer <thead> and this inner table keep the columns aligned since
+    // they're otherwise two independently auto-sized tables.
     parts.push(`
       <tr>
-        <td>
-          <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
-          ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
+        <td colspan="3" style="padding:0;border-top:none">
+          <table style="width:100%"><tbody>
+            <tr>
+              <td style="width:55%">
+                <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
+                ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
+              </td>
+              <td style="width:30%">${esc(asset.location_on_site) || '—'}</td>
+              <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
+            </tr>
+            ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
+            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
+          </tbody></table>
         </td>
-        <td>${esc(asset.location_on_site) || '—'}</td>
-        <td style="text-align:right">${resultPill(asset.result)}</td>
       </tr>`);
-
-    // Photos get their own full-width row rather than being squeezed into the
-    // narrow "Asset" column — at a size where a defect is actually visible
-    // (see .thumb in theme.ts), 2-3 of them don't fit in a 3-column cell.
-    if (photos.length > 0) {
-      parts.push(`<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>`);
-    }
-
-    if (assetDefects.length > 0) {
-      parts.push(`<tr><td colspan="3" style="padding:0;border-top:none">`);
-      for (const defect of assetDefects) {
-        parts.push(renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection));
-      }
-      parts.push(`</td></tr>`);
-    }
   }
   if (lastCategory !== null) parts.push(`</tbody></table>`);
 
