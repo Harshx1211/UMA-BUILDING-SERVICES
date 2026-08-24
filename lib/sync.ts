@@ -558,6 +558,28 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
     if (__DEV__ && defectCodes.length > 0)
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${defectCodes.length} defect_codes`);
   }
+
+  // Asset tag vocabulary + assignments — small/company-wide like the
+  // catalogue tables above, so pulled unconditionally rather than scoped
+  // to this batch's asset ids (keeps this consistent/simple; a company's
+  // total tag assignment count is not expected to be large).
+  const { data: assetTags } = await supabase.from('asset_tags').select('*');
+  if (assetTags) {
+    for (const row of assetTags) {
+      upsertRecord('asset_tags', row as Record<string, string | number | boolean | null>);
+    }
+    if (__DEV__ && assetTags.length > 0)
+      console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assetTags.length} asset_tags`);
+  }
+
+  const { data: assetTagAssignments } = await supabase.from('asset_tag_assignments').select('*');
+  if (assetTagAssignments) {
+    for (const row of assetTagAssignments) {
+      upsertRecord('asset_tag_assignments', row as Record<string, string | number | boolean | null>);
+    }
+    if (__DEV__ && assetTagAssignments.length > 0)
+      console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assetTagAssignments.length} asset_tag_assignments`);
+  }
 }
 
 /** Generic helper to pull a related table for a set of parent ids */

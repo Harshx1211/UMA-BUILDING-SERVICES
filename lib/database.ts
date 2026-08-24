@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 34;
+const CURRENT_SCHEMA_VERSION = 35;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -335,6 +335,23 @@ export function initializeSchema(): void {
       is_active   INTEGER NOT NULL DEFAULT 1,
       sort_order  INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_tags (
+      id         TEXT PRIMARY KEY NOT NULL,
+      company_id TEXT,
+      name       TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_tag_assignments (
+      id         TEXT PRIMARY KEY NOT NULL,
+      company_id TEXT,
+      asset_id   TEXT NOT NULL,
+      tag_id     TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (asset_id) REFERENCES assets(id),
+      FOREIGN KEY (tag_id)   REFERENCES asset_tags(id)
     );
   `);
 
@@ -1203,6 +1220,37 @@ export function initializeSchema(): void {
     }
     currentVersion = 34;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '34')`);
+  }
+
+  // Migration 35: asset_tags + asset_tag_assignments — a real tagging
+  // system for assets. Mirrors supabase/migrations/20260824040000_asset_tags.sql.
+  if (currentVersion < 35) {
+    try {
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS asset_tags (
+          id         TEXT PRIMARY KEY NOT NULL,
+          company_id TEXT,
+          name       TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS asset_tag_assignments (
+          id         TEXT PRIMARY KEY NOT NULL,
+          company_id TEXT,
+          asset_id   TEXT NOT NULL,
+          tag_id     TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (asset_id) REFERENCES assets(id),
+          FOREIGN KEY (tag_id)   REFERENCES asset_tags(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_asset_tag_assignments_asset_id ON asset_tag_assignments(asset_id);
+        CREATE INDEX IF NOT EXISTS idx_asset_tag_assignments_tag_id  ON asset_tag_assignments(tag_id);
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 35: added asset_tags + asset_tag_assignments');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 35 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 35;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '35')`);
   }
 
   // Seed inventory from Uptick defect codes on first run
