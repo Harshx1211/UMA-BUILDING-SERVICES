@@ -167,6 +167,11 @@ export interface ReportData {
   // out to be the actual generation-time bottleneck in real testing).
   signedPhotoUrls: Map<string, string>;
   signature: Signature | null;
+  // The assigned crew — a flat list, no primary (see job_technicians
+  // migration). Falls back to [job.assigned_user] for a job that predates
+  // job_technicians rows. Distinct from timeLogUsers, which also includes
+  // anyone who clocked time but isn't formally assigned.
+  assignedUsers: JobUser[];
   timeLogUsers: Array<{
     user: JobUser;
     firstClockIn: string;

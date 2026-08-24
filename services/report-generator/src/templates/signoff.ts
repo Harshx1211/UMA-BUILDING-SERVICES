@@ -3,18 +3,22 @@ import { esc, fmtDate, fmtDateTime } from './helpers';
 import { ReportData } from '../types';
 
 /**
- * Lists the job's assigned technician (always present — see
+ * Lists every assigned technician (always at least one — see
  * data/fetchReportData.ts) plus any other technician who separately logged
  * time on the job, each with their worked date range and accreditation
  * fields. The `signatures` table has a hard UNIQUE(job_id) constraint — it
- * can only ever store one technician signature per job — so only the job's
- * assigned technician (the one who actually captured `tech_signature_url` in
- * the app) shows a signature image; every other technician is listed by
- * name/date/accreditation only. This was an explicit, confirmed trade-off,
- * not an oversight — see the plan doc's "Multi-tech signoff" decision.
+ * can only ever store one technician signature per job, and has no record
+ * of WHICH crew member captured it. When exactly one technician is
+ * assigned that's unambiguous (the original, confirmed design — see the
+ * plan doc's "Multi-tech signoff" decision) and their row shows the
+ * signature image. When there's a real crew of 2+, attributing it to any
+ * one row would just be a guess, so no row claims it — the captured
+ * signature still appears, once, in an unattributed note below the table,
+ * so it's never silently lost from a compliance document.
  */
 export function renderSignoff(data: ReportData): string {
-  const { job, company, signature, timeLogUsers } = data;
+  const { job, company, signature, timeLogUsers, assignedUsers } = data;
+  const unambiguousSigner = assignedUsers.length === 1;
 
   // Matches the reference report's footer line — optional, so a company that
   // hasn't set one (companies.accreditations is nullable) just omits the row
@@ -28,7 +32,7 @@ export function renderSignoff(data: ReportData): string {
 
   const rows = timeLogUsers
     .map((t) => {
-      const isSigner = t.user.id === job.assigned_to;
+      const isSigner = unambiguousSigner && t.user.id === job.assigned_to;
       const sigCell = isSigner && signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE'
         ? `<img src="${esc(signature.tech_signature_url)}" style="max-height:36px" alt="signature" />`
         : `<span style="color:${COLORS.MUTED}">—</span>`;
@@ -66,6 +70,15 @@ export function renderSignoff(data: ReportData): string {
     ? `<span style="font-style:italic;color:${COLORS.MUTED}">Client unavailable to sign</span>`
     : `<img src="${esc(signature!.signature_url)}" style="max-height:44px" alt="signature" />`;
 
+  const hasRealTechSignature = signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE';
+  const unattributedTechSignature = !unambiguousSigner && hasRealTechSignature
+    ? `
+    <div class="card" style="margin-top:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:9px;color:${COLORS.MUTED}">Technician signature captured (not individually attributed — multiple technicians assigned)</span>
+      <img src="${esc(signature!.tech_signature_url)}" style="max-height:36px" alt="signature" />
+    </div>`
+    : '';
+
   const clientSignoff = signature
     ? `
     <div class="card" style="margin-top:14px;padding:12px 14px">
@@ -93,6 +106,7 @@ export function renderSignoff(data: ReportData): string {
     <thead><tr><th>Technician</th><th>Date/Time</th><th>Accreditations</th><th>Signature</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="4">No time logged against this job</td></tr>`}</tbody>
   </table>
+  ${unattributedTechSignature}
   ${clientSignoff}
 </div></body></html>`;
 }

@@ -87,6 +87,10 @@ const data: ReportData = {
   photosByDefect,
   signedPhotoUrls,
   signature: { id: 's1', job_id: 'j1', signature_url: 'https://signed.example.com/sig.png', tech_signature_url: 'https://signed.example.com/techsig.png', signed_by_name: 'Raquel', signed_at: new Date().toISOString() },
+  // Single assigned tech in this fixture (job_technicians empty -> falls
+  // back to [job.assigned_user], same as fetchReportData.ts) — u2/u3 below
+  // are extra technicians who only logged time, not formally assigned.
+  assignedUsers: [{ id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' }],
   timeLogUsers: [
     { user: { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' }, firstClockIn: new Date().toISOString(), lastClockOut: new Date().toISOString(), hasRealSession: true },
     { user: { id: 'u2', full_name: 'Rutvi Patel', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null }, firstClockIn: new Date().toISOString(), lastClockOut: null, hasRealSession: true },
@@ -214,6 +218,28 @@ if (!signoffHtml.includes('FPAA101D Certified')) {
   throw new Error('FAIL: signoff — expected company.accreditations to render when set');
 }
 console.log('OK: signoff renders Company Accreditations line');
+
+// With a real crew (2+ assignedUsers), no per-row signature attribution is a
+// guess — neither crew member's row should claim the image, but the
+// captured signature must still appear somewhere, unattributed.
+const multiTechSignoffHtml = renderSignoff({
+  ...data,
+  assignedUsers: [
+    { id: 'u1', full_name: 'Anup Patel', fpas_number: 'FP1234', fpas_class: 'Class 1', fpas_expiry: '2027-01-01', state_license: 'NSW-999', state_license_expiry: '2027-01-01' },
+    { id: 'u2', full_name: 'Rutvi Patel', fpas_number: null, fpas_class: null, fpas_expiry: null, state_license: null, state_license_expiry: null },
+  ],
+});
+if (!multiTechSignoffHtml.includes('not individually attributed')) {
+  throw new Error('FAIL: signoff — expected the unattributed-signature note when 2+ technicians are assigned');
+}
+const multiTechImgCount = (multiTechSignoffHtml.match(/techsig\.png/g) ?? []).length;
+if (multiTechImgCount !== 1) {
+  throw new Error(`FAIL: signoff — expected the tech signature image to appear exactly once (unattributed), found ${multiTechImgCount}`);
+}
+assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'html');
+assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'table');
+assertBalanced(multiTechSignoffHtml, 'signoff (2+ techs)', 'div');
+console.log('OK: signoff never guesses which of 2+ assigned technicians signed');
 
 for (const [name, html] of docs) {
   assertBalanced(html, name, 'html');

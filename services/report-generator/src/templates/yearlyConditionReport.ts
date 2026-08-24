@@ -30,7 +30,7 @@ export function renderYearlyConditionReport(
   data: ReportData,
   assetTypesByValue: Map<string, AssetTypeDefinition>,
 ): string {
-  const { job, company, assets, defects, reportId, dateOfService } = data;
+  const { job, company, assets, defects, reportId, dateOfService, assignedUsers } = data;
   const property = job.property;
 
   const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue);
@@ -107,7 +107,7 @@ export function renderYearlyConditionReport(
     ${infoCell('Company', company.name)}
     ${infoCell('Address', company.address)}
     ${infoCell('Phone', company.phone)}
-    ${infoCell('Technician', job.assigned_user?.full_name)}
+    ${infoCell('Technician' + (assignedUsers.length !== 1 ? 's' : ''), assignedUsers.map((u) => u.full_name).join(', ') || null)}
   </div>
 </div></body></html>`;
 }

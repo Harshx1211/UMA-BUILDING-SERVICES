@@ -113,17 +113,33 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     .eq('job_id', jobId)
     .maybeSingle();
 
+  // The assigned crew — a flat list, no primary (see job_technicians
+  // migration). Falls back to the legacy single assigned_user for any job
+  // whose job_technicians rows haven't been created (created before this
+  // feature existed).
+  const { data: jobTechRows } = await db
+    .from('job_technicians')
+    .select('user:users(id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry)')
+    .eq('job_id', jobId);
+  const assignedUsers: JobUser[] =
+    jobTechRows && jobTechRows.length > 0
+      ? ((jobTechRows as unknown as { user: JobUser | null }[]).map((r) => r.user).filter(Boolean) as JobUser[])
+      : job.assigned_user
+        ? [job.assigned_user as JobUser]
+        : [];
+  const assignedUserIds = new Set(assignedUsers.map((u) => u.id));
+
   // One row per distinct technician who worked this job. Time-tracking
   // (clocking in/out) is a separate, optional feature from actually
   // performing the inspection — a job with no time_logs rows (tech never
-  // clocked in) still has the technician who did the whole job recorded on
-  // `jobs.assigned_to`. Relying on time_logs alone meant a job with no time
-  // entries showed NO technician at all on the signoff, which is what "tech
-  // details not reflecting" was — always include the assigned technician
-  // first, then any additional technicians who logged time (matching the
-  // user's confirmed "everyone who worked it" decision as a supplement).
+  // clocked in) still has whoever's assigned recorded via job_technicians.
+  // Relying on time_logs alone meant a job with no time entries showed NO
+  // technician at all on the signoff, which is what "tech details not
+  // reflecting" was — always include every assigned technician first, then
+  // any additional technicians who logged time (matching the user's
+  // confirmed "everyone who worked it" decision as a supplement).
   const userIds = [...new Set(timeLogs.map((t) => t.user_id))];
-  const extraUserIds = userIds.filter((id) => id !== job.assigned_to);
+  const extraUserIds = userIds.filter((id) => !assignedUserIds.has(id));
   let usersById = new Map<string, JobUser>();
   if (extraUserIds.length > 0) {
     const { data: users } = await db
@@ -143,12 +159,12 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
   };
 
   const timeLogUsers: ReportData['timeLogUsers'] = [];
-  if (job.assigned_user) {
-    const assignedRange = rangeFor(sessionsFor(job.assigned_to));
+  for (const assignedUser of assignedUsers) {
+    const assignedRange = rangeFor(sessionsFor(assignedUser.id));
     timeLogUsers.push({
-      user: job.assigned_user as JobUser,
-      // No time_logs for the assigned tech is common (time-tracking is
-      // optional) — fall back to the job's own dates rather than an empty cell.
+      user: assignedUser,
+      // No time_logs for this tech is common (time-tracking is optional) —
+      // fall back to the job's own dates rather than an empty cell.
       firstClockIn: assignedRange?.firstClockIn ?? job.completed_at ?? job.scheduled_date,
       lastClockOut: assignedRange?.lastClockOut ?? job.completed_at ?? null,
       hasRealSession: assignedRange !== null,
@@ -174,6 +190,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     photosByDefect,
     signedPhotoUrls,
     signature: (signature ?? null) as Signature | null,
+    assignedUsers,
     timeLogUsers,
     approvedQuote,
     reportId,
