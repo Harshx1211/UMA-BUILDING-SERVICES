@@ -73,8 +73,6 @@ export const MAX_LENGTHS = {
   notes:        1000,
   /** Long-form text (access notes, hazard notes, inspection notes) */
   longNotes:    2000,
-  /** PDF / report text — capped to prevent layout breaking */
-  reportText:   500,
 } as const;
 
 // ── Combined sanitizer ────────────────────────────────────────────────────
@@ -94,31 +92,4 @@ export const MAX_LENGTHS = {
 export function sanitizeText(value: string, maxLength: number): string {
   if (!value) return '';
   return stripHtml(value).substring(0, maxLength).trim();
-}
-
-/**
- * Sanitizes a value specifically for use in PDF HTML templates.
- * In addition to standard sanitization, converts remaining characters that
- * have special meaning in HTML to their entity equivalents so they render
- * as text rather than markup inside the WebView-based PDF renderer.
- *
- * Call this on EVERY user-supplied string that goes into reportTemplate.ts
- * or quoteTemplate.ts.
- *
- * @param value     Raw value from SQLite (already sanitized at input time)
- * @param maxLength Maximum characters (defaults to MAX_LENGTHS.reportText)
- */
-export function sanitizeForHtml(
-  value: string | null | undefined,
-  maxLength: number = MAX_LENGTHS.reportText,
-): string {
-  if (!value) return '';
-  // First strip injection patterns, then HTML-encode what remains
-  const cleaned = stripHtml(value).substring(0, maxLength);
-  return cleaned
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
 }

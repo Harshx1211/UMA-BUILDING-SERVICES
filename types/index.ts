@@ -116,32 +116,6 @@ export interface Job {
   assigned_user?: User;
 }
 
-/**
- * Job enriched with flat property JOIN fields — returned by getJobById()
- * which does a LEFT JOIN on properties. Use this instead of 'job as any'
- * in reportTemplate.ts and pdfGenerator.ts.
- */
-export interface JoinedJob extends Job {
-  property_name:           string | null;
-  property_address:        string | null;
-  property_suburb:         string | null;
-  property_state:          string | null;
-  property_postcode:       string | null;
-  property_compliance:     string | null;
-  site_contact_name:       string | null;
-  site_note:               string | null;
-}
-
-/** Technician User record — same as User but used specifically for PDF cover-page rendering.
- *  fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry are
- *  inherited from User (already typed as string | null there). No need to re-declare.
- */
-export interface TechUser extends User {
-  // No additional fields beyond User — this type alias exists so call-sites
-  // can express intent ("this is the assigned tech") without widening the base type.
-}
-
-
 /** The inspection record linking a specific asset to a job */
 export interface JobAsset {
   id: string;

@@ -199,7 +199,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     item: {
       id: 'report',
       title: 'Generating Reports',
-      content: '1. From the job detail screen, tap "Generate Report" at the bottom\n2. SiteTrack compiles all inspection data, defects, and the signature\n3. A PDF is generated on your device — no internet needed\n4. Tap "Share" to email it directly to the client or office\n5. The report includes pass/fail colour coding and a compliance footer',
+      content: '1. From the job detail screen, tap "Generate Report" at the bottom\n2. SiteTrack sends all inspection data, defects, and the signature to our server\n3. The PDF is generated there — this needs an internet connection\n4. Tap "Share" to email it directly to the client or office\n5. The report includes pass/fail colour coding and a compliance footer',
     },
   },
 ];
@@ -211,7 +211,7 @@ const FAQ_ITEMS: { item: AccordionItem; icon: MCIconName }[] = [
 
   { icon: 'sync', item: { id: 'faq5', title: 'How often does the app sync?', content: 'The sync engine runs automatically every 60 seconds when you\'re online. You can also force a sync from the Profile screen → "Force Sync Now". The sync uploads your local changes and pulls in any new jobs assigned by your office.' } },
   { icon: 'key', item: { id: 'faq6', title: 'I forgot my password — what do I do?', content: 'Contact your company administrator. They can reset your password through the SiteTrack admin portal. Your app data is not lost — it will re-sync once you log back in.' } },
-  { icon: 'file-pdf-box', item: { id: 'faq7', title: 'Who receives the PDF report?', content: 'The report is generated on your device. You can share it directly to email, WhatsApp, or any other app via the native Android share sheet. It\'s your responsibility to send it to the relevant parties — typically office admin and the client.' } },
+  { icon: 'file-pdf-box', item: { id: 'faq7', title: 'Who receives the PDF report?', content: 'The report is generated on our server (needs an internet connection) and downloaded to your phone once it\'s ready. You can share it directly to email, WhatsApp, or any other app via the native Android share sheet. It\'s your responsibility to send it to the relevant parties — typically office admin and the client.' } },
   { icon: 'lightning-bolt', item: { id: 'faq8', title: 'The app seems slow — what should I do?', content: 'Try force-closing and reopening the app. Make sure you\'re running the latest version. If the jobs list is slow, try the "Force Sync" in Profile to refresh your local database. If problems persist, send feedback using the button below.' } },
 ];
 
