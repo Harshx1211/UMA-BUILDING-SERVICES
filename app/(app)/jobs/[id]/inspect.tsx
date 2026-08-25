@@ -24,7 +24,7 @@ import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
-import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -133,7 +133,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             <View style={{ flex: 1 }}>
               <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
               {asset.variant ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{asset.variant}</Text> : null}
-              <Text style={[s.assetLocation, { color: C.textSecondary }]} numberOfLines={1}>{asset.location_on_site || 'Location not specified'}</Text>
+              <Text style={[s.assetLocation, { color: C.textSecondary }]} numberOfLines={1}>{asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'Location not specified'}</Text>
               {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
               {asset.previousResult && (
@@ -453,7 +453,8 @@ export default function AssetInspectionScreen() {
     const rows: ListRow[] = [];
     for (const key of [...buckets.keys()].sort()) {
       const items = buckets.get(key)!;
-      rows.push({ kind: 'header', label: key, count: items.length, assetIds: items.map(a => a.id) });
+      const label = groupBy === 'location' ? formatLocationCode(key) : key;
+      rows.push({ kind: 'header', label, count: items.length, assetIds: items.map(a => a.id) });
       for (const asset of items) rows.push({ kind: 'asset', asset });
     }
     return rows;
@@ -615,9 +616,10 @@ export default function AssetInspectionScreen() {
             <TouchableOpacity
               onPress={() => handleBulkMark(item.label, item.assetIds)}
               hitSlop={8}
-              style={s.routineHeaderAction}
+              style={[s.routineHeaderAction, { borderColor: C.primary, backgroundColor: C.primary + '15' }]}
             >
-              <MaterialCommunityIcons name="checkbox-multiple-marked-outline" size={16} color={C.primary} />
+              <MaterialCommunityIcons name="checkbox-multiple-marked-outline" size={14} color={C.primary} />
+              <Text style={[s.routineHeaderActionTxt, { color: C.primary }]}>Mark Unit</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -909,7 +911,8 @@ const s = StyleSheet.create({
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
   routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
   routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
-  routineHeaderAction: { marginLeft: 10, padding: 2 },
+  routineHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  routineHeaderActionTxt: { fontSize: 11, fontWeight: '700' },
   cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
   assetCard:   { borderRadius: 16, borderWidth: 1, borderLeftWidth: 4 },
   cardInner:   { padding: 16 },

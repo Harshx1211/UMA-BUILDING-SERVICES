@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
+import { formatLocationCode } from '@/utils/assetHelpers';
 
 export type GroupBy = 'routine' | 'asset' | 'location';
 export type SortBy = 'label' | 'location';
@@ -61,7 +62,7 @@ function Section({ icon, label, children }: { icon: IconName; label: string; chi
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({ label, displayLabel, active, onPress }: { label: string; displayLabel?: string; active: boolean; onPress: () => void }) {
   const C = useColors();
   return (
     <TouchableOpacity
@@ -73,7 +74,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
       ]}
     >
       {active && <MaterialCommunityIcons name="check" size={13} color="#fff" style={{ marginRight: 4 }} />}
-      <Text style={[s.chipText, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>{label}</Text>
+      <Text style={[s.chipText, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>{displayLabel ?? label}</Text>
     </TouchableOpacity>
   );
 }
@@ -100,8 +101,8 @@ export default function InspectionFilterModal({
   const insets = useSafeAreaInsets();
   const [activeCategory, setActiveCategory] = useState<typeof CATEGORY_DEFS[number]['key']>('routine');
 
-  const chipsFor = (options: string[], value: string, onChange: (v: string) => void) =>
-    options.map(o => <Chip key={o} label={o} active={o === value} onPress={() => onChange(o)} />);
+  const chipsFor = (options: string[], value: string, onChange: (v: string) => void, formatLabel?: (v: string) => string) =>
+    options.map(o => <Chip key={o} label={o} displayLabel={formatLabel?.(o)} active={o === value} onPress={() => onChange(o)} />);
 
   const categoryData: Record<string, { options: string[]; value: string; onChange: (v: string) => void }> = {
     routine:   { options: routineOptions,   value: routineFilter,   onChange: onRoutineChange },
@@ -157,7 +158,9 @@ export default function InspectionFilterModal({
                   );
                 })}
               </View>
-              <View style={[s.chipWrap, { marginBottom: 22 }]}>{chipsFor(current.options, current.value, current.onChange)}</View>
+              <View style={[s.chipWrap, { marginBottom: 22 }]}>
+                {chipsFor(current.options, current.value, current.onChange, currentKey === 'location' ? formatLocationCode : undefined)}
+              </View>
             </>
           )}
 
@@ -176,7 +179,7 @@ export default function InspectionFilterModal({
                     style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
                     <MaterialCommunityIcons name={icon} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
+                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
                       {label}
                     </Text>
                   </TouchableOpacity>
@@ -196,8 +199,8 @@ export default function InspectionFilterModal({
                     style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
                     <MaterialCommunityIcons name={opt === 'label' ? 'text' : 'map-marker-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
-                      {opt === 'label' ? 'Asset Label' : 'Location'}
+                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>
+                      {opt === 'label' ? 'Label' : 'Location'}
                     </Text>
                     {active && (
                       <MaterialCommunityIcons name={sortAsc ? 'arrow-up' : 'arrow-down'} size={13} color="#fff" />
@@ -253,8 +256,8 @@ const s = StyleSheet.create({
   categoryDot: { width: 5, height: 5, borderRadius: 3 },
   divider: { height: 1, marginBottom: 22 },
   segmentRow: { flexDirection: 'row', gap: 8 },
-  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
-  segmentTxt: { fontSize: 13, fontWeight: '700' },
+  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, paddingHorizontal: 4, borderRadius: 10, borderWidth: 1 },
+  segmentTxt: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   bottomBar: {
     paddingHorizontal: 20, paddingTop: 14,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,

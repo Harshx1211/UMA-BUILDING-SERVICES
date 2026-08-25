@@ -33,3 +33,29 @@ export function formatAssetType(assetType: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+// ─── formatLocationCode ───────────────────────────────────────────────────────
+
+/**
+ * Expands a structured location code ("1-1-1" or "1-CR") into a readable
+ * label: "Tower 1 · Floor 1 · Unit 1" or "Tower 1 · CR". Legacy free-text
+ * locations (spaces, long segments) are left untouched — only strings that
+ * actually look like the Tower/Floor/Unit builder's output get expanded.
+ *
+ * Examples:
+ *   '1-1-1'                → 'Tower 1 · Floor 1 · Unit 1'
+ *   '2-6-3'                → 'Tower 2 · Floor 6 · Unit 3'
+ *   '1-CR'                 → 'Tower 1 · CR'
+ *   'Level 2 corridor'     → 'Level 2 corridor'   (untouched — legacy free text)
+ */
+export function formatLocationCode(location: string): string {
+  if (!location) return '';
+  const parts = location.split('-').map((p) => p.trim());
+  const looksStructured =
+    parts.length >= 2 &&
+    parts.length <= 3 &&
+    parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
+  if (!looksStructured) return location;
+  if (parts.length === 3) return `Tower ${parts[0]} · Floor ${parts[1]} · Unit ${parts[2]}`;
+  return `Tower ${parts[0]} · ${parts[1]}`;
+}
