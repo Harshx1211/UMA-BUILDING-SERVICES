@@ -136,6 +136,19 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               <Text style={[s.assetLocation, { color: C.textSecondary }]} numberOfLines={1}>{asset.location_on_site || 'Location not specified'}</Text>
               {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
+              {asset.previousResult && (
+                <Text style={[s.assetPrevResult, { color: C.textTertiary }]} numberOfLines={1}>
+                  Last:{' '}
+                  <Text style={{
+                    fontWeight: '700',
+                    color: asset.previousResult === InspectionResult.Pass ? C.success
+                         : asset.previousResult === InspectionResult.Fail ? C.error : C.textTertiary,
+                  }}>
+                    {asset.previousResult === InspectionResult.Pass ? 'Pass' : asset.previousResult === InspectionResult.Fail ? 'Fail' : 'Not Tested'}
+                  </Text>
+                  {asset.previousDate ? ` · ${asset.previousDate}` : ''}
+                </Text>
+              )}
             </View>
             <View style={[s.cardHeaderRight, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
               {asset.photos && asset.photos.length > 0 && (
@@ -170,28 +183,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               </TouchableOpacity>
             </View>
           </View>
-
-          {asset.previousResult ? (
-            <View style={[s.prevResultRow, { backgroundColor: C.backgroundTertiary }]}>
-              <MaterialCommunityIcons name="history" size={12} color={C.textTertiary} />
-              <Text style={[s.prevResultTxt, { color: C.textTertiary }]}>
-                Last inspection:{' '}
-                <Text style={{
-                  fontWeight: '700',
-                  color: asset.previousResult === InspectionResult.Pass ? C.success
-                       : asset.previousResult === InspectionResult.Fail ? C.error : C.textTertiary,
-                }}>
-                  {asset.previousResult === InspectionResult.Pass ? 'Pass' : asset.previousResult === InspectionResult.Fail ? 'Fail' : 'Not Tested'}
-                </Text>
-                {asset.previousDate ? `  ·  ${asset.previousDate}` : ''}
-              </Text>
-            </View>
-          ) : (
-            <View style={[s.prevResultRow, { backgroundColor: C.backgroundTertiary }]}>
-              <MaterialCommunityIcons name="star-outline" size={12} color={C.textTertiary} />
-              <Text style={[s.prevResultTxt, { color: C.textTertiary, fontStyle: 'italic' }]}>First inspection</Text>
-            </View>
-          )}
 
           {isFailed && Boolean(asset.defect_reason) && (
             <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.errorLight, borderColor: C.error }]}>
@@ -931,8 +922,7 @@ const s = StyleSheet.create({
   cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
   photoBadge:      { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10 },
   photoBadgeTxt:   { fontSize: 10, fontWeight: '700' },
-  prevResultRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 10 },
-  prevResultTxt: { fontSize: 12, flex: 1 },
+  assetPrevResult: { fontSize: 12, marginTop: 4 },
   defectNotice:      { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 10 },
   defectNoticeTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2, textTransform: 'uppercase' },
   defectNoticeBody:  { fontSize: 13, fontWeight: '500', marginTop: 1 },

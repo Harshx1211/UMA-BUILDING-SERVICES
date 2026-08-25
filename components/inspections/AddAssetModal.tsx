@@ -50,6 +50,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [errors,       setErrors]       = useState<{ location?: string; type?: string }>({});
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [addingNewLocation, setAddingNewLocation] = useState(false);
+  const [showMoreFields, setShowMoreFields] = useState(false);
 
   // ── Structured "New Location" builder — Tower / Floor / Unit-or-Area ──
   const [tower,   setTower]   = useState('');
@@ -103,6 +104,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     setTower('');
     setFloorNo('');
     setUnitNo('');
+    setShowMoreFields(false);
   };
 
   const handleClose = () => { resetAll(); onClose(); };
@@ -359,13 +361,10 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
             >
             {/* Inspection Routine (read-only) */}
             {routine ? (
-              <Card variant="info" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
-                <MaterialCommunityIcons name="calendar-check" size={18} color={C.info} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.routineLabel, { color: C.info }]}>INSPECTION ROUTINE</Text>
-                  <Text style={[s.routineValue, { color: C.text }]}>{routine}</Text>
-                </View>
-              </Card>
+              <View style={s.routineRow}>
+                <MaterialCommunityIcons name="calendar-check" size={14} color={C.textTertiary} />
+                <Text style={[s.routineInlineTxt, { color: C.textSecondary }]}>{routine}</Text>
+              </View>
             ) : null}
 
             <Card style={s.formCard} noPadding>
@@ -446,20 +445,6 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               )}
             </View>
 
-            {/* Ref */}
-            <View style={s.field}>
-              <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
-              <TextInput
-                style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                placeholder="Reference code..."
-                placeholderTextColor={C.textTertiary}
-                value={assetRef}
-                onChangeText={setAssetRef}
-                keyboardType="default"
-                maxLength={15}
-              />
-            </View>
-
             <View style={s.field}>
               <Text style={[s.fieldLabel, { color: C.text }]}>Quantity</Text>
               <View style={s.qtyRow}>
@@ -484,38 +469,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             </View>
 
-            {/* Base date (single asset only) */}
-            {quantity === 1 && (
-              <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Base Date</Text>
-                <TextInput
-                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={C.textTertiary}
-                  value={baseDate}
-                  onChangeText={setBaseDate}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
-                />
-              </View>
-            )}
-
-            {/* Serial number (single asset only) */}
-            {quantity === 1 && (
-              <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
-                <TextInput
-                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                  placeholder="Serial number or barcode..."
-                  placeholderTextColor={C.textTertiary}
-                  value={serialNumber}
-                  onChangeText={setSerialNumber}
-                  autoCapitalize="characters"
-                />
-              </View>
-            )}
             {/* Notes */}
-            <View style={[s.field, { marginBottom: 0 }]}>
+            <View style={s.field}>
               <Text style={[s.fieldLabel, { color: C.text }]}>Notes</Text>
               <TextInput
                 style={[s.input, s.textArea, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
@@ -527,6 +482,60 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 textAlignVertical="top"
               />
             </View>
+
+            {showMoreFields ? (
+              <>
+                {/* Ref */}
+                <View style={s.field}>
+                  <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
+                  <TextInput
+                    style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                    placeholder="Reference code..."
+                    placeholderTextColor={C.textTertiary}
+                    value={assetRef}
+                    onChangeText={setAssetRef}
+                    keyboardType="default"
+                    maxLength={15}
+                  />
+                </View>
+
+                {/* Base date (single asset only) */}
+                {quantity === 1 && (
+                  <View style={s.field}>
+                    <Text style={[s.fieldLabel, { color: C.text }]}>Base Date</Text>
+                    <TextInput
+                      style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={C.textTertiary}
+                      value={baseDate}
+                      onChangeText={setBaseDate}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={10}
+                    />
+                  </View>
+                )}
+
+                {/* Serial number (single asset only) */}
+                {quantity === 1 && (
+                  <View style={[s.field, { marginBottom: 0 }]}>
+                    <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
+                    <TextInput
+                      style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                      placeholder="Serial number or barcode..."
+                      placeholderTextColor={C.textTertiary}
+                      value={serialNumber}
+                      onChangeText={setSerialNumber}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity onPress={() => setShowMoreFields(true)} style={s.moreFieldsBtn}>
+                <MaterialCommunityIcons name="plus" size={14} color={C.primary} />
+                <Text style={[s.moreFieldsTxt, { color: C.primary }]}>Reference, serial no. &amp; base date</Text>
+              </TouchableOpacity>
+            )}
               </View>
             </Card>
 
@@ -614,8 +623,10 @@ const s = StyleSheet.create({
   // Details
   detailsScroll: { padding: 16, paddingBottom: 100, gap: 6 },
 
-  routineLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  routineValue: { fontSize: 14, fontWeight: '700', lineHeight: 20 },
+  routineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14, marginLeft: 2 },
+  routineInlineTxt: { fontSize: 12, fontWeight: '600' },
+  moreFieldsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
+  moreFieldsTxt: { fontSize: 13, fontWeight: '700' },
 
   sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
   formCard:     { marginBottom: 16 },
