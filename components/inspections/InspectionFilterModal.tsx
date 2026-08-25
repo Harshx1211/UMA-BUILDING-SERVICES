@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -78,6 +78,13 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   );
 }
 
+const CATEGORY_DEFS: { key: 'routine' | 'assetType' | 'tag' | 'location'; icon: IconName; label: string }[] = [
+  { key: 'routine',   icon: 'clipboard-list-outline', label: 'Routine' },
+  { key: 'assetType', icon: 'shape-outline',           label: 'Type' },
+  { key: 'tag',       icon: 'tag-multiple-outline',    label: 'Tag' },
+  { key: 'location',  icon: 'map-marker-outline',      label: 'Location' },
+];
+
 export default function InspectionFilterModal({
   visible, onClose,
   resultOptions, resultFilter, onResultChange,
@@ -91,9 +98,20 @@ export default function InspectionFilterModal({
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  const [activeCategory, setActiveCategory] = useState<typeof CATEGORY_DEFS[number]['key']>('routine');
 
   const chipsFor = (options: string[], value: string, onChange: (v: string) => void) =>
     options.map(o => <Chip key={o} label={o} active={o === value} onPress={() => onChange(o)} />);
+
+  const categoryData: Record<string, { options: string[]; value: string; onChange: (v: string) => void }> = {
+    routine:   { options: routineOptions,   value: routineFilter,   onChange: onRoutineChange },
+    assetType: { options: assetTypeOptions, value: assetTypeFilter, onChange: onAssetTypeChange },
+    tag:       { options: tagOptions,       value: tagFilter,       onChange: onTagChange },
+    location:  { options: locationOptions,  value: locationFilter,  onChange: onLocationChange },
+  };
+  const availableCategories = CATEGORY_DEFS.filter(c => categoryData[c.key].options.length > 2);
+  const currentKey = availableCategories.some(c => c.key === activeCategory) ? activeCategory : availableCategories[0]?.key;
+  const current = currentKey ? categoryData[currentKey] : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -120,17 +138,27 @@ export default function InspectionFilterModal({
 
           <View style={[s.divider, { backgroundColor: C.border }]} />
 
-          {routineOptions.length > 2 && (
-            <Section icon="clipboard-list-outline" label="Routines">{chipsFor(routineOptions, routineFilter, onRoutineChange)}</Section>
-          )}
-          {assetTypeOptions.length > 2 && (
-            <Section icon="shape-outline" label="Asset Types">{chipsFor(assetTypeOptions, assetTypeFilter, onAssetTypeChange)}</Section>
-          )}
-          {tagOptions.length > 2 && (
-            <Section icon="tag-multiple-outline" label="Asset Tags">{chipsFor(tagOptions, tagFilter, onTagChange)}</Section>
-          )}
-          {locationOptions.length > 2 && (
-            <Section icon="map-marker-outline" label="Location">{chipsFor(locationOptions, locationFilter, onLocationChange)}</Section>
+          {availableCategories.length > 0 && current && (
+            <>
+              <View style={s.categoryTabRow}>
+                {availableCategories.map(cat => {
+                  const active = cat.key === currentKey;
+                  const hasFilter = categoryData[cat.key].value !== categoryData[cat.key].options[0];
+                  return (
+                    <TouchableOpacity
+                      key={cat.key}
+                      onPress={() => setActiveCategory(cat.key)}
+                      style={[s.categoryTab, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
+                    >
+                      <MaterialCommunityIcons name={cat.icon} size={13} color={active ? '#fff' : C.textTertiary} />
+                      <Text style={[s.categoryTabTxt, { color: active ? '#fff' : C.textSecondary }]}>{cat.label}</Text>
+                      {hasFilter && <View style={[s.categoryDot, { backgroundColor: active ? '#fff' : C.primary }]} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={[s.chipWrap, { marginBottom: 22 }]}>{chipsFor(current.options, current.value, current.onChange)}</View>
+            </>
           )}
 
           <View style={[s.divider, { backgroundColor: C.border }]} />
@@ -164,22 +192,19 @@ export default function InspectionFilterModal({
                 return (
                   <TouchableOpacity
                     key={opt}
-                    onPress={() => onSortByChange(opt)}
+                    onPress={() => active ? onToggleSortDirection() : onSortByChange(opt)}
                     style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
                     <MaterialCommunityIcons name={opt === 'label' ? 'text' : 'map-marker-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
                     <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
                       {opt === 'label' ? 'Asset Label' : 'Location'}
                     </Text>
+                    {active && (
+                      <MaterialCommunityIcons name={sortAsc ? 'arrow-up' : 'arrow-down'} size={13} color="#fff" />
+                    )}
                   </TouchableOpacity>
                 );
               })}
-              <TouchableOpacity
-                onPress={onToggleSortDirection}
-                style={[s.segmentBtn, { flex: 0, width: 44, borderColor: C.border, backgroundColor: C.background }]}
-              >
-                <MaterialCommunityIcons name={sortAsc ? 'sort-ascending' : 'sort-descending'} size={18} color={C.textSecondary} />
-              </TouchableOpacity>
             </View>
           </Section>
         </ScrollView>
@@ -222,6 +247,10 @@ const s = StyleSheet.create({
     borderRadius: 999, borderWidth: 1,
   },
   chipText: { fontSize: 13, fontWeight: '600' },
+  categoryTabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  categoryTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  categoryTabTxt: { fontSize: 12, fontWeight: '700' },
+  categoryDot: { width: 5, height: 5, borderRadius: 3 },
   divider: { height: 1, marginBottom: 22 },
   segmentRow: { flexDirection: 'row', gap: 8 },
   segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
