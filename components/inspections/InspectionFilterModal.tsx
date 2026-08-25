@@ -7,7 +7,7 @@ import { Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 
-export type GroupBy = 'routine' | 'asset';
+export type GroupBy = 'routine' | 'asset' | 'location';
 export type SortBy = 'label' | 'location';
 
 interface Props {
@@ -137,17 +137,19 @@ export default function InspectionFilterModal({
 
           <Section icon="format-list-group" label="Group By">
             <View style={s.segmentRow}>
-              {(['asset', 'routine'] as const).map(opt => {
+              {(['asset', 'routine', 'location'] as const).map(opt => {
                 const active = groupBy === opt;
+                const icon = opt === 'asset' ? 'cube-outline' : opt === 'routine' ? 'clipboard-list-outline' : 'map-marker-outline';
+                const label = opt === 'asset' ? 'Asset' : opt === 'routine' ? 'Routine' : 'Location';
                 return (
                   <TouchableOpacity
                     key={opt}
                     onPress={() => onGroupByChange(opt)}
                     style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
-                    <MaterialCommunityIcons name={opt === 'asset' ? 'cube-outline' : 'clipboard-list-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
+                    <MaterialCommunityIcons name={icon} size={14} color={active ? '#fff' : C.textTertiary} />
                     <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]}>
-                      {opt === 'asset' ? 'Asset' : 'Routine'}
+                      {label}
                     </Text>
                   </TouchableOpacity>
                 );

@@ -37,7 +37,7 @@ const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
 type AssetTagRow = { id: string; name: string };
 type AssetTagAssignmentRow = { asset_id: string; tag_id: string };
 type ListRow =
-  | { kind: 'header'; label: string; count: number }
+  | { kind: 'header'; label: string; count: number; assetIds: string[] }
   | { kind: 'asset'; asset: AssetWithResult };
 
 
@@ -448,18 +448,21 @@ export default function AssetInspectionScreen() {
   // synthetic header row interleaved with assets, not a SectionList, so the
   // existing FlatList perf tuning (removeClippedSubviews etc.) still applies.
   const listData = useMemo((): ListRow[] => {
-    if (groupBy !== 'routine') return filteredAssets.map(asset => ({ kind: 'asset', asset }));
+    if (groupBy === 'asset') return filteredAssets.map(asset => ({ kind: 'asset', asset }));
+    const keyFor = groupBy === 'routine'
+      ? (asset: AssetWithResult) => routineByType.get(asset.asset_type) || 'Other'
+      : (asset: AssetWithResult) => asset.location_on_site || 'Unassigned';
     const buckets = new Map<string, AssetWithResult[]>();
     for (const asset of filteredAssets) {
-      const routine = routineByType.get(asset.asset_type) || 'Other';
-      const list = buckets.get(routine) ?? [];
+      const key = keyFor(asset);
+      const list = buckets.get(key) ?? [];
       list.push(asset);
-      buckets.set(routine, list);
+      buckets.set(key, list);
     }
     const rows: ListRow[] = [];
-    for (const routine of [...buckets.keys()].sort()) {
-      const items = buckets.get(routine)!;
-      rows.push({ kind: 'header', label: routine, count: items.length });
+    for (const key of [...buckets.keys()].sort()) {
+      const items = buckets.get(key)!;
+      rows.push({ kind: 'header', label: key, count: items.length, assetIds: items.map(a => a.id) });
       for (const asset of items) rows.push({ kind: 'asset', asset });
     }
     return rows;
@@ -598,19 +601,41 @@ export default function AssetInspectionScreen() {
     );
   }, [jobId, store]);
 
+  const handleBulkMark = useCallback((label: string, assetIds: string[]) => {
+    Alert.alert(
+      `Mark "${label}" As`,
+      `Applies to all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in this location.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Passed', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.Pass)) },
+        { text: 'Failed', style: 'destructive', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.Fail)) },
+        { text: 'Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
+      ]
+    );
+  }, [store]);
+
   const renderItem = useCallback(({ item, index }: { item: ListRow; index: number }) => {
     if (item.kind === 'header') {
       return (
         <View style={[s.routineHeader, { backgroundColor: C.backgroundSecondary, borderColor: C.border }]}>
           <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={1}>{item.label}</Text>
           <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count}</Text>
+          {groupBy === 'location' && (
+            <TouchableOpacity
+              onPress={() => handleBulkMark(item.label, item.assetIds)}
+              hitSlop={8}
+              style={s.routineHeaderAction}
+            >
+              <MaterialCommunityIcons name="checkbox-multiple-marked-outline" size={16} color={C.primary} />
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
     return (
       <AssetCard asset={item.asset} index={index} jobId={jobId as string} onEdit={setEditingAsset} onClone={handleClone} onDelete={handleDelete} />
     );
-  }, [jobId, handleClone, handleDelete, C]);
+  }, [jobId, handleClone, handleDelete, C, groupBy, handleBulkMark]);
 
   const fillPct = store.progress.total > 0 ? (store.progress.inspected / store.progress.total) * 100 : 0;
 
@@ -893,6 +918,7 @@ const s = StyleSheet.create({
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
   routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
   routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
+  routineHeaderAction: { marginLeft: 10, padding: 2 },
   cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
   assetCard:   { borderRadius: 16, borderWidth: 1, borderLeftWidth: 4 },
   cardInner:   { padding: 16 },
