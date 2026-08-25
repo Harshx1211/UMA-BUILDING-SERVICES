@@ -37,15 +37,18 @@ export function formatAssetType(assetType: string): string {
 // ─── formatLocationCode ───────────────────────────────────────────────────────
 
 /**
- * Expands a structured location code ("1-1-1" or "1-CR") into a readable
- * label: "Tower 1 · Floor 1 · Unit 1" or "Tower 1 · CR". Legacy free-text
- * locations (spaces, long segments) are left untouched — only strings that
- * actually look like the Tower/Floor/Unit builder's output get expanded.
+ * Expands a structured location code ("1-1-1" or "1-CR") into a short,
+ * unambiguous label: "T1 · F1 · U1" or "T1 · CR". Kept compact on purpose —
+ * this shows up on asset cards and group headers where space is tight, and
+ * the full "Tower 1 · Floor 1 · Unit 1" wording was getting truncated.
+ * Legacy free-text locations (spaces, long segments) are left untouched —
+ * only strings that actually look like the Tower/Floor/Unit builder's
+ * output get expanded.
  *
  * Examples:
- *   '1-1-1'                → 'Tower 1 · Floor 1 · Unit 1'
- *   '2-6-3'                → 'Tower 2 · Floor 6 · Unit 3'
- *   '1-CR'                 → 'Tower 1 · CR'
+ *   '1-1-1'                → 'T1 · F1 · U1'
+ *   '2-6-3'                → 'T2 · F6 · U3'
+ *   '1-CR'                 → 'T1 · CR'
  *   'Level 2 corridor'     → 'Level 2 corridor'   (untouched — legacy free text)
  */
 export function formatLocationCode(location: string): string {
@@ -56,6 +59,6 @@ export function formatLocationCode(location: string): string {
     parts.length <= 3 &&
     parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
   if (!looksStructured) return location;
-  if (parts.length === 3) return `Tower ${parts[0]} · Floor ${parts[1]} · Unit ${parts[2]}`;
-  return `Tower ${parts[0]} · ${parts[1]}`;
+  if (parts.length === 3) return `T${parts[0]} · F${parts[1]} · U${parts[2]}`;
+  return `T${parts[0]} · ${parts[1]}`;
 }

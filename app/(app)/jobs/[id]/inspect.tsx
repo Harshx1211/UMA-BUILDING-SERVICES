@@ -133,7 +133,12 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             <View style={{ flex: 1 }}>
               <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
               {asset.variant ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{asset.variant}</Text> : null}
-              <Text style={[s.assetLocation, { color: C.textSecondary }]} numberOfLines={1}>{asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'Location not specified'}</Text>
+              <View style={s.assetLocationRow}>
+                <MaterialCommunityIcons name="map-marker-outline" size={12} color={C.primary} />
+                <Text style={[s.assetLocation, { color: C.text }]} numberOfLines={1}>
+                  {asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'Location not specified'}
+                </Text>
+              </View>
               {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
               {asset.previousResult && (
@@ -920,7 +925,8 @@ const s = StyleSheet.create({
   assetIconWrap:   { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   assetType:       { fontSize: 16, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },
   assetVariant:    { fontSize: 13, fontWeight: '600', marginTop: 1, opacity: 0.85 },
-  assetLocation:   { fontSize: 13, marginTop: 2 },
+  assetLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  assetLocation:   { fontSize: 13, fontWeight: '700' },
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
   cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
   photoBadge:      { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10 },

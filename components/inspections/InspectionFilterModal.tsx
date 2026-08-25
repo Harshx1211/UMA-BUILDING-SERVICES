@@ -167,7 +167,7 @@ export default function InspectionFilterModal({
           <View style={[s.divider, { backgroundColor: C.border }]} />
 
           <Section icon="format-list-group" label="Group By">
-            <View style={s.segmentRow}>
+            <View style={s.pillRow}>
               {(['asset', 'routine', 'location'] as const).map(opt => {
                 const active = groupBy === opt;
                 const icon = opt === 'asset' ? 'cube-outline' : opt === 'routine' ? 'clipboard-list-outline' : 'map-marker-outline';
@@ -176,12 +176,10 @@ export default function InspectionFilterModal({
                   <TouchableOpacity
                     key={opt}
                     onPress={() => onGroupByChange(opt)}
-                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
+                    style={[s.pillBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
                     <MaterialCommunityIcons name={icon} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
-                      {label}
-                    </Text>
+                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>{label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -189,17 +187,17 @@ export default function InspectionFilterModal({
           </Section>
 
           <Section icon="sort" label="Sort By">
-            <View style={s.segmentRow}>
+            <View style={s.pillRow}>
               {(['label', 'location'] as const).map(opt => {
                 const active = sortBy === opt;
                 return (
                   <TouchableOpacity
                     key={opt}
                     onPress={() => active ? onToggleSortDirection() : onSortByChange(opt)}
-                    style={[s.segmentBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
+                    style={[s.pillBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
                     <MaterialCommunityIcons name={opt === 'label' ? 'text' : 'map-marker-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.segmentTxt, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>
+                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>
                       {opt === 'label' ? 'Label' : 'Location'}
                     </Text>
                     {active && (
@@ -255,9 +253,9 @@ const s = StyleSheet.create({
   categoryTabTxt: { fontSize: 12, fontWeight: '700' },
   categoryDot: { width: 5, height: 5, borderRadius: 3 },
   divider: { height: 1, marginBottom: 22 },
-  segmentRow: { flexDirection: 'row', gap: 8 },
-  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, paddingHorizontal: 4, borderRadius: 10, borderWidth: 1 },
-  segmentTxt: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
+  pillTxt: { fontSize: 13, fontWeight: '700' },
   bottomBar: {
     paddingHorizontal: 20, paddingTop: 14,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
