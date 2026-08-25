@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 35;
+const CURRENT_SCHEMA_VERSION = 36;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -126,6 +126,7 @@ export function initializeSchema(): void {
       asset_ref         TEXT,
       description       TEXT,
       location_on_site  TEXT,
+      location_detail   TEXT,
       serial_number     TEXT,
       barcode_id        TEXT,
       install_date      TEXT,
@@ -1251,6 +1252,24 @@ export function initializeSchema(): void {
     }
     currentVersion = 35;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '35')`);
+  }
+
+  // Migration 36: assets.location_detail — free-text extra detail, kept
+  // separate from the structured location_on_site code so it never
+  // interferes with grouping/matching. Mirrors
+  // supabase/migrations/20260825010000_assets_location_detail.sql.
+  if (currentVersion < 36) {
+    try {
+      db.runSync(`ALTER TABLE assets ADD COLUMN location_detail TEXT;`);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 36: added assets.location_detail');
+    } catch (err: unknown) {
+      const msg = String(err);
+      if (!msg.includes('duplicate column')) {
+        console.error('[UMA BUILDING SERVICES DB] Migration 36 failed:', msg);
+      }
+    }
+    currentVersion = 36;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '36')`);
   }
 
   // Seed inventory from Uptick defect codes on first run

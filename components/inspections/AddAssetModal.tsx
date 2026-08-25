@@ -51,6 +51,19 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [addingNewLocation, setAddingNewLocation] = useState(false);
 
+  // ── Structured "New Location" builder ───────────────────────────
+  const [locMode,        setLocMode]        = useState<'unit' | 'common'>('unit');
+  const [tower,          setTower]          = useState('');
+  const [floorNo,        setFloorNo]        = useState('');
+  const [unitNo,         setUnitNo]         = useState('');
+  const [areaLabel,      setAreaLabel]      = useState('');
+  const [locationDetail, setLocationDetail] = useState('');
+
+  const generatedLocation = locMode === 'unit'
+    ? (tower.trim() && floorNo.trim() && unitNo.trim() ? `${tower.trim()}-${floorNo.trim()}-${unitNo.trim()}` : '')
+    : (tower.trim() && areaLabel.trim() ? `${tower.trim()}-${areaLabel.trim()}` : '');
+  const effectiveLocation = addingNewLocation ? generatedLocation : location;
+
   useEffect(() => {
     if (!visible) return;
     const rows = queryRecords<{ location_on_site: string | null }>('assets', { property_id: propertyId });
@@ -90,6 +103,12 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     setQuantity(1);
     setErrors({});
     setAddingNewLocation(false);
+    setLocMode('unit');
+    setTower('');
+    setFloorNo('');
+    setUnitNo('');
+    setAreaLabel('');
+    setLocationDetail('');
   };
 
   const handleClose = () => { resetAll(); onClose(); };
@@ -133,7 +152,11 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const handleSave = () => {
     const e: { location?: string; type?: string } = {};
     if (!selectedType) e.type = 'Please select an asset type.';
-    if (!location.trim()) e.location = 'Location is required.';
+    if (!effectiveLocation.trim()) {
+      e.location = addingNewLocation
+        ? (locMode === 'unit' ? 'Tower, floor and unit no. are all required.' : 'Tower and area are both required.')
+        : 'Please pick a location.';
+    }
     setErrors(e);
     if (Object.keys(e).length > 0) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -157,7 +180,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           variant:          selectedVariant || null,
           asset_ref:        assetRef.trim() || null,
           description:      notes.trim() || null,
-          location_on_site: location.trim(),
+          location_on_site: effectiveLocation.trim(),
+          location_detail:  locationDetail.trim() || null,
           serial_number:    quantity === 1 && serialNumber.trim() ? serialNumber.trim() : null,
           barcode_id:       null,
           install_date:     baseDate.trim() || today,
@@ -395,19 +419,89 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 </>
               ) : (
                 <>
-                  <TextInput
-                    style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
-                    placeholder="e.g. Tower A, Floor 3, Unit 3"
-                    placeholderTextColor={C.textTertiary}
-                    value={location}
-                    onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
-                    autoFocus={locationSuggestions.length > 0}
-                  />
-                  <Text style={[s.fieldHint, { color: C.textTertiary, marginBottom: 0, marginTop: 6 }]}>
-                    Tip: separate with commas (building, floor, unit) — this exact text is what groups assets by unit later, so keep it consistent.
-                  </Text>
+                  <View style={s.locModeRow}>
+                    {(['unit', 'common'] as const).map(mode => {
+                      const active = locMode === mode;
+                      return (
+                        <TouchableOpacity
+                          key={mode}
+                          onPress={() => setLocMode(mode)}
+                          style={[s.locModeBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.backgroundTertiary }]}
+                        >
+                          <Text style={[s.locModeTxt, { color: active ? '#fff' : C.textSecondary }]}>
+                            {mode === 'unit' ? 'Unit' : 'Common Area'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {locMode === 'unit' ? (
+                    <View style={s.locFieldsRow}>
+                      <View style={s.locFieldCol}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Tower No</Text>
+                        <TextInput
+                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                          placeholder="1" placeholderTextColor={C.textTertiary}
+                          value={tower} onChangeText={v => { setTower(v); setErrors(e => ({ ...e, location: undefined })); }}
+                        />
+                      </View>
+                      <View style={s.locFieldCol}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Floor No</Text>
+                        <TextInput
+                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                          placeholder="1" placeholderTextColor={C.textTertiary}
+                          value={floorNo} onChangeText={v => { setFloorNo(v); setErrors(e => ({ ...e, location: undefined })); }}
+                        />
+                      </View>
+                      <View style={s.locFieldCol}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Unit No</Text>
+                        <TextInput
+                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                          placeholder="1" placeholderTextColor={C.textTertiary}
+                          value={unitNo} onChangeText={v => { setUnitNo(v); setErrors(e => ({ ...e, location: undefined })); }}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={s.locFieldsRow}>
+                      <View style={[s.locFieldCol, { flex: 0.7 }]}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Tower No</Text>
+                        <TextInput
+                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                          placeholder="1" placeholderTextColor={C.textTertiary}
+                          value={tower} onChangeText={v => { setTower(v); setErrors(e => ({ ...e, location: undefined })); }}
+                        />
+                      </View>
+                      <View style={[s.locFieldCol, { flex: 1.6 }]}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Area</Text>
+                        <TextInput
+                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                          placeholder="e.g. CR, Lobby, Bsmt" placeholderTextColor={C.textTertiary}
+                          value={areaLabel} onChangeText={v => { setAreaLabel(v); setErrors(e => ({ ...e, location: undefined })); }}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {!!generatedLocation && (
+                    <View style={s.locPreviewRow}>
+                      <MaterialCommunityIcons name="tag-outline" size={13} color={C.primary} />
+                      <Text style={[s.locPreviewTxt, { color: C.primary }]}>Will be saved as: {generatedLocation}</Text>
+                    </View>
+                  )}
+
+                  <View style={{ marginTop: 14 }}>
+                    <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Other Detail (optional)</Text>
+                    <TextInput
+                      style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
+                      placeholder="e.g. near fire exit, storage room" placeholderTextColor={C.textTertiary}
+                      value={locationDetail} onChangeText={setLocationDetail}
+                    />
+                  </View>
+
                   {locationSuggestions.length > 0 && (
-                    <TouchableOpacity onPress={() => setAddingNewLocation(false)} style={{ marginTop: 8 }}>
+                    <TouchableOpacity onPress={() => setAddingNewLocation(false)} style={{ marginTop: 10 }}>
                       <Text style={[s.locationBackLink, { color: C.primary }]}>← Choose from existing locations</Text>
                     </TouchableOpacity>
                   )}
@@ -602,6 +696,15 @@ const s = StyleSheet.create({
   locationChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
   locationChipTxt: { fontSize: 12, fontWeight: '600' },
   locationBackLink: { fontSize: 12, fontWeight: '700' },
+  locModeRow:   { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  locModeBtn:   { flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
+  locModeTxt:   { fontSize: 12, fontWeight: '700' },
+  locFieldsRow: { flexDirection: 'row', gap: 8 },
+  locFieldCol:  { flex: 1 },
+  locFieldLabel:{ fontSize: 11, fontWeight: '700', marginBottom: 5, letterSpacing: 0.2, textTransform: 'uppercase' },
+  locInput:     { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '500' },
+  locPreviewRow:{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  locPreviewTxt:{ fontSize: 12, fontWeight: '700' },
 
   qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyBtn:    { width: 40, height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
