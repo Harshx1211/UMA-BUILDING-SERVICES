@@ -288,6 +288,7 @@ export default function AssetInspectionScreen() {
 
   // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [routineFilter, setRoutineFilter]     = useState<string>(ALL);
   const [assetTypeFilter, setAssetTypeFilter] = useState<string>(ALL);
   const [tagFilter, setTagFilter]             = useState<string>(ALL);
@@ -665,34 +666,62 @@ export default function AssetInspectionScreen() {
           <View>
             <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
               <View style={[s.overviewCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-                {Boolean(jobTitle || jobDate) && (
-                  <View style={[s.formInfoBar, { borderBottomColor: C.border }]}>
-                    <View style={s.formInfoItem}>
-                      <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>PROPERTY</Text>
-                      <Text style={[s.formInfoValue, { color: C.text }]} numberOfLines={1}>{jobTitle || '—'}</Text>
-                    </View>
-                    <View style={[s.formInfoDivider, { backgroundColor: C.border }]} />
-                    <View style={s.formInfoItem}>
-                      <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>DATE</Text>
-                      <Text style={[s.formInfoValue, { color: C.text }]}>
-                        {jobDate ? new Date(jobDate + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setDetailsExpanded(v => !v)}
+                  style={s.overviewHeader}
+                >
+                  <View style={s.overviewHeaderLeft}>
+                    <Text style={[s.overviewTitle, { color: C.text }]} numberOfLines={1}>{jobTitle || 'Inspection'}</Text>
+                    <Text style={[s.overviewSub, { color: C.textTertiary }]} numberOfLines={1}>
+                      {store.assets.length === 0
+                        ? 'No assets registered'
+                        : `${counts.passed} passed · ${counts.failed} failed${counts.nt > 0 ? ` · ${counts.nt} N/T` : ''} · ${counts.remaining} remaining`}
+                    </Text>
+                  </View>
+                  <View style={s.overviewHeaderRight}>
+                    <View style={[s.overviewProgressPill, { backgroundColor: allDone ? C.successLight : C.backgroundTertiary }]}>
+                      <Text style={[s.overviewProgressTxt, { color: allDone ? C.success : C.textSecondary }]}>
+                        {store.progress.inspected}/{store.progress.total}
                       </Text>
                     </View>
+                    <MaterialCommunityIcons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={C.textTertiary} />
                   </View>
-                )}
+                </TouchableOpacity>
+
                 <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary }]}>
                   <Animated.View style={[s.progressFill, { backgroundColor: allDone ? C.success : C.primary, width: `${fillPct}%` as `${number}%` }]} />
                 </View>
-                {store.assets.length > 0 && (
-                  <View style={s.summaryBar}>
-                    <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.success }]} /><Text style={[s.summaryCount, { color: C.success }]}>{counts.passed}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Passed</Text></View>
-                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-                    <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.error }]} /><Text style={[s.summaryCount, { color: C.error }]}>{counts.failed}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Failed</Text></View>
-                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-                    <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.textTertiary }]} /><Text style={[s.summaryCount, { color: C.textTertiary }]}>{counts.nt}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>N/T</Text></View>
-                    <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
-                    <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.primary }]} /><Text style={[s.summaryCount, { color: C.primary }]}>{counts.remaining}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Remaining</Text></View>
-                  </View>
+
+                {detailsExpanded && (
+                  <Animated.View entering={FadeIn.duration(150)}>
+                    {Boolean(jobTitle || jobDate) && (
+                      <View style={[s.formInfoBar, { borderTopColor: C.border }]}>
+                        <View style={s.formInfoItem}>
+                          <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>PROPERTY</Text>
+                          <Text style={[s.formInfoValue, { color: C.text }]} numberOfLines={1}>{jobTitle || '—'}</Text>
+                        </View>
+                        <View style={[s.formInfoDivider, { backgroundColor: C.border }]} />
+                        <View style={s.formInfoItem}>
+                          <Text style={[s.formInfoLabel, { color: C.textTertiary }]}>DATE</Text>
+                          <Text style={[s.formInfoValue, { color: C.text }]}>
+                            {jobDate ? new Date(jobDate + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    {store.assets.length > 0 && (
+                      <View style={[s.summaryBar, { borderTopWidth: jobTitle || jobDate ? 0 : 1, borderTopColor: C.border }]}>
+                        <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.success }]} /><Text style={[s.summaryCount, { color: C.success }]}>{counts.passed}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Passed</Text></View>
+                        <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                        <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.error }]} /><Text style={[s.summaryCount, { color: C.error }]}>{counts.failed}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Failed</Text></View>
+                        <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                        <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.textTertiary }]} /><Text style={[s.summaryCount, { color: C.textTertiary }]}>{counts.nt}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>N/T</Text></View>
+                        <View style={[s.summaryDivider, { backgroundColor: C.border }]} />
+                        <View style={s.summaryItem}><View style={[s.summaryDot, { backgroundColor: C.primary }]} /><Text style={[s.summaryCount, { color: C.primary }]}>{counts.remaining}</Text><Text style={[s.summaryLabel, { color: C.textTertiary }]}>Remaining</Text></View>
+                      </View>
+                    )}
+                  </Animated.View>
                 )}
               </View>
             </View>
@@ -832,6 +861,13 @@ export default function AssetInspectionScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   overviewCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  overviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  overviewHeaderLeft: { flex: 1, gap: 3 },
+  overviewHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  overviewTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  overviewSub: { fontSize: 12, fontWeight: '600' },
+  overviewProgressPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  overviewProgressTxt: { fontSize: 12, fontWeight: '800' },
   progressTrack: { height: 6, width: '100%' },
   progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
   progressBadge:    { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
@@ -842,7 +878,7 @@ const s = StyleSheet.create({
   summaryCount:   { fontSize: 18, fontWeight: '800' },
   summaryLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
   summaryDivider: { width: 1, height: 32, alignSelf: 'center', marginHorizontal: 4 },
-  formInfoBar:     { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
+  formInfoBar:     { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1 },
   formInfoItem:    { flex: 1 },
   formInfoLabel:   { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
   formInfoValue:   { fontSize: 14, fontWeight: '700' },
