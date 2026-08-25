@@ -40,6 +40,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const [allTags, setAllTags] = useState<AssetTag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [initialAssignments, setInitialAssignments] = useState<AssetTagAssignment[]>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (visible && asset) {
@@ -53,6 +54,10 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       const current = queryRecords<AssetTagAssignment>('asset_tag_assignments', { asset_id: asset.id });
       setSelectedTagIds(current.map(a => a.tag_id));
       setInitialAssignments(current);
+
+      const rows = queryRecords<{ location_on_site: string | null }>('assets', { property_id: asset.property_id });
+      const distinct = Array.from(new Set(rows.map(r => r.location_on_site).filter((v): v is string => !!v && v !== asset.location_on_site))).sort();
+      setLocationSuggestions(distinct);
     }
   }, [visible, asset]);
 
@@ -145,11 +150,27 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                 )}
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
-                  placeholder="Location on site..."
+                  placeholder="e.g. Tower A, Floor 3, Unit 3"
                   placeholderTextColor={C.textTertiary}
                   value={location}
                   onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
                 />
+                <Text style={[s.fieldHint, { color: C.textTertiary }]}>
+                  Tip: separate with commas (building, floor, unit) to make filtering and grouping by unit easier later.
+                </Text>
+                {locationSuggestions.length > 0 && (
+                  <View style={s.locationSuggestWrap}>
+                    {locationSuggestions.map(loc => (
+                      <TouchableOpacity
+                        key={loc}
+                        onPress={() => { setLocation(loc); setErrors(e => ({ ...e, location: undefined })); }}
+                        style={[s.locationChip, { borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
+                      >
+                        <Text style={[s.locationChipTxt, { color: C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
 
               {/* Ref */}
@@ -262,6 +283,10 @@ const s = StyleSheet.create({
   errorTxt: { fontSize: 12, fontWeight: '800', flex: 1 },
   input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
+  fieldHint: { fontSize: 12, lineHeight: 17, marginTop: 6, fontWeight: '500' },
+  locationSuggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  locationChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
+  locationChipTxt: { fontSize: 12, fontWeight: '600' },
   tagWrap:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagChip:  { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   tagChipText: { fontSize: 13, fontWeight: '700' },

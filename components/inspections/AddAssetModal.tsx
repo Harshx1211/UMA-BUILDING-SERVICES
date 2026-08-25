@@ -1,6 +1,6 @@
 // AddAssetModal — Type → Variant → Details three-step flow
 // Mirrors the "Edit Asset" form captured in reference screenshots from Uptick
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
   ScrollView, Platform, Alert, FlatList,
@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { upsertRecord, addToSyncQueue } from '@/lib/database';
+import { upsertRecord, addToSyncQueue, queryRecords } from '@/lib/database';
 import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
@@ -48,6 +48,14 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [quantity,     setQuantity]     = useState(1);
   const [isSaving,     setIsSaving]     = useState(false);
   const [errors,       setErrors]       = useState<{ location?: string; type?: string }>({});
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const rows = queryRecords<{ location_on_site: string | null }>('assets', { property_id: propertyId });
+    const distinct = Array.from(new Set(rows.map(r => r.location_on_site).filter((v): v is string => !!v))).sort();
+    setLocationSuggestions(distinct);
+  }, [visible, propertyId]);
 
   // ── Derived ───────────────────────────────────────────────────
   const typeDef  = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
@@ -352,11 +360,27 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               )}
               <TextInput
                 style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
-                placeholder="Location on site..."
+                placeholder="e.g. Tower A, Floor 3, Unit 3"
                 placeholderTextColor={C.textTertiary}
                 value={location}
                 onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
               />
+              <Text style={[s.fieldHint, { color: C.textTertiary, marginBottom: 0, marginTop: 6 }]}>
+                Tip: separate with commas (building, floor, unit) to make filtering and grouping by unit easier later.
+              </Text>
+              {locationSuggestions.length > 0 && (
+                <View style={s.locationSuggestWrap}>
+                  {locationSuggestions.map(loc => (
+                    <TouchableOpacity
+                      key={loc}
+                      onPress={() => { setLocation(loc); setErrors(e => ({ ...e, location: undefined })); }}
+                      style={[s.locationChip, { borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
+                    >
+                      <Text style={[s.locationChipTxt, { color: C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Ref */}
@@ -542,6 +566,9 @@ const s = StyleSheet.create({
 
   input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
+  locationSuggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  locationChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
+  locationChipTxt: { fontSize: 12, fontWeight: '600' },
 
   qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyBtn:    { width: 40, height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
