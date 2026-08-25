@@ -49,12 +49,17 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [isSaving,     setIsSaving]     = useState(false);
   const [errors,       setErrors]       = useState<{ location?: string; type?: string }>({});
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [addingNewLocation, setAddingNewLocation] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     const rows = queryRecords<{ location_on_site: string | null }>('assets', { property_id: propertyId });
     const distinct = Array.from(new Set(rows.map(r => r.location_on_site).filter((v): v is string => !!v))).sort();
     setLocationSuggestions(distinct);
+    // No locations recorded for this property yet — nothing to pick from, go
+    // straight to free text. Otherwise force picking an existing one so two
+    // assets in the same unit can't end up with slightly different spellings.
+    setAddingNewLocation(distinct.length === 0);
   }, [visible, propertyId]);
 
   // ── Derived ───────────────────────────────────────────────────
@@ -84,6 +89,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     setNotes('');
     setQuantity(1);
     setErrors({});
+    setAddingNewLocation(false);
   };
 
   const handleClose = () => { resetAll(); onClose(); };
@@ -358,28 +364,54 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   <Text style={[s.errorTxt, { color: C.error }]}>{errors.location}</Text>
                 </View>
               )}
-              <TextInput
-                style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
-                placeholder="e.g. Tower A, Floor 3, Unit 3"
-                placeholderTextColor={C.textTertiary}
-                value={location}
-                onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
-              />
-              <Text style={[s.fieldHint, { color: C.textTertiary, marginBottom: 0, marginTop: 6 }]}>
-                Tip: separate with commas (building, floor, unit) to make filtering and grouping by unit easier later.
-              </Text>
-              {locationSuggestions.length > 0 && (
-                <View style={s.locationSuggestWrap}>
-                  {locationSuggestions.map(loc => (
+
+              {locationSuggestions.length > 0 && !addingNewLocation ? (
+                <>
+                  <Text style={[s.fieldHint, { color: C.textTertiary, marginBottom: 10, marginTop: 0 }]}>
+                    Pick an existing block/unit so it groups correctly, or add a new one.
+                  </Text>
+                  <View style={s.locationSuggestWrap}>
+                    {locationSuggestions.map(loc => {
+                      const selected = location === loc;
+                      return (
+                        <TouchableOpacity
+                          key={loc}
+                          onPress={() => { setLocation(loc); setErrors(e => ({ ...e, location: undefined })); }}
+                          style={[s.locationChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary : C.backgroundTertiary }]}
+                        >
+                          {selected && <MaterialCommunityIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />}
+                          <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                     <TouchableOpacity
-                      key={loc}
-                      onPress={() => { setLocation(loc); setErrors(e => ({ ...e, location: undefined })); }}
-                      style={[s.locationChip, { borderColor: C.border, backgroundColor: C.backgroundTertiary }]}
+                      onPress={() => { setLocation(''); setAddingNewLocation(true); setErrors(e => ({ ...e, location: undefined })); }}
+                      style={[s.locationChip, { borderColor: C.primary, backgroundColor: C.background, borderStyle: 'dashed' }]}
                     >
-                      <Text style={[s.locationChipTxt, { color: C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                      <MaterialCommunityIcons name="plus" size={13} color={C.primary} style={{ marginRight: 3 }} />
+                      <Text style={[s.locationChipTxt, { color: C.primary }]}>New Location</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: errors.location ? C.error : 'transparent', color: C.text }]}
+                    placeholder="e.g. Tower A, Floor 3, Unit 3"
+                    placeholderTextColor={C.textTertiary}
+                    value={location}
+                    onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
+                    autoFocus={locationSuggestions.length > 0}
+                  />
+                  <Text style={[s.fieldHint, { color: C.textTertiary, marginBottom: 0, marginTop: 6 }]}>
+                    Tip: separate with commas (building, floor, unit) — this exact text is what groups assets by unit later, so keep it consistent.
+                  </Text>
+                  {locationSuggestions.length > 0 && (
+                    <TouchableOpacity onPress={() => setAddingNewLocation(false)} style={{ marginTop: 8 }}>
+                      <Text style={[s.locationBackLink, { color: C.primary }]}>← Choose from existing locations</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
             </View>
 
@@ -567,8 +599,9 @@ const s = StyleSheet.create({
   input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
   locationSuggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  locationChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
+  locationChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
   locationChipTxt: { fontSize: 12, fontWeight: '600' },
+  locationBackLink: { fontSize: 12, fontWeight: '700' },
 
   qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyBtn:    { width: 40, height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
