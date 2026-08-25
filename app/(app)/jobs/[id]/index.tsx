@@ -419,36 +419,23 @@ export default function JobDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
         <View style={s.body}>
 
-          {/* ── JOB ACTIONS WIDGET ── */}
-          {!isCompleted && !isCancelled && (
+          {/* ── JOB ACTIONS WIDGET (scheduled state only — once in progress, the
+               Inspection Progress card below is the single hub for both
+               opening the form and completing the job) ── */}
+          {isScheduled && (
             <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(360)}>
-              {isInProgress ? (
-                <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.timerLabel, { color: C.text }]}>Job In Progress</Text>
-                    <Text style={[s.timerSub, { color: C.textSecondary }]}>You can now perform inspections.</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={handleCompleteRequest}
-                    style={[s.continueBtn, { backgroundColor: C.primary, borderColor: C.primary, paddingHorizontal: 16, paddingVertical: 10 }]}
-                  >
-                    <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Complete Job</Text>
-                  </TouchableOpacity>
-                </Card>
-              ) : (
-                <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.timerLabel, { color: C.text }]}>Job Scheduled</Text>
-                    <Text style={[s.timerSub, { color: C.textSecondary }]}>Start the job to begin work.</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={handleStartJob}
-                    style={[s.continueBtn, { backgroundColor: C.primary, borderColor: C.primary, paddingHorizontal: 20, paddingVertical: 10 }]}
-                  >
-                    <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start Job</Text>
-                  </TouchableOpacity>
-                </Card>
-              )}
+              <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.timerLabel, { color: C.text }]}>Job Scheduled</Text>
+                  <Text style={[s.timerSub, { color: C.textSecondary }]}>Start the job to begin work.</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleStartJob}
+                  style={[s.continueBtn, { backgroundColor: C.primary, borderColor: C.primary, paddingHorizontal: 20, paddingVertical: 10 }]}
+                >
+                  <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start Job</Text>
+                </TouchableOpacity>
+              </Card>
             </Animated.View>
           )}
 
@@ -498,86 +485,90 @@ export default function JobDetailScreen() {
             </Animated.View>
           )}
 
-          {/* ── INSPECTION PROGRESS + CTA (the primary task on this screen) ── */}
-          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(360)}>
-            <Card variant="default" noPadding>
-              <View style={{ padding: 16 }}>
-                <View style={s.progressHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.progressTitle, { color: C.text }]}>Inspection Progress</Text>
-                    <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
-                      {totalAssets === 0
-                        ? 'No assets registered for this property'
-                        : `${inspected} of ${totalAssets} assets inspected`}
+          {/* ── INSPECTION PROGRESS + CTA (the single hub once a job is started —
+               opening the form and completing the job both live here, so
+               there's no second competing card while in progress) ── */}
+          {(isInProgress || isCompleted) && (
+            <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(360)}>
+              <Card variant="default" noPadding>
+                <View style={{ padding: 16 }}>
+                  <View style={s.progressHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.progressTitle, { color: C.text }]}>Inspection Progress</Text>
+                      <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
+                        {totalAssets === 0
+                          ? 'No assets registered for this property'
+                          : `${inspected} of ${totalAssets} assets inspected`}
+                      </Text>
+                    </View>
+                    <Text style={[s.progressPct, { color: progressPct === 100 ? (failedCount > 0 ? C.error : C.success) : C.textSecondary }]}>
+                      {progressPct}%
                     </Text>
                   </View>
-                  <Text style={[s.progressPct, { color: progressPct === 100 ? (failedCount > 0 ? C.error : C.success) : C.textSecondary }]}>
-                    {progressPct}%
-                  </Text>
-                </View>
-                <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary, flexDirection: 'row' }]}>
-                  {passedPct > 0 && <View style={[s.progressFill, { width: `${passedPct}%`, backgroundColor: C.success }]} />}
-                  {failedPct > 0 && <View style={[s.progressFill, { width: `${failedPct}%`, backgroundColor: C.error }]} />}
-                </View>
-                {totalAssets > 0 && (
-                  <View style={s.progressStatRow}>
-                    {[
-                      { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success },
-                      { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error },
-                      { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textTertiary },
-                    ].map(stat => (
-                      <View key={stat.label} style={s.progressStat}>
-                        <View style={[s.progressStatDot, { backgroundColor: stat.color }]} />
-                        <Text style={[s.progressStatTxt, { color: C.textSecondary }]}>
-                          {stat.count} {stat.label}
-                        </Text>
-                      </View>
-                    ))}
+                  <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary, flexDirection: 'row' }]}>
+                    {passedPct > 0 && <View style={[s.progressFill, { width: `${passedPct}%`, backgroundColor: C.success }]} />}
+                    {failedPct > 0 && <View style={[s.progressFill, { width: `${failedPct}%`, backgroundColor: C.error }]} />}
                   </View>
-                )}
-              </View>
+                  {totalAssets > 0 && (
+                    <View style={s.progressStatRow}>
+                      {[
+                        { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success },
+                        { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error },
+                        { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textTertiary },
+                      ].map(stat => (
+                        <View key={stat.label} style={s.progressStat}>
+                          <View style={[s.progressStatDot, { backgroundColor: stat.color }]} />
+                          <Text style={[s.progressStatTxt, { color: C.textSecondary }]}>
+                            {stat.count} {stat.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
 
-              <TouchableOpacity
-                onPress={
-                  isInProgress ? () => router.push(`/jobs/${id}/inspect` as never)
-                  : isCompleted ? handleContinueWorking
-                  : undefined
-                }
-                activeOpacity={0.7}
-                disabled={isScheduled || isCancelled}
-                style={[s.inspectRow, { borderTopWidth: 1, borderTopColor: C.border, opacity: isScheduled || isCancelled ? 0.6 : 1 }]}
-              >
-                <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '18' : C.backgroundTertiary }]}>
-                  <MaterialCommunityIcons
-                    name={isInProgress ? 'clipboard-check' : isCompleted ? 'lock-open-outline' : 'clipboard-check-outline'}
-                    size={22}
-                    color={isInProgress ? C.primary : C.textTertiary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.inspectCtaTitle, { color: C.text }]}>
-                    {isCompleted ? 'Re-open inspection' : 'Open inspection form'}
-                  </Text>
-                  <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
-                    {isScheduled
-                      ? 'Start job first to begin the inspection'
-                      : isCancelled
-                      ? 'This job has been cancelled'
-                      : isInProgress
-                      ? (totalAssets === 0
-                          ? 'Add assets and begin the on-site inspection'
-                          : progressPct === 100
-                          ? 'All assets inspected'
-                          : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`)
-                      : 'Tap here to unlock and edit the form'}
-                  </Text>
-                </View>
-                {!(isScheduled || isCancelled) && (
+                <TouchableOpacity
+                  onPress={isInProgress ? () => router.push(`/jobs/${id}/inspect` as never) : handleContinueWorking}
+                  activeOpacity={0.7}
+                  style={[s.inspectRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+                >
+                  <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '18' : C.backgroundTertiary }]}>
+                    <MaterialCommunityIcons
+                      name={isInProgress ? 'clipboard-check' : 'lock-open-outline'}
+                      size={22}
+                      color={isInProgress ? C.primary : C.textTertiary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.inspectCtaTitle, { color: C.text }]}>
+                      {isCompleted ? 'Re-open inspection' : 'Open inspection form'}
+                    </Text>
+                    <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
+                      {isInProgress
+                        ? (totalAssets === 0
+                            ? 'Add assets and begin the on-site inspection'
+                            : progressPct === 100
+                            ? 'All assets inspected'
+                            : `${totalAssets - inspected} asset${totalAssets - inspected !== 1 ? 's' : ''} remaining`)
+                        : 'Tap here to unlock and edit the form'}
+                    </Text>
+                  </View>
                   <MaterialCommunityIcons name="chevron-right" size={20} color={isInProgress ? C.primary : C.textTertiary} />
+                </TouchableOpacity>
+
+                {isInProgress && (
+                  <TouchableOpacity
+                    onPress={handleCompleteRequest}
+                    activeOpacity={0.7}
+                    style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+                  >
+                    <MaterialCommunityIcons name="check-circle-outline" size={17} color={C.textSecondary} />
+                    <Text style={[s.completeRowTxt, { color: C.textSecondary }]}>Mark Job Complete</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            </Card>
-          </Animated.View>
+              </Card>
+            </Animated.View>
+          )}
 
           {/* ── DETAILS (collapsed by default — scheduling info, access/site notes) ── */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(360)}>
@@ -879,6 +870,8 @@ const s = StyleSheet.create({
   progressStatTxt: { fontSize: 12, fontWeight: '600' },
 
   inspectRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
+  completeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13 },
+  completeRowTxt: { fontSize: 13, fontWeight: '700' },
   inspectCtaIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   inspectCtaTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
   inspectCtaSub: { fontSize: 13, fontWeight: '500' },
