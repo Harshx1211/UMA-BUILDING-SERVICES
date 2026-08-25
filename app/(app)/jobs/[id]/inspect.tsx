@@ -518,7 +518,6 @@ export default function AssetInspectionScreen() {
         asset_ref: null,
         description: assetToClone.description,
         location_on_site: assetToClone.location_on_site,
-        location_detail: assetToClone.location_detail,
         serial_number: null,
         barcode_id: null,
         install_date: assetToClone.install_date,
