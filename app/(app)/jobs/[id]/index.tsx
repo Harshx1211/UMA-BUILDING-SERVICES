@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import type { NavigationAction } from '@react-navigation/native';
@@ -136,6 +136,7 @@ export default function JobDetailScreen() {
   const [isLoading,        setIsLoading]        = useState(true);
   const [hasSig,           setHasSig]           = useState(false);
   const [showBottomSheet,  setShowBottomSheet]  = useState(false);
+  const [detailsExpanded,  setDetailsExpanded]  = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completionCountdown, setCompletionCountdown] = useState(5);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -355,17 +356,18 @@ export default function JobDetailScreen() {
 
   const actionRows: (Omit<React.ComponentProps<typeof ActionRow>, 'isLast' | 'C'> & { key: string })[] = [
     {
-      key: 'defects', icon: 'alert-circle-outline', iconBg: C.error + '15', iconColor: C.error,
+      key: 'defects', icon: 'alert-circle-outline',
+      iconBg: defects.length > 0 ? C.error + '15' : C.backgroundTertiary,
+      iconColor: defects.length > 0 ? C.error : C.textSecondary,
       title: 'Defects',
       subtitle: defects.length === 0 ? 'None logged' : `${defects.length} defect${defects.length !== 1 ? 's' : ''}`,
       badge: defects.length, badgeColor: C.error,
       onPress: () => router.push(`/jobs/${id}/defects` as never),
     },
     {
-      key: 'photos', icon: 'camera-outline', iconBg: C.accent + '15', iconColor: C.accent,
+      key: 'photos', icon: 'camera-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Photos',
       subtitle: photos.length === 0 ? 'None captured' : `${photos.length} photo${photos.length !== 1 ? 's' : ''}`,
-      badge: photos.length, badgeColor: C.accent,
       onPress: () => router.push(`/jobs/${id}/photos` as never),
     },
     {
@@ -379,13 +381,13 @@ export default function JobDetailScreen() {
       onPress: () => router.push(`/jobs/${id}/signature` as never),
     },
     {
-      key: 'navigate', icon: 'map-marker-path', iconBg: C.info + '18', iconColor: C.infoDark,
+      key: 'navigate', icon: 'map-marker-path', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Navigate to Site',
       subtitle: [job.property_address, job.property_suburb].filter(Boolean).join(', ') || undefined,
       onPress: handleNavigate,
     },
     ...(job.site_contact_phone ? [{
-      key: 'call', icon: 'phone-in-talk' as MCIconName, iconBg: C.success + '18', iconColor: C.successDark,
+      key: 'call', icon: 'phone-in-talk' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: job.site_contact_name || 'Call Site Contact',
       subtitle: job.site_contact_phone,
       onPress: () => Linking.openURL(`tel:${job.site_contact_phone}`),
@@ -483,7 +485,7 @@ export default function JobDetailScreen() {
             </Card>
           )}
 
-          {/* ── SAFETY ALERTS ── */}
+          {/* ── SAFETY HAZARD (always visible — never hidden behind a tap) ── */}
           {job.hazard_notes && (
             <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(360)}>
               <Card variant="danger" style={{ flexDirection: 'row', gap: 12 }}>
@@ -496,69 +498,8 @@ export default function JobDetailScreen() {
             </Animated.View>
           )}
 
-          {(job.access_notes || job.site_note) && (
-            <Animated.View entering={noMotion ? undefined : FadeInDown.delay(70).duration(360)}>
-              <Card variant="info" noPadding>
-                {job.access_notes && (
-                  <View style={[s.noteRow, job.site_note && { borderBottomWidth: 1, borderBottomColor: C.info + '30' }]}>
-                    <MaterialCommunityIcons name="key" size={18} color={C.info} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.alertTitle, { color: C.info }]}>Access Notes</Text>
-                      <Text style={[s.alertBody, { color: C.text }]}>{job.access_notes}</Text>
-                    </View>
-                  </View>
-                )}
-                {job.site_note && (
-                  <View style={s.noteRow}>
-                    <MaterialCommunityIcons name="note-text-outline" size={18} color={C.info} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.alertTitle, { color: C.info }]}>Site Note</Text>
-                      <Text style={[s.alertBody, { color: C.text }]}>{job.site_note}</Text>
-                    </View>
-                  </View>
-                )}
-              </Card>
-            </Animated.View>
-          )}
-
-          {/* ── INFO CHIPS ── */}
+          {/* ── INSPECTION PROGRESS + CTA (the primary task on this screen) ── */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(360)}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                <MaterialCommunityIcons name="calendar" size={15} color={C.textSecondary} />
-                <Text style={[s.chipTxt, { color: C.text }]}>Sch: {fmtDate(job.scheduled_date)}</Text>
-              </View>
-              {(isCompleted || isInProgress) && job.updated_at && (
-                <View style={[s.chip, { backgroundColor: isCompleted ? C.success + '18' : C.primary + '18' }]}>
-                  <MaterialCommunityIcons name={isCompleted ? "check-circle-outline" : "play-circle-outline"} size={15} color={isCompleted ? C.success : C.primary} />
-                  <Text style={[s.chipTxt, { color: isCompleted ? C.success : C.primary, fontWeight: '700' }]}>
-                    {isCompleted ? 'Done: ' : 'Started: '}{fmtDate(job.updated_at.substring(0, 10))}
-                  </Text>
-                </View>
-              )}
-              {job.scheduled_time && (
-                <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                  <MaterialCommunityIcons name="clock-outline" size={15} color={C.textSecondary} />
-                  <Text style={[s.chipTxt, { color: C.text }]}>{fmtTime(job.scheduled_time)}</Text>
-                </View>
-              )}
-              <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
-                <MaterialCommunityIcons name="wrench-outline" size={15} color={C.textSecondary} />
-                <Text style={[s.chipTxt, { color: C.text }]}>
-                  {JOB_TYPE_LABEL[job.job_type as JobType] ?? job.job_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                </Text>
-              </View>
-              <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.accent) + '18' }]}>
-                <MaterialCommunityIcons name="lightning-bolt" size={15} color={PRIORITY_COLOR[job.priority] ?? C.accent} />
-                <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.accent, fontWeight: '800' }]}>
-                  {PRIORITY_LABEL[job.priority] ?? job.priority}
-                </Text>
-              </View>
-            </ScrollView>
-          </Animated.View>
-
-          {/* ── INSPECTION PROGRESS + CTA ── */}
-          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(360)}>
             <Card variant="default" noPadding>
               <View style={{ padding: 16 }}>
                 <View style={s.progressHeader}>
@@ -606,18 +547,18 @@ export default function JobDetailScreen() {
                 disabled={isScheduled || isCancelled}
                 style={[s.inspectRow, { borderTopWidth: 1, borderTopColor: C.border, opacity: isScheduled || isCancelled ? 0.6 : 1 }]}
               >
-                <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.success + '18' : isCompleted ? C.warning + '18' : C.backgroundTertiary }]}>
+                <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '18' : C.backgroundTertiary }]}>
                   <MaterialCommunityIcons
                     name={isInProgress ? 'clipboard-check' : isCompleted ? 'lock-open-outline' : 'clipboard-check-outline'}
                     size={22}
-                    color={isInProgress ? C.success : isCompleted ? C.warningDark : C.textTertiary}
+                    color={isInProgress ? C.primary : C.textTertiary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.inspectCtaTitle, { color: isInProgress ? C.success : isCompleted ? C.warningDark : C.text }]}>
+                  <Text style={[s.inspectCtaTitle, { color: C.text }]}>
                     {isCompleted ? 'Re-open inspection' : 'Open inspection form'}
                   </Text>
-                  <Text style={[s.inspectCtaSub, { color: isInProgress ? C.success : isCompleted ? C.warningDark : C.textSecondary, opacity: isInProgress ? 0.85 : 1 }]}>
+                  <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
                     {isScheduled
                       ? 'Start job first to begin the inspection'
                       : isCancelled
@@ -632,9 +573,87 @@ export default function JobDetailScreen() {
                   </Text>
                 </View>
                 {!(isScheduled || isCancelled) && (
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={isInProgress ? C.success : C.warningDark} />
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={isInProgress ? C.primary : C.textTertiary} />
                 )}
               </TouchableOpacity>
+            </Card>
+          </Animated.View>
+
+          {/* ── DETAILS (collapsed by default — scheduling info, access/site notes) ── */}
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(360)}>
+            <Card variant="default" noPadding>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setDetailsExpanded(v => !v)}
+                style={s.detailsHeader}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.detailsTitle, { color: C.text }]}>Details</Text>
+                  <Text style={[s.detailsSub, { color: C.textSecondary }]} numberOfLines={1}>
+                    {JOB_TYPE_LABEL[job.job_type as JobType] ?? job.job_type} · {PRIORITY_LABEL[job.priority] ?? job.priority} priority · Sch: {fmtDate(job.scheduled_date)}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={C.textTertiary} />
+              </TouchableOpacity>
+
+              {detailsExpanded && (
+                <Animated.View entering={FadeIn.duration(150)} style={{ borderTopWidth: 1, borderTopColor: C.border }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
+                    <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                      <MaterialCommunityIcons name="calendar" size={15} color={C.textSecondary} />
+                      <Text style={[s.chipTxt, { color: C.text }]}>Sch: {fmtDate(job.scheduled_date)}</Text>
+                    </View>
+                    {(isCompleted || isInProgress) && job.updated_at && (
+                      <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                        <MaterialCommunityIcons name={isCompleted ? "check-circle-outline" : "play-circle-outline"} size={15} color={C.textSecondary} />
+                        <Text style={[s.chipTxt, { color: C.text }]}>
+                          {isCompleted ? 'Done: ' : 'Started: '}{fmtDate(job.updated_at.substring(0, 10))}
+                        </Text>
+                      </View>
+                    )}
+                    {job.scheduled_time && (
+                      <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                        <MaterialCommunityIcons name="clock-outline" size={15} color={C.textSecondary} />
+                        <Text style={[s.chipTxt, { color: C.text }]}>{fmtTime(job.scheduled_time)}</Text>
+                      </View>
+                    )}
+                    <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                      <MaterialCommunityIcons name="wrench-outline" size={15} color={C.textSecondary} />
+                      <Text style={[s.chipTxt, { color: C.text }]}>
+                        {JOB_TYPE_LABEL[job.job_type as JobType] ?? job.job_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </Text>
+                    </View>
+                    <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.accent) + '18' }]}>
+                      <MaterialCommunityIcons name="lightning-bolt" size={15} color={PRIORITY_COLOR[job.priority] ?? C.accent} />
+                      <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.accent, fontWeight: '800' }]}>
+                        {PRIORITY_LABEL[job.priority] ?? job.priority}
+                      </Text>
+                    </View>
+                  </ScrollView>
+
+                  {job.access_notes && (
+                    <View style={[s.noteRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
+                      <MaterialCommunityIcons name="key" size={18} color={C.textSecondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Access Notes</Text>
+                        <Text style={[s.alertBody, { color: C.text }]}>{job.access_notes}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.site_note && (
+                    <View style={[s.noteRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
+                      <MaterialCommunityIcons name="note-text-outline" size={18} color={C.textSecondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Property Note</Text>
+                        <Text style={[s.alertBody, { color: C.text }]}>{job.site_note}</Text>
+                        <Text style={[s.detailsCaption, { color: C.textTertiary }]}>
+                          Read-only — set on the property record, shared by every job at this site
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </Animated.View>
+              )}
             </Card>
           </Animated.View>
 
@@ -651,6 +670,11 @@ export default function JobDetailScreen() {
           {/* ── FIELD NOTES ── */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(360)}>
             <Text style={[s.sectionLabel, { color: C.textTertiary }]}>Field notes</Text>
+            {job.site_note && (
+              <Text style={[s.sectionCaption, { color: C.textTertiary }]}>
+                Your notes for this visit — separate from the read-only Property Note in Details above.
+              </Text>
+            )}
             <Card variant="default">
               {isEditingNotes ? (
                 <>
@@ -835,7 +859,11 @@ const s = StyleSheet.create({
   alertBody: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
   noteRow: { flexDirection: 'row', gap: 12, padding: 16 },
 
-  chipsRow: { gap: 10, paddingBottom: 6 },
+  chipsRow: { gap: 10, padding: 16 },
+  detailsHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
+  detailsTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2, marginBottom: 2 },
+  detailsSub: { fontSize: 12, fontWeight: '600' },
+  detailsCaption: { fontSize: 11, fontWeight: '500', fontStyle: 'italic', marginTop: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   chipTxt: { fontSize: 13, fontWeight: '700' },
 
@@ -856,6 +884,7 @@ const s = StyleSheet.create({
   inspectCtaSub: { fontSize: 13, fontWeight: '500' },
 
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginLeft: 2, marginBottom: 10, textTransform: 'uppercase', },
+  sectionCaption: { fontSize: 12, fontWeight: '500', marginLeft: 2, marginTop: -6, marginBottom: 10 },
 
   notesText: { fontSize: 14, lineHeight: 22, marginBottom: 14, fontWeight: '500' },
   notesEmpty: { fontSize: 13, fontStyle: 'italic', marginBottom: 14, fontWeight: '500' },
