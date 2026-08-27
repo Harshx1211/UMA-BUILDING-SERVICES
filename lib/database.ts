@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 36;
+const CURRENT_SCHEMA_VERSION = 37;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -94,6 +94,7 @@ export function initializeSchema(): void {
       notification_settings TEXT,
       compliance_standards TEXT,
       appearance_settings  TEXT,
+      accreditations       TEXT,
       created_at           TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -1269,6 +1270,24 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '36')`);
   }
 
+  // Migration 37: companies.accreditations — added to Supabase back in
+  // 20260824010000_company_accreditations.sql for the report Signoff page,
+  // but never mirrored to local SQLite, so every company pull hit "skipping
+  // unknown columns [accreditations]" and silently dropped the value.
+  if (currentVersion < 37) {
+    try {
+      db.runSync(`ALTER TABLE companies ADD COLUMN accreditations TEXT;`);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 37: added companies.accreditations');
+    } catch (err: unknown) {
+      const msg = String(err);
+      if (!msg.includes('duplicate column')) {
+        console.error('[UMA BUILDING SERVICES DB] Migration 37 failed:', msg);
+      }
+    }
+    currentVersion = 37;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '37')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1774,6 +1793,21 @@ export function markSyncItemComplete(id: number): void {
     db.runSync(`UPDATE sync_queue SET synced = 1 WHERE id = ?`, [id]);
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] markSyncItemComplete(${id}) error:`, err);
+  }
+}
+
+/**
+ * Overwrites a queued sync item's stored payload — used to strip a column
+ * Supabase no longer recognises (e.g. a field removed from a table after
+ * the item was already queued) so the corrected payload is what gets sent
+ * on every future retry, not the original stale one.
+ */
+export function updateSyncQueuePayload(id: number, payload: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(`UPDATE sync_queue SET payload = ? WHERE id = ?`, [payload, id]);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] updateSyncQueuePayload(${id}) error:`, err);
   }
 }
 

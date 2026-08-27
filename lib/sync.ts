@@ -13,6 +13,7 @@ import {
   getFailedSyncItems,
   getRecord,
   deleteRecord,
+  updateSyncQueuePayload,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
@@ -888,6 +889,34 @@ export async function _pushQueue(): Promise<void> {
 
         if (!error && __DEV__) {
           console.log(`[UMA BUILDING SERVICES Sync] PUSH: report generation queued for job ${reportJobId} (${respData?.status ?? 'accepted'})`);
+        }
+      }
+
+      // ── Self-heal a stale/removed column in an already-queued payload ──────
+      // If a field is removed from a table after some devices already had a
+      // sync_queue item referencing it (e.g. a feature built then reverted
+      // mid-rollout — this happened with assets.location_detail), PostgREST
+      // rejects the push with "Could not find the 'X' column of 'Y' in the
+      // schema cache" forever — retrying the same stale payload can never
+      // succeed on its own. Strip the offending key, persist the corrected
+      // payload so it isn't resent broken, and retry immediately.
+      if (error && (item.operation === SyncOperation.Insert || item.operation === SyncOperation.Update)) {
+        const colMatch = error.message?.match(/Could not find the '([a-zA-Z0-9_]+)' column of '[a-zA-Z0-9_]+' in the schema cache/);
+        if (colMatch && colMatch[1] in payload) {
+          const staleColumn = colMatch[1];
+          console.warn(`[SiteTrack Sync] '${item.table_name}.${staleColumn}' no longer exists on the server — stripping it from queued item ${item.id} and retrying`);
+          delete payload[staleColumn];
+          updateSyncQueuePayload(item.id, JSON.stringify(payload));
+          if (item.operation === SyncOperation.Insert) {
+            const retry = await supabase.from(item.table_name).insert(payload);
+            error = retry.error;
+          } else if (item.table_name === 'job_assets' && payload.actioned_at) {
+            const retry = await supabase.from('job_assets').update(payload).eq('id', item.record_id).lt('actioned_at', payload.actioned_at as string).select('id');
+            error = retry.error;
+          } else {
+            const retry = await supabase.from(item.table_name).update(payload).eq('id', item.record_id);
+            error = retry.error;
+          }
         }
       }
 
