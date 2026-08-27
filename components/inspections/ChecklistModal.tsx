@@ -211,7 +211,7 @@ export default function ChecklistModal({
         </ScrollView>
 
         {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
           <Button
             variant="primary"
             disabled={!allAnswered}

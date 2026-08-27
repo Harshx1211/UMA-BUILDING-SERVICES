@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import Toast from 'react-native-toast-message';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 
@@ -16,6 +17,7 @@ interface Props {
 
 export function SignatureModal({ visible, onClose, onSign, clientName }: Props) {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const sigRef = useRef<SignatureViewRef>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -45,7 +47,7 @@ export function SignatureModal({ visible, onClose, onSign, clientName }: Props) 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[s.overlay, { backgroundColor: C.overlay }]}>
-        <View style={[s.sheet, { backgroundColor: C.surface }]}>
+        <View style={[s.sheet, { backgroundColor: C.surface, paddingBottom: 24 + insets.bottom }]}>
           <View style={s.header}>
             <View>
               <Text style={[s.title, { color: C.text }]}>Client Sign-off</Text>

@@ -6,6 +6,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button } from '@/components/ui';
@@ -292,6 +293,7 @@ AssetCard.displayName = 'AssetCard';
 
 export default function AssetInspectionScreen() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useInspectionStore();
@@ -856,7 +858,7 @@ export default function AssetInspectionScreen() {
       />
 
       {store.assets.length > 0 && (
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, shadowColor: C.shadow }]}>
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, shadowColor: C.shadow, paddingBottom: 16 + insets.bottom }]}>
           <View style={{ flex: 1 }}>
             <Text style={[s.bottomBarTitle, { color: C.text }]}>{allDone ? (hasActualResults ? 'All assets inspected' : 'All assets marked (N/T)') : `${counts.remaining} remaining`}</Text>
             <Text style={[s.bottomBarSub, { color: C.textSecondary }]}>{store.progress.inspected} of {store.progress.total} inspected</Text>
@@ -872,7 +874,7 @@ export default function AssetInspectionScreen() {
       )}
 
       {store.assets.length > 0 && (
-        <TouchableOpacity style={[s.addAssetFab, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]} onPress={() => setShowAddAsset(true)} activeOpacity={0.85}>
+        <TouchableOpacity style={[s.addAssetFab, { backgroundColor: C.surface, borderColor: C.border, bottom: (Platform.OS === 'ios' ? 90 : 70) + insets.bottom }, cardShadow]} onPress={() => setShowAddAsset(true)} activeOpacity={0.85}>
           <MaterialCommunityIcons name="plus" size={18} color={C.primary} />
           <Text style={[s.addAssetFabTxt, { color: C.primary }]}>Add Asset</Text>
         </TouchableOpacity>

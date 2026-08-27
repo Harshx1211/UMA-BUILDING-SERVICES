@@ -415,7 +415,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
           </ScrollView>
 
           {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
-          <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+          <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
             {/* Replace Now */}
             <TouchableOpacity
               style={[s.replaceBtn, { backgroundColor: C.warning + '18', borderColor: C.warning }]}

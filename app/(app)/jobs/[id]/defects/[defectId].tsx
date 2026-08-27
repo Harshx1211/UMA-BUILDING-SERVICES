@@ -14,6 +14,7 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
@@ -64,6 +65,7 @@ const STATUS_COLORS: Record<DefectStatus, string> = {
 
 export default function DefectDetailScreen() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
   const { defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
   const { deleteDefect } = useDefectsStore();
@@ -295,7 +297,7 @@ export default function DefectDetailScreen() {
 
       {/* Bottom action bar — Delete only when job is in_progress */}
       {!jobLocked && (
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
           <TouchableOpacity
             style={[s.bottomBtn, { backgroundColor: C.error + '12', borderColor: C.error + '30' }]}
             onPress={handleDelete}

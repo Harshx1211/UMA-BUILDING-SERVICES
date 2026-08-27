@@ -9,6 +9,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import type { NavigationAction } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -113,6 +114,7 @@ const ar = StyleSheet.create({
 // ─── Main Screen ─────────────────────────────────────────────────────────
 export default function JobDetailScreen() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -723,7 +725,7 @@ export default function JobDetailScreen() {
       </ScrollView>
 
       {/* ── BOTTOM ACTION BAR ── */}
-      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, borderTopWidth: 1, shadowColor: C.shadow }]}>
+      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, borderTopWidth: 1, shadowColor: C.shadow, paddingBottom: 20 + insets.bottom }]}>
         <Button
           title={
             isCompleted && job?.report_url ? 'View Report' :

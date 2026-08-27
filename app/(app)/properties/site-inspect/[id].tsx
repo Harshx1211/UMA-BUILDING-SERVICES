@@ -15,6 +15,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
@@ -233,6 +234,7 @@ AssetInspectCard.displayName = 'AssetInspectCard';
 export default function SiteInspectScreen() {
   const noMotion = useReducedMotion();
   const C          = useColors();
+  const insets     = useSafeAreaInsets();
   const { id: propertyId } = useLocalSearchParams<{ id: string }>();
   const { user }   = useAuth();
 
@@ -662,7 +664,7 @@ export default function SiteInspectScreen() {
 
       {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
       {assets.length > 0 && (
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
           <View style={{ flex: 1 }}>
             <Text style={[s.bottomTitle, { color: C.text }]}>
               {allDone

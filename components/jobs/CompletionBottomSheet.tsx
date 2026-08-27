@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Button } from '@/components/ui';
 
@@ -20,6 +21,7 @@ export default function CompletionBottomSheet({
   visible, onClose, onConfirm, assetsTotal, assetsInspected, hasSignature, hasDefects, onNeedSignature 
 }: Props) {
   const C = useColors();
+  const insets = useSafeAreaInsets();
 
   // FIX: assetsInspected used to be pass+fail only, so an all-N/T job showed
   // the warning state even though all assets had been actioned.
@@ -31,7 +33,7 @@ export default function CompletionBottomSheet({
       <View style={s.overlay}>
         <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1} />
         
-        <View style={[s.sheet, { backgroundColor: C.background }]}>
+        <View style={[s.sheet, { backgroundColor: C.background, paddingBottom: 24 + insets.bottom }]}>
           <View style={s.handleWrap}>
             <View style={[s.handle, { backgroundColor: C.border }]} />
           </View>

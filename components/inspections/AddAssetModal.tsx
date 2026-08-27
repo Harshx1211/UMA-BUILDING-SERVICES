@@ -544,7 +544,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           </ScrollView>
 
           {/* ── BOTTOM ACTION BAR ───────────────────────────── */}
-          <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+          <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Button variant="secondary" title="Cancel" onPress={handleClose} />
             </View>

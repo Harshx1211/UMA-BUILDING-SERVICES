@@ -11,6 +11,7 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getJobById,
   getAssetsWithJobResults,
@@ -215,6 +216,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
 
 export default function ReportSummaryScreen() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const { updateJobStatus } = useJobsStore();
@@ -541,7 +543,7 @@ export default function ReportSummaryScreen() {
       </ScrollView>
 
       {/* ── Bottom Action Bar ── */}
-      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+      <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
         {isCompleted && job.report_url ? (
           // A completed job's data can only change via "Continue Working" on the
           // job detail screen, which resets status to in_progress AND clears
