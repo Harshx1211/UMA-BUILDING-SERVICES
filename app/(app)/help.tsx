@@ -92,7 +92,6 @@ function AccordionCard({
 function ChecklistBody({ items, color }: { items: ChecklistItem[]; color: string }) {
   const C = useColors();
   const checks = items.filter(i => i.type !== 'text');
-  const notes  = items.filter(i => i.type === 'text');
 
   return (
     <View style={{ gap: 10 }}>
@@ -105,12 +104,6 @@ function ChecklistBody({ items, color }: { items: ChecklistItem[]; color: string
           </View>
         </View>
       ))}
-      {notes.length > 0 && (
-        <View style={[s.checkNoteBox, { backgroundColor: C.backgroundTertiary }]}>
-          <MaterialCommunityIcons name="pencil-outline" size={14} color={C.textSecondary} />
-          <Text style={[s.checkNoteTxt, { color: C.textSecondary }]}>{notes.map(n => n.question).join(' · ')}</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -418,8 +411,6 @@ const s = StyleSheet.create({
   checkRow:      { flexDirection: 'row', gap: 10, paddingLeft: 38, paddingRight: 4 },
   checkQuestion: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   checkHint:     { fontSize: 12, lineHeight: 17, marginTop: 2, fontStyle: 'italic' },
-  checkNoteBox:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 38, marginTop: 2, padding: 10, borderRadius: 10 },
-  checkNoteTxt:  { flex: 1, fontSize: 12, fontWeight: '500' },
 
   // Version card
   versionCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 0, marginBottom: 12, marginTop: 12 },
