@@ -32,12 +32,14 @@ function PendingView({
   textSecondary,
   border,
   elapsedS,
+  isViewMode,
 }: {
   primaryColor: string;
   textColor: string;
   textSecondary: string;
   border: string;
   elapsedS: number;
+  isViewMode: boolean;
 }) {
   const pulse = useSharedValue(1);
   useEffect(() => {
@@ -51,12 +53,14 @@ function PendingView({
       {/* Cloud icon with pulse */}
       <View style={[styles.iconCircle, { backgroundColor: primaryColor + '18', borderColor: primaryColor + '30' }]}>
         <Animated.View style={noMotion ? undefined : animStyle}>
-          <MaterialCommunityIcons name="cloud-upload-outline" size={42} color={primaryColor} />
+          <MaterialCommunityIcons name={isViewMode ? 'cloud-download-outline' : 'cloud-upload-outline'} size={42} color={primaryColor} />
         </Animated.View>
       </View>
 
-      <Text style={[styles.bigTitle, { color: textColor }]}>Generating Report</Text>
-      <Text style={[styles.subTitle, { color: primaryColor }]}>Processing on our servers…</Text>
+      <Text style={[styles.bigTitle, { color: textColor }]}>{isViewMode ? 'Loading Report' : 'Generating Report'}</Text>
+      <Text style={[styles.subTitle, { color: primaryColor }]}>
+        {isViewMode ? 'Fetching your existing report…' : 'Processing on our servers…'}
+      </Text>
 
       {/* Progress dots */}
       <View style={styles.dotsRow}>
@@ -69,17 +73,26 @@ function PendingView({
       </View>
 
       <View style={[styles.infoBox, { borderColor: border }]}>
-        <Text style={[styles.infoLine, { color: textSecondary }]}>
-          ⏱  Elapsed: {elapsedS}s
-        </Text>
-        <Text style={[styles.infoLine, { color: textSecondary }]}>
-          The PDF is being built on our servers with full-resolution photos.
-          {'\n'}Large sites (1000+ assets) take 15–45 seconds.
-        </Text>
-        <Text style={[styles.infoLine, { color: textSecondary, marginTop: 8 }]}>
-          You can go back — the report will be ready in the cloud when done.
-          Come back to this screen to download it.
-        </Text>
+        {isViewMode ? (
+          <Text style={[styles.infoLine, { color: textSecondary }]}>
+            This job&apos;s report was already generated — just checking its current status.
+            {'\n'}This isn&apos;t creating a new PDF.
+          </Text>
+        ) : (
+          <>
+            <Text style={[styles.infoLine, { color: textSecondary }]}>
+              ⏱  Elapsed: {elapsedS}s
+            </Text>
+            <Text style={[styles.infoLine, { color: textSecondary }]}>
+              The PDF is being built on our servers with full-resolution photos.
+              {'\n'}Large sites (1000+ assets) take 15–45 seconds.
+            </Text>
+            <Text style={[styles.infoLine, { color: textSecondary, marginTop: 8 }]}>
+              You can go back — the report will be ready in the cloud when done.
+              Come back to this screen to download it.
+            </Text>
+          </>
+        )}
       </View>
     </Animated.View>
   );
@@ -225,11 +238,16 @@ export default function PreviewScreen() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   const pdfTitle = `Service Report — ${job?.property_name ?? jobId}`;
+  const isViewMode = mode === 'view';
 
   return (
     <View style={[styles.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
-        title={screenState === 'ready' || screenState === 'downloading' ? 'Report Preview' : 'Generating Report'}
+        title={
+          screenState === 'ready' || screenState === 'downloading' ? 'Report Preview'
+          : isViewMode ? 'Loading Report'
+          : 'Generating Report'
+        }
         showBack
         rightComponent={
           (screenState === 'ready' && pdfUrl) ? (
@@ -258,6 +276,7 @@ export default function PreviewScreen() {
           textSecondary={C.textSecondary}
           border={C.border}
           elapsedS={elapsedS}
+          isViewMode={isViewMode}
         />
       )}
 
