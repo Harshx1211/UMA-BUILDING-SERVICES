@@ -6,15 +6,11 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AssetWithResult } from '@/store/inspectionStore';
 import * as Haptics from 'expo-haptics';
 import { Card, Button } from '@/components/ui';
 import { DefectSeverity } from '@/constants/Enums';
-import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
 import { router } from 'expo-router';
@@ -47,7 +43,6 @@ interface AssetInspectModalProps {
   onSaveFail: (
     reason: string,
     notes: string,
-    photos: string[],
     severity?: DefectSeverity,
     defectCode?: string | null,
     quotePrice?: number | null,
@@ -63,7 +58,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
 
   const [defectReason,    setDefectReason]    = useState('');
   const [notes,           setNotes]           = useState('');
-  const [photos,          setPhotos]          = useState<string[]>([]);
   const [severity,        setSeverity]        = useState<DefectSeverity>(DefectSeverity.NonConformance);
   const [reasonError,     setReasonError]     = useState(false);
   const [pickerVisible,   setPickerVisible]   = useState(false);
@@ -74,7 +68,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
     if (visible && asset) {
       setDefectReason(asset.defect_reason || '');
       setNotes(asset.technician_notes || '');
-      setPhotos([...(asset.photos || [])]);
       setSeverity(DefectSeverity.NonConformance);
       setReasonError(false);
       setSelectedCode(null);
@@ -100,46 +93,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
     }
   };
 
-  const handleTakePhoto = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return;
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: false });
-    if (!result.canceled && result.assets.length > 0) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const sourceUri = result.assets[0].uri;
-      const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
-      const destUri = `${FileSystem.documentDirectory}${filename}`;
-      try {
-        await FileSystem.copyAsync({ from: sourceUri, to: destUri });
-        setPhotos(prev => [...prev, destUri]);
-      } catch (e) {
-        console.warn('Failed to copy image', e);
-        setPhotos(prev => [...prev, sourceUri]);
-      }
-    }
-  };
-
-  const handlePickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsMultipleSelection: true, selectionLimit: 5 });
-    if (!result.canceled) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const newPhotos: string[] = [];
-      for (const asset of result.assets) {
-        const sourceUri = asset.uri;
-        const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
-        const destUri = `${FileSystem.documentDirectory}${filename}`;
-        try {
-          await FileSystem.copyAsync({ from: sourceUri, to: destUri });
-          newPhotos.push(destUri);
-        } catch {
-          newPhotos.push(sourceUri);
-        }
-      }
-      setPhotos(prev => [...prev, ...newPhotos]);
-    }
-  };
 
   const handleSave = () => {
     if (!defectReason.trim()) {
@@ -151,7 +104,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
     onSaveFail(
       defectReason.trim(),
       notes.trim(),
-      photos,
       severity,
       selectedCode?.code ?? null,
       suggestedPrice,
@@ -169,7 +121,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
     onSaveFail(
       defectReason.trim(),
       notes.trim(),
-      photos,
       DefectSeverity.Critical,
       selectedCode?.code ?? null,
       suggestedPrice,
@@ -362,54 +313,6 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
               />
             </View>
 
-            {/* ── PHOTO EVIDENCE ─────────────────────────────── */}
-            <View style={s.formSection}>
-              <View style={s.photoHeaderRow}>
-                <Text style={[s.formLabel, { color: C.text }]}>Photo Evidence</Text>
-                <Text style={[s.photoBadge, { backgroundColor: C.backgroundTertiary, color: C.textSecondary }]}>
-                  {photos.length} / 5
-                </Text>
-              </View>
-              <Text style={[s.formHint, { color: C.textTertiary }]}>
-                Photos are required for Critical defects and strongly recommended for all others.
-              </Text>
-
-              <View style={s.photoGrid}>
-                <TouchableOpacity
-                  style={[s.addPhotoBtn, { borderColor: C.border, backgroundColor: C.surface }]}
-                  onPress={handleTakePhoto}
-                  activeOpacity={0.75}
-                >
-                  <MaterialCommunityIcons name="camera-plus-outline" size={24} color={C.primary} />
-                  <Text style={[s.addPhotoBtnTxt, { color: C.primary }]}>Camera</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[s.addPhotoBtn, { borderColor: C.border, backgroundColor: C.surface }]}
-                  onPress={handlePickPhoto}
-                  activeOpacity={0.75}
-                >
-                  <MaterialCommunityIcons name="image-plus" size={24} color={C.primary} />
-                  <Text style={[s.addPhotoBtnTxt, { color: C.primary }]}>Gallery</Text>
-                </TouchableOpacity>
-
-                {photos.map((uri, idx) => (
-                  <View key={idx} style={s.thumbWrap}>
-                    <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
-                    <TouchableOpacity
-                      style={[s.delPhotoBtn, { backgroundColor: C.error }]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setPhotos(p => p.filter((_, i) => i !== idx));
-                      }}
-                    >
-                      <MaterialCommunityIcons name="close" size={11} color={T.textOnPrimary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            </View>
-
             {/* ── ACTION BUTTONS MOVED TO BOTTOM BAR ───────────────── */}
             <View style={{ height: 16 }} />
           </ScrollView>
@@ -515,25 +418,6 @@ const s = StyleSheet.create({
     fontSize: 14, fontWeight: '500',
   },
   textArea: { minHeight: 80, paddingTop: 12, textAlignVertical: 'top' },
-
-  // Photos
-  photoHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  photoBadge:     { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  photoGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 2 },
-  addPhotoBtn:    {
-    width: 86, height: 86, borderRadius: 14,
-    borderWidth: 1, borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center', gap: 4,
-  },
-  addPhotoBtnTxt: { fontSize: 11, fontWeight: '700' },
-  thumbWrap:      { width: 86, height: 86, borderRadius: 14, overflow: 'visible' },
-  thumb:          { width: '100%', height: '100%', borderRadius: 14 },
-  delPhotoBtn:    {
-    position: 'absolute', top: -6, right: -6,
-    width: 22, height: 22, borderRadius: 11,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: T.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.25, shadowRadius: 2, elevation: 3,
-  },
 
   // Bottom action bar
   bottomBar: {

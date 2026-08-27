@@ -16,6 +16,8 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
 
@@ -76,9 +78,61 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 }) => {
   const C = useColors();
   const noMotion = useReducedMotion();
-  const { updateAssetResult, isSaving } = useInspectionStore();
+  const { updateAssetResult, addPhotoToAsset, isSaving } = useInspectionStore();
 
   const [showFailModal,  setShowFailModal]  = useState(false);
+  const [isAddingPhoto,  setIsAddingPhoto]  = useState(false);
+  const photoCount = asset.photos?.length ?? 0;
+
+  const savePickedPhoto = async (sourceUri: string) => {
+    const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
+    const destUri = `${FileSystem.documentDirectory}${filename}`;
+    try {
+      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+      addPhotoToAsset(asset.id, destUri);
+    } catch (e) {
+      console.warn('Failed to copy image', e);
+      addPhotoToAsset(asset.id, sourceUri);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return;
+    setIsAddingPhoto(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: false });
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await savePickedPhoto(result.assets[0].uri);
+      }
+    } finally {
+      setIsAddingPhoto(false);
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    setIsAddingPhoto(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsMultipleSelection: true, selectionLimit: 5 });
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        for (const a of result.assets) await savePickedPhoto(a.uri);
+      }
+    } finally {
+      setIsAddingPhoto(false);
+    }
+  };
+
+  const handleAddPhotoPress = () => {
+    Alert.alert('Add Photo', undefined, [
+      { text: 'Take Photo', onPress: handleTakePhoto },
+      { text: 'Choose from Gallery', onPress: handlePickPhoto },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const handleResult = (res: InspectionResult) => {
     if (res === InspectionResult.Pass) {
@@ -101,12 +155,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const handleSaveFail = (
     reason: string,
     notes: string,
-    photos: string[],
     severity?: DefectSeverity,
     defectCode?: string | null,
     quotePrice?: number | null,
   ) => {
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, reason, notes, photos, severity, defectCode, quotePrice);
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, reason, notes, undefined, severity, defectCode, quotePrice);
     setShowFailModal(false);
   };
 
@@ -233,6 +286,18 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               <Text style={[s.resultBtnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[s.photoBtn, photoCount > 0 ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
+            onPress={() => !isAddingPhoto && handleAddPhotoPress()}
+            activeOpacity={0.8}
+            disabled={isAddingPhoto}
+          >
+            <MaterialCommunityIcons name={photoCount > 0 ? 'camera-image' : 'camera-plus-outline'} size={16} color={photoCount > 0 ? C.successDark : C.textSecondary} />
+            <Text style={[s.photoBtnTxt, { color: photoCount > 0 ? C.successDark : C.textSecondary }]}>
+              {isAddingPhoto ? 'Adding…' : photoCount > 0 ? `${photoCount} Photo${photoCount !== 1 ? 's' : ''}` : 'Add Photo'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -945,6 +1010,8 @@ const s = StyleSheet.create({
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
+  photoBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 38, borderRadius: 14, borderWidth: 1, marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14 },
+  photoBtnTxt:  { fontSize: 13, fontWeight: '700' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },

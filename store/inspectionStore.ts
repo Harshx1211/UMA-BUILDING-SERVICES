@@ -458,16 +458,32 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       return;
     }
 
+    // If this asset currently has an open defect, link the photo to it too so
+    // it shows up with the defect (in-app and in the report), not just on the
+    // asset's own row.
+    const existingDefect = queryRecords<{ id: string; photos: string | null }>(
+      'defects', { job_id: currentJobId, asset_id: assetId },
+    )[0];
+
     usePhotosStore.getState().addPhoto({
       job_id: currentJobId,
       company_id: useAuthStore.getState().user?.company_id ?? null,
       asset_id: assetId,
-      defect_id: null,
+      defect_id: existingDefect?.id ?? null,
       photo_url: photoUri,
       local_uri: (photoUri.startsWith('file://') || photoUri.startsWith('content://')) ? photoUri : null,
       caption: null,
       uploaded_by: userId,
     });
+
+    if (existingDefect) {
+      let defectPhotos: string[] = [];
+      try { defectPhotos = existingDefect.photos ? JSON.parse(existingDefect.photos) : []; }
+      catch { defectPhotos = []; }
+      const updates = { photos: JSON.stringify([...defectPhotos, photoUri]) };
+      updateRecord('defects', existingDefect.id, updates);
+      addToSyncQueue('defects', existingDefect.id, SyncOperation.Update, updates);
+    }
 
     const newAssets = assets.map(a =>
       a.id === assetId ? { ...a, photos: [...a.photos, photoUri] } : a
