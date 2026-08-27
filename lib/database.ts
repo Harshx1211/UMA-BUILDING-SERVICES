@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 35;
+const CURRENT_SCHEMA_VERSION = 36;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -180,6 +180,7 @@ export function initializeSchema(): void {
       FOREIGN KEY (asset_id) REFERENCES assets(id),
       FOREIGN KEY (actioned_by) REFERENCES users(id)
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_job_assets_job_asset_unique ON job_assets(job_id, asset_id);
 
     CREATE TABLE IF NOT EXISTS defects (
       id          TEXT PRIMARY KEY NOT NULL,
@@ -1251,6 +1252,21 @@ export function initializeSchema(): void {
     }
     currentVersion = 35;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '35')`);
+  }
+
+  // Migration 36: job_assets uniqueness — one row per (job_id, asset_id), so
+  // two technicians can no longer end up with duplicate/contradictory rows
+  // for the same asset. Mirrors
+  // supabase/migrations/20260827010000_job_assets_unique_constraint.sql.
+  if (currentVersion < 36) {
+    try {
+      db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_assets_job_asset_unique ON job_assets(job_id, asset_id);`);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 36: added job_assets unique index');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 36 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 36;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '36')`);
   }
 
   // Seed inventory from Uptick defect codes on first run

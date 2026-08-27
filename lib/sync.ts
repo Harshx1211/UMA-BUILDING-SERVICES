@@ -12,6 +12,7 @@ import {
   getDeletedPhotoIds,
   getFailedSyncItems,
   getRecord,
+  deleteRecord,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
@@ -712,6 +713,44 @@ export async function _pushQueue(): Promise<void> {
         }
         const result = await supabase.from(item.table_name).insert(payload);
         error = result.error;
+
+        // ── job_assets conflict: two technicians both actioned the same
+        // never-before-touched asset while offline, so two devices each
+        // minted their own row for the same (job_id, asset_id). The
+        // job_assets_job_asset_unique constraint rejects the second INSERT
+        // with 23505 — resolve it here by policy ("whoever actually
+        // submitted later wins") instead of falling into the generic
+        // isDuplicate fast-path below, which would silently drop this
+        // device's result without ever applying it.
+        if (error?.code === '23505' && item.table_name === 'job_assets') {
+          const { data: existing } = await supabase
+            .from('job_assets')
+            .select('id, actioned_at')
+            .eq('job_id', payload.job_id as string)
+            .eq('asset_id', payload.asset_id as string)
+            .maybeSingle();
+
+          if (existing) {
+            const localTime = payload.actioned_at ? new Date(payload.actioned_at as string).getTime() : 0;
+            const serverTime = existing.actioned_at ? new Date(existing.actioned_at).getTime() : 0;
+            if (localTime > serverTime) {
+              const { id: _localId, ...updatePayload } = payload;
+              const updateResult = await supabase.from('job_assets').update(updatePayload).eq('id', existing.id);
+              if (updateResult.error) {
+                console.warn('[SiteTrack Sync] job_assets conflict resolution UPDATE failed:', updateResult.error.message);
+              } else if (__DEV__) {
+                console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: this device's later result applied to row ${existing.id}`);
+              }
+            } else if (__DEV__) {
+              console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: server row ${existing.id} is already the more recent result, discarding this device's older one`);
+            }
+            // This device's own locally-generated row is now an orphan either
+            // way — the canonical row lives at `existing.id`. Drop it locally;
+            // the next pull brings the canonical (winning) row down normally.
+            deleteRecord('job_assets', item.record_id);
+          }
+          error = null; // handled — don't fall through to the generic error path
+        }
       } else if (item.operation === SyncOperation.Update) {
         // FIX: Inject company_id for UPDATE operations too.
         // Although RLS on UPDATE typically filters on existing column values (not
@@ -721,11 +760,30 @@ export async function _pushQueue(): Promise<void> {
           const u = getRecord<{ company_id: string }>('users', _cachedUserId);
           if (u?.company_id) payload.company_id = u.company_id;
         }
-        const result = await supabase
-          .from(item.table_name)
-          .update(payload)
-          .eq('id', item.record_id);
-        error = result.error;
+
+        // ── job_assets: guard the update so a stale, later-syncing result can
+        // never overwrite a genuinely more recent one server-side ("whoever
+        // actually submitted later wins", not "whoever's device synced
+        // last"). Every job_assets write sets actioned_at, so this only
+        // falls back to a plain update in the unexpected case it's missing.
+        if (item.table_name === 'job_assets' && payload.actioned_at) {
+          const result = await supabase
+            .from('job_assets')
+            .update(payload)
+            .eq('id', item.record_id)
+            .lt('actioned_at', payload.actioned_at as string)
+            .select('id');
+          error = result.error;
+          if (!error && (result.data?.length ?? 0) === 0 && __DEV__) {
+            console.log(`[SiteTrack Sync] job_assets update for ${item.record_id} skipped — server already has an equal-or-later result`);
+          }
+        } else {
+          const result = await supabase
+            .from(item.table_name)
+            .update(payload)
+            .eq('id', item.record_id);
+          error = result.error;
+        }
       } else if (item.operation === SyncOperation.Delete) {
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
         if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
