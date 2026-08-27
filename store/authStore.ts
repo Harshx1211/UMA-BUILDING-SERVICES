@@ -40,7 +40,8 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
-  signOut: () => Promise<void>;
+  /** Returns false (and leaves the session intact) if unsynced work couldn't be flushed first. */
+  signOut: () => Promise<boolean>;
   forceFinalSyncAndSignOut: () => Promise<void>;
   restoreSession: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
@@ -181,15 +182,47 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     set({ isLoading: true });
     try {
       stopSync();
+
+      // FIX: signOut() used to wipe the local database unconditionally, even
+      // with unsynced work still queued (offline inspection results, photos,
+      // defects) — silently destroying it, despite the sign-out confirmation
+      // dialog promising "unsynced changes will sync next time you log in."
+      // Attempt a bounded final flush first, same retry shape as
+      // forceFinalSyncAndSignOut, and abort the sign-out (keep the session)
+      // if it still can't get everything up.
+      let pending = getPendingSyncItems();
+      if (pending.length > 0) {
+        const { processPhotoQueue } = await import('@/lib/photoUpload');
+        const { _pushQueue } = await import('@/lib/sync');
+        const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
+
+        for (let i = 0; i < 5; i++) {
+          await processPhotoQueue(currentUserId);
+          await _pushQueue();
+          pending = getPendingSyncItems();
+          if (pending.length === 0) break;
+          await new Promise(r => setTimeout(r, (i + 1) * 1000));
+        }
+
+        if (pending.length > 0) {
+          console.warn(`[AuthStore] signOut: ${pending.length} item(s) still unsynced — aborting to prevent data loss.`);
+          set({ isLoading: false });
+          const rn = await import('react-native');
+          rn.Alert.alert(
+            'Unsynced Work',
+            'You have offline work that hasn\'t reached the server yet. Connect to Wi-Fi or mobile data and try again so it isn\'t lost.',
+            [{ text: 'OK' }]
+          );
+          return false;
+        }
+      }
+
       await supabaseSignOut();
       // Security: clear ALL session data including cached profile.
       // Without USER_PROFILE_KEY removal, signing in as a different user
       // via biometrics would restore the previous user's profile.
       await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY, COMPANY_CACHE_KEY]);
       clearDatabase();
-    } catch (err) {
-      console.error('[AuthStore] signOut error:', err);
-    } finally {
       set({
         user: null,
         session: null,
@@ -198,6 +231,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isForceSyncing: false,
         error: null,
       });
+      return true;
+    } catch (err) {
+      console.error('[AuthStore] signOut error:', err);
+      set({ isLoading: false });
+      return false;
     }
   },
 

@@ -378,7 +378,10 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   if (techUser) {
     if (techUser.is_active === false) {
       console.warn('[UMA BUILDING SERVICES Sync] User deactivated. Forcing logout.');
-      import('@/store/authStore').then((m) => m.useAuthStore.getState().signOut());
+      // Use forceFinalSyncAndSignOut, not signOut directly — this flushes any
+      // offline work first (and aborts the logout with a warning if it can't),
+      // rather than risking a deactivated tech's queued inspection data.
+      import('@/store/authStore').then((m) => m.useAuthStore.getState().forceFinalSyncAndSignOut());
       return;
     }
     if (techUser.company_id) {
@@ -386,7 +389,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       if (company) {
         if (company.subscription_status !== 'active') {
           console.warn('[UMA BUILDING SERVICES Sync] Company suspended. Forcing logout.');
-          import('@/store/authStore').then((m) => m.useAuthStore.getState().signOut());
+          import('@/store/authStore').then((m) => m.useAuthStore.getState().forceFinalSyncAndSignOut());
           return;
         }
         // Save company locally so PDFs have proper headers (name, ABN, etc.)

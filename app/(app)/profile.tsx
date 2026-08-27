@@ -30,6 +30,7 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [editForm, setEditForm] = useState({
     phone: user?.phone || '',
   });
@@ -39,7 +40,7 @@ export default function ProfileScreen() {
   function _confirmLogout() {
     Alert.alert(
       'Sign Out',
-      'Are you sure you want to sign out? Any unsynced changes will sync next time you log in.',
+      'Are you sure you want to sign out? Any unsynced changes will be uploaded first.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -47,8 +48,10 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             stopSync();
-            await signOut();
-            router.replace('/(auth)/login');
+            setIsSigningOut(true);
+            const success = await signOut();
+            setIsSigningOut(false);
+            if (success) router.replace('/(auth)/login');
           },
         },
       ]
@@ -166,8 +169,17 @@ export default function ProfileScreen() {
         </View>
 
         {/* Sign out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={_confirmLogout} activeOpacity={0.85}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+        <TouchableOpacity
+          style={[styles.signOutBtn, isSigningOut && { opacity: 0.6 }]}
+          onPress={_confirmLogout}
+          activeOpacity={0.85}
+          disabled={isSigningOut}
+        >
+          {isSigningOut ? (
+            <ActivityIndicator color={T.danger} size="small" />
+          ) : (
+            <Text style={styles.signOutText}>Sign Out</Text>
+          )}
         </TouchableOpacity>
 
         {/* Retry failed syncs — only visible when there are permanently-failed items */}
