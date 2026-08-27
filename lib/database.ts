@@ -2323,6 +2323,33 @@ export function getUnreadNotificationCount(userId: string): number {
 }
 
 /**
+ * Counts properties (among this technician's own jobs) whose next_inspection_date
+ * has already passed. The data has always been there (properties/[id].tsx already
+ * computes this per-property) — this just makes it visible before the tech opens
+ * that specific property.
+ */
+export function getOverdueCompliancePropertyCount(userId: string, todayStr: string): number {
+  try {
+    const db = openDatabase();
+    const res = db.getFirstSync<{ count: number }>(
+      `SELECT COUNT(DISTINCT p.id) as count
+       FROM properties p
+       WHERE p.next_inspection_date IS NOT NULL
+         AND p.next_inspection_date < ?
+         AND EXISTS (
+           SELECT 1 FROM jobs j
+           WHERE j.property_id = p.id
+             AND (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
+         )`,
+      [todayStr, userId, userId],
+    );
+    return res?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Robustly wipes all tenant-specific local data from the SQLite database.
  * Called securely upon signOut to ensure data does not leak between sessions.
  */

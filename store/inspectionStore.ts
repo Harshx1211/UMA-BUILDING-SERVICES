@@ -387,6 +387,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           const updates: Record<string, string | number | null> = {
             description: defectReason,
             severity: severity ?? DefectSeverity.NonCritical,
+            updated_at: new Date().toISOString(),
           };
 
           // Replace defect.photos with the COMPLETE current desired set.

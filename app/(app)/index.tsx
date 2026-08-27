@@ -20,7 +20,7 @@ import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
-import { getUnreadNotificationCount } from '@/lib/database';
+import { getUnreadNotificationCount, getOverdueCompliancePropertyCount } from '@/lib/database';
 import { T } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { JobStatus } from '@/constants/Enums';
@@ -146,6 +146,7 @@ export default function HomeScreen() {
   const { jobs, loadJobs, isLoading } = useJobsStore();
   const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [overdueCount, setOverdueCount] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // FIX: Use localDateString() instead of toISOString().slice(0,10).
@@ -163,12 +164,14 @@ export default function HomeScreen() {
     if (user) {
       loadJobs(user.id);
       setUnreadCount(getUnreadNotificationCount(user.id));
+      setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
     }
 
     const onSync = () => {
       if (user) {
         loadJobs(user.id);
         setUnreadCount(getUnreadNotificationCount(user.id));
+        setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
       }
     };
     onSyncComplete(onSync);
@@ -188,7 +191,7 @@ export default function HomeScreen() {
       // "Can't perform a React state update on an unmounted component" warning.
       pulseAnimation.stop();
     };
-  }, [user, loadJobs, pulseAnim]);
+  }, [user, loadJobs, pulseAnim, today]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -255,6 +258,16 @@ export default function HomeScreen() {
               </View>
             </Card>
           </Animated.View>
+        )}
+
+        {/* ── Overdue Compliance Banner ── */}
+        {overdueCount > 0 && (
+          <View style={[styles.overdueBanner, { marginBottom: T.space16 }]}>
+            <MaterialCommunityIcons name="calendar-alert-outline" size={18} color={T.danger} />
+            <Text style={styles.overdueText}>
+              {overdueCount} propert{overdueCount === 1 ? 'y is' : 'ies are'} overdue for inspection
+            </Text>
+          </View>
         )}
 
         {/* ── KPI Stat Tiles ── */}
@@ -394,6 +407,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: T.primary,
+  },
+
+  // Overdue compliance banner
+  overdueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: T.space8,
+    backgroundColor: T.iconBg(T.danger),
+    borderRadius: T.radiusCard,
+    paddingVertical: T.space12,
+    paddingHorizontal: T.space16,
+  },
+  overdueText: {
+    ...Typography.body,
+    color: T.danger,
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
   },
 
   // KPI strip

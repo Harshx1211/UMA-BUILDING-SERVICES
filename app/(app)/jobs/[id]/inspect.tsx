@@ -605,7 +605,7 @@ export default function AssetInspectionScreen() {
               }
 
               // 3. Soft-delete the asset by setting status = decommissioned
-              const payload = { status: AssetStatus.Decommissioned };
+              const payload = { status: AssetStatus.Decommissioned, updated_at: new Date().toISOString() };
               updateRecord('assets', assetToDelete.id, payload);
               addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
 

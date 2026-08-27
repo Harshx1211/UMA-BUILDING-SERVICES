@@ -778,6 +778,25 @@ export async function _pushQueue(): Promise<void> {
           if (!error && (result.data?.length ?? 0) === 0 && __DEV__) {
             console.log(`[SiteTrack Sync] job_assets update for ${item.record_id} skipped — server already has an equal-or-later result`);
           }
+        } else if (
+          (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
+          payload.updated_at
+        ) {
+          // Same policy as job_assets, generalised: a stale, later-syncing edit
+          // must never overwrite a genuinely more recent one already on the
+          // server — "whoever actually edited later wins," not "whoever's
+          // device happened to sync last." Matters most for jobs/defects since
+          // multiple crew members (job_technicians) can share one job offline.
+          const result = await supabase
+            .from(item.table_name)
+            .update(payload)
+            .eq('id', item.record_id)
+            .lt('updated_at', payload.updated_at as string)
+            .select('id');
+          error = result.error;
+          if (!error && (result.data?.length ?? 0) === 0 && __DEV__) {
+            console.log(`[SiteTrack Sync] ${item.table_name} update for ${item.record_id} skipped — server already has an equal-or-later edit`);
+          }
         } else {
           const result = await supabase
             .from(item.table_name)
@@ -912,6 +931,12 @@ export async function _pushQueue(): Promise<void> {
             error = retry.error;
           } else if (item.table_name === 'job_assets' && payload.actioned_at) {
             const retry = await supabase.from('job_assets').update(payload).eq('id', item.record_id).lt('actioned_at', payload.actioned_at as string).select('id');
+            error = retry.error;
+          } else if (
+            (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
+            payload.updated_at
+          ) {
+            const retry = await supabase.from(item.table_name).update(payload).eq('id', item.record_id).lt('updated_at', payload.updated_at as string).select('id');
             error = retry.error;
           } else {
             const retry = await supabase.from(item.table_name).update(payload).eq('id', item.record_id);

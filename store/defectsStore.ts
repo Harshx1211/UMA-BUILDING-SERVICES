@@ -170,6 +170,7 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
           ? { photos: JSON.stringify(updates.photos) }
           : {}),
         company_id: companyId,
+        updated_at: new Date().toISOString(),
       };
 
       updateRecord('defects', defectId, dbUpdates);

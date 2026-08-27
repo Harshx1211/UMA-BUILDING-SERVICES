@@ -102,6 +102,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
         asset_ref: assetRef.trim() || null,
         serial_number: serialNumber.trim() || null,
         description: notes.trim() || null,
+        updated_at: new Date().toISOString(),
       };
 
       updateRecord('assets', asset.id, payload);
