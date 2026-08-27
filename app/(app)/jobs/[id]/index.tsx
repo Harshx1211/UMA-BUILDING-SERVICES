@@ -388,6 +388,12 @@ export default function JobDetailScreen() {
       subtitle: [job.property_address, job.property_suburb].filter(Boolean).join(', ') || undefined,
       onPress: handleNavigate,
     },
+    {
+      key: 'checklist-guide', icon: 'clipboard-text-search-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+      title: 'Inspection Checklist Guide',
+      subtitle: 'What to check, by asset type',
+      onPress: () => router.push('/help' as never),
+    },
     ...(job.site_contact_phone ? [{
       key: 'call', icon: 'phone-in-talk' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: job.site_contact_name || 'Call Site Contact',

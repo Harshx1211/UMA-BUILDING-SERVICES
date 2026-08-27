@@ -19,8 +19,6 @@ import * as Haptics from 'expo-haptics';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
 
-import ChecklistModal from '@/components/inspections/ChecklistModal';
-import { COMPLIANCE_CHECKLISTS, GENERIC_CHECKLIST } from '@/constants/Checklists';
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
@@ -81,27 +79,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const { updateAssetResult, isSaving } = useInspectionStore();
 
   const [showFailModal,  setShowFailModal]  = useState(false);
-  const [showChecklist,  setShowChecklist]  = useState(false);
-
-  const checklistItems = useMemo(() =>
-    COMPLIANCE_CHECKLISTS[asset.asset_type] || GENERIC_CHECKLIST
-  , [asset.asset_type]);
-
-  const parsedChecklist = useMemo(() => {
-    try { return asset.checklist_data ? JSON.parse(asset.checklist_data) : null; }
-    catch { return null; }
-  }, [asset.checklist_data]);
-
-  const handleSaveChecklist = (data: Record<string, unknown>, isCompliant: boolean) => {
-    setShowChecklist(false);
-    if (isCompliant) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      updateAssetResult(asset.id, InspectionResult.Pass, JSON.stringify(data), true, undefined, asset.technician_notes || '');
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setShowFailModal(true);
-    }
-  };
 
   const handleResult = (res: InspectionResult) => {
     if (res === InspectionResult.Pass) {
@@ -256,29 +233,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               <Text style={[s.resultBtnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={[s.checklistBtn, asset.checklist_data ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-            onPress={() => setShowChecklist(true)}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons name={asset.checklist_data ? 'clipboard-check' : 'clipboard-check-outline'} size={16} color={asset.checklist_data ? C.successDark : C.textSecondary} />
-            <Text style={[s.checklistBtnTxt, { color: asset.checklist_data ? C.successDark : C.textSecondary }]}>
-              {asset.checklist_data ? 'Checklist Complete' : 'Run Compliance Checklist'}
-            </Text>
-            {!asset.checklist_data && <MaterialCommunityIcons name="chevron-right" size={14} color={C.textTertiary} />}
-          </TouchableOpacity>
         </View>
       </View>
 
-      <ChecklistModal
-        visible={showChecklist}
-        assetType={asset.asset_type}
-        items={checklistItems}
-        initialData={parsedChecklist}
-        onSave={handleSaveChecklist}
-        onCancel={() => setShowChecklist(false)}
-      />
       <AssetInspectModal
         visible={showFailModal}
         asset={asset}
@@ -988,8 +945,6 @@ const s = StyleSheet.create({
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
-  checklistBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 42, borderRadius: 14, borderWidth: 1, marginTop: 12 },
-  checklistBtnTxt: { fontSize: 14, fontWeight: '700' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },

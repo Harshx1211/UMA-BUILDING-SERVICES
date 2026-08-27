@@ -2,9 +2,9 @@
  * Checklists.ts — Compliance checklist definitions for all 9 official fire safety asset types.
  * Keys MUST exactly match the `value` field in AssetData.ts ASSET_TYPES.
  *
- * Each checklist is used by ChecklistModal during an inspection.
- * When a checklist is completed and all items pass → asset result = Pass.
- * If any item fails → technician is prompted to log a defect.
+ * Reference-only content, shown as a static guide on the Help screen (What to
+ * check per asset type). Not tied to individual asset results — Pass/Fail/Not
+ * Tested is set directly on each asset in the inspection form.
  */
 
 export interface ChecklistItem {

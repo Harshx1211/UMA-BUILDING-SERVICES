@@ -20,6 +20,8 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { Card, ScreenHeader, SectionHeader, Button } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
+import { COMPLIANCE_CHECKLISTS, GENERIC_CHECKLIST, ChecklistItem } from '@/constants/Checklists';
+import { ASSET_TYPE_MAP } from '@/constants/AssetData';
 
 // ─── Types ───────────────────────────────────
 interface AccordionItem {
@@ -215,6 +217,37 @@ const FAQ_ITEMS: { item: AccordionItem; icon: MCIconName }[] = [
   { icon: 'lightning-bolt', item: { id: 'faq8', title: 'The app seems slow — what should I do?', content: 'Try force-closing and reopening the app. Make sure you\'re running the latest version. If the jobs list is slow, try the "Force Sync" in Profile to refresh your local database. If problems persist, send feedback using the button below.' } },
 ];
 
+// ─── What-to-check reference guide, by asset type ────────────
+// Reference only — doesn't set Pass/Fail, that's done directly on each asset
+// in the inspection form. This is here for anyone unsure what to look for.
+function formatChecklistContent(items: ChecklistItem[]): string {
+  return items
+    .map((it, i) => {
+      const line = `${i + 1}. ${it.question}`;
+      return it.hint ? `${line}\n   ${it.hint}` : line;
+    })
+    .join('\n');
+}
+
+const CHECKLIST_GUIDE: { item: AccordionItem; icon: MCIconName }[] = [
+  ...Object.entries(COMPLIANCE_CHECKLISTS).map(([assetType, items]) => ({
+    icon: (ASSET_TYPE_MAP[assetType]?.icon ?? 'shield-check-outline') as MCIconName,
+    item: {
+      id: `check-${assetType}`,
+      title: ASSET_TYPE_MAP[assetType]?.fullLabel ?? assetType,
+      content: formatChecklistContent(items),
+    },
+  })),
+  {
+    icon: 'shield-check-outline',
+    item: {
+      id: 'check-generic',
+      title: 'Other / unlisted asset types',
+      content: formatChecklistContent(GENERIC_CHECKLIST),
+    },
+  },
+];
+
 // ─── Main Screen ─────────────────────────────
 export default function HelpScreen() {
   const C = useColors();
@@ -263,6 +296,18 @@ export default function HelpScreen() {
         <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(350)} style={s.section}>
           <SectionHeader title="How to use SiteTrack" eyebrow />
           {HOW_TO.map(({ item, icon }) => (
+            <AccordionCard key={item.id} item={item} icon={icon} />
+          ))}
+        </Reanimated.View>
+
+        {/* ── What to check, by asset type (reference only — doesn't set Pass/Fail) ── */}
+        <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(105).duration(350)} style={s.section}>
+          <SectionHeader title="What to check — by asset type" eyebrow />
+          <Text style={[s.guideIntro, { color: C.textSecondary }]}>
+            A quick reference for what to look for on each asset type. This doesn&apos;t affect Pass/Fail —
+            those are still set directly on each asset in the inspection form.
+          </Text>
+          {CHECKLIST_GUIDE.map(({ item, icon }) => (
             <AccordionCard key={item.id} item={item} icon={icon} />
           ))}
         </Reanimated.View>
@@ -332,4 +377,5 @@ const s = StyleSheet.create({
   versionApp:  { fontSize: 13, fontWeight: '700' },
   versionNum:  { fontSize: 11, marginTop: 2 },
   legalNote:   { fontSize: 11, textAlign: 'center', lineHeight: 16, paddingHorizontal: 8 },
+  guideIntro:  { fontSize: 13, lineHeight: 19, marginBottom: 12 },
 });
