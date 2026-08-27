@@ -598,15 +598,16 @@ export default function AssetInspectionScreen() {
     );
   }, [jobId, store]);
 
+  // Bulk-marking a whole unit only ever makes sense for "couldn't access it" —
+  // Pass/Fail require actually inspecting each asset individually, so Not
+  // Tested is the only option here, not a 3-way choice.
   const handleBulkMark = useCallback((label: string, assetIds: string[]) => {
     Alert.alert(
-      `Mark "${label}" As`,
-      `Applies to all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in this location.`,
+      'No Access',
+      `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Passed', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.Pass)) },
-        { text: 'Failed', style: 'destructive', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.Fail)) },
-        { text: 'Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
+        { text: 'Mark Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
       ]
     );
   }, [store]);
@@ -623,8 +624,8 @@ export default function AssetInspectionScreen() {
               hitSlop={8}
               style={[s.routineHeaderAction, { borderColor: C.primary, backgroundColor: C.primary + '15' }]}
             >
-              <MaterialCommunityIcons name="checkbox-multiple-marked-outline" size={14} color={C.primary} />
-              <Text style={[s.routineHeaderActionTxt, { color: C.primary }]}>Mark Unit</Text>
+              <MaterialCommunityIcons name="lock-outline" size={14} color={C.primary} />
+              <Text style={[s.routineHeaderActionTxt, { color: C.primary }]}>No Access</Text>
             </TouchableOpacity>
           )}
         </View>

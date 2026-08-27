@@ -140,8 +140,12 @@ export default function InspectionFilterModal({
           <View style={[s.divider, { backgroundColor: C.border }]} />
 
           {availableCategories.length > 0 && current && (
-            <>
-              <View style={s.categoryTabRow}>
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <MaterialCommunityIcons name="filter-variant" size={15} color={C.textTertiary} />
+                <Text style={[s.sectionLabel, { color: C.textSecondary }]}>Filter By</Text>
+              </View>
+              <View style={[s.categoryTabRow, { borderBottomColor: C.border }]}>
                 {availableCategories.map(cat => {
                   const active = cat.key === currentKey;
                   const hasFilter = categoryData[cat.key].value !== categoryData[cat.key].options[0];
@@ -149,19 +153,19 @@ export default function InspectionFilterModal({
                     <TouchableOpacity
                       key={cat.key}
                       onPress={() => setActiveCategory(cat.key)}
-                      style={[s.categoryTab, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
+                      style={[s.categoryTab, active && { borderBottomColor: C.primary }]}
                     >
-                      <MaterialCommunityIcons name={cat.icon} size={13} color={active ? '#fff' : C.textTertiary} />
-                      <Text style={[s.categoryTabTxt, { color: active ? '#fff' : C.textSecondary }]}>{cat.label}</Text>
-                      {hasFilter && <View style={[s.categoryDot, { backgroundColor: active ? '#fff' : C.primary }]} />}
+                      <MaterialCommunityIcons name={cat.icon} size={14} color={active ? C.primary : C.textTertiary} />
+                      <Text style={[s.categoryTabTxt, { color: active ? C.primary : C.textSecondary, fontWeight: active ? '800' : '600' }]}>{cat.label}</Text>
+                      {hasFilter && <View style={[s.categoryDot, { backgroundColor: C.primary }]} />}
                     </TouchableOpacity>
                   );
                 })}
               </View>
-              <View style={[s.chipWrap, { marginBottom: 22 }]}>
+              <View style={s.chipWrap}>
                 {chipsFor(current.options, current.value, current.onChange, currentKey === 'location' ? formatLocationCode : undefined)}
               </View>
-            </>
+            </View>
           )}
 
           <View style={[s.divider, { backgroundColor: C.border }]} />
@@ -248,9 +252,9 @@ const s = StyleSheet.create({
     borderRadius: 999, borderWidth: 1,
   },
   chipText: { fontSize: 13, fontWeight: '600' },
-  categoryTabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  categoryTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
-  categoryTabTxt: { fontSize: 12, fontWeight: '700' },
+  categoryTabRow: { flexDirection: 'row', flexWrap: 'wrap', borderBottomWidth: 1, marginBottom: 14 },
+  categoryTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingBottom: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  categoryTabTxt: { fontSize: 13 },
   categoryDot: { width: 5, height: 5, borderRadius: 3 },
   divider: { height: 1, marginBottom: 22 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

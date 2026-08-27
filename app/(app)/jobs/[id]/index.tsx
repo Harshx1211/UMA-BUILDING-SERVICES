@@ -530,9 +530,13 @@ export default function JobDetailScreen() {
                 <TouchableOpacity
                   onPress={isInProgress ? () => router.push(`/jobs/${id}/inspect` as never) : handleContinueWorking}
                   activeOpacity={0.7}
-                  style={[s.inspectRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+                  style={[
+                    s.inspectRow,
+                    { borderTopWidth: 1, borderTopColor: C.border },
+                    isInProgress && { backgroundColor: C.primary + '0D' },
+                  ]}
                 >
-                  <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '18' : C.backgroundTertiary }]}>
+                  <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '20' : C.backgroundTertiary }]}>
                     <MaterialCommunityIcons
                       name={isInProgress ? 'clipboard-check' : 'lock-open-outline'}
                       size={22}
@@ -540,7 +544,7 @@ export default function JobDetailScreen() {
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[s.inspectCtaTitle, { color: C.text }]}>
+                    <Text style={[s.inspectCtaTitle, { color: isInProgress ? C.primary : C.text }]}>
                       {isCompleted ? 'Re-open inspection' : 'Open inspection form'}
                     </Text>
                     <Text style={[s.inspectCtaSub, { color: C.textSecondary }]}>
@@ -553,17 +557,18 @@ export default function JobDetailScreen() {
                         : 'Tap here to unlock and edit the form'}
                     </Text>
                   </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={isInProgress ? C.primary : C.textTertiary} />
+                  <View style={[s.inspectChevronWrap, isInProgress && { backgroundColor: C.primary }]}>
+                    <MaterialCommunityIcons name="chevron-right" size={18} color={isInProgress ? C.textOnPrimary : C.textTertiary} />
+                  </View>
                 </TouchableOpacity>
 
                 {isInProgress && (
                   <TouchableOpacity
                     onPress={handleCompleteRequest}
-                    activeOpacity={0.7}
+                    activeOpacity={0.6}
                     style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
                   >
-                    <MaterialCommunityIcons name="check-circle-outline" size={17} color={C.textSecondary} />
-                    <Text style={[s.completeRowTxt, { color: C.textSecondary }]}>Mark Job Complete</Text>
+                    <Text style={[s.completeRowTxt, { color: C.textTertiary }]}>Mark Job Complete</Text>
                   </TouchableOpacity>
                 )}
               </Card>
@@ -870,9 +875,10 @@ const s = StyleSheet.create({
   progressStatTxt: { fontSize: 12, fontWeight: '600' },
 
   inspectRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  completeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13 },
-  completeRowTxt: { fontSize: 13, fontWeight: '700' },
+  completeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
+  completeRowTxt: { fontSize: 13, fontWeight: '600' },
   inspectCtaIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  inspectChevronWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   inspectCtaTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
   inspectCtaSub: { fontSize: 13, fontWeight: '500' },
 
