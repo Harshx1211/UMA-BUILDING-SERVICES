@@ -45,6 +45,28 @@ function assetIconName(type: string): React.ComponentProps<typeof MaterialCommun
   return getAssetTypeIcon(type);
 }
 
+// Natural sort for location codes ("1-1-1", "1-1-2", ... "1-1-10") so unit
+// numbers order the way a person walking the site would expect, instead of
+// lexicographically (which would put "1-1-10" between "1-1-1" and "1-1-2").
+function compareLocationKeys(a: string, b: string): number {
+  const partsA = a.split('-');
+  const partsB = b.split('-');
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    const pa = partsA[i] ?? '';
+    const pb = partsB[i] ?? '';
+    const na = Number(pa);
+    const nb = Number(pb);
+    if (pa !== '' && pb !== '' && !Number.isNaN(na) && !Number.isNaN(nb)) {
+      if (na !== nb) return na - nb;
+    } else {
+      const cmp = pa.localeCompare(pb);
+      if (cmp !== 0) return cmp;
+    }
+  }
+  return 0;
+}
+
 const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }: {
   asset: AssetWithResult;
   index: number;
@@ -289,7 +311,7 @@ export default function AssetInspectionScreen() {
   const [assetTypeFilter, setAssetTypeFilter] = useState<string>(ALL);
   const [tagFilter, setTagFilter]             = useState<string>(ALL);
   const [locationFilter, setLocationFilter]   = useState<string>(ALL);
-  const [groupBy, setGroupBy]                 = useState<GroupBy>('asset');
+  const [groupBy, setGroupBy]                 = useState<GroupBy>('location');
   const [sortBy, setSortBy]                   = useState<SortBy>('label');
   const [sortAsc, setSortAsc]                 = useState(true);
   const [allTags, setAllTags]                 = useState<AssetTagRow[]>([]);
@@ -394,7 +416,7 @@ export default function AssetInspectionScreen() {
   const locationOptions = useMemo(() => {
     const set = new Set<string>();
     for (const a of store.assets) if (a.location_on_site) set.add(a.location_on_site);
-    return [ALL, ...Array.from(set).sort()];
+    return [ALL, ...Array.from(set).sort(compareLocationKeys)];
   }, [store.assets]);
 
   const activeFilterCount = [filter, routineFilter, assetTypeFilter, tagFilter, locationFilter].filter(v => v !== ALL).length;
@@ -402,7 +424,7 @@ export default function AssetInspectionScreen() {
   const resetFilters = () => {
     setFilter(ALL);
     setRoutineFilter(ALL); setAssetTypeFilter(ALL); setTagFilter(ALL); setLocationFilter(ALL);
-    setGroupBy('asset'); setSortBy('label'); setSortAsc(true);
+    setGroupBy('location'); setSortBy('label'); setSortAsc(true);
   };
 
   const filteredAssets = useMemo(() => {
@@ -432,7 +454,7 @@ export default function AssetInspectionScreen() {
 
     list = [...list].sort((a, b) => {
       const cmp = sortBy === 'location'
-        ? (a.location_on_site ?? '').localeCompare(b.location_on_site ?? '')
+        ? compareLocationKeys(a.location_on_site ?? '', b.location_on_site ?? '')
         : formatAssetType(a.asset_type).localeCompare(formatAssetType(b.asset_type)) || (a.asset_ref ?? '').localeCompare(b.asset_ref ?? '');
       return sortAsc ? cmp : -cmp;
     });
@@ -455,8 +477,11 @@ export default function AssetInspectionScreen() {
       list.push(asset);
       buckets.set(key, list);
     }
+    const sortedKeys = groupBy === 'location'
+      ? [...buckets.keys()].sort(compareLocationKeys)
+      : [...buckets.keys()].sort();
     const rows: ListRow[] = [];
-    for (const key of [...buckets.keys()].sort()) {
+    for (const key of sortedKeys) {
       const items = buckets.get(key)!;
       const label = groupBy === 'location' ? formatLocationCode(key) : key;
       rows.push({ kind: 'header', label, count: items.length, assetIds: items.map(a => a.id) });
