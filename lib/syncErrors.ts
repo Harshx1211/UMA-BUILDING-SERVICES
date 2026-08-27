@@ -5,7 +5,6 @@
 
 /** Postgres SQLSTATE codes that mean "this will never succeed by retrying" */
 const TERMINAL_PG_CODES = new Set([
-  '23503', // foreign_key_violation — referenced row doesn't exist
   '23502', // not_null_violation — required field missing
   '23514', // check_violation — value fails a CHECK constraint
   '42501', // insufficient_privilege — RLS/permission denial
@@ -13,6 +12,15 @@ const TERMINAL_PG_CODES = new Set([
   '42703', // undefined_column
   '42P01', // undefined_table
 ]);
+
+// 23503 (foreign_key_violation) is deliberately NOT terminal here. In this
+// offline-first queue, related rows are pushed in the same or a nearby
+// cycle (e.g. a new asset's own insert alongside a job_assets row that
+// references it) — a FK violation very often just means the parent row
+// hasn't finished syncing yet, not that the data is invalid. Treating it as
+// retryable lets it succeed once the parent lands on a later cycle; a
+// genuinely-orphaned row still gets abandoned once MAX_SYNC_RETRIES is hit,
+// same as any other retryable failure.
 
 /** Postgres SQLSTATE for unique_violation — see classifySyncError() doc below */
 const DUPLICATE_PG_CODE = '23505';
