@@ -17,3 +17,7 @@ export const LAST_SYNCED_KEY = '@sitetrack/last_synced';
 
 /** AsyncStorage key for the authenticated user session */
 export const SESSION_KEY = '@sitetrack/session';
+
+/** Supabase Storage bucket names — must match services/report-generator/src/config.ts */
+export const PHOTO_BUCKET = 'job-photos';
+export const REPORT_BUCKET = 'job-reports';

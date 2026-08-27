@@ -29,6 +29,7 @@ import {
   getPendingSyncItems,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
+import { REPORT_BUCKET } from '@/constants/Config';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 
@@ -100,7 +101,7 @@ export async function getOrRefreshReportUrl(jobId: string): Promise<string | nul
 
   // It's a raw storage path — generate a fresh signed URL
   const { data, error } = await supabase.storage
-    .from('job-reports')
+    .from(REPORT_BUCKET)
     .createSignedUrl(stored, 60 * 60); // 1-hour TTL
 
   if (error || !data?.signedUrl) {

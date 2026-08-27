@@ -24,6 +24,7 @@ import {
   queryRecords,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
+import { PHOTO_BUCKET } from '@/constants/Config';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 
@@ -67,7 +68,7 @@ export async function uploadPhoto(
       throw new Error('[PhotoUpload] EXPO_PUBLIC_SUPABASE_URL is not set');
     }
 
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/job-photos/${filePath}`;
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${PHOTO_BUCKET}/${filePath}`;
 
     // PUT is required for Supabase Storage binary upserts — POST returns 405
     const uploadResult = await FileSystem.uploadAsync(uploadUrl, resolvedUri, {
@@ -88,7 +89,7 @@ export async function uploadPhoto(
     }
 
     const { data: { publicUrl } } = supabase.storage
-      .from('job-photos')
+      .from(PHOTO_BUCKET)
       .getPublicUrl(filePath);
 
     return publicUrl;
@@ -289,21 +290,27 @@ export async function cleanupLocalPhotos(): Promise<void> {
     const toClean = uploaded.filter(r => eligibleJobIds.has(r.job_id));
     let deletedCount = 0;
 
-    for (const photo of toClean) {
-      try {
-        const localPath = getValidLocalUri(photo.local_uri);
-        const info = await FileSystem.getInfoAsync(localPath);
-        if (info.exists) {
-          await FileSystem.deleteAsync(localPath, { idempotent: true });
-          deletedCount++;
+    // Delete in small concurrent batches rather than one file at a time —
+    // on large sites (1000+ photos) a sequential loop here delays the end
+    // of every sync cycle. Uses the same concurrency as photo uploads.
+    for (let i = 0; i < toClean.length; i += UPLOAD_CONCURRENCY) {
+      const batch = toClean.slice(i, i + UPLOAD_CONCURRENCY);
+      await Promise.all(batch.map(async (photo) => {
+        try {
+          const localPath = getValidLocalUri(photo.local_uri);
+          const info = await FileSystem.getInfoAsync(localPath);
+          if (info.exists) {
+            await FileSystem.deleteAsync(localPath, { idempotent: true });
+            deletedCount++;
+          }
+        } catch (e) {
+          // File already gone or path invalid — not a problem, just clear the column
+          if (__DEV__) console.warn(`[PhotoCleanup] Could not delete ${photo.local_uri}:`, e);
         }
-      } catch (e) {
-        // File already gone or path invalid — not a problem, just clear the column
-        if (__DEV__) console.warn(`[PhotoCleanup] Could not delete ${photo.local_uri}:`, e);
-      }
-      // Regardless of whether the file existed, clear local_uri so we don't
-      // attempt deletion again on the next sync cycle.
-      updateRecord('inspection_photos', photo.id, { local_uri: null });
+        // Regardless of whether the file existed, clear local_uri so we don't
+        // attempt deletion again on the next sync cycle.
+        updateRecord('inspection_photos', photo.id, { local_uri: null });
+      }));
     }
 
     if (deletedCount > 0 && __DEV__) {

@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
+import { PHOTO_BUCKET } from '@/constants/Config';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
 import { classifySyncError } from '@/lib/syncErrors';
@@ -808,10 +809,10 @@ export async function _pushQueue(): Promise<void> {
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
         if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
           const url = payload.photo_url;
-          if (url.includes('/object/public/job-photos/')) {
-            const filePath = url.split('/object/public/job-photos/')[1];
+          if (url.includes(`/object/public/${PHOTO_BUCKET}/`)) {
+            const filePath = url.split(`/object/public/${PHOTO_BUCKET}/`)[1];
             if (filePath) {
-              const { error: storageErr } = await supabase.storage.from('job-photos').remove([filePath]);
+              const { error: storageErr } = await supabase.storage.from(PHOTO_BUCKET).remove([filePath]);
               if (storageErr && __DEV__) {
                 console.warn(`[UMA BUILDING SERVICES Sync] Failed to delete photo binary from storage:`, storageErr.message);
               }

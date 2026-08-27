@@ -303,6 +303,7 @@ export default function AssetInspectionScreen() {
   const [propertyId, setPropertyId]  = useState<string>('');
   const [jobTitle, setJobTitle]    = useState<string>('');
   const [jobDate, setJobDate]     = useState<string>('');
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -491,14 +492,26 @@ export default function AssetInspectionScreen() {
   }, [filteredAssets, groupBy, routineByType]);
 
   // Decision #2: mark all uninspected assets as not_tested before completing.
-  // This runs synchronously before navigation — the store's updateAssetResult
-  // writes to SQLite + queues sync for each asset.
-  const markUninspectedAsNotTested = useCallback(() => {
-    for (const asset of store.assets) {
-      if (asset.result === null) {
-        store.updateAssetResult(asset.id, InspectionResult.NotTested);
-      }
-    }
+  // Chunked with a setTimeout yield between batches so a large site (500+
+  // uninspected assets) doesn't freeze the JS thread in one long synchronous
+  // loop — each updateAssetResult call does real SQLite writes + sync queueing.
+  const markUninspectedAsNotTested = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const uninspected = store.assets.filter(a => a.result === null);
+      const CHUNK_SIZE = 25;
+      let i = 0;
+      const processChunk = () => {
+        const end = Math.min(i + CHUNK_SIZE, uninspected.length);
+        for (; i < end; i++) {
+          store.updateAssetResult(uninspected[i].id, InspectionResult.NotTested);
+        }
+        i = end;
+        if (i < uninspected.length) setTimeout(processChunk, 0);
+        else resolve();
+      };
+      if (uninspected.length > 0) processChunk();
+      else resolve();
+    });
   }, [store]);
 
   const handleComplete = () => {
@@ -512,8 +525,10 @@ export default function AssetInspectionScreen() {
           { text: 'Continue Inspecting', style: 'cancel' },
           {
             text: 'Complete Anyway',
-            onPress: () => {
-              markUninspectedAsNotTested();
+            onPress: async () => {
+              setIsCompleting(true);
+              await markUninspectedAsNotTested();
+              setIsCompleting(false);
               router.replace(`/jobs/${jobId}/report` as never);
             },
           },
@@ -846,7 +861,13 @@ export default function AssetInspectionScreen() {
             <Text style={[s.bottomBarTitle, { color: C.text }]}>{allDone ? (hasActualResults ? 'All assets inspected' : 'All assets marked (N/T)') : `${counts.remaining} remaining`}</Text>
             <Text style={[s.bottomBarSub, { color: C.textSecondary }]}>{store.progress.inspected} of {store.progress.total} inspected</Text>
           </View>
-          <Button title={allDone ? 'Complete' : 'Complete Inspection'} disabled={store.progress.inspected === 0} onPress={handleComplete} style={{ minWidth: 140, borderRadius: 22, height: 46 }} />
+          <Button
+            title={allDone ? 'Complete' : 'Complete Inspection'}
+            disabled={store.progress.inspected === 0 || isCompleting}
+            loading={isCompleting}
+            onPress={handleComplete}
+            style={{ minWidth: 140, borderRadius: 22, height: 46 }}
+          />
         </View>
       )}
 
