@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import { COMPLIANCE_CHECKLISTS, GENERIC_CHECKLIST, ChecklistItem } from '@/constants/Checklists';
 import { ASSET_TYPE_MAP } from '@/constants/AssetData';
+import { T } from '@/constants/Colors';
 
 // ─── Types ───────────────────────────────────
 interface AccordionItem {
@@ -32,11 +33,22 @@ interface AccordionItem {
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ─── Accordion card ─────────────────────────
-function AccordionCard({ item, icon }: { item: AccordionItem; icon: MCIconName }) {
+// bodyContent lets a caller render structured content (e.g. a checklist)
+// instead of the plain item.content string. Height is measured on layout
+// rather than capped at a fixed value, so longer bodies (a 9-item checklist
+// with hints) never get clipped.
+function AccordionCard({
+  item, icon, iconColor, bodyContent,
+}: {
+  item: AccordionItem;
+  icon: MCIconName;
+  iconColor?: string;
+  bodyContent?: React.ReactNode;
+}) {
   const C = useColors();
-  const noMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const animVal = useRef(new Animated.Value(0)).current;
+  const [measuredHeight, setMeasuredHeight] = useState(0);
 
   const toggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -45,13 +57,15 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: MCIconName }
     setOpen(o => !o);
   };
 
-  const maxH = animVal.interpolate({ inputRange: [0, 1], outputRange: [0, 400] });
+  const maxH = animVal.interpolate({ inputRange: [0, 1], outputRange: [0, measuredHeight || 1000] });
 
   return (
     <Card style={{ marginBottom: 12 }} noPadding>
       <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={{ padding: 16 }}>
         <View style={s.accordionHeader}>
-          <MaterialCommunityIcons name={icon} size={18} color={C.accent} style={{ width: 28, textAlign: 'center' }} />
+          <View style={[s.accordionIconWrap, { backgroundColor: (iconColor ?? C.accent) + '18' }]}>
+            <MaterialCommunityIcons name={icon} size={17} color={iconColor ?? C.accent} />
+          </View>
           <Text style={[s.accordionTitle, { color: C.text }]}>{item.title}</Text>
           <MaterialCommunityIcons
             name={open ? 'chevron-up' : 'chevron-down'}
@@ -60,10 +74,44 @@ function AccordionCard({ item, icon }: { item: AccordionItem; icon: MCIconName }
           />
         </View>
         <Animated.View style={{ maxHeight: maxH, overflow: 'hidden' }}>
-          <Text style={[s.accordionBody, { color: C.textSecondary }]}>{item.content}</Text>
+          <View
+            style={{ position: 'absolute', left: 0, right: 0, opacity: 0 }}
+            pointerEvents="none"
+            onLayout={(e) => setMeasuredHeight(e.nativeEvent.layout.height)}
+          >
+            {bodyContent ? <View style={{ paddingTop: 12 }}>{bodyContent}</View> : <Text style={s.accordionBody}>{item.content}</Text>}
+          </View>
+          {bodyContent ? <View style={{ paddingTop: 12 }}>{bodyContent}</View> : <Text style={[s.accordionBody, { color: C.textSecondary }]}>{item.content}</Text>}
         </Animated.View>
       </TouchableOpacity>
     </Card>
+  );
+}
+
+// ─── Checklist body — structured list for the "what to check" guide ────
+function ChecklistBody({ items, color }: { items: ChecklistItem[]; color: string }) {
+  const C = useColors();
+  const checks = items.filter(i => i.type !== 'text');
+  const notes  = items.filter(i => i.type === 'text');
+
+  return (
+    <View style={{ gap: 10 }}>
+      {checks.map((it) => (
+        <View key={it.id} style={s.checkRow}>
+          <MaterialCommunityIcons name="checkbox-marked-circle-outline" size={16} color={color} style={{ marginTop: 1 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.checkQuestion, { color: C.text }]}>{it.question}</Text>
+            {it.hint ? <Text style={[s.checkHint, { color: C.textTertiary }]}>{it.hint}</Text> : null}
+          </View>
+        </View>
+      ))}
+      {notes.length > 0 && (
+        <View style={[s.checkNoteBox, { backgroundColor: C.backgroundTertiary }]}>
+          <MaterialCommunityIcons name="pencil-outline" size={14} color={C.textSecondary} />
+          <Text style={[s.checkNoteTxt, { color: C.textSecondary }]}>{notes.map(n => n.question).join(' · ')}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -220,31 +268,20 @@ const FAQ_ITEMS: { item: AccordionItem; icon: MCIconName }[] = [
 // ─── What-to-check reference guide, by asset type ────────────
 // Reference only — doesn't set Pass/Fail, that's done directly on each asset
 // in the inspection form. This is here for anyone unsure what to look for.
-function formatChecklistContent(items: ChecklistItem[]): string {
-  return items
-    .map((it, i) => {
-      const line = `${i + 1}. ${it.question}`;
-      return it.hint ? `${line}\n   ${it.hint}` : line;
-    })
-    .join('\n');
-}
-
-const CHECKLIST_GUIDE: { item: AccordionItem; icon: MCIconName }[] = [
+const CHECKLIST_GUIDE: { id: string; title: string; icon: MCIconName; color: string; items: ChecklistItem[] }[] = [
   ...Object.entries(COMPLIANCE_CHECKLISTS).map(([assetType, items]) => ({
+    id: `check-${assetType}`,
+    title: ASSET_TYPE_MAP[assetType]?.fullLabel ?? assetType,
     icon: (ASSET_TYPE_MAP[assetType]?.icon ?? 'shield-check-outline') as MCIconName,
-    item: {
-      id: `check-${assetType}`,
-      title: ASSET_TYPE_MAP[assetType]?.fullLabel ?? assetType,
-      content: formatChecklistContent(items),
-    },
+    color: ASSET_TYPE_MAP[assetType]?.color ?? T.primary,
+    items,
   })),
   {
-    icon: 'shield-check-outline',
-    item: {
-      id: 'check-generic',
-      title: 'Other / unlisted asset types',
-      content: formatChecklistContent(GENERIC_CHECKLIST),
-    },
+    id: 'check-generic',
+    title: 'Other / unlisted asset types',
+    icon: 'shield-check-outline' as MCIconName,
+    color: T.primary,
+    items: GENERIC_CHECKLIST,
   },
 ];
 
@@ -307,8 +344,14 @@ export default function HelpScreen() {
             A quick reference for what to look for on each asset type. This doesn&apos;t affect Pass/Fail —
             those are still set directly on each asset in the inspection form.
           </Text>
-          {CHECKLIST_GUIDE.map(({ item, icon }) => (
-            <AccordionCard key={item.id} item={item} icon={icon} />
+          {CHECKLIST_GUIDE.map((g) => (
+            <AccordionCard
+              key={g.id}
+              item={{ id: g.id, title: g.title, content: '' }}
+              icon={g.icon}
+              iconColor={g.color}
+              bodyContent={<ChecklistBody items={g.items} color={g.color} />}
+            />
           ))}
         </Reanimated.View>
 
@@ -367,9 +410,16 @@ const s = StyleSheet.create({
   section:      { marginBottom: 12, gap: 8 },
 
   // Accordion
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  accordionTitle:  { flex: 1, fontSize: 14, fontWeight: '600' },
-  accordionBody:   { fontSize: 13, lineHeight: 21, paddingTop: 12, paddingLeft: 38 },
+  accordionHeader:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  accordionIconWrap:{ width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  accordionTitle:   { flex: 1, fontSize: 14, fontWeight: '600' },
+  accordionBody:    { fontSize: 13, lineHeight: 21, paddingTop: 12, paddingLeft: 38 },
+
+  checkRow:      { flexDirection: 'row', gap: 10, paddingLeft: 38, paddingRight: 4 },
+  checkQuestion: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  checkHint:     { fontSize: 12, lineHeight: 17, marginTop: 2, fontStyle: 'italic' },
+  checkNoteBox:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 38, marginTop: 2, padding: 10, borderRadius: 10 },
+  checkNoteTxt:  { flex: 1, fontSize: 12, fontWeight: '500' },
 
   // Version card
   versionCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 0, marginBottom: 12, marginTop: 12 },
