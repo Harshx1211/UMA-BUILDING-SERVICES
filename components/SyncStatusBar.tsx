@@ -1,7 +1,7 @@
 // SyncStatusBar — shows last sync time, pending count, manual sync trigger,
 // and a user-visible alert when data permanently fails to reach the server.
 import { useEffect, useState, useCallback } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -13,6 +13,7 @@ import {
   type SyncFailureAlert,
 } from '@/lib/sync';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { showConfirm } from '@/components/ui';
 import { T } from '@/constants/Colors';
 import type { SyncStatus } from '@/types';
 
@@ -51,14 +52,15 @@ export function SyncStatusBar() {
     const terminalNote = terminalCount > 0
       ? `\n\n${terminalCount} of these ${terminalCount > 1 ? 'have' : 'has'} a data or permission problem and won't succeed just by retrying — it needs to be reviewed.`
       : '';
-    Alert.alert(
-      'Sync Failed',
-      `${failedCount} item${failedCount > 1 ? 's' : ''} could not be saved to the server.\n\n` +
-      `Affected: ${tables.join(', ')}\n` +
-      `Reason: ${lastError}` +
-      terminalNote +
-      '\n\nYour data is safe on this device. Tap "Retry Now" to try again.',
-      [
+    showConfirm({
+      title: 'Sync Failed',
+      message: `${failedCount} item${failedCount > 1 ? 's' : ''} could not be saved to the server.\n\n` +
+        `Affected: ${tables.join(', ')}\n` +
+        `Reason: ${lastError}` +
+        terminalNote +
+        '\n\nYour data is safe on this device. Tap "Retry Now" to try again.',
+      icon: 'cloud-alert-outline',
+      buttons: [
         {
           text: 'Retry Now',
           onPress: () => {
@@ -74,8 +76,7 @@ export function SyncStatusBar() {
           onPress: () => setFailureAlert(null),
         },
       ],
-      { cancelable: false },
-    );
+    });
   }, [failureAlert]);
 
   useEffect(() => {

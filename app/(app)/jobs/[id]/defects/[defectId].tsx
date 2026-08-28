@@ -9,7 +9,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Modal,
-  Alert, Platform, Image,
+  Platform, Image,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { ScreenHeader, Button } from '@/components/ui';
+import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById } from '@/lib/database';
 import { useDefectsStore } from '@/store/defectsStore';
@@ -92,10 +92,11 @@ export default function DefectDetailScreen() {
   useEffect(() => { loadDefect(); }, [loadDefect]);
 
   const handleDelete = () => {
-    Alert.alert(
-      'Remove Defect',
-      'This will permanently remove the defect record. Continue?',
-      [
+    showConfirm({
+      title: 'Remove Defect',
+      message: 'This will permanently remove the defect record. Continue?',
+      icon: 'trash-can-outline',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
@@ -108,7 +109,7 @@ export default function DefectDetailScreen() {
           },
         },
       ],
-    );
+    });
   };
 
   if (isLoading) {

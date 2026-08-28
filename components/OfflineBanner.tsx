@@ -1,24 +1,25 @@
-// OfflineBanner — Phase 12: 3-state state machine (offline / syncing / synced)
+// OfflineBanner — 3-state state machine (offline / syncing / synced)
 // Shows pending count when offline, syncing indicator on reconnect, green success auto-dismiss
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getPendingSyncItems } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
-import { T } from '@/constants/Colors';
 
-const BANNER_HEIGHT = 40;
+const HIDDEN_OFFSET = -80;
 
 type BannerState = 'offline' | 'syncing' | 'synced' | 'hidden';
 
 export function OfflineBanner() {
   const C = useColors();
+  const insets = useSafeAreaInsets();
   const { isOnline } = useNetworkStatus();
   const [bannerState, setBannerState] = useState<BannerState>('hidden');
   const [pendingCount, setPendingCount] = useState(0);
-  const translateY = useRef(new Animated.Value(-BANNER_HEIGHT)).current;
+  const translateY = useRef(new Animated.Value(HIDDEN_OFFSET)).current;
   const prevOnlineRef = useRef<boolean | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,40 +67,42 @@ export function OfflineBanner() {
   // ── Animate up/down ────────────────────────────────
   useEffect(() => {
     const show = bannerState !== 'hidden';
-    Animated.timing(translateY, {
-      toValue: show ? 0 : -BANNER_HEIGHT,
-      duration: 320,
+    Animated.spring(translateY, {
+      toValue: show ? 0 : HIDDEN_OFFSET,
       useNativeDriver: true,
+      speed: 16,
+      bounciness: 6,
     }).start();
   }, [bannerState, translateY]);
 
-  // ── Config per state ──────────────────────────────────
+  // ── Config per state — soft tinted pill, not a solid saturated stripe,
+  // to match the rest of the app's card/badge language ──────────────────
   const stateConfig = {
     offline: {
-      bg:   T.warningBg,
-      icon: 'wifi-off' as const,
+      bg:     C.warningLight,
+      border: C.warning,
+      icon:   'wifi-off' as const,
       text: pendingCount > 0
         ? `Offline — ${pendingCount} change${pendingCount > 1 ? 's' : ''} pending sync`
-        : 'Offline Mode — changes save locally',
-      textColor: T.warning,
+        : 'Offline — changes save locally',
+      fg: C.warningDark,
     },
     syncing: {
-      bg:   C.primary,
-      icon: 'sync' as const,
-      text: 'Syncing changes with cloud...',
-      textColor: T.textOnPrimary,
+      bg:     C.primary + '15',
+      border: C.primary,
+      icon:   'cloud-sync-outline' as const,
+      text: 'Syncing with cloud…',
+      fg: C.primary,
     },
     synced: {
-      bg:   C.success,
-      icon: 'cloud-check-outline' as const,
-      text: 'All changes synced successfully',
-      textColor: T.textOnPrimary,
+      bg:     C.successLight,
+      border: C.success,
+      icon:   'cloud-check-outline' as const,
+      text: 'All changes synced',
+      fg: C.successDark,
     },
     hidden: {
-      bg:   'transparent',
-      icon: 'wifi-off' as const,
-      text: '',
-      textColor: T.textMuted,
+      bg: 'transparent', border: 'transparent', icon: 'wifi-off' as const, text: '', fg: C.textTertiary,
     },
   };
 
@@ -107,41 +110,54 @@ export function OfflineBanner() {
 
   return (
     <Animated.View
+      pointerEvents={bannerState === 'hidden' ? 'none' : 'box-none'}
       style={[
-        styles.banner,
-        { backgroundColor: cfg.bg, transform: [{ translateY }] },
+        styles.wrap,
+        { top: insets.top + 8, transform: [{ translateY }] },
       ]}
     >
-      <MaterialCommunityIcons name={cfg.icon} size={14} color={cfg.textColor} />
-      <Text style={[styles.text, { color: cfg.textColor }]} numberOfLines={1}>
-        {cfg.text}
-      </Text>
-      {bannerState === 'synced' && (
-        <TouchableOpacity onPress={() => setBannerState('hidden')} hitSlop={10}>
-          <MaterialCommunityIcons name="close" size={14} color={cfg.textColor} />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        activeOpacity={bannerState === 'synced' ? 0.7 : 1}
+        onPress={() => { if (bannerState === 'synced') setBannerState('hidden'); }}
+        style={[styles.pill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
+      >
+        <MaterialCommunityIcons name={cfg.icon} size={15} color={cfg.fg} />
+        <Text style={[styles.text, { color: cfg.fg }]} numberOfLines={1}>
+          {cfg.text}
+        </Text>
+        {bannerState === 'synced' && (
+          <MaterialCommunityIcons name="close" size={14} color={cfg.fg} style={{ opacity: 0.7 }} />
+        )}
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  banner: {
-    height: BANNER_HEIGHT,
-    width: '100%',
+  wrap: {
+    position: 'absolute',
+    left: 16, right: 16,
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    zIndex: 999,
-    paddingHorizontal: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    maxWidth: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   text: {
     fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    flex: 1,
+    fontWeight: '700',
+    flexShrink: 1,
   },
 });

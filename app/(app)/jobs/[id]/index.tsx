@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking, Modal, Platform, ScrollView, StyleSheet,
-  View, TouchableOpacity, TextInput, Alert,
+  View, TouchableOpacity, TextInput,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,7 +22,7 @@ import {
 } from '@/lib/database';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { useColors } from '@/hooks/useColors';
-import { ScreenHeader, Button, Badge, Card } from '@/components/ui';
+import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 
@@ -189,10 +189,11 @@ export default function JobDetailScreen() {
     const unsub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data: { action: NavigationAction } }) => {
       if (!isEditingNotes) return; // no unsaved changes
       e.preventDefault();
-      Alert.alert(
-        'Unsaved Notes',
-        'You have unsaved field notes. Save them before leaving?',
-        [
+      showConfirm({
+        title: 'Unsaved Notes',
+        message: 'You have unsaved field notes. Save them before leaving?',
+        icon: 'note-edit-outline',
+        buttons: [
           {
             text: 'Discard',
             style: 'destructive',
@@ -203,8 +204,8 @@ export default function JobDetailScreen() {
             text: 'Save & Leave',
             onPress: () => { handleSaveNotes(); navigation.dispatch(e.data.action); },
           },
-        ]
-      );
+        ],
+      });
     });
     return unsub;
   }, [navigation, isEditingNotes, handleSaveNotes]);
@@ -227,17 +228,18 @@ export default function JobDetailScreen() {
   const handleFinalizeConfirm = () => {
     setShowBottomSheet(false);
     if (!hasSig) {
-      Alert.alert(
-        'Signature Required',
-        'A client signature is required before completing this job. Please capture a signature first.',
-        [
+      showConfirm({
+        title: 'Signature Required',
+        message: 'A client signature is required before completing this job. Please capture a signature first.',
+        icon: 'draw',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Go to Signature',
             onPress: () => { if (job) router.push(`/jobs/${job.id}/signature` as never); },
           },
-        ]
-      );
+        ],
+      });
       return;
     }
     // FIX: Check that all assets have a result (pass/fail/not_tested),
@@ -248,17 +250,18 @@ export default function JobDetailScreen() {
     // has completed their assessment.
     const allAssetsResulted = totalAssets > 0 && assets.every(a => a.result !== null);
     if (!allAssetsResulted && totalAssets > 0) {
-      Alert.alert(
-        'Inspection Incomplete',
-        'All assets must have a result (Pass, Fail, or Not Tested) before completing this job.',
-        [
+      showConfirm({
+        title: 'Inspection Incomplete',
+        message: 'All assets must have a result (Pass, Fail, or Not Tested) before completing this job.',
+        icon: 'clipboard-alert-outline',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Open Inspection',
             onPress: () => { if (job) router.push(`/jobs/${job.id}/inspect` as never); },
           },
-        ]
-      );
+        ],
+      });
       return;
     }
     finalizeCompletion();
@@ -284,10 +287,11 @@ export default function JobDetailScreen() {
 
   const handleContinueWorking = () => {
     if (!job) return;
-    Alert.alert(
-      'Continue Working?',
-      'This will re-open the job and unlock the inspection form. All existing data is preserved.',
-      [
+    showConfirm({
+      title: 'Continue Working?',
+      message: 'This will re-open the job and unlock the inspection form. All existing data is preserved.',
+      icon: 'pencil-outline',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Continue Working',
@@ -308,8 +312,8 @@ export default function JobDetailScreen() {
             });
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleNavigate = () => {

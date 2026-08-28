@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,7 +8,7 @@ import { updateRecord, addToSyncQueue, getFailedSyncItems } from '@/lib/database
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
 import { useColors } from '@/hooks/useColors';
-import { ScreenHeader, Badge } from '@/components/ui';
+import { ScreenHeader, Badge, showConfirm } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
 import { sanitizeText } from '@/utils/sanitize';
@@ -38,10 +38,11 @@ export default function ProfileScreen() {
   const failedSyncCount = getFailedSyncItems().length;
 
   function _confirmLogout() {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out? Any unsynced changes will be uploaded first.',
-      [
+    showConfirm({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out? Any unsynced changes will be uploaded first.',
+      icon: 'logout',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
@@ -54,8 +55,8 @@ export default function ProfileScreen() {
             if (success) router.replace('/(auth)/login');
           },
         },
-      ]
-    );
+      ],
+    });
   }
 
   const fpasExpiry = user?.fpas_expiry ? new Date(user.fpas_expiry) : null;
@@ -80,7 +81,7 @@ export default function ProfileScreen() {
       updateUser({ ...user, phone });
       setIsEditing(false);
     } catch (err) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      showConfirm({ title: 'Error', message: 'Failed to update profile. Please try again.', icon: 'alert-circle-outline' });
       console.error('[Profile] handleSave error:', err);
     } finally {
       setIsSaving(false);
@@ -191,10 +192,11 @@ export default function ProfileScreen() {
               retryAllFailedSyncItems();
               // Give the sync cycle a moment to kick off
               setTimeout(() => setIsRetrying(false), 1500);
-              Alert.alert(
-                'Retry Queued',
-                `${failedSyncCount} failed item(s) have been re-queued. They will sync automatically within 60 seconds.`,
-              );
+              showConfirm({
+                title: 'Retry Queued',
+                message: `${failedSyncCount} failed item(s) have been re-queued. They will sync automatically within 60 seconds.`,
+                icon: 'cloud-sync-outline',
+              });
             }}
             activeOpacity={0.85}
             disabled={isRetrying}

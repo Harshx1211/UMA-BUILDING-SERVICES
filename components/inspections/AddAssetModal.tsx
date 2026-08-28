@@ -3,13 +3,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, Platform, Alert,
+  ScrollView, Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, showConfirm } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { upsertRecord, addToSyncQueue, queryRecords } from '@/lib/database';
@@ -163,7 +163,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       return;
     }
     if (quantity > 100) {
-      Alert.alert('Max Quantity', 'You can add up to 100 assets at once.');
+      showConfirm({ title: 'Max Quantity', message: 'You can add up to 100 assets at once.', icon: 'alert-circle-outline' });
       return;
     }
     setIsSaving(true);

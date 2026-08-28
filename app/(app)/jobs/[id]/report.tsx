@@ -6,7 +6,6 @@ import {
   Platform,
   TouchableOpacity,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -24,7 +23,7 @@ import {
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { ScreenHeader, Button, SectionHeader, Card } from '@/components/ui';
+import { ScreenHeader, Button, SectionHeader, Card, showConfirm } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus, SyncOperation } from '@/constants/Enums';
@@ -308,25 +307,27 @@ export default function ReportSummaryScreen() {
   // Completed if it isn't already, then go generate.
   const handleGenerate = () => {
     if (!isFullyInspected) {
-      Alert.alert(
-        'Inspection Incomplete',
-        'All assets must have a result (Pass, Fail, or Not Tested) before generating the report.',
-        [
+      showConfirm({
+        title: 'Inspection Incomplete',
+        message: 'All assets must have a result (Pass, Fail, or Not Tested) before generating the report.',
+        icon: 'clipboard-alert-outline',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open Inspection', onPress: () => router.push(`/jobs/${job.id}/inspect` as never) },
         ],
-      );
+      });
       return;
     }
     if (!hasSignature) {
-      Alert.alert(
-        'Signature Required',
-        'A client signature is required before generating the report. Please capture a signature first.',
-        [
+      showConfirm({
+        title: 'Signature Required',
+        message: 'A client signature is required before generating the report. Please capture a signature first.',
+        icon: 'draw',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Go to Signature', onPress: () => router.push(`/jobs/${job.id}/signature` as never) },
         ],
-      );
+      });
       return;
     }
     if (!isCompleted) {

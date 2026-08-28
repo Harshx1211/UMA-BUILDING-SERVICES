@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
@@ -11,7 +11,7 @@ import PhotoGrid from '@/components/camera/PhotoGrid';
 import PhotoCaptureSheet, { PhotoCaptureSheetRef } from '@/components/camera/PhotoCaptureSheet';
 import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { Button } from '@/components/ui';
+import { Button, showConfirm } from '@/components/ui';
 
 export default function PhotosScreen() {
   const C = useColors();
@@ -38,10 +38,11 @@ export default function PhotosScreen() {
 
   /** Long-press handler — confirms then deletes photo from SQLite + syncs */
   const handlePhotoLongPress = (photo: { id: string }) => {
-    Alert.alert(
-      'Delete Photo',
-      'Are you sure you want to delete this photo? This cannot be undone.',
-      [
+    showConfirm({
+      title: 'Delete Photo',
+      message: 'Are you sure you want to delete this photo? This cannot be undone.',
+      icon: 'trash-can-outline',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -51,8 +52,8 @@ export default function PhotosScreen() {
             Toast.show({ type: 'success', text1: 'Photo deleted' });
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (store.isLoading) {

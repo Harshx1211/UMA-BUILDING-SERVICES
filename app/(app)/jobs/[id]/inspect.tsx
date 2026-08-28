@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Alert, Platform, TextInput, Modal,
+  Platform, TextInput, Modal,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { Image } from 'expo-image';
@@ -10,7 +10,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { ScreenHeader, Button } from '@/components/ui';
+import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -676,12 +676,13 @@ export default function AssetInspectionScreen() {
 
   const handleComplete = () => {
     if (!store.isInspectionComplete()) {
-      Alert.alert(
-        'Incomplete Inspection',
-        `${store.progress.total - store.progress.inspected} asset${
+      showConfirm({
+        title: 'Incomplete Inspection',
+        message: `${store.progress.total - store.progress.inspected} asset${
           store.progress.total - store.progress.inspected !== 1 ? 's have' : ' has'
         } not been inspected.\n\nUninspected assets will be automatically marked as Not Tested.\n\nComplete anyway?`,
-        [
+        icon: 'clipboard-alert-outline',
+        buttons: [
           { text: 'Continue Inspecting', style: 'cancel' },
           {
             text: 'Complete Anyway',
@@ -692,8 +693,8 @@ export default function AssetInspectionScreen() {
               router.replace(`/jobs/${jobId}/report` as never);
             },
           },
-        ]
-      );
+        ],
+      });
     } else {
       router.replace(`/jobs/${jobId}/report` as never);
     }
@@ -738,10 +739,11 @@ export default function AssetInspectionScreen() {
   }, [jobId, store]);
 
   const handleDelete = useCallback((assetToDelete: AssetWithResult) => {
-    Alert.alert(
-      'Delete Asset',
-      `Are you sure you want to delete this ${formatAssetType(assetToDelete.asset_type)}?`,
-      [
+    showConfirm({
+      title: 'Delete Asset',
+      message: `Are you sure you want to delete this ${formatAssetType(assetToDelete.asset_type)}?`,
+      icon: 'trash-can-outline',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -792,24 +794,25 @@ export default function AssetInspectionScreen() {
               console.error('Failed to delete asset:', err);
               Toast.show({ type: 'error', text1: 'Failed to delete asset' });
             }
-          }
-        }
-      ]
-    );
+          },
+        },
+      ],
+    });
   }, [jobId, store]);
 
   // Bulk-marking a whole unit only ever makes sense for "couldn't access it" —
   // Pass/Fail require actually inspecting each asset individually, so Not
   // Tested is the only option here, not a 3-way choice.
   const handleBulkMark = useCallback((label: string, assetIds: string[]) => {
-    Alert.alert(
-      'No Access',
-      `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?`,
-      [
+    showConfirm({
+      title: 'No Access',
+      message: `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?`,
+      icon: 'lock-outline',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Mark Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
-      ]
-    );
+      ],
+    });
   }, [store]);
 
   const renderItem = useCallback(({ item, index }: { item: ListRow; index: number }) => {

@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Alert, Modal, TextInput, Platform, BackHandler,
+  Modal, TextInput, Platform, BackHandler,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,7 +22,7 @@ import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useAuth } from '@/hooks/useAuth';
-import { ScreenHeader, FilterPills, Button } from '@/components/ui';
+import { ScreenHeader, FilterPills, Button, showConfirm } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { InspectionResult, SyncOperation, JobType, JobStatus, Priority, DefectSeverity } from '@/constants/Enums';
 import {
@@ -394,10 +394,11 @@ export default function SiteInspectScreen() {
 
   const handleBackPress = useCallback(() => {
     if (!hasProgress) return false; // let navigation proceed normally
-    Alert.alert(
-      'Save Progress?',
-      'You have inspected some assets. What would you like to do?',
-      [
+    showConfirm({
+      title: 'Save Progress?',
+      message: 'You have inspected some assets. What would you like to do?',
+      icon: 'content-save-alert-outline',
+      buttons: [
         {
           text: 'Keep Inspecting',
           style: 'cancel',
@@ -414,8 +415,7 @@ export default function SiteInspectScreen() {
           },
         },
       ],
-      { cancelable: false }
-    );
+    });
     return true;
   }, [hasProgress, saveInspection, navigateAway]);
 
@@ -492,18 +492,19 @@ export default function SiteInspectScreen() {
   // ── Complete & save ──────────────────────────────────────
   const handleComplete = () => {
     if (counts.inspected === 0) {
-      Alert.alert('No Results', 'Please inspect at least one asset before completing.');
+      showConfirm({ title: 'No Results', message: 'Please inspect at least one asset before completing.', icon: 'information-outline' });
       return;
     }
     if (counts.remaining > 0) {
-      Alert.alert(
-        'Not All Inspected',
-        `${counts.remaining} asset${counts.remaining !== 1 ? 's have' : ' has'} not been inspected.\n\nComplete anyway?`,
-        [
+      showConfirm({
+        title: 'Not All Inspected',
+        message: `${counts.remaining} asset${counts.remaining !== 1 ? 's have' : ' has'} not been inspected.\n\nComplete anyway?`,
+        icon: 'clipboard-alert-outline',
+        buttons: [
           { text: 'Continue Inspecting', style: 'cancel' },
           { text: 'Complete', onPress: () => saveInspection() },
-        ]
-      );
+        ],
+      });
     } else {
       saveInspection();
     }

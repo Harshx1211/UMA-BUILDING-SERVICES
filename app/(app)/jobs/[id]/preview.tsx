@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   TouchableOpacity,
   Linking,
@@ -14,7 +13,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
-import { ScreenHeader, Button } from '@/components/ui';
+import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useReportGeneration } from '@/hooks/useReportGeneration';
@@ -223,7 +222,7 @@ export default function PreviewScreen() {
       });
     } catch (e) {
       console.error('[Preview] Share failed:', e);
-      Alert.alert('Share Failed', 'Could not download or share the report. Please try again.');
+      showConfirm({ title: 'Share Failed', message: 'Could not download or share the report. Please try again.', icon: 'alert-circle-outline' });
     } finally {
       if (isMounted.current) setIsDownloading(false);
     }

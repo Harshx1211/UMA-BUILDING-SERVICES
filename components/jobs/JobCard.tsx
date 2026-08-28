@@ -3,7 +3,7 @@
  * Clean, data-rich layout with strong typography and clear visual hierarchy.
  */
 import React, { useRef } from 'react';
-import { StyleSheet, TouchableOpacity, View, Linking, Alert } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { JobStatus, JobType, Priority, ComplianceStatus } from '@/constants/Enums';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { Badge } from '@/components/ui';
+import { Badge, showConfirm } from '@/components/ui';
 import type { JobWithProperty } from '@/store/jobsStore';
 
 interface Props {
@@ -103,10 +103,11 @@ export const JobCard = React.memo(function JobCard({
 
   const handleCancel = () => {
     swipeRef.current?.close();
-    Alert.alert(
-      'Cancel Job?',
-      'Are you sure you want to cancel this job? This action will be synced to the cloud.',
-      [
+    showConfirm({
+      title: 'Cancel Job?',
+      message: 'Are you sure you want to cancel this job? This action will be synced to the cloud.',
+      icon: 'close-circle-outline',
+      buttons: [
         { text: 'Keep Job', style: 'cancel' },
         {
           text: 'Cancel Job',
@@ -116,8 +117,8 @@ export const JobCard = React.memo(function JobCard({
             onCancel?.();
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const cardContent = (

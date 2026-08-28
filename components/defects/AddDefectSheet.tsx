@@ -1,5 +1,5 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -18,6 +18,7 @@ import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
 import type { Asset } from '@/types';
 import { T } from '@/constants/Colors';
+import { showConfirm } from '@/components/ui';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -102,10 +103,14 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
   };
 
   const removePhoto = (uri: string) => {
-    Alert.alert('Remove photo?', '', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => setPhotos(p => p.filter(x => x !== uri)) },
-    ]);
+    showConfirm({
+      title: 'Remove photo?',
+      icon: 'trash-can-outline',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => setPhotos(p => p.filter(x => x !== uri)) },
+      ],
+    });
   };
 
   const handleSave = () => {

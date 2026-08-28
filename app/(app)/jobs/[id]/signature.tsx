@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, Platform, ScrollView, Image,
+  Platform, ScrollView, Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +15,7 @@ import { useColors } from '@/hooks/useColors';
 import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import type { Signature } from '@/types';
-import { ScreenHeader, Button, Card } from '@/components/ui';
+import { ScreenHeader, Button, Card, showConfirm } from '@/components/ui';
 import { T } from '@/constants/Colors';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 
@@ -101,14 +101,19 @@ export default function SignatureScreen() {
   }
 
   function handleResetAll() {
-    Alert.alert('Restart Sign-off', 'This will delete the captured technician signature. Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Restart', style: 'destructive', onPress: async () => {
-        if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null; }
-        if (id) await AsyncStorage.removeItem(`draft_tech_sig_${id}`);
-        setStep('tech'); setTechSigBase64(null); setHasSig(false); setSigError('');
-      }},
-    ]);
+    showConfirm({
+      title: 'Restart Sign-off',
+      message: 'This will delete the captured technician signature. Are you sure?',
+      icon: 'restart',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Restart', style: 'destructive', onPress: async () => {
+          if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null; }
+          if (id) await AsyncStorage.removeItem(`draft_tech_sig_${id}`);
+          setStep('tech'); setTechSigBase64(null); setHasSig(false); setSigError('');
+        }},
+      ],
+    });
   }
 
   // ── Next / Save ────────────────────────────────────────────────────────
@@ -175,9 +180,12 @@ export default function SignatureScreen() {
       setIsEditing(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
-      Alert.alert('Signature Saved', 'All signatures have been recorded.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showConfirm({
+        title: 'Signature Saved',
+        message: 'All signatures have been recorded.',
+        icon: 'check-circle-outline',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch {
       setSaving(false);
       setSigError('Failed to save signature. Please try again.');
@@ -214,9 +222,12 @@ export default function SignatureScreen() {
       setIsEditing(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
-      Alert.alert('Recorded', 'Technician signature captured. Client was unavailable.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showConfirm({
+        title: 'Recorded',
+        message: 'Technician signature captured. Client was unavailable.',
+        icon: 'check-circle-outline',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch {
       setSaving(false);
       setSigError('Failed to record. Please try again.');

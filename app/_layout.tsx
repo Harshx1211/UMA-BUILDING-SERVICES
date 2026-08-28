@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
+import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
 
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
@@ -134,6 +135,7 @@ export default function RootLayout() {
           <Slot />
           <StatusBar style="dark" />
           <Toast />
+          <ConfirmDialogHost />
           {/* iOS app-switcher screenshot shield */}
           {isObscured && (
             <Animated.View

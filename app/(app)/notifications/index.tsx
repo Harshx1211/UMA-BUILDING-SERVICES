@@ -1,7 +1,7 @@
 // app/(app)/notifications/index.tsx
 import React, { useEffect, useCallback } from 'react';
 import {
-  Alert, FlatList, StyleSheet, TouchableOpacity, View,
+  FlatList, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { Card } from '@/components/ui/Card';
-import { ScreenHeader, EmptyState } from '@/components/ui';
+import { ScreenHeader, EmptyState, showConfirm } from '@/components/ui';
 import {
   useNotificationsStore, type AppNotification, type NotificationType,
 } from '@/store/notificationsStore';
@@ -164,14 +164,15 @@ export default function NotificationsScreen() {
                 <TouchableOpacity
                   style={s.clearBtn}
                   onPress={() =>
-                    Alert.alert(
-                      'Clear all notifications?',
-                      'This will permanently remove all notifications. This action cannot be undone.',
-                      [
+                    showConfirm({
+                      title: 'Clear all notifications?',
+                      message: 'This will permanently remove all notifications. This action cannot be undone.',
+                      icon: 'delete-sweep-outline',
+                      buttons: [
                         { text: 'Cancel', style: 'cancel' },
                         { text: 'Clear All', style: 'destructive', onPress: clearAll },
-                      ]
-                    )
+                      ],
+                    })
                   }
                 >
                   <MaterialCommunityIcons name="delete-sweep-outline" size={16} color={C.textTertiary} />
