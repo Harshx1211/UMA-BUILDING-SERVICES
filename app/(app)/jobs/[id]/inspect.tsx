@@ -107,6 +107,46 @@ function PhotoChooserSheet({
   );
 }
 
+// ─── Confirm dialog — styled to match the app instead of a native Alert ────
+function ConfirmDeleteDialog({
+  visible, onCancel, onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const C = useColors();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={s.confirmOverlay}>
+        <View style={[s.confirmCard, { backgroundColor: C.surface }]}>
+          <View style={[s.confirmIconWrap, { backgroundColor: C.error + '18' }]}>
+            <MaterialCommunityIcons name="trash-can-outline" size={26} color={C.error} />
+          </View>
+          <Text style={[s.confirmTitle, { color: C.text }]}>Delete Photo?</Text>
+          <Text style={[s.confirmSub, { color: C.textSecondary }]}>This can&apos;t be undone.</Text>
+          <View style={s.confirmBtnRow}>
+            <TouchableOpacity
+              style={[s.confirmBtn, { backgroundColor: C.backgroundTertiary }]}
+              onPress={onCancel}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.confirmBtnTxt, { color: C.text }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.confirmBtn, { backgroundColor: C.error }]}
+              onPress={onConfirm}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.confirmBtnTxt, { color: C.textOnPrimary }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Full-screen photo viewer — tap a thumbnail to see it properly, ────────
 // delete lives here (with confirmation) rather than as a tiny badge on the thumbnail.
 function PhotoViewer({
@@ -150,6 +190,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const [showPhotoChooser, setShowPhotoChooser] = useState(false);
   const [isAddingPhoto,   setIsAddingPhoto]   = useState(false);
   const [viewingPhoto,    setViewingPhoto]    = useState<string | null>(null);
+  const [confirmingDeleteUri, setConfirmingDeleteUri] = useState<string | null>(null);
 
   const savePickedPhoto = async (sourceUri: string) => {
     const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
@@ -196,22 +237,15 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   };
 
   const handleRemovePhoto = (uri: string) => {
-    Alert.alert(
-      'Delete Photo?',
-      'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            removePhotoFromAsset(asset.id, uri);
-            setViewingPhoto(null);
-          },
-        },
-      ],
-    );
+    setConfirmingDeleteUri(uri);
+  };
+
+  const confirmRemovePhoto = () => {
+    if (!confirmingDeleteUri) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    removePhotoFromAsset(asset.id, confirmingDeleteUri);
+    setConfirmingDeleteUri(null);
+    setViewingPhoto(null);
   };
 
   const handleResult = (res: InspectionResult) => {
@@ -404,6 +438,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
         uri={viewingPhoto}
         onClose={() => setViewingPhoto(null)}
         onDelete={() => viewingPhoto && handleRemovePhoto(viewingPhoto)}
+      />
+      <ConfirmDeleteDialog
+        visible={!!confirmingDeleteUri}
+        onCancel={() => setConfirmingDeleteUri(null)}
+        onConfirm={confirmRemovePhoto}
       />
     </Animated.View>
   );
@@ -1122,6 +1161,16 @@ const s = StyleSheet.create({
   chooserDivider:  { height: StyleSheet.hairlineWidth, marginLeft: 18 },
   chooserCancel:   { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
   chooserCancelTxt:{ fontSize: 16, fontWeight: '700' },
+
+  // Confirm delete dialog
+  confirmOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 32 },
+  confirmCard:     { width: '100%', maxWidth: 320, borderRadius: 20, padding: 24, alignItems: 'center' },
+  confirmIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  confirmTitle:    { fontSize: 17, fontWeight: '800' },
+  confirmSub:      { fontSize: 13, marginTop: 4, textAlign: 'center' },
+  confirmBtnRow:   { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
+  confirmBtn:      { flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  confirmBtnTxt:   { fontSize: 15, fontWeight: '700' },
 
   // Full-screen photo viewer
   viewerOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
