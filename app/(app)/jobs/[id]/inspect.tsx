@@ -107,6 +107,33 @@ function PhotoChooserSheet({
   );
 }
 
+// ─── Full-screen photo viewer — tap a thumbnail to see it properly, ────────
+// delete lives here (with confirmation) rather than as a tiny badge on the thumbnail.
+function PhotoViewer({
+  uri, onClose, onDelete,
+}: {
+  uri: string | null;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={s.viewerOverlay}>
+        <TouchableOpacity style={s.viewerCloseBtn} onPress={onClose} hitSlop={10}>
+          <MaterialCommunityIcons name="close" size={26} color="#fff" />
+        </TouchableOpacity>
+        {uri ? (
+          <Image source={{ uri: getValidLocalUri(uri) }} style={s.viewerImage} contentFit="contain" />
+        ) : null}
+        <TouchableOpacity style={s.viewerDeleteBtn} onPress={onDelete} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="trash-can-outline" size={18} color="#fff" />
+          <Text style={s.viewerDeleteTxt}>Delete Photo</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
 const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }: {
   asset: AssetWithResult;
   index: number;
@@ -122,6 +149,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const [showFailModal,   setShowFailModal]   = useState(false);
   const [showPhotoChooser, setShowPhotoChooser] = useState(false);
   const [isAddingPhoto,   setIsAddingPhoto]   = useState(false);
+  const [viewingPhoto,    setViewingPhoto]    = useState<string | null>(null);
 
   const savePickedPhoto = async (sourceUri: string) => {
     const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
@@ -168,8 +196,22 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   };
 
   const handleRemovePhoto = (uri: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    removePhotoFromAsset(asset.id, uri);
+    Alert.alert(
+      'Delete Photo?',
+      'This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            removePhotoFromAsset(asset.id, uri);
+            setViewingPhoto(null);
+          },
+        },
+      ],
+    );
   };
 
   const handleResult = (res: InspectionResult) => {
@@ -327,16 +369,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 
           <View style={s.photoRow}>
             {(asset.photos ?? []).map((uri) => (
-              <View key={uri} style={s.photoThumbWrap}>
+              <TouchableOpacity key={uri} style={s.photoThumbWrap} onPress={() => setViewingPhoto(uri)} activeOpacity={0.8}>
                 <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
-                <TouchableOpacity
-                  style={[s.photoThumbDel, { backgroundColor: C.error }]}
-                  onPress={() => handleRemovePhoto(uri)}
-                  hitSlop={6}
-                >
-                  <MaterialCommunityIcons name="close" size={10} color={C.textOnPrimary} />
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             ))}
             <TouchableOpacity
               style={[s.photoAddTile, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
@@ -364,6 +399,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
         onClose={() => setShowPhotoChooser(false)}
         onTakePhoto={handleTakePhoto}
         onPickGallery={handlePickPhoto}
+      />
+      <PhotoViewer
+        uri={viewingPhoto}
+        onClose={() => setViewingPhoto(null)}
+        onDelete={() => viewingPhoto && handleRemovePhoto(viewingPhoto)}
       />
     </Animated.View>
   );
@@ -1068,14 +1108,9 @@ const s = StyleSheet.create({
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
   photoRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
-  photoThumbWrap:  { width: 44, height: 44, borderRadius: 10, overflow: 'visible' },
-  photoThumb:      { width: '100%', height: '100%', borderRadius: 10 },
-  photoThumbDel:   {
-    position: 'absolute', top: -5, right: -5,
-    width: 17, height: 17, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  photoAddTile:    { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  photoThumbWrap:  { width: 60, height: 60, borderRadius: 12, overflow: 'hidden' },
+  photoThumb:      { width: '100%', height: '100%' },
+  photoAddTile:    { width: 60, height: 60, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 
   // Photo chooser sheet
   chooserOverlay:  { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
@@ -1087,6 +1122,13 @@ const s = StyleSheet.create({
   chooserDivider:  { height: StyleSheet.hairlineWidth, marginLeft: 18 },
   chooserCancel:   { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
   chooserCancelTxt:{ fontSize: 16, fontWeight: '700' },
+
+  // Full-screen photo viewer
+  viewerOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
+  viewerCloseBtn:   { position: 'absolute', top: 50, right: 20, zIndex: 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  viewerImage:      { width: '100%', height: '80%' },
+  viewerDeleteBtn:  { position: 'absolute', bottom: 50, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(220,38,38,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24 },
+  viewerDeleteTxt:  { color: '#fff', fontSize: 14, fontWeight: '700' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },
