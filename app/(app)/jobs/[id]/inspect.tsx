@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Alert, Platform, TextInput,
+  Alert, Platform, TextInput, Modal,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
+import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,7 @@ import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
 import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -68,6 +70,43 @@ function compareLocationKeys(a: string, b: string): number {
   return 0;
 }
 
+// ─── Small bottom sheet: Take Photo / Choose from Gallery ─────────────────
+function PhotoChooserSheet({
+  visible, onClose, onTakePhoto, onPickGallery,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onTakePhoto: () => void;
+  onPickGallery: () => void;
+}) {
+  const C = useColors();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={s.chooserOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
+          <Text style={[s.chooserTitle, { color: C.text }]}>Add Photo</Text>
+          <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
+            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
+              <MaterialCommunityIcons name="camera-outline" size={20} color={C.primary} />
+            </View>
+            <Text style={[s.chooserRowTxt, { color: C.text }]}>Take Photo</Text>
+          </TouchableOpacity>
+          <View style={[s.chooserDivider, { backgroundColor: C.border }]} />
+          <TouchableOpacity style={s.chooserRow} onPress={onPickGallery} activeOpacity={0.7}>
+            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
+              <MaterialCommunityIcons name="image-multiple-outline" size={20} color={C.primary} />
+            </View>
+            <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from Gallery</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.chooserCancel, { backgroundColor: C.surface }]} onPress={onClose} activeOpacity={0.7}>
+          <Text style={[s.chooserCancelTxt, { color: C.text }]}>Cancel</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }: {
   asset: AssetWithResult;
   index: number;
@@ -78,11 +117,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 }) => {
   const C = useColors();
   const noMotion = useReducedMotion();
-  const { updateAssetResult, addPhotoToAsset, isSaving } = useInspectionStore();
+  const { updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
 
-  const [showFailModal,  setShowFailModal]  = useState(false);
-  const [isAddingPhoto,  setIsAddingPhoto]  = useState(false);
-  const photoCount = asset.photos?.length ?? 0;
+  const [showFailModal,   setShowFailModal]   = useState(false);
+  const [showPhotoChooser, setShowPhotoChooser] = useState(false);
+  const [isAddingPhoto,   setIsAddingPhoto]   = useState(false);
 
   const savePickedPhoto = async (sourceUri: string) => {
     const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
@@ -97,6 +136,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   };
 
   const handleTakePhoto = async () => {
+    setShowPhotoChooser(false);
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) return;
     setIsAddingPhoto(true);
@@ -112,6 +152,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   };
 
   const handlePickPhoto = async () => {
+    setShowPhotoChooser(false);
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     setIsAddingPhoto(true);
@@ -126,12 +167,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
     }
   };
 
-  const handleAddPhotoPress = () => {
-    Alert.alert('Add Photo', undefined, [
-      { text: 'Take Photo', onPress: handleTakePhoto },
-      { text: 'Choose from Gallery', onPress: handlePickPhoto },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  const handleRemovePhoto = (uri: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    removePhotoFromAsset(asset.id, uri);
   };
 
   const handleResult = (res: InspectionResult) => {
@@ -287,17 +325,30 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[s.photoBtn, photoCount > 0 ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-            onPress={() => !isAddingPhoto && handleAddPhotoPress()}
-            activeOpacity={0.8}
-            disabled={isAddingPhoto}
-          >
-            <MaterialCommunityIcons name={photoCount > 0 ? 'camera-image' : 'camera-plus-outline'} size={16} color={photoCount > 0 ? C.successDark : C.textSecondary} />
-            <Text style={[s.photoBtnTxt, { color: photoCount > 0 ? C.successDark : C.textSecondary }]}>
-              {isAddingPhoto ? 'Adding…' : photoCount > 0 ? `${photoCount} Photo${photoCount !== 1 ? 's' : ''}` : 'Add Photo'}
-            </Text>
-          </TouchableOpacity>
+          <View style={s.photoRow}>
+            {(asset.photos ?? []).map((uri) => (
+              <View key={uri} style={s.photoThumbWrap}>
+                <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
+                <TouchableOpacity
+                  style={[s.photoThumbDel, { backgroundColor: C.error }]}
+                  onPress={() => handleRemovePhoto(uri)}
+                  hitSlop={6}
+                >
+                  <MaterialCommunityIcons name="close" size={10} color={C.textOnPrimary} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[s.photoAddTile, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
+              onPress={() => !isAddingPhoto && setShowPhotoChooser(true)}
+              activeOpacity={0.8}
+              disabled={isAddingPhoto}
+            >
+              {isAddingPhoto
+                ? <ActivityIndicator size="small" color={C.textSecondary} />
+                : <MaterialCommunityIcons name="camera-plus-outline" size={18} color={C.textSecondary} />}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -307,6 +358,12 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
         jobId={jobId as string}
         onClose={() => setShowFailModal(false)}
         onSaveFail={handleSaveFail}
+      />
+      <PhotoChooserSheet
+        visible={showPhotoChooser}
+        onClose={() => setShowPhotoChooser(false)}
+        onTakePhoto={handleTakePhoto}
+        onPickGallery={handlePickPhoto}
       />
     </Animated.View>
   );
@@ -1010,8 +1067,26 @@ const s = StyleSheet.create({
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
-  photoBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 38, borderRadius: 14, borderWidth: 1, marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14 },
-  photoBtnTxt:  { fontSize: 13, fontWeight: '700' },
+  photoRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
+  photoThumbWrap:  { width: 44, height: 44, borderRadius: 10, overflow: 'visible' },
+  photoThumb:      { width: '100%', height: '100%', borderRadius: 10 },
+  photoThumbDel:   {
+    position: 'absolute', top: -5, right: -5,
+    width: 17, height: 17, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoAddTile:    { width: 44, height: 44, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+
+  // Photo chooser sheet
+  chooserOverlay:  { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
+  chooserSheet:    { borderRadius: 18, overflow: 'hidden', paddingTop: 14 },
+  chooserTitle:    { fontSize: 12, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, paddingBottom: 10 },
+  chooserRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  chooserIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  chooserRowTxt:   { fontSize: 16, fontWeight: '600' },
+  chooserDivider:  { height: StyleSheet.hairlineWidth, marginLeft: 18 },
+  chooserCancel:   { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
+  chooserCancelTxt:{ fontSize: 16, fontWeight: '700' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },

@@ -82,6 +82,7 @@ interface InspectionState {
     quotePrice?: number | null,
   ) => void;
   addPhotoToAsset: (assetId: string, photoUri: string) => void;
+  removePhotoFromAsset: (assetId: string, photoUri: string) => void;
   isInspectionComplete: () => boolean;
   reset: () => void;
 }
@@ -487,6 +488,46 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
     const newAssets = assets.map(a =>
       a.id === assetId ? { ...a, photos: [...a.photos, photoUri] } : a
+    );
+    set({ assets: newAssets });
+  },
+
+  removePhotoFromAsset: (assetId, photoUri) => {
+    const { assets, currentJobId } = get();
+    if (!currentJobId) return;
+
+    const row = queryRecords<{ id: string; photo_url: string; defect_id: string | null }>(
+      'inspection_photos', { job_id: currentJobId, asset_id: assetId, photo_url: photoUri },
+    )[0];
+
+    if (row) {
+      deleteRecord('inspection_photos', row.id);
+      recordDeletedPhoto(row.id);
+      if (row.photo_url.startsWith('https://')) {
+        addToSyncQueue('inspection_photos', row.id, SyncOperation.Delete, {
+          id: row.id, photo_url: row.photo_url,
+        });
+      } else {
+        cancelPendingPhotoUpload(row.id);
+      }
+
+      if (row.defect_id) {
+        const defect = queryRecords<{ id: string; photos: string | null }>(
+          'defects', { id: row.defect_id },
+        )[0];
+        if (defect) {
+          let defectPhotos: string[] = [];
+          try { defectPhotos = defect.photos ? JSON.parse(defect.photos) : []; }
+          catch { defectPhotos = []; }
+          const updates = { photos: JSON.stringify(defectPhotos.filter(p => p !== photoUri)) };
+          updateRecord('defects', defect.id, updates);
+          addToSyncQueue('defects', defect.id, SyncOperation.Update, updates);
+        }
+      }
+    }
+
+    const newAssets = assets.map(a =>
+      a.id === assetId ? { ...a, photos: a.photos.filter(p => p !== photoUri) } : a
     );
     set({ assets: newAssets });
   },
