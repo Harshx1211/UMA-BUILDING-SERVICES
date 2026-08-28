@@ -30,6 +30,34 @@ export { retryAllFailedSyncItems } from '@/lib/database';
 /** Max consecutive push failures before a sync queue item is permanently abandoned */
 const MAX_SYNC_RETRIES = 5;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const REPORT_SERVICE_WARMUP_MAX_WAIT_MS = 90_000;
+const REPORT_SERVICE_WARMUP_POLL_MS = 4_000;
+
+/**
+ * Blocks until sitetrack-report-generator answers its own /health check, or
+ * gives up quietly after REPORT_SERVICE_WARMUP_MAX_WAIT_MS. See the call site
+ * in the report_generate handler below for why this exists — same cold-start
+ * problem as Gotenberg's waitForGotenbergReady, one network hop further out.
+ * Never throws: if the service is genuinely down (not just cold), the real
+ * POST that follows still gets its own error handling and normal sync retry.
+ */
+async function waitForReportServiceReady(baseUrl: string): Promise<void> {
+  const deadline = Date.now() + REPORT_SERVICE_WARMUP_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${baseUrl}/health`);
+      if (res.ok) return;
+    } catch {
+      // Still asleep / mid-boot — keep waiting.
+    }
+    await sleep(REPORT_SERVICE_WARMUP_POLL_MS);
+  }
+}
+
 // Mutex for processPhotoQueue — prevents overlapping manual + interval calls (BUG-N12)
 let _isProcessingPhotos = false;
 
@@ -879,6 +907,20 @@ export async function _pushQueue(): Promise<void> {
         }
 
         if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling report-generator service for job ${reportJobId}`);
+
+        // Render's free tier (see render.yaml) spins sitetrack-report-generator
+        // down after ~15 min with no inbound traffic. This POST is the very
+        // first thing to touch it, before generateReport() even gets a chance
+        // to run its own internal Gotenberg warm-up — a cold instance can take
+        // 30-60s+ to start listening, and the first request to hit it while
+        // still booting gets a 502 from Render's own proxy. That's exactly the
+        // failure mode already diagnosed and fixed one layer in for Gotenberg
+        // (see gotenberg/client.ts's waitForGotenbergReady): the fix is the
+        // same shape — patiently wait for /health before sending the real
+        // request, instead of letting the first attempt eat a cold 502 and
+        // silently waiting for the next 60s sync cycle (or the user manually
+        // retrying) to paper over it.
+        await waitForReportServiceReady(reportServiceUrl);
 
         // The service now responds immediately once generation is safely queued
         // (202) rather than blocking for the entire Chromium render — a
