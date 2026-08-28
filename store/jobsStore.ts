@@ -1,7 +1,7 @@
 // Zustand store — full jobs state: loading, filtering, searching, status updates
 import { create } from 'zustand';
-import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord } from '@/lib/database';
-import { JobStatus, SyncOperation } from '@/constants/Enums';
+import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, getAssetsWithJobResults } from '@/lib/database';
+import { JobStatus, SyncOperation, ComplianceStatus, InspectionResult } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useAuthStore } from '@/store/authStore';
 import type { Job } from '@/types';
@@ -166,6 +166,28 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
       const update = { status: newStatus, updated_at: now, company_id: companyId };
       updateRecord('jobs', jobId, update);
       addToSyncQueue('jobs', jobId, SyncOperation.Update, update);
+
+      // Recompute the property's overall compliance whenever a job actually
+      // completes. This was previously the one thing missing from the normal
+      // job-completion path — only the separate, less-common "Site Inspect"
+      // quick-flow (app/(app)/properties/site-inspect/[id].tsx) ever wrote
+      // properties.compliance_status, so a property inspected exclusively
+      // through ordinary scheduled jobs stayed "Pending" in the admin
+      // dashboard forever, no matter how many jobs were completed against
+      // it. Same formula as that flow: any Fail among the property's
+      // (job-scoped) asset results makes it non-compliant.
+      if (newStatus === JobStatus.Completed) {
+        const completedJob = getJobById<{ property_id: string }>(jobId);
+        if (completedJob?.property_id) {
+          const propertyAssets = getAssetsWithJobResults<{ result: string | null }>(jobId, completedJob.property_id);
+          const compliance = propertyAssets.some(a => a.result === InspectionResult.Fail)
+            ? ComplianceStatus.NonCompliant
+            : ComplianceStatus.Compliant;
+          const propertyUpdate = { compliance_status: compliance, updated_at: now };
+          updateRecord('properties', completedJob.property_id, propertyUpdate);
+          addToSyncQueue('properties', completedJob.property_id, SyncOperation.Update, propertyUpdate);
+        }
+      }
 
       // Optimistic UI update — reflects change before the next sync cycle
       set((state) => ({
