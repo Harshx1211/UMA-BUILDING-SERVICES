@@ -34,6 +34,53 @@ function getSeverityColors(severity: DefectSeverity, C: ColorsType) {
   }
 }
 
+// ─── Severity picker sheet ─────────────────────────────────────
+function SeverityPickerSheet({
+  visible, value, onSelect, onClose,
+}: {
+  visible: boolean;
+  value: DefectSeverity;
+  onSelect: (v: DefectSeverity) => void;
+  onClose: () => void;
+}) {
+  const C = useColors();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={s.sevSheetOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[s.sevSheet, { backgroundColor: C.surface }]}>
+          <Text style={[s.sevSheetTitle, { color: C.text }]}>Defect Severity</Text>
+          {SEVERITIES.map((sev, i) => {
+            const isActive = value === sev.value;
+            const colors = getSeverityColors(sev.value, C);
+            return (
+              <React.Fragment key={sev.value}>
+                {i > 0 && <View style={[s.sevSheetDivider, { backgroundColor: C.border }]} />}
+                <TouchableOpacity
+                  style={s.sevSheetRow}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(sev.value); onClose(); }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.sevSheetIconWrap, { backgroundColor: colors.active + '18' }]}>
+                    <MaterialCommunityIcons name={sev.icon} size={20} color={colors.active} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.sevSheetLabel, { color: C.text }]}>{sev.label}</Text>
+                    <Text style={[s.sevSheetDesc, { color: C.textTertiary }]}>{sev.desc}</Text>
+                  </View>
+                  {isActive && <MaterialCommunityIcons name="check" size={20} color={colors.active} />}
+                </TouchableOpacity>
+              </React.Fragment>
+            );
+          })}
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.sevSheetCancel, { backgroundColor: C.surface }]} onPress={onClose} activeOpacity={0.7}>
+          <Text style={[s.sevSheetCancelTxt, { color: C.text }]}>Cancel</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 // ─── Props ───────────────────────────────────────────────────
 interface AssetInspectModalProps {
   visible: boolean;
@@ -61,6 +108,7 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
   const [severity,        setSeverity]        = useState<DefectSeverity>(DefectSeverity.NonConformance);
   const [reasonError,     setReasonError]     = useState(false);
   const [pickerVisible,   setPickerVisible]   = useState(false);
+  const [severityPickerVisible, setSeverityPickerVisible] = useState(false);
   const [selectedCode,    setSelectedCode]    = useState<DefectCode | null>(null);
   const [suggestedPrice,  setSuggestedPrice]  = useState<number | null>(null);
 
@@ -177,42 +225,32 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
               </View>
             </Card>
 
-            {/* ── SEVERITY SELECTOR ──────────────────────────── */}
+            {/* ── SEVERITY DROPDOWN ──────────────────────────── */}
             <View style={s.formSection}>
               <Text style={[s.formLabel, { color: C.text }]}>Defect Severity *</Text>
-              <View style={s.severityRow}>
-                {SEVERITIES.map(sev => {
-                  const isActive = severity === sev.value;
-                  const colors   = getSeverityColors(sev.value, C);
-                  return (
-                    <Card
-                      key={sev.value}
-                      style={{
-                        flex: 1,
-                        backgroundColor: isActive ? colors.active : C.backgroundTertiary,
-                        borderColor: isActive ? colors.active : C.border,
-                      }}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSeverity(sev.value);
-                      }}
-                      padding={12}
-                    >
-                      <View style={{ alignItems: 'center', gap: 4 }}>
-                        <MaterialCommunityIcons
-                          name={sev.icon}
-                          size={20}
-                          color={isActive ? T.textOnPrimary : colors.active}
-                        />
-                        <Text style={[s.severityLabel, { color: isActive ? T.textOnPrimary : C.text }]}>{sev.label}</Text>
-                        <Text style={[s.severityDesc, { color: isActive ? T.textOnPrimary : C.textTertiary, opacity: isActive ? 0.75 : 1 }]}>
-                          {sev.desc}
-                        </Text>
-                      </View>
-                    </Card>
-                  );
-                })}
-              </View>
+              {(() => {
+                const current = SEVERITIES.find(sv => sv.value === severity) ?? SEVERITIES[0];
+                const colors = getSeverityColors(current.value, C);
+                return (
+                  <TouchableOpacity
+                    style={[s.severityDropdown, { backgroundColor: C.surface, borderColor: C.border }]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSeverityPickerVisible(true);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[s.severityDropdownIconWrap, { backgroundColor: colors.active + '18' }]}>
+                      <MaterialCommunityIcons name={current.icon} size={18} color={colors.active} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.severityDropdownLabel, { color: C.text }]}>{current.label}</Text>
+                      <Text style={[s.severityDropdownDesc, { color: C.textTertiary }]}>{current.desc}</Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-down" size={22} color={C.textTertiary} />
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
 
             {/* ── DEFECT CODE PICKER ──────────────────────────── */}
@@ -348,6 +386,12 @@ export default function AssetInspectModal({ visible, asset, jobId, onClose, onSa
         onSelect={handleCodeSelect}
         onClose={() => setPickerVisible(false)}
       />
+      <SeverityPickerSheet
+        visible={severityPickerVisible}
+        value={severity}
+        onSelect={setSeverity}
+        onClose={() => setSeverityPickerVisible(false)}
+      />
     </>
   );
 }
@@ -385,13 +429,23 @@ const s = StyleSheet.create({
   errorBanner:    { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 10 },
   errorBannerTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
 
-  // Severity
-  severityRow: { flexDirection: 'row', gap: 10 },
-  severityCard: {
-    flex: 1, alignItems: 'center', padding: 12, borderRadius: 16, borderWidth: 1, gap: 4,
-  },
-  severityLabel: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  severityDesc:  { fontSize: 9, textAlign: 'center', letterSpacing: 0.1 },
+  // Severity dropdown
+  severityDropdown:        { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, padding: 12 },
+  severityDropdownIconWrap:{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  severityDropdownLabel:   { fontSize: 14, fontWeight: '700' },
+  severityDropdownDesc:    { fontSize: 12, marginTop: 1 },
+
+  // Severity picker sheet
+  sevSheetOverlay:  { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
+  sevSheet:         { borderRadius: 18, overflow: 'hidden', paddingTop: 14 },
+  sevSheetTitle:    { fontSize: 12, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, paddingBottom: 10 },
+  sevSheetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  sevSheetIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sevSheetLabel:    { fontSize: 15, fontWeight: '700' },
+  sevSheetDesc:     { fontSize: 12, marginTop: 1 },
+  sevSheetDivider:  { height: StyleSheet.hairlineWidth, marginLeft: 18 },
+  sevSheetCancel:   { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
+  sevSheetCancelTxt:{ fontSize: 16, fontWeight: '700' },
 
   // Code picker button
   codePickerBtn: { marginBottom: 12 },
