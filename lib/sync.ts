@@ -362,6 +362,39 @@ export async function runSync(userId?: string): Promise<boolean> {
   }
 }
 
+/**
+ * Pushes photo binaries then the sync queue, guarded by the same
+ * `_isProcessingPhotos` mutex runSync() uses internally — plus a bounded wait
+ * for any already-in-flight runSync() to finish its own push first.
+ *
+ * For use ONLY by authStore's signOut()/forceFinalSyncAndSignOut(), which
+ * can't just call runSync(): runSync's revocation/subscription check would
+ * immediately re-detect the same deactivated/suspended account and re-call
+ * forceFinalSyncAndSignOut() (a no-op re-entrancy guard), short-circuiting
+ * before the push step ever runs — the whole reason those callers do their
+ * own push instead. Previously that bypass called processPhotoQueue()/
+ * _pushQueue() directly with no mutex at all: a technician signing out while
+ * the background 60s interval was mid-upload could run two concurrent
+ * processPhotoQueue() passes, each uploading the same local photo under a
+ * different generated filename and racing to insert the same
+ * inspection_photos.id, orphaning a Storage object. Screens should still use
+ * runSync() for normal sync triggering — this is not a general substitute.
+ */
+export async function pushPendingWork(userId: string): Promise<void> {
+  for (let waited = 0; _isSyncing && waited < 10; waited++) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!_isProcessingPhotos) {
+    _isProcessingPhotos = true;
+    try {
+      await processPhotoQueue(userId);
+    } finally {
+      _isProcessingPhotos = false;
+    }
+  }
+  await _pushQueue();
+}
+
 // ─────────────────────────────────────────────
 // Private helpers
 // ─────────────────────────────────────────────
@@ -719,6 +752,20 @@ export async function _pushQueue(): Promise<void> {
   // We process all returned items — no secondary filter needed.
   if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: processing ${pending.length} queue item(s)`);
 
+  // Records whose own Insert is still outstanding at the start of this pass
+  // (not yet confirmed to exist server-side). An Update for one of these
+  // records is unsafe to run: `.eq('id', ...)` (or the conflict-guarded
+  // `.lt(...)`) matches zero rows exactly the same way it would if a newer
+  // server edit had legitimately already won — but here the row simply
+  // isn't there yet, so the update has nowhere to land and would otherwise
+  // be marked complete below having silently done nothing. Entries are
+  // removed as their Insert is confirmed to have succeeded further down in
+  // this same loop, so an Insert-then-Update pair queued together in the
+  // normal case still runs in one pass without waiting an extra cycle.
+  const openInsertKeys = new Set<string>(
+    pending.filter(p => p.operation === SyncOperation.Insert).map(p => `${p.table_name}:${p.record_id}`),
+  );
+
   for (const item of pending) {
     try {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
@@ -782,6 +829,20 @@ export async function _pushQueue(): Promise<void> {
           error = null; // handled — don't fall through to the generic error path
         }
       } else if (item.operation === SyncOperation.Update) {
+        // Defer if this record's own Insert hasn't been confirmed yet this
+        // pass — see openInsertKeys above. Soft retry, same idiom as the
+        // report_generate dependency-blocker below: don't burn a real
+        // attempt, just come back once the Insert has had its turn.
+        if (openInsertKeys.has(`${item.table_name}:${item.record_id}`)) {
+          if (__DEV__) console.warn(
+            `[SiteTrack Sync] Update for ${item.table_name}/${item.record_id} deferred — its own Insert hasn't synced yet`
+          );
+          if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
+            incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to sync first`, MAX_SYNC_RETRIES);
+          }
+          continue;
+        }
+
         // FIX: Inject company_id for UPDATE operations too.
         // Although RLS on UPDATE typically filters on existing column values (not
         // the payload), some Supabase policies check the payload's company_id to
@@ -997,6 +1058,7 @@ export async function _pushQueue(): Promise<void> {
           // (dropped connection, app killed mid-request). The goal of this
           // queue item — get this row onto the server — is already met.
           markSyncItemComplete(item.id);
+          openInsertKeys.delete(`${item.table_name}:${item.record_id}`);
           if (__DEV__) console.log(
             `[SiteTrack Sync] PUSH: item ${item.id} (${item.table_name}) already exists server-side — treating as complete`
           );
@@ -1021,6 +1083,9 @@ export async function _pushQueue(): Promise<void> {
         // never uploaded but the queue item was marked done, permanently
         // losing the photo. Now we only mark complete for handled operations.
         markSyncItemComplete(item.id);
+        if (item.operation === SyncOperation.Insert) {
+          openInsertKeys.delete(`${item.table_name}:${item.record_id}`);
+        }
         if (__DEV__) console.log(
           `[UMA BUILDING SERVICES Sync] PUSH: queue item ${item.id} (${item.table_name}/${item.operation}) complete`
         );

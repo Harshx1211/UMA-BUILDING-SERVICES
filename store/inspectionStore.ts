@@ -345,8 +345,26 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         if (existingDefects.length === 0) {
           const defectId = generateUUID();
           const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
-          const resolvedPhotos = savedPhotoUris.length > 0
-            ? JSON.stringify(savedPhotoUris)
+
+          // Photos can reach this asset two ways: passed directly via this
+          // call's `photos` arg (savedPhotoUris — the old Fail-modal flow), or
+          // added earlier through addPhotoToAsset() while no defect existed
+          // yet (the current flow: the photo icon on each asset card works
+          // independently of Pass/Fail/N-T, so a technician commonly
+          // photographs the fault before tapping Fail). addPhotoToAsset can
+          // only link a photo to a defect that already exists, so any
+          // inspection_photos row for this asset still sitting with
+          // defect_id NULL belongs to the defect being created right now —
+          // without this, those photos would show on the asset card but
+          // never appear on the Defects list/detail screen or in the synced
+          // defects.photos column, since both read defect.photos exclusively.
+          const unlinkedPhotos = queryRecords<{ id: string; photo_url: string; defect_id: string | null }>(
+            'inspection_photos',
+            { job_id: currentJobId, asset_id: assetId },
+          ).filter(p => !p.defect_id);
+          const allDefectPhotoUris = [...new Set([...savedPhotoUris, ...unlinkedPhotos.map(p => p.photo_url)])];
+          const resolvedPhotos = allDefectPhotoUris.length > 0
+            ? JSON.stringify(allDefectPhotoUris)
             : '[]';
 
           const defectPayload: Record<string, string | number | null> = {
@@ -366,16 +384,20 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           insertRecord('defects', defectPayload);
           addToSyncQueue('defects', defectId, SyncOperation.Insert, defectPayload);
 
-          // Back-fill defect_id on the inspection_photos rows we just inserted
-          // so pdfGenerator can correctly link them to the defect box in the report.
-          if (savedPhotoUris.length > 0) {
+          // Back-fill defect_id on every inspection_photos row that belongs to
+          // this new defect (both just-inserted-this-call and previously
+          // orphaned ones) — queued as its own Update so the link reaches
+          // Supabase too, not just local SQLite (the row's own Insert may
+          // already have gone out with defect_id: null before this runs).
+          if (allDefectPhotoUris.length > 0) {
             const recentPhotos = queryRecords<{ id: string; photo_url: string }>(
               'inspection_photos',
               { job_id: currentJobId, asset_id: assetId },
             );
             for (const p of recentPhotos) {
-              if (savedPhotoUris.includes(p.photo_url)) {
+              if (allDefectPhotoUris.includes(p.photo_url)) {
                 updateRecord('inspection_photos', p.id, { defect_id: defectId });
+                addToSyncQueue('inspection_photos', p.id, SyncOperation.Update, { defect_id: defectId });
               }
             }
           }
@@ -409,6 +431,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             for (const p of recentPhotos) {
               if (savedPhotoUris.includes(p.photo_url)) {
                 updateRecord('inspection_photos', p.id, { defect_id: existingId });
+                addToSyncQueue('inspection_photos', p.id, SyncOperation.Update, { defect_id: existingId });
               }
             }
           }

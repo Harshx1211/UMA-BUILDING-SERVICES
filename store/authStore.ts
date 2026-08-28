@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, signOut as supabaseSignOut } from '@/lib/supabase';
 import { stopSync } from '@/lib/sync';
 import { clearDatabase, getPendingSyncItems } from '@/lib/database';
+import { showConfirm } from '@/components/ui';
 import { SESSION_KEY } from '@/constants/Config';
 import type { User } from '@/types';
 import { UserRole } from '@/constants/Enums';
@@ -192,13 +193,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // if it still can't get everything up.
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
-        const { processPhotoQueue } = await import('@/lib/photoUpload');
-        const { _pushQueue } = await import('@/lib/sync');
+        const { pushPendingWork } = await import('@/lib/sync');
         const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
 
         for (let i = 0; i < 5; i++) {
-          await processPhotoQueue(currentUserId);
-          await _pushQueue();
+          await pushPendingWork(currentUserId);
           pending = getPendingSyncItems();
           if (pending.length === 0) break;
           await new Promise(r => setTimeout(r, (i + 1) * 1000));
@@ -207,12 +206,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         if (pending.length > 0) {
           console.warn(`[AuthStore] signOut: ${pending.length} item(s) still unsynced — aborting to prevent data loss.`);
           set({ isLoading: false });
-          const rn = await import('react-native');
-          rn.Alert.alert(
-            'Unsynced Work',
-            'You have offline work that hasn\'t reached the server yet. Connect to Wi-Fi or mobile data and try again so it isn\'t lost.',
-            [{ text: 'OK' }]
-          );
+          showConfirm({
+            title: 'Unsynced Work',
+            message: 'You have offline work that hasn\'t reached the server yet. Connect to Wi-Fi or mobile data and try again so it isn\'t lost.',
+            icon: 'cloud-alert-outline',
+          });
           return false;
         }
       }
@@ -254,13 +252,11 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // _pushQueue only handles data records (Insert/Update/Delete/ReportGenerate).
         // Photo binaries live in a separate binary upload queue (photoUpload.ts).
         // Previously, offline photos were permanently lost on forced logout.
-        const { processPhotoQueue } = await import('@/lib/photoUpload');
-        const { _pushQueue } = await import('@/lib/sync');
+        const { pushPendingWork } = await import('@/lib/sync');
         const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
 
         for (let i = 0; i < 5; i++) {
-          await processPhotoQueue(currentUserId);
-          await _pushQueue();
+          await pushPendingWork(currentUserId);
           pending = getPendingSyncItems();
           if (pending.length === 0) break;
           // Exponential backoff: 1s, 2s, 3s, 4s, 5s
@@ -272,12 +268,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         if (pending.length > 0) {
           console.warn(`[AuthStore] Final sync failed. ${pending.length} items remain. Aborting logout to prevent data loss.`);
           set({ isForceSyncing: false });
-          import('react-native').then(rn => {
-            rn.Alert.alert(
-              'Final Sync Failed',
-              'Your account was deactivated, but we could not upload your final offline work. Please connect to a strong Wi-Fi network so your work is not lost.',
-              [{ text: 'OK' }]
-            );
+          showConfirm({
+            title: 'Final Sync Failed',
+            message: 'Your account was deactivated, but we could not upload your final offline work. Please connect to a strong Wi-Fi network so your work is not lost.',
+            icon: 'cloud-alert-outline',
           });
           return;
         }
