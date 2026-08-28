@@ -103,45 +103,73 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   // already warm.
   await gotenbergReady;
 
-  // ── Every top-level section (cover, each category, each tail section) gets
-  // its own Gotenberg render so its exact page count is knowable via pdf-lib
-  // afterward — the only reliable way to build a page-accurate Index, since
-  // Chromium's own pagination can't be predicted from the source HTML alone.
-  // This trades away the old "one combined render for small jobs" fast path;
-  // config.gotenbergConcurrency controls how many of these run in parallel.
-  let coverRendered: { buffer: Buffer; pageCount: number };
-  let categoryRendered: Array<{ label: string; buffers: Buffer[]; pageCount: number }>;
-  let tailRendered: Array<{ key: string; buffer: Buffer; pageCount: number }>;
+  // ── Every top-level section (cover, each category chunk, each tail section)
+  // gets its own Gotenberg render so its exact page count is knowable via
+  // pdf-lib afterward — the only reliable way to build a page-accurate Index,
+  // since Chromium's own pagination can't be predicted from the source HTML
+  // alone. This trades away the old "one combined render for small jobs" fast
+  // path, so even a small report is several separate Chromium round trips.
+  //
+  // These sections don't depend on each other, so they're all queued as one
+  // flat batch here (instead of three sequential await stages: cover, then
+  // ALL categories, then ALL tail docs) — config.gotenbergConcurrency workers
+  // pull from the combined queue, keeping Gotenberg equally busy the whole
+  // time rather than idling between stages. This was previously also the
+  // only place gotenbergConcurrency could be silently exceeded: a category
+  // split into multiple chunks fanned out via an inner unbounded Promise.all,
+  // so a single large category could launch far more concurrent renders than
+  // the configured limit. Flattening onto one queue fixes that too.
+  type SectionJob =
+    | { kind: 'cover' }
+    | { kind: 'category'; catIndex: number; chunkIndex: number; label: string; html: string }
+    | { kind: 'tail'; tailIndex: number; key: string; html: string };
+
+  const jobs: SectionJob[] = [
+    { kind: 'cover' },
+    ...categoryLogs.flatMap((cat, catIndex) =>
+      cat.chunks.map((chunk, chunkIndex) => ({
+        kind: 'category' as const,
+        catIndex,
+        chunkIndex,
+        label: cat.label,
+        html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls),
+      })),
+    ),
+    ...tailDocs.map((doc, tailIndex) => ({ kind: 'tail' as const, tailIndex, key: doc.key, html: doc.html })),
+  ];
+
+  let coverRendered!: { buffer: Buffer; pageCount: number };
+  const categoryBuffers: Buffer[][] = categoryLogs.map((cat) => new Array(cat.chunks.length));
+  const categoryPageCounts: number[][] = categoryLogs.map((cat) => new Array(cat.chunks.length).fill(0));
+  const tailResults: Array<{ key: string; buffer: Buffer; pageCount: number }> = new Array(tailDocs.length);
 
   try {
-    coverRendered = await renderAndCount(renderCover(data, assetTypesByValue), 'cover', footerTemplate);
-
-    categoryRendered = await mapWithConcurrency(categoryLogs, config.gotenbergConcurrency, async (cat) => {
-      const chunkResults = await Promise.all(
-        cat.chunks.map((chunk) =>
-          renderAndCount(
-            renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls),
-            `asset_log_${cat.label}`,
-            footerTemplate,
-          ),
-        ),
-      );
-      return {
-        label: cat.label,
-        buffers: chunkResults.map((r) => r.buffer),
-        pageCount: chunkResults.reduce((sum, r) => sum + r.pageCount, 0),
-      };
-    });
-
-    tailRendered = await mapWithConcurrency(tailDocs, config.gotenbergConcurrency, async (doc) => {
-      const r = await renderAndCount(doc.html, doc.key, footerTemplate);
-      return { key: doc.key, buffer: r.buffer, pageCount: r.pageCount };
+    await mapWithConcurrency(jobs, config.gotenbergConcurrency, async (job) => {
+      if (job.kind === 'cover') {
+        coverRendered = await renderAndCount(renderCover(data, assetTypesByValue), 'cover', footerTemplate);
+        return;
+      }
+      if (job.kind === 'category') {
+        const r = await renderAndCount(job.html, `asset_log_${job.label}`, footerTemplate);
+        categoryBuffers[job.catIndex][job.chunkIndex] = r.buffer;
+        categoryPageCounts[job.catIndex][job.chunkIndex] = r.pageCount;
+        return;
+      }
+      const r = await renderAndCount(job.html, job.key, footerTemplate);
+      tailResults[job.tailIndex] = { key: job.key, buffer: r.buffer, pageCount: r.pageCount };
     });
   } catch (err) {
     throw new ReportGenerationError(
       `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
     );
   }
+
+  const categoryRendered = categoryLogs.map((cat, ci) => ({
+    label: cat.label,
+    buffers: categoryBuffers[ci],
+    pageCount: categoryPageCounts[ci].reduce((sum, n) => sum + n, 0),
+  }));
+  const tailRendered = tailResults;
 
   // ── Build the Index. Pass 1 renders it with a placeholder page-count
   // assumption purely to measure the Index's OWN page count — that
