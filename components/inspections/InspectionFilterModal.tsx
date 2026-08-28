@@ -214,7 +214,7 @@ export default function InspectionFilterModal({
           </Section>
         </ScrollView>
 
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border }]}>
+        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
           <Button title={activeCount > 0 ? `Show Results (${activeCount} active)` : 'Done'} onPress={onClose} />
         </View>
       </View>
