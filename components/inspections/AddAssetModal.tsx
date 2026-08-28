@@ -1,9 +1,9 @@
-// AddAssetModal — Type → Variant → Details three-step flow
+// AddAssetModal — Type (with variant picked inline) → Details, two-step flow
 // Mirrors the "Edit Asset" form captured in reference screenshots from Uptick
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, Platform, Alert, FlatList,
+  ScrollView, Platform, Alert,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ import { useCatalogueStore } from '@/store/catalogueStore';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
-type Step = 'type' | 'variant' | 'details';
+type Step = 'type' | 'details';
 
 interface AddAssetModalProps {
   visible: boolean;
@@ -110,15 +110,23 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const handleClose = () => { resetAll(); onClose(); };
 
   // ── Navigation ────────────────────────────────────────────────
+  // Tapping a type expands its variant list inline (right under that row) —
+  // no separate page. Tapping a variant there advances straight to Details.
+  // A type with no variants advances to Details immediately.
   const handleTypeSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (selectedType === value) {
+      // Tapping the already-expanded type again collapses it.
+      setSelectedType('');
+      setSelectedVariant('');
+      setVariantSearch('');
+      return;
+    }
     setSelectedType(value);
     setSelectedVariant('');
     setVariantSearch('');
     const def = assetTypes.find(t => t.value === value);
-    if (def && def.variants.length > 0) {
-      setStep('variant');
-    } else {
+    if (!def || def.variants.length === 0) {
       setStep('details');
     }
   };
@@ -130,15 +138,13 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   };
 
   const handleBack = () => {
-    if (step === 'variant') {
+    if (step === 'details') {
       setStep('type');
-      setSelectedType('');
-    } else if (step === 'details') {
       if (variants.length > 0) {
-        setStep('variant');
+        // Keep the type selected so its variant list re-expands — just
+        // clear the pick so they can choose a different one, or Skip again.
         setSelectedVariant('');
       } else {
-        setStep('type');
         setSelectedType('');
       }
     }
@@ -199,12 +205,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   };
 
   // ── Step titles ───────────────────────────────────────────────
-  const stepTitle = step === 'type' ? 'Select Asset Type'
-    : step === 'variant' ? 'Select Variant'
-    : 'Asset Details';
+  const stepTitle = step === 'type' ? 'Select Asset Type' : 'Asset Details';
 
   const stepSub = step === 'type' ? 'What kind of asset is this?'
-    : step === 'variant' ? typeDef?.fullLabel ?? ''
     : selectedVariant ? `${selectedType} — ${selectedVariant}` : selectedType;
 
   // ─────────────────────────────────────────────────────────────
@@ -229,7 +232,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
 
         {/* ── STEP INDICATORS ── */}
         {(() => {
-          const STEPS: Step[] = ['type', 'variant', 'details'];
+          const STEPS: Step[] = ['type', 'details'];
           const currentIdx = STEPS.indexOf(step);
           return (
             <View style={[s.stepBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
@@ -245,7 +248,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                       }
                     </View>
                     <Text style={[s.stepLabel, { color: isActive ? C.primary : C.textTertiary }]}>
-                      {s2 === 'type' ? 'Type' : s2 === 'variant' ? 'Variant' : 'Details'}
+                      {s2 === 'type' ? 'Type' : 'Details'}
                     </Text>
                   </View>
                 );
@@ -254,9 +257,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           );
         })()}
 
-        {/* ══ STEP 1: TYPE GRID ══════════════════════════════════════ */}
+        {/* ══ STEP 1: TYPE LIST — tapping a type expands its variants right below it ══ */}
         {step === 'type' && (
-          <ScrollView contentContainerStyle={s.typeScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={s.typeScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {errors.type && (
               <View style={[s.errorRow, { backgroundColor: C.errorLight, borderColor: C.error }]}>
                 <MaterialCommunityIcons name="alert-circle" size={13} color={C.error} />
@@ -264,91 +267,85 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             )}
             <View style={s.typeGrid}>
-              {assetTypes.map(t => (
-                <Card
-                  key={t.value}
-                  style={[s.typeCard, selectedType === t.value ? { borderColor: t.color, backgroundColor: t.color + '15' } : {}]}
-                  noPadding
-                >
-                  <TouchableOpacity
-                    style={s.typeCardTouch}
-                    onPress={() => handleTypeSelect(t.value)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={[s.typeIconWrap, {
-                      backgroundColor: selectedType === t.value ? t.color : C.backgroundTertiary,
-                    }]}>
-                      <MaterialCommunityIcons name={t.icon} size={24} color={selectedType === t.value ? T.textOnPrimary : t.color} />
-                    </View>
-                    <Text style={[s.typeLabel, { color: selectedType === t.value ? t.color : C.text }]}>{t.label}</Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={16}
-                      color={C.textTertiary}
-                    />
-                  </TouchableOpacity>
-                </Card>
-              ))}
-            </View>
-          </ScrollView>
-        )}
-
-        {/* ══ STEP 2: VARIANT LIST ══════════════════════════════════ */}
-        {step === 'variant' && (
-          <View style={{ flex: 1 }}>
-            {/* Search */}
-            <View style={[s.searchBar, { backgroundColor: C.surface, borderBottomColor: C.border }]}>
-              <MaterialCommunityIcons name="magnify" size={18} color={C.textTertiary} />
-              <TextInput
-                style={[s.searchInput, { color: C.text }]}
-                placeholder="Filter variants…"
-                placeholderTextColor={C.textTertiary}
-                value={variantSearch}
-                onChangeText={setVariantSearch}
-              />
-              {variantSearch.length > 0 && (
-                <TouchableOpacity onPress={() => setVariantSearch('')} hitSlop={8}>
-                  <MaterialCommunityIcons name="close-circle" size={16} color={C.textTertiary} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <FlatList
-              data={filteredVariants}
-              keyExtractor={item => item}
-              contentContainerStyle={{ paddingVertical: 8 }}
-              renderItem={({ item }) => {
-                const isSelected = selectedVariant === item;
+              {assetTypes.map(t => {
+                const isExpanded = selectedType === t.value && t.variants.length > 0;
                 return (
-                  <Card key={item} style={[s.variantRow, isSelected ? { borderColor: C.primary, backgroundColor: C.primary + '15' } : {}]} noPadding>
+                  <Card
+                    key={t.value}
+                    style={[s.typeCard, isExpanded ? { borderColor: t.color, backgroundColor: t.color + '15' } : {}]}
+                    noPadding
+                  >
                     <TouchableOpacity
-                      style={s.variantTouch}
-                      onPress={() => handleVariantSelect(item)}
-                      activeOpacity={0.7}
+                      style={s.typeCardTouch}
+                      onPress={() => handleTypeSelect(t.value)}
+                      activeOpacity={0.75}
                     >
-                      <Text style={[s.variantTxt, { color: isSelected ? C.primary : C.text, fontWeight: isSelected ? '800' : '600' }]}>
-                        {item}
-                      </Text>
-                      {isSelected && <MaterialCommunityIcons name="check" size={20} color={C.primary} />}
+                      <View style={[s.typeIconWrap, {
+                        backgroundColor: isExpanded ? t.color : C.backgroundTertiary,
+                      }]}>
+                        <MaterialCommunityIcons name={t.icon} size={24} color={isExpanded ? T.textOnPrimary : t.color} />
+                      </View>
+                      <Text style={[s.typeLabel, { color: isExpanded ? t.color : C.text }]}>{t.label}</Text>
+                      <MaterialCommunityIcons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={isExpanded ? t.color : C.textTertiary}
+                      />
                     </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={[s.variantDropdown, { borderTopColor: t.color + '30' }]}>
+                        {t.variants.length > 6 && (
+                          <View style={[s.variantSearchBar, { backgroundColor: C.background, borderColor: C.border }]}>
+                            <MaterialCommunityIcons name="magnify" size={16} color={C.textTertiary} />
+                            <TextInput
+                              style={[s.variantSearchInput, { color: C.text }]}
+                              placeholder="Filter variants…"
+                              placeholderTextColor={C.textTertiary}
+                              value={variantSearch}
+                              onChangeText={setVariantSearch}
+                            />
+                            {variantSearch.length > 0 && (
+                              <TouchableOpacity onPress={() => setVariantSearch('')} hitSlop={8}>
+                                <MaterialCommunityIcons name="close-circle" size={15} color={C.textTertiary} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {filteredVariants.length === 0 ? (
+                          <Text style={[s.emptyVariantTxt, { color: C.textTertiary }]}>
+                            No variants match &quot;{variantSearch}&quot;
+                          </Text>
+                        ) : (
+                          filteredVariants.map(v => {
+                            const isSelected = selectedVariant === v;
+                            return (
+                              <TouchableOpacity
+                                key={v}
+                                style={[s.variantDropdownRow, { borderColor: isSelected ? t.color : C.border, backgroundColor: isSelected ? t.color + '18' : C.background }]}
+                                onPress={() => handleVariantSelect(v)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[s.variantDropdownTxt, { color: isSelected ? t.color : C.text, fontWeight: isSelected ? '800' : '600' }]} numberOfLines={2}>
+                                  {v}
+                                </Text>
+                                {isSelected && <MaterialCommunityIcons name="check" size={18} color={t.color} />}
+                              </TouchableOpacity>
+                            );
+                          })
+                        )}
+
+                        <TouchableOpacity onPress={() => setStep('details')} style={s.skipInlineBtn}>
+                          <Text style={[s.skipTxt, { color: C.textTertiary }]}>Skip — enter details without variant</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </Card>
                 );
-              }}
-              ListEmptyComponent={
-                <View style={s.emptyVariant}>
-                  <Text style={{ color: C.textTertiary }}>No variants match &quot;{variantSearch}&quot;</Text>
-                </View>
-              }
-            />
-
-            {/* Skip variant */}
-            <TouchableOpacity
-              style={[s.skipBtn, { borderTopColor: C.border }]}
-              onPress={() => setStep('details')}
-            >
-              <Text style={[s.skipTxt, { color: C.textTertiary }]}>Skip — enter details without variant</Text>
-            </TouchableOpacity>
-          </View>
+              })}
+            </View>
+          </ScrollView>
         )}
 
         {/* ══ STEP 3: DETAILS FORM ══════════════════════════════════ */}
@@ -592,8 +589,7 @@ const s = StyleSheet.create({
   typeScroll: { padding: 16, paddingBottom: 40 },
   typeGrid:   { gap: 12 },
   typeCard: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 14,
+    flexDirection: 'column',
   },
   typeCardTouch: {
     flexDirection: 'row', alignItems: 'center', padding: 14, gap: 14, flex: 1,
@@ -601,23 +597,23 @@ const s = StyleSheet.create({
   typeIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   typeLabel:    { flex: 1, fontSize: 15, fontWeight: '800', letterSpacing: -0.1 },
 
-  // Variant list
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, gap: 10,
+  // Variant dropdown — expands inline under the tapped type row
+  variantDropdown: { borderTopWidth: 1, padding: 12, gap: 8 },
+  variantSearchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 2,
   },
-  searchInput: { flex: 1, fontSize: 15, fontWeight: '600', padding: 0 },
-  variantRow: {
-    marginHorizontal: 16, marginVertical: 4,
+  variantSearchInput: { flex: 1, fontSize: 14, fontWeight: '600', padding: 0 },
+  variantDropdownRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
   },
-  variantTouch: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
-  },
-  variantTxt:   { flex: 1, fontSize: 15, letterSpacing: -0.1 },
-  emptyVariant: { padding: 40, alignItems: 'center' },
-  skipBtn:      { borderTopWidth: 1, padding: 18, alignItems: 'center' },
+  variantDropdownTxt: { flex: 1, fontSize: 14, letterSpacing: -0.1, marginRight: 8 },
+  emptyVariantTxt: { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
+  skipInlineBtn: { alignItems: 'center', paddingVertical: 10, marginTop: 2 },
   skipTxt:      { fontSize: 13, fontWeight: '700' },
 
   // Details
