@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { JobStatus, JobType, Priority, ComplianceStatus } from '@/constants/Enums';
+import { Priority, ComplianceStatus } from '@/constants/Enums';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { Badge, showConfirm } from '@/components/ui';

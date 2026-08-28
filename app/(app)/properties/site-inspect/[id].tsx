@@ -232,7 +232,6 @@ AssetInspectCard.displayName = 'AssetInspectCard';
 // MAIN SCREEN
 // ═══════════════════════════════════════════════════════════════
 export default function SiteInspectScreen() {
-  const noMotion = useReducedMotion();
   const C          = useColors();
   const insets     = useSafeAreaInsets();
   const { id: propertyId } = useLocalSearchParams<{ id: string }>();

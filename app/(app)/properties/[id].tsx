@@ -9,7 +9,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { ComplianceStatus, AssetStatus, JobStatus, JobType } from '@/constants/Enums';
+import { ComplianceStatus, AssetStatus, JobStatus } from '@/constants/Enums';
 import { getRecord, getAssetsForProperty, getJobsForProperty } from '@/lib/database';
 import type { Property, Asset, Job } from '@/types';
 import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
@@ -60,7 +60,6 @@ function SectionHeader({ icon, title, count, actionLabel, onAction }: {
   actionLabel?: string; onAction?: () => void;
 }) {
   const C = useColors();
-  const noMotion = useReducedMotion();
   return (
     <View style={[sh.row, { marginHorizontal: 16, marginBottom: 12, marginTop: 24 }]}>
       <View style={sh.left}>
@@ -99,7 +98,6 @@ function InfoRow({ icon, label, value, onPress, valueColor }: {
   onPress?: () => void; valueColor?: string;
 }) {
   const C = useColors();
-  const noMotion = useReducedMotion();
   const Comp = onPress ? TouchableOpacity : View;
   return (
     <Comp style={infoRow.wrap} onPress={onPress} activeOpacity={0.7}>

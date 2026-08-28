@@ -5,14 +5,12 @@ import { Text } from 'react-native-paper';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
-import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function SplashScreen() {
   const { isLoading, isAuthenticated } = useAuthStore();
-  const C = useColors();
   const noMotion = useReducedMotion();
 
   useEffect(() => {

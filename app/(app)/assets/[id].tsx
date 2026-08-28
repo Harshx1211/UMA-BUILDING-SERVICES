@@ -7,7 +7,6 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { T } from '@/constants/Colors';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';

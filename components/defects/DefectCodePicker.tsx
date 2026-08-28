@@ -219,7 +219,7 @@ export default function DefectCodePicker({ visible, onSelect, onClose }: DefectC
         </Text>
       </View>
     </Animated.View>
-  ), [C, handleSelect, filteredCodes.length, query]);
+  ), [C, handleSelect, filteredCodes.length, query, noMotion]);
 
   return (
     <Modal

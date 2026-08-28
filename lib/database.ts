@@ -1480,30 +1480,6 @@ export function cleanOldSyncQueueItems(): void {
 }
 
 /**
- * FIX: this previously deleted `synced = 0` (PENDING, not-yet-attempted) items —
- * the exact opposite of what the name promises. A pending item hasn't failed at
- * all; deleting it silently drops a legitimate queued write with zero warning.
- * Now correctly targets `synced = -1` (permanently failed, retries exhausted) —
- * the rows this function's name says it clears. Use this only when you want to
- * ABANDON that data; to give failed items a fresh shot instead, use
- * resetStaleFailedSyncItems() or retryAllFailedSyncItems() below.
- */
-export function clearFailedSyncItems(tableName: string): void {
-  try {
-    const db = openDatabase();
-    db.runSync(`DELETE FROM sync_queue WHERE table_name = ? AND synced = -1`, [
-      tableName,
-    ]);
-    if (__DEV__)
-      console.log(
-        `[UMA BUILDING SERVICES DB] Cleared permanently-failed sync queue items for table: ${tableName}`,
-      );
-  } catch (err) {
-    console.error(`[UMA BUILDING SERVICES DB] clearFailedSyncItems error:`, err);
-  }
-}
-
-/**
  * NEW: Recovery mechanism for permanently-failed sync items.
  *
  * Without this, an item that exhausts MAX_SYNC_RETRIES (5) in sync.ts is

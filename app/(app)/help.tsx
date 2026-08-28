@@ -139,7 +139,6 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
 
 function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const C = useColors();
-  const noMotion = useReducedMotion();
   const [step, setStep] = useState(0);
   const current = WALKTHROUGH_STEPS[step];
 
