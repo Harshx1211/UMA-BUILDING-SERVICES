@@ -17,9 +17,8 @@ import {
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
-import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY } from '@/constants/Config';
+import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, PHOTO_BUCKET } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
-import { PHOTO_BUCKET } from '@/constants/Config';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
 import { classifySyncError } from '@/lib/syncErrors';
