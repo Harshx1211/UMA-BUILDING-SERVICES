@@ -8,9 +8,11 @@ export enum JobStatus {
   Cancelled = 'cancelled',
 }
 
-/** Status of generated deficiency quotes */
+/** Status of generated deficiency quotes — must mirror the admin app's
+ * `quotes.status` CHECK constraint exactly (draft/sent/approved/rejected). */
 export enum QuoteStatus {
   Draft = 'draft',
+  Sent = 'sent',
   Approved = 'approved',
   Rejected = 'rejected',
 }
