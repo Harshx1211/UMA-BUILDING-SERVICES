@@ -18,6 +18,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
@@ -152,14 +153,30 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const [viewingPhoto,    setViewingPhoto]    = useState<string | null>(null);
 
   const savePickedPhoto = async (sourceUri: string) => {
-    const filename = sourceUri.split('/').pop() || `photo_${Date.now()}.jpg`;
+    // Same resize/compress standard as PhotoCaptureSheet.tsx's camera flow —
+    // this helper is shared by both the in-app camera AND "choose from
+    // library" below, and the library path previously skipped this step
+    // entirely, letting a full-resolution gallery photo (several MB) through
+    // uncompressed in size while every other capture path was ~150-350KB.
+    let resizedUri = sourceUri;
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        sourceUri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      resizedUri = manipResult.uri;
+    } catch (e) {
+      console.warn('Failed to resize/compress image, using original', e);
+    }
+    const filename = `photo_${Date.now()}.jpg`;
     const destUri = `${FileSystem.documentDirectory}${filename}`;
     try {
-      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+      await FileSystem.copyAsync({ from: resizedUri, to: destUri });
       addPhotoToAsset(asset.id, destUri);
     } catch (e) {
       console.warn('Failed to copy image', e);
-      addPhotoToAsset(asset.id, sourceUri);
+      addPhotoToAsset(asset.id, resizedUri);
     }
   };
 

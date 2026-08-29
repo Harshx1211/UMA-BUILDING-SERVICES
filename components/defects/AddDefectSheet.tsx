@@ -5,6 +5,7 @@ import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -84,7 +85,21 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
     if (!granted) return;
     const res = await ImagePicker.launchCameraAsync({ quality: 0.75 });
     if (!res.canceled && res.assets[0]) {
-      const src = res.assets[0].uri;
+      // Same resize/compress standard as PhotoCaptureSheet.tsx's inspection
+      // camera flow — this path previously only applied ImagePicker's own
+      // JPEG re-encode (quality 0.75, no dimension change), so a modern
+      // phone's full-resolution capture could still land several MB.
+      let src = res.assets[0].uri;
+      try {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          src,
+          [{ resize: { width: 1600 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        src = manipResult.uri;
+      } catch (e) {
+        console.warn('Failed to resize/compress defect photo, using original', e);
+      }
       const dest = `${FileSystem.documentDirectory}defect_${Date.now()}.jpg`;
       try {
         await FileSystem.copyAsync({ from: src, to: dest });
