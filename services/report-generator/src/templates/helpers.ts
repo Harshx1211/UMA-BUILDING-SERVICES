@@ -28,6 +28,21 @@ export function fmtDateTime(iso: string | null | undefined): string {
   return `${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
 }
 
+/** "3 days ago" / "today" — mirrors the reference report's "identified N days
+ * ago" convention, which matters most on a long multi-routine report: it lets
+ * a reader tell an outstanding defect carried over from a prior visit apart
+ * from one just raised in this inspection, without cross-referencing dates. */
+export function fmtRelativeDays(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((startOfDay(new Date()).getTime() - startOfDay(then).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
+
 export function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '$0.00';
   return `$${Number(v).toFixed(2)}`;

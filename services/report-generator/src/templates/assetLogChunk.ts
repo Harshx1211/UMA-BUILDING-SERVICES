@@ -1,5 +1,5 @@
 import { BASE_STYLE, COLORS } from './theme';
-import { esc, fmtDateTime, photoRow, resultPill } from './helpers';
+import { esc, fmtDateTime, fmtRelativeDays, photoRow, resultPill } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -103,7 +103,7 @@ export function renderDefectCard(
       <div class="defect-body">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
-          <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)}</span>
+          <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)} &middot; ${esc(fmtRelativeDays(defect.created_at))}</span>
         </div>
         <div style="margin-top:4px">${esc(defect.description)}</div>
         ${quoteBadge}
