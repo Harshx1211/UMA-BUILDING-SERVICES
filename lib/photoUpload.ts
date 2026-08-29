@@ -191,17 +191,35 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
           // Update local SQLite row with the now-public URL
           updateRecord('inspection_photos', payload.recordId, { photo_url: publicUrl });
 
-          // Read caption from the local SQLite row so it's included in the Supabase row.
-          // Bug fix: caption was previously omitted, causing captions to be local-only.
-          const localRow = getRecord<{ caption: string | null; company_id: string | null }>('inspection_photos', payload.recordId);
+          // Read caption/asset_id/defect_id fresh from the local SQLite row rather
+          // than trusting this task's queued payload — the payload's assetId/defectId
+          // were captured when the photo was FIRST taken, which for the common
+          // "photograph the fault before tapping Fail" flow is often before the
+          // defect even existed. inspectionStore.ts back-fills defect_id onto this
+          // row locally (synchronously) the moment the defect is created, and queues
+          // its own Update to carry that fix to Supabase — but that Update was
+          // queued earlier (at defect-creation time) than this Insert (queued only
+          // now, after the upload finished), so the sync queue's created_at-ASC FIFO
+          // order runs the Update first, against a row that doesn't exist remotely
+          // yet, where it's a silent no-op — then this Insert lands with the stale
+          // defect_id: null, permanently losing the link. Reading the row's current
+          // local values here (always as-fresh-or-fresher than the queued payload)
+          // means this Insert already carries the correct link, making that
+          // redundant Update harmless instead of destructive.
+          const localRow = getRecord<{
+            caption: string | null;
+            company_id: string | null;
+            asset_id: string | null;
+            defect_id: string | null;
+          }>('inspection_photos', payload.recordId);
 
           // Insert the row into Supabase via sync queue.
           // uploaded_by AND company_id are required — include both so Supabase RLS is satisfied.
           addToSyncQueue('inspection_photos', payload.recordId, SyncOperation.Insert, {
             id:          payload.recordId,
             job_id:      payload.jobId,
-            asset_id:    payload.assetId ?? null,
-            defect_id:   payload.defectId ?? null,
+            asset_id:    localRow?.asset_id ?? payload.assetId ?? null,
+            defect_id:   localRow?.defect_id ?? payload.defectId ?? null,
             photo_url:   publicUrl,
             caption:     localRow?.caption ?? null,
             company_id:  localRow?.company_id ?? null,
