@@ -934,12 +934,31 @@ export async function _pushQueue(): Promise<void> {
         // with stale Supabase data and produce a PDF that is missing new assets.
         // Guard: if any pending items exist for this job, defer this cycle.
         const PDF_CRITICAL_TABLES = ['assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
+        // Tables whose local row carries its own job_id column — look this up
+        // fresh from SQLite rather than trusting the queued payload to contain
+        // it. Several call sites (e.g. editing an existing defect's
+        // description/severity in inspectionStore.ts, or appending a photo to
+        // defects.photos) queue partial UPDATE payloads carrying only the
+        // changed fields, which never re-includes job_id. That silently
+        // defeated the plain substring search below for exactly those edits —
+        // report generation would run before they'd actually synced, producing
+        // a PDF that looked unchanged even though the technician had just made
+        // a change. The local row's job_id is always current and authoritative
+        // regardless of what happens to be in any one queued payload.
+        const TABLES_WITH_JOB_ID = ['job_assets', 'defects', 'signatures', 'inspection_photos'];
         const allPendingNow = getPendingSyncItems();
-        const blockers = allPendingNow.filter(p =>
-          p.id !== item.id &&
-          PDF_CRITICAL_TABLES.includes(p.table_name) &&
-          (p.payload ?? '').includes(`"${reportJobId}"`)
-        );
+        const blockers = allPendingNow.filter(p => {
+          if (p.id === item.id || !PDF_CRITICAL_TABLES.includes(p.table_name)) return false;
+          if (TABLES_WITH_JOB_ID.includes(p.table_name)) {
+            const row = getRecord<{ job_id?: string }>(p.table_name, p.record_id);
+            if (row?.job_id) return row.job_id === reportJobId;
+          }
+          // 'assets' has no job_id of its own (it belongs to a property, not a
+          // job) — a pending asset insert only matters for this report once
+          // it's linked via job_assets, which the branch above already catches.
+          // Also the fallback for any row the local lookup couldn't resolve.
+          return (p.payload ?? '').includes(`"${reportJobId}"`);
+        });
         if (blockers.length > 0) {
           if (__DEV__) console.warn(
             `[Sync] report_generate for ${reportJobId} deferred — ${blockers.length} item(s) still pending:`,
