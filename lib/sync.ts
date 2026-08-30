@@ -33,7 +33,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const REPORT_SERVICE_WARMUP_MAX_WAIT_MS = 90_000;
+const REPORT_SERVICE_WARMUP_MAX_WAIT_MS = 120_000;
 const REPORT_SERVICE_WARMUP_POLL_MS = 4_000;
 
 /**

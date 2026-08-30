@@ -30,7 +30,7 @@ async function withRetries<T>(label: string, attempts: number, fn: () => Promise
   throw new GotenbergError(`${label} failed after ${attempts} attempt(s): ${lastErr instanceof Error ? lastErr.message : lastErr}`);
 }
 
-const WARMUP_MAX_WAIT_MS = 150_000;
+const WARMUP_MAX_WAIT_MS = 300_000;
 const WARMUP_POLL_INTERVAL_MS = 3_000;
 
 /**

@@ -62,4 +62,4 @@ services:
       - key: GOTENBERG_TIMEOUT_MS
         value: "200000"
       - key: CHUNK_RETRY_ATTEMPTS
-        value: "2"
+        value: "4"
