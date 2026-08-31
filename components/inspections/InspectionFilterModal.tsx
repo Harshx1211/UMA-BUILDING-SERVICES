@@ -19,21 +19,23 @@ interface Props {
   resultFilter: string;
   onResultChange: (v: string) => void;
 
+  // Multi-select: an empty array means "no filter" (equivalent to the old
+  // single-value ALL sentinel); a non-empty array matches ANY selected value.
   routineOptions: string[];
-  routineFilter: string;
-  onRoutineChange: (v: string) => void;
+  routineFilter: string[];
+  onRoutineChange: (v: string[]) => void;
 
   assetTypeOptions: string[];
-  assetTypeFilter: string;
-  onAssetTypeChange: (v: string) => void;
+  assetTypeFilter: string[];
+  onAssetTypeChange: (v: string[]) => void;
 
   tagOptions: string[];
-  tagFilter: string;
-  onTagChange: (v: string) => void;
+  tagFilter: string[];
+  onTagChange: (v: string[]) => void;
 
   locationOptions: string[];
-  locationFilter: string;
-  onLocationChange: (v: string) => void;
+  locationFilter: string[];
+  onLocationChange: (v: string[]) => void;
 
   groupBy: GroupBy;
   onGroupByChange: (v: GroupBy) => void;
@@ -101,10 +103,25 @@ export default function InspectionFilterModal({
   const insets = useSafeAreaInsets();
   const [activeCategory, setActiveCategory] = useState<typeof CATEGORY_DEFS[number]['key']>('routine');
 
+  // Result stays single-select (a workflow-stage tab, not a narrowing filter).
   const chipsFor = (options: string[], value: string, onChange: (v: string) => void, formatLabel?: (v: string) => string) =>
     options.map(o => <Chip key={o} label={o} displayLabel={formatLabel?.(o)} active={o === value} onPress={() => onChange(o)} />);
 
-  const categoryData: Record<string, { options: string[]; value: string; onChange: (v: string) => void }> = {
+  // Filter-By categories are multi-select: options[0] is always the "All"
+  // catch-all label (built by the caller as [ALL, ...values]) — tapping it
+  // clears the selection; tapping any other value toggles it in/out.
+  const chipsForMulti = (options: string[], value: string[], onChange: (v: string[]) => void, formatLabel?: (v: string) => string) =>
+    options.map((o, i) => {
+      const isAllOption = i === 0;
+      const active = isAllOption ? value.length === 0 : value.includes(o);
+      const toggle = () => {
+        if (isAllOption) { onChange([]); return; }
+        onChange(value.includes(o) ? value.filter(v => v !== o) : [...value, o]);
+      };
+      return <Chip key={o} label={o} displayLabel={formatLabel?.(o)} active={active} onPress={toggle} />;
+    });
+
+  const categoryData: Record<string, { options: string[]; value: string[]; onChange: (v: string[]) => void }> = {
     routine:   { options: routineOptions,   value: routineFilter,   onChange: onRoutineChange },
     assetType: { options: assetTypeOptions, value: assetTypeFilter, onChange: onAssetTypeChange },
     tag:       { options: tagOptions,       value: tagFilter,       onChange: onTagChange },
@@ -148,7 +165,7 @@ export default function InspectionFilterModal({
               <View style={[s.categoryTabRow, { borderBottomColor: C.border }]}>
                 {availableCategories.map(cat => {
                   const active = cat.key === currentKey;
-                  const hasFilter = categoryData[cat.key].value !== categoryData[cat.key].options[0];
+                  const hasFilter = categoryData[cat.key].value.length > 0;
                   return (
                     <TouchableOpacity
                       key={cat.key}
@@ -163,7 +180,7 @@ export default function InspectionFilterModal({
                 })}
               </View>
               <View style={s.chipWrap}>
-                {chipsFor(current.options, current.value, current.onChange, currentKey === 'location' ? formatLocationCode : undefined)}
+                {chipsForMulti(current.options, current.value, current.onChange, currentKey === 'location' ? formatLocationCode : undefined)}
               </View>
             </View>
           )}

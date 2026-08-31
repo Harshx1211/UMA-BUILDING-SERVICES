@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Platform, TextInput, Modal,
+  Platform, TextInput,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
-import { Image } from 'expo-image';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,19 +16,14 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system/legacy';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
 
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
-import AssetNoteModal from '@/components/inspections/AssetNoteModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
 import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
-import { getValidLocalUri } from '@/utils/fileHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -72,70 +66,6 @@ function compareLocationKeys(a: string, b: string): number {
   return 0;
 }
 
-// ─── Small bottom sheet: Take Photo / Choose from Gallery ─────────────────
-function PhotoChooserSheet({
-  visible, onClose, onTakePhoto, onPickGallery,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onTakePhoto: () => void;
-  onPickGallery: () => void;
-}) {
-  const C = useColors();
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={s.chooserOverlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
-          <Text style={[s.chooserTitle, { color: C.text }]}>Add Photo</Text>
-          <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
-              <MaterialCommunityIcons name="camera-outline" size={20} color={C.primary} />
-            </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Take Photo</Text>
-          </TouchableOpacity>
-          <View style={[s.chooserDivider, { backgroundColor: C.border }]} />
-          <TouchableOpacity style={s.chooserRow} onPress={onPickGallery} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
-              <MaterialCommunityIcons name="image-multiple-outline" size={20} color={C.primary} />
-            </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from Gallery</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.chooserCancel, { backgroundColor: C.surface }]} onPress={onClose} activeOpacity={0.7}>
-          <Text style={[s.chooserCancelTxt, { color: C.text }]}>Cancel</Text>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
-// ─── Full-screen photo viewer — tap a thumbnail to see it properly, ────────
-// delete lives here (with confirmation) rather than as a tiny badge on the thumbnail.
-function PhotoViewer({
-  uri, onClose, onDelete,
-}: {
-  uri: string | null;
-  onClose: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={s.viewerOverlay}>
-        <TouchableOpacity style={s.viewerCloseBtn} onPress={onClose} hitSlop={10}>
-          <MaterialCommunityIcons name="close" size={26} color="#fff" />
-        </TouchableOpacity>
-        {uri ? (
-          <Image source={{ uri: getValidLocalUri(uri) }} style={s.viewerImage} contentFit="contain" />
-        ) : null}
-        <TouchableOpacity style={s.viewerDeleteBtn} onPress={onDelete} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="trash-can-outline" size={18} color="#fff" />
-          <Text style={s.viewerDeleteTxt}>Delete Photo</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-}
-
 const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }: {
   asset: AssetWithResult;
   index: number;
@@ -146,93 +76,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 }) => {
   const C = useColors();
   const noMotion = useReducedMotion();
-  const { updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
+  const { updateAssetResult, isSaving } = useInspectionStore();
 
-  const [showFailModal,   setShowFailModal]   = useState(false);
-  const [showNoteModal,   setShowNoteModal]   = useState(false);
-  const [showPhotoChooser, setShowPhotoChooser] = useState(false);
-  const [isAddingPhoto,   setIsAddingPhoto]   = useState(false);
-  const [viewingPhoto,    setViewingPhoto]    = useState<string | null>(null);
-
-  const savePickedPhoto = async (sourceUri: string) => {
-    // Same resize/compress standard as PhotoCaptureSheet.tsx's camera flow —
-    // this helper is shared by both the in-app camera AND "choose from
-    // library" below, and the library path previously skipped this step
-    // entirely, letting a full-resolution gallery photo (several MB) through
-    // uncompressed in size while every other capture path was ~150-350KB.
-    let resizedUri = sourceUri;
-    try {
-      const manipResult = await ImageManipulator.manipulateAsync(
-        sourceUri,
-        [{ resize: { width: 1600 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      resizedUri = manipResult.uri;
-    } catch (e) {
-      console.warn('Failed to resize/compress image, using original', e);
-    }
-    const filename = `photo_${Date.now()}.jpg`;
-    const destUri = `${FileSystem.documentDirectory}${filename}`;
-    try {
-      await FileSystem.copyAsync({ from: resizedUri, to: destUri });
-      addPhotoToAsset(asset.id, destUri);
-    } catch (e) {
-      console.warn('Failed to copy image', e);
-      addPhotoToAsset(asset.id, resizedUri);
-    }
-  };
-
-  const handleTakePhoto = async () => {
-    setShowPhotoChooser(false);
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return;
-    setIsAddingPhoto(true);
-    try {
-      const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: false });
-      if (!result.canceled && result.assets.length > 0) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await savePickedPhoto(result.assets[0].uri);
-      }
-    } finally {
-      setIsAddingPhoto(false);
-    }
-  };
-
-  const handlePickPhoto = async () => {
-    setShowPhotoChooser(false);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    setIsAddingPhoto(true);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsMultipleSelection: true, selectionLimit: 5 });
-      if (!result.canceled && result.assets.length > 0) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        for (const a of result.assets) await savePickedPhoto(a.uri);
-      }
-    } finally {
-      setIsAddingPhoto(false);
-    }
-  };
-
-  const handleRemovePhoto = (uri: string) => {
-    showConfirm({
-      title: 'Delete Photo?',
-      message: "This can't be undone.",
-      icon: 'trash-can-outline',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            removePhotoFromAsset(asset.id, uri);
-            setViewingPhoto(null);
-          },
-        },
-      ],
-    });
-  };
+  const [showFailModal, setShowFailModal] = useState(false);
 
   const handleResult = (res: InspectionResult) => {
     if (res === InspectionResult.Pass) {
@@ -263,14 +109,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
     setShowFailModal(false);
   };
 
-  // Notes are only offered for Pass/Not-Tested — a Fail already carries a
-  // required description (AddDefectSheet) that IS the defect's comment and
-  // already renders in the PDF. This preserves every other field untouched
-  // (photos param omitted = left as-is, see inspectionStore.updateAssetResult).
-  const handleSaveNote = (note: string) => {
-    updateAssetResult(asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant, asset.defect_reason ?? undefined, note);
-  };
-
   const result = asset.result;
   const isPassed  = result === InspectionResult.Pass;
   const isFailed  = result === InspectionResult.Fail;
@@ -280,7 +118,13 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 
   return (
     <Animated.View entering={index < 12 ? FadeInDown.delay(index * 40).duration(300) : undefined} style={s.cardWrapper}>
-      <View style={[s.assetCard, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: cardAccentColor }, cardShadow]}>
+      <TouchableOpacity
+        style={[s.assetCard, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: cardAccentColor }, cardShadow]}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/jobs/${jobId}/asset/${asset.id}` as never)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${formatAssetType(asset.asset_type)} details`}
+      >
         <View style={s.cardInner}>
           <View style={s.cardHeader}>
             <View style={[s.assetIconWrap, {
@@ -317,12 +161,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               )}
             </View>
             <View style={[s.cardHeaderRight, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-              {asset.photos && asset.photos.length > 0 && (
-                <View style={[s.photoBadge, { backgroundColor: C.accent }]}>
-                  <MaterialCommunityIcons name="camera" size={10} color={C.textOnPrimary} />
-                  <Text style={[s.photoBadgeTxt, { color: C.textOnPrimary }]}>{asset.photos.length}</Text>
-                </View>
-              )}
               <TouchableOpacity
                 onPress={() => onClone(asset)}
                 hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
@@ -363,31 +201,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </Animated.View>
           )}
 
-          {/* Notes only apply once a result exists (Pass/N-T) — Fail already
-              has its own required comment via the defect description above. */}
-          {!isFailed && result !== null && Boolean(asset.technician_notes) && (
-            <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.infoLight, borderColor: C.info }]}>
-              <MaterialCommunityIcons name="note-text-outline" size={15} color={C.infoDark} />
-              <View style={{ flex: 1 }}>
-                <Text style={[s.defectNoticeTitle, { color: C.infoDark }]}>Note</Text>
-                <Text style={[s.defectNoticeBody, { color: C.info }]}>{asset.technician_notes}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowNoteModal(true)} hitSlop={8}>
-                <Text style={[s.defectEditTxt, { color: C.infoDark }]}>Edit</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-          {!isFailed && result !== null && !asset.technician_notes && (
-            <TouchableOpacity
-              style={s.addNoteRow}
-              onPress={() => setShowNoteModal(true)}
-              hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
-            >
-              <MaterialCommunityIcons name="note-plus-outline" size={14} color={C.textTertiary} />
-              <Text style={[s.addNoteTxt, { color: C.textTertiary }]}>Add note</Text>
-            </TouchableOpacity>
-          )}
-
           {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
           <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
@@ -420,25 +233,25 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </TouchableOpacity>
           </View>
 
-          <View style={s.photoRow}>
-            {(asset.photos ?? []).map((uri) => (
-              <TouchableOpacity key={uri} style={s.photoThumbWrap} onPress={() => setViewingPhoto(uri)} activeOpacity={0.8}>
-                <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={[s.photoAddTile, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
-              onPress={() => !isAddingPhoto && setShowPhotoChooser(true)}
-              activeOpacity={0.8}
-              disabled={isAddingPhoto}
-            >
-              {isAddingPhoto
-                ? <ActivityIndicator size="small" color={C.textSecondary} />
-                : <MaterialCommunityIcons name="camera-plus-outline" size={18} color={C.textSecondary} />}
-            </TouchableOpacity>
+          <View style={[s.openDetailRow, { borderColor: C.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {asset.photos && asset.photos.length > 0 && (
+                <View style={s.openDetailBadge}>
+                  <MaterialCommunityIcons name="camera" size={12} color={C.textSecondary} />
+                  <Text style={[s.openDetailBadgeTxt, { color: C.textSecondary }]}>{asset.photos.length}</Text>
+                </View>
+              )}
+              {Boolean(asset.technician_notes) && (
+                <View style={s.openDetailBadge}>
+                  <MaterialCommunityIcons name="note-text-outline" size={12} color={C.textSecondary} />
+                </View>
+              )}
+              <Text style={[s.openDetailTxt, { color: C.textSecondary }]}>Photos &amp; notes</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={16} color={C.textTertiary} />
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
       <AssetInspectModal
         visible={showFailModal}
@@ -446,25 +259,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
         jobId={jobId as string}
         onClose={() => setShowFailModal(false)}
         onSaveFail={handleSaveFail}
-      />
-      <AssetNoteModal
-        visible={showNoteModal}
-        initialNote={asset.technician_notes ?? ''}
-        assetType={formatAssetType(asset.asset_type)}
-        location={asset.location_on_site ? formatLocationCode(asset.location_on_site) : null}
-        onClose={() => setShowNoteModal(false)}
-        onSave={handleSaveNote}
-      />
-      <PhotoChooserSheet
-        visible={showPhotoChooser}
-        onClose={() => setShowPhotoChooser(false)}
-        onTakePhoto={handleTakePhoto}
-        onPickGallery={handlePickPhoto}
-      />
-      <PhotoViewer
-        uri={viewingPhoto}
-        onClose={() => setViewingPhoto(null)}
-        onDelete={() => viewingPhoto && handleRemovePhoto(viewingPhoto)}
       />
     </Animated.View>
   );
@@ -489,10 +283,13 @@ export default function AssetInspectionScreen() {
   // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const [routineFilter, setRoutineFilter]     = useState<string>(ALL);
-  const [assetTypeFilter, setAssetTypeFilter] = useState<string>(ALL);
-  const [tagFilter, setTagFilter]             = useState<string>(ALL);
-  const [locationFilter, setLocationFilter]   = useState<string>(ALL);
+  // Multi-select: an empty array means "no filter applied" (matches the old
+  // single-value ALL sentinel's meaning); a non-empty array matches ANY of
+  // the selected values within that category, and categories AND together.
+  const [routineFilter, setRoutineFilter]     = useState<string[]>([]);
+  const [assetTypeFilter, setAssetTypeFilter] = useState<string[]>([]);
+  const [tagFilter, setTagFilter]             = useState<string[]>([]);
+  const [locationFilter, setLocationFilter]   = useState<string[]>([]);
   const [groupBy, setGroupBy]                 = useState<GroupBy>('location');
   const [sortBy, setSortBy]                   = useState<SortBy>('label');
   const [sortAsc, setSortAsc]                 = useState(true);
@@ -601,11 +398,17 @@ export default function AssetInspectionScreen() {
     return [ALL, ...Array.from(set).sort(compareLocationKeys)];
   }, [store.assets]);
 
-  const activeFilterCount = [filter, routineFilter, assetTypeFilter, tagFilter, locationFilter].filter(v => v !== ALL).length;
+  const activeFilterCount = [
+    filter !== ALL,
+    routineFilter.length > 0,
+    assetTypeFilter.length > 0,
+    tagFilter.length > 0,
+    locationFilter.length > 0,
+  ].filter(Boolean).length;
 
   const resetFilters = () => {
     setFilter(ALL);
-    setRoutineFilter(ALL); setAssetTypeFilter(ALL); setTagFilter(ALL); setLocationFilter(ALL);
+    setRoutineFilter([]); setAssetTypeFilter([]); setTagFilter([]); setLocationFilter([]);
     setGroupBy('location'); setSortBy('label'); setSortAsc(true);
   };
 
@@ -618,10 +421,10 @@ export default function AssetInspectionScreen() {
       case 'Remaining': list = list.filter(a => a.result === null); break;
     }
 
-    if (routineFilter !== ALL) list = list.filter(a => (routineByType.get(a.asset_type) || 'Other') === routineFilter);
-    if (assetTypeFilter !== ALL) list = list.filter(a => formatAssetType(a.asset_type) === assetTypeFilter);
-    if (locationFilter !== ALL) list = list.filter(a => a.location_on_site === locationFilter);
-    if (tagFilter !== ALL) list = list.filter(a => (tagsByAssetId.get(a.id) ?? []).includes(tagFilter));
+    if (routineFilter.length > 0) list = list.filter(a => routineFilter.includes(routineByType.get(a.asset_type) || 'Other'));
+    if (assetTypeFilter.length > 0) list = list.filter(a => assetTypeFilter.includes(formatAssetType(a.asset_type)));
+    if (locationFilter.length > 0) list = list.filter(a => a.location_on_site != null && locationFilter.includes(a.location_on_site));
+    if (tagFilter.length > 0) list = list.filter(a => (tagsByAssetId.get(a.id) ?? []).some(t => tagFilter.includes(t)));
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -1175,40 +978,22 @@ const s = StyleSheet.create({
   assetLocation:   { fontSize: 13, fontWeight: '700' },
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
   cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
-  photoBadge:      { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10 },
-  photoBadgeTxt:   { fontSize: 10, fontWeight: '700' },
   assetPrevResult: { fontSize: 12, marginTop: 4 },
   defectNotice:      { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 10 },
   defectNoticeTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2, textTransform: 'uppercase' },
   defectNoticeBody:  { fontSize: 13, fontWeight: '500', marginTop: 1 },
   defectEditTxt:     { fontSize: 12, fontWeight: '700' },
-  addNoteRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, alignSelf: 'flex-start' },
-  addNoteTxt: { fontSize: 12, fontWeight: '600' },
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
-  photoRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
-  photoThumbWrap:  { width: 60, height: 60, borderRadius: 12, overflow: 'hidden' },
-  photoThumb:      { width: '100%', height: '100%' },
-  photoAddTile:    { width: 60, height: 60, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 
-  // Photo chooser sheet
-  chooserOverlay:  { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
-  chooserSheet:    { borderRadius: 18, overflow: 'hidden', paddingTop: 14 },
-  chooserTitle:    { fontSize: 12, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, paddingBottom: 10 },
-  chooserRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
-  chooserIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  chooserRowTxt:   { fontSize: 16, fontWeight: '600' },
-  chooserDivider:  { height: StyleSheet.hairlineWidth, marginLeft: 18 },
-  chooserCancel:   { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
-  chooserCancelTxt:{ fontSize: 16, fontWeight: '700' },
-
-  // Full-screen photo viewer
-  viewerOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
-  viewerCloseBtn:   { position: 'absolute', top: 50, right: 20, zIndex: 1, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  viewerImage:      { width: '100%', height: '80%' },
-  viewerDeleteBtn:  { position: 'absolute', bottom: 50, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(220,38,38,0.9)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24 },
-  viewerDeleteTxt:  { color: '#fff', fontSize: 14, fontWeight: '700' },
+  // Tap-through row — photos/note/defect detail all live on the Asset Detail
+  // screen now (app/(app)/jobs/[id]/asset/[assetId].tsx); this just signals
+  // there's more here and shows counts, the whole card navigates on tap.
+  openDetailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1 },
+  openDetailBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  openDetailBadgeTxt: { fontSize: 11, fontWeight: '700' },
+  openDetailTxt: { fontSize: 12, fontWeight: '600' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },

@@ -1583,6 +1583,70 @@ export function getDefectsForJob<T = RecordData>(jobId: string): T[] {
   }
 }
 
+export interface AssetHistoryDefect {
+  id: string;
+  description: string;
+  severity: string;
+  defect_code: string | null;
+  quote_price: number | null;
+}
+
+export interface AssetHistoryPhoto {
+  id: string;
+  photo_url: string;
+}
+
+export interface AssetHistoryEntry {
+  jobId: string;
+  date: string | null;
+  result: string;
+  technicianNotes: string | null;
+  defects: AssetHistoryDefect[];
+  photos: AssetHistoryPhoto[];
+}
+
+/**
+ * Every prior visit's result/note/defects/photos for one asset, newest first —
+ * everything needed for the Asset Detail screen's History section. Assets are
+ * property-scoped and persistent (see getAssetsForProperty above); a job never
+ * duplicates an asset, it just adds one job_assets row per visit, so this is a
+ * plain local-SQLite read of data that's already synced to the device — no
+ * network call, no new sync plumbing.
+ */
+export function getAssetHistory(assetId: string, excludeJobId: string): AssetHistoryEntry[] {
+  try {
+    const db = openDatabase();
+    const visits = db.getAllSync<{ job_id: string; result: string; technician_notes: string | null; actioned_at: string | null }>(
+      `SELECT job_id, result, technician_notes, actioned_at
+       FROM job_assets
+       WHERE asset_id = ? AND job_id != ? AND result IS NOT NULL
+       ORDER BY actioned_at DESC`,
+      [assetId, excludeJobId],
+    );
+    return visits.map((v) => {
+      const defects = db.getAllSync<AssetHistoryDefect>(
+        `SELECT id, description, severity, defect_code, quote_price FROM defects WHERE asset_id = ? AND job_id = ?`,
+        [assetId, v.job_id],
+      );
+      const photos = db.getAllSync<AssetHistoryPhoto>(
+        `SELECT id, photo_url FROM inspection_photos WHERE asset_id = ? AND job_id = ?`,
+        [assetId, v.job_id],
+      );
+      return {
+        jobId: v.job_id,
+        date: v.actioned_at,
+        result: v.result,
+        technicianNotes: v.technician_notes,
+        defects,
+        photos,
+      };
+    });
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getAssetHistory(${assetId}) error:`, err);
+    return [];
+  }
+}
+
 /** Returns the active (not clocked-out) time log for this job+user, or null. */
 export function getActiveTimeLog(jobId: string, userId: string): { id: string; clock_in: string } | null {
   try {
