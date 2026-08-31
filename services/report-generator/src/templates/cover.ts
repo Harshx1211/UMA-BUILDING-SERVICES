@@ -1,8 +1,43 @@
 import { BASE_STYLE, COLORS } from './theme';
 import { esc, fmtDate, infoCell } from './helpers';
 import { groupByCategory } from '../data/categoryGrouping';
-import { ReportData } from '../types';
+import { ReportData, Property } from '../types';
 import { AssetTypeDefinition } from '../types';
+
+/**
+ * Hazard/access/site notes were previously fetched (property:properties(*)
+ * in fetchReportData.ts) but never rendered anywhere — a technician could see
+ * a hazard warning in the app before starting the job, but the printed
+ * report handed to the client never mentioned it. Hazard gets the most
+ * prominent (red) treatment since it's safety-relevant; access and the
+ * general site note are informational.
+ */
+function renderSiteNotes(property: Property | null | undefined): string {
+  if (!property) return '';
+  const rows: string[] = [];
+  if (property.hazard_notes) {
+    rows.push(`
+      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.RED_BG};border:1px solid ${COLORS.RED_BORDER};border-radius:8px;margin-top:10px">
+        <div style="font-weight:800;color:${COLORS.RED_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">&#9888; Site Hazard</div>
+        <div style="color:${COLORS.RED_TEXT_DARK};font-size:10.5px">${esc(property.hazard_notes)}</div>
+      </div>`);
+  }
+  if (property.access_notes) {
+    rows.push(`
+      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.AMBER_BG};border:1px solid ${COLORS.AMBER_BORDER};border-radius:8px;margin-top:10px">
+        <div style="font-weight:800;color:${COLORS.AMBER_TEXT};font-size:10px;text-transform:uppercase;flex-shrink:0">Access</div>
+        <div style="color:${COLORS.AMBER_TEXT};font-size:10.5px">${esc(property.access_notes)}</div>
+      </div>`);
+  }
+  if (property.site_note) {
+    rows.push(`
+      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.GREEN_BG};border:1px solid ${COLORS.GREEN_BORDER};border-radius:8px;margin-top:10px">
+        <div style="font-weight:800;color:${COLORS.GREEN_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">Site Note</div>
+        <div style="color:${COLORS.GREEN_TEXT_DARK};font-size:10.5px">${esc(property.site_note)}</div>
+      </div>`);
+  }
+  return rows.join('');
+}
 
 /**
  * Cover page. Adapted from the reference report's grid to fields SiteTrack
@@ -84,6 +119,8 @@ export function renderCover(
       ${infoCell('Job Reference', reportId)}
       ${infoCell('Date of Service', fmtDate(dateOfService))}
     </div>
+
+    ${renderSiteNotes(property)}
 
     <div class="section-bar" style="margin-top:18px">Scope of Works</div>
     <div class="card" style="padding:12px 16px">

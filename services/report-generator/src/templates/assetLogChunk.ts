@@ -58,6 +58,7 @@ export function renderAssetLogChunk(
               <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
+            ${asset.technician_notes ? `<tr><td colspan="3" style="padding:2px 0 0;border-top:none"><div style="font-size:10.5px;color:${COLORS.MUTED};font-style:italic">Note: ${esc(asset.technician_notes)}</div></td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>

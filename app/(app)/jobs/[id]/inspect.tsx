@@ -24,6 +24,7 @@ import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
 
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
+import AssetNoteModal from '@/components/inspections/AssetNoteModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
@@ -148,6 +149,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const { updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
 
   const [showFailModal,   setShowFailModal]   = useState(false);
+  const [showNoteModal,   setShowNoteModal]   = useState(false);
   const [showPhotoChooser, setShowPhotoChooser] = useState(false);
   const [isAddingPhoto,   setIsAddingPhoto]   = useState(false);
   const [viewingPhoto,    setViewingPhoto]    = useState<string | null>(null);
@@ -261,6 +263,14 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
     setShowFailModal(false);
   };
 
+  // Notes are only offered for Pass/Not-Tested — a Fail already carries a
+  // required description (AddDefectSheet) that IS the defect's comment and
+  // already renders in the PDF. This preserves every other field untouched
+  // (photos param omitted = left as-is, see inspectionStore.updateAssetResult).
+  const handleSaveNote = (note: string) => {
+    updateAssetResult(asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant, asset.defect_reason ?? undefined, note);
+  };
+
   const result = asset.result;
   const isPassed  = result === InspectionResult.Pass;
   const isFailed  = result === InspectionResult.Fail;
@@ -353,6 +363,31 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </Animated.View>
           )}
 
+          {/* Notes only apply once a result exists (Pass/N-T) — Fail already
+              has its own required comment via the defect description above. */}
+          {!isFailed && result !== null && Boolean(asset.technician_notes) && (
+            <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.infoLight, borderColor: C.info }]}>
+              <MaterialCommunityIcons name="note-text-outline" size={15} color={C.infoDark} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.defectNoticeTitle, { color: C.infoDark }]}>Note</Text>
+                <Text style={[s.defectNoticeBody, { color: C.info }]}>{asset.technician_notes}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowNoteModal(true)} hitSlop={8}>
+                <Text style={[s.defectEditTxt, { color: C.infoDark }]}>Edit</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+          {!isFailed && result !== null && !asset.technician_notes && (
+            <TouchableOpacity
+              style={s.addNoteRow}
+              onPress={() => setShowNoteModal(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 0, right: 0 }}
+            >
+              <MaterialCommunityIcons name="note-plus-outline" size={14} color={C.textTertiary} />
+              <Text style={[s.addNoteTxt, { color: C.textTertiary }]}>Add note</Text>
+            </TouchableOpacity>
+          )}
+
           {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
           <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
@@ -411,6 +446,14 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
         jobId={jobId as string}
         onClose={() => setShowFailModal(false)}
         onSaveFail={handleSaveFail}
+      />
+      <AssetNoteModal
+        visible={showNoteModal}
+        initialNote={asset.technician_notes ?? ''}
+        assetType={formatAssetType(asset.asset_type)}
+        location={asset.location_on_site ? formatLocationCode(asset.location_on_site) : null}
+        onClose={() => setShowNoteModal(false)}
+        onSave={handleSaveNote}
       />
       <PhotoChooserSheet
         visible={showPhotoChooser}
@@ -1139,6 +1182,8 @@ const s = StyleSheet.create({
   defectNoticeTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2, textTransform: 'uppercase' },
   defectNoticeBody:  { fontSize: 13, fontWeight: '500', marginTop: 1 },
   defectEditTxt:     { fontSize: 12, fontWeight: '700' },
+  addNoteRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, alignSelf: 'flex-start' },
+  addNoteTxt: { fontSize: 12, fontWeight: '600' },
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },

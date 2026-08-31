@@ -154,6 +154,18 @@ export const JobCard = React.memo(function JobCard({
           </View>
         ) : null}
 
+        {/* Hazard warning — surfaced here (not just on the job/property detail
+            screen) so a technician sees it while scanning the day's list,
+            before ever opening the job. */}
+        {job.hazard_notes ? (
+          <View style={[s.hazardRow, { backgroundColor: C.errorLight }]}>
+            <MaterialCommunityIcons name="alert" size={12} color={C.errorDark} />
+            <Text style={[s.hazardText, { color: C.errorDark }]} numberOfLines={1}>
+              {job.hazard_notes}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Divider */}
         <View style={[s.divider, { backgroundColor: C.border }]} />
 
@@ -233,6 +245,9 @@ const s = StyleSheet.create({
 
   row2: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   address: { fontSize: 12, flex: 1, lineHeight: 17 },
+
+  hazardRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, alignSelf: 'flex-start', maxWidth: '100%' },
+  hazardText: { fontSize: 11, fontWeight: '700', flexShrink: 1 },
 
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
 

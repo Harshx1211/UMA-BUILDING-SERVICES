@@ -27,6 +27,9 @@ export interface Property {
   postcode: string | null;
   site_contact_name: string | null;
   site_contact_phone: string | null;
+  access_notes: string | null;
+  hazard_notes: string | null;
+  site_note: string | null;
 }
 
 export interface JobUser {
