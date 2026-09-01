@@ -34,6 +34,25 @@ export function formatAssetType(assetType: string): string {
     .join(' ');
 }
 
+// ─── formatRelativeDays ───────────────────────────────────────────────────────
+
+/**
+ * "today" / "yesterday" / "N days ago" for a given ISO date string. Same
+ * day-truncated math as the PDF report's fmtRelativeDays (a separate service,
+ * can't share the import) — kept consistent so "X days ago" means the same
+ * thing whether a technician sees it in the app or in the generated report.
+ */
+export function formatRelativeDays(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((startOfDay(new Date()).getTime() - startOfDay(then).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
+
 // ─── formatLocationCode ───────────────────────────────────────────────────────
 
 /**

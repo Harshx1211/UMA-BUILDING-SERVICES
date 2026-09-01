@@ -27,7 +27,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AssetNoteModal from '@/components/inspections/AssetNoteModal';
-import { formatAssetType, formatLocationCode } from '@/utils/assetHelpers';
+import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry } from '@/lib/database';
 
@@ -260,9 +260,10 @@ export default function AssetDetailScreen() {
       <ScreenHeader title={formatAssetType(asset.asset_type)} subtitle={location} showBack />
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-        {(asset.asset_ref || asset.serial_number) && (
+        {(asset.asset_ref || asset.serial_number || history[0]?.date) && (
           <Text style={[s.refLine, { color: C.textTertiary }]}>
-            {asset.asset_ref ? `Ref: ${asset.asset_ref}` : `S/N: ${asset.serial_number}`}
+            {asset.asset_ref ? `Ref: ${asset.asset_ref}` : asset.serial_number ? `S/N: ${asset.serial_number}` : ''}
+            {history[0]?.date ? `${asset.asset_ref || asset.serial_number ? '  ·  ' : ''}Last serviced ${formatRelativeDays(history[0].date)}` : ''}
           </Text>
         )}
 

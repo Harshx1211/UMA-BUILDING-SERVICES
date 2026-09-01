@@ -145,6 +145,11 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
             {/* Custom marker pin */}
             <View style={[s.markerPin, { borderColor: PRIORITY_COLOR[job.priority] ?? C.primary }]}>
               <View style={[s.markerDot, { backgroundColor: PRIORITY_COLOR[job.priority] ?? C.primary }]} />
+              {job.hazard_notes ? (
+                <View style={[s.markerHazardBadge, { borderColor: C.surface }]}>
+                  <MaterialCommunityIcons name="alert" size={9} color="#fff" />
+                </View>
+              ) : null}
             </View>
           </Marker>
         ))}
@@ -230,6 +235,11 @@ const s = StyleSheet.create({
     shadowOpacity: 0.25, shadowRadius: 4, elevation: 5,
   },
   markerDot: { width: 12, height: 12, borderRadius: 6 },
+  markerHazardBadge: {
+    position: 'absolute', top: -4, right: -4,
+    width: 15, height: 15, borderRadius: 8, borderWidth: 1.5,
+    backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center',
+  },
 
   countBadge: {
     position: 'absolute', top: 12, right: 12,
