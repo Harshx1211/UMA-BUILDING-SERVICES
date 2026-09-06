@@ -24,7 +24,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useAuth } from '@/hooks/useAuth';
 import { ScreenHeader, FilterPills, Button, showConfirm } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
-import { InspectionResult, SyncOperation, JobType, JobStatus, Priority, DefectSeverity } from '@/constants/Enums';
+import { InspectionResult, SyncOperation, JobStatus, Priority, DefectSeverity } from '@/constants/Enums';
 import {
   getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue,
 } from '@/lib/database';
@@ -322,9 +322,20 @@ export default function SiteInspectScreen() {
       const jobId = generateUUID();
 
       // 1. Create completed job
+      // FIX: job_type must be one of the real Supabase CHECK-constraint values
+      // (routine_service_monthly/_3_monthly/_6_monthly/_annual/_5_yearly,
+      // defect_repair_quote, defect_repair, quote, installation, emergency) —
+      // JobType.RoutineService ('routine_service') is NOT one of them (it's a
+      // stale enum value with no matching DB value), so this insert used to
+      // fail the CHECK constraint silently on sync: the job saved fine locally
+      // and looked completed on-device, but never actually reached Supabase,
+      // so it never appeared for admin/office or any other device. This quick
+      // on-site flow has no specific pre-set frequency, so it's recorded as
+      // the annual tier — the standard cadence for a full ad-hoc compliance
+      // walkthrough of every asset at the property.
       const jobPayload = {
         id: jobId, property_id: property.id, assigned_to: user.id,
-        job_type: JobType.RoutineService, status: JobStatus.Completed,
+        job_type: 'routine_service_annual', status: JobStatus.Completed,
         scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
         notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
