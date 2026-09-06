@@ -3,6 +3,7 @@ export * from './Button';
 export * from './Card';
 export * from './ConfirmDialog';
 export * from './EmptyState';
+export * from './FilterChip';
 export * from './FilterPills';
 export * from './FormField';
 export * from './Input';

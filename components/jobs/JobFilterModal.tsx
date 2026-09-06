@@ -1,52 +1,42 @@
+/**
+ * JobFilterModal — filter/group/sort for the top-level Jobs list. Mirrors
+ * InspectionFilterModal's chrome (page-sheet, category tabs, Reset, bottom
+ * bar) but scoped to Job fields that are already loaded client-side —
+ * Status, Job Type, Priority, Technician. Asset-type/tag filtering is
+ * deliberately NOT included here: jobs aren't tied to specific assets until
+ * a technician actions them in the inspect screen, so filtering the job
+ * list by asset type would need a new, lower-value join.
+ */
 import React, { useState } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, FilterChip, chipsForMulti } from '@/components/ui';
+import { Button, chipsForMulti } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { formatLocationCode } from '@/utils/assetHelpers';
 
-export type GroupBy = 'routine' | 'asset' | 'location';
-export type SortBy = 'label' | 'location';
+export type JobGroupBy = 'none' | 'property' | 'status' | 'technician';
+export type JobSortBy = 'date' | 'priority' | 'property';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
 
-  resultOptions: string[];
-  resultFilter: string;
-  onResultChange: (v: string) => void;
+  statusOptions: string[]; statusFilter: string[]; onStatusChange: (v: string[]) => void;
+  jobTypeOptions: string[]; jobTypeFilter: string[]; onJobTypeChange: (v: string[]) => void;
+  priorityOptions: string[]; priorityFilter: string[]; onPriorityChange: (v: string[]) => void;
+  technicianOptions: string[]; technicianFilter: string[]; onTechnicianChange: (v: string[]) => void;
 
-  // Multi-select: an empty array means "no filter" (equivalent to the old
-  // single-value ALL sentinel); a non-empty array matches ANY selected value.
-  routineOptions: string[];
-  routineFilter: string[];
-  onRoutineChange: (v: string[]) => void;
-
-  assetTypeOptions: string[];
-  assetTypeFilter: string[];
-  onAssetTypeChange: (v: string[]) => void;
-
-  tagOptions: string[];
-  tagFilter: string[];
-  onTagChange: (v: string[]) => void;
-
-  locationOptions: string[];
-  locationFilter: string[];
-  onLocationChange: (v: string[]) => void;
-
-  groupBy: GroupBy;
-  onGroupByChange: (v: GroupBy) => void;
-
-  sortBy: SortBy;
-  onSortByChange: (v: SortBy) => void;
-  sortAsc: boolean;
-  onToggleSortDirection: () => void;
+  groupBy: JobGroupBy; onGroupByChange: (v: JobGroupBy) => void;
+  sortBy: JobSortBy; onSortByChange: (v: JobSortBy) => void;
+  sortAsc: boolean; onToggleSortDirection: () => void;
 
   activeCount: number;
   onReset: () => void;
+
+  /** Optional display-label formatter per category — filtering still happens on the raw value. */
+  labelFormatters?: Partial<Record<'status' | 'jobType' | 'priority' | 'technician', (v: string) => string>>;
 }
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -64,37 +54,33 @@ function Section({ icon, label, children }: { icon: IconName; label: string; chi
   );
 }
 
-const CATEGORY_DEFS: { key: 'routine' | 'assetType' | 'tag' | 'location'; icon: IconName; label: string }[] = [
-  { key: 'routine',   icon: 'clipboard-list-outline', label: 'Routine' },
-  { key: 'assetType', icon: 'shape-outline',           label: 'Type' },
-  { key: 'tag',       icon: 'tag-multiple-outline',    label: 'Tag' },
-  { key: 'location',  icon: 'map-marker-outline',      label: 'Location' },
+const CATEGORY_DEFS: { key: 'status' | 'jobType' | 'priority' | 'technician'; icon: IconName; label: string }[] = [
+  { key: 'status',     icon: 'progress-clock',      label: 'Status' },
+  { key: 'jobType',    icon: 'wrench-outline',      label: 'Job Type' },
+  { key: 'priority',   icon: 'lightning-bolt',      label: 'Priority' },
+  { key: 'technician', icon: 'account-outline',     label: 'Technician' },
 ];
 
-export default function InspectionFilterModal({
+export default function JobFilterModal({
   visible, onClose,
-  resultOptions, resultFilter, onResultChange,
-  routineOptions, routineFilter, onRoutineChange,
-  assetTypeOptions, assetTypeFilter, onAssetTypeChange,
-  tagOptions, tagFilter, onTagChange,
-  locationOptions, locationFilter, onLocationChange,
+  statusOptions, statusFilter, onStatusChange,
+  jobTypeOptions, jobTypeFilter, onJobTypeChange,
+  priorityOptions, priorityFilter, onPriorityChange,
+  technicianOptions, technicianFilter, onTechnicianChange,
   groupBy, onGroupByChange,
   sortBy, onSortByChange, sortAsc, onToggleSortDirection,
   activeCount, onReset,
+  labelFormatters,
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
-  const [activeCategory, setActiveCategory] = useState<typeof CATEGORY_DEFS[number]['key']>('routine');
+  const [activeCategory, setActiveCategory] = useState<typeof CATEGORY_DEFS[number]['key']>('status');
 
-  // Result stays single-select (a workflow-stage tab, not a narrowing filter).
-  const chipsFor = (options: string[], value: string, onChange: (v: string) => void, formatLabel?: (v: string) => string) =>
-    options.map(o => <FilterChip key={o} label={o} displayLabel={formatLabel?.(o)} active={o === value} onPress={() => onChange(o)} />);
-
-  const categoryData: Record<string, { options: string[]; value: string[]; onChange: (v: string[]) => void }> = {
-    routine:   { options: routineOptions,   value: routineFilter,   onChange: onRoutineChange },
-    assetType: { options: assetTypeOptions, value: assetTypeFilter, onChange: onAssetTypeChange },
-    tag:       { options: tagOptions,       value: tagFilter,       onChange: onTagChange },
-    location:  { options: locationOptions,  value: locationFilter,  onChange: onLocationChange },
+  const categoryData: Record<string, { options: string[]; value: string[]; onChange: (v: string[]) => void; formatLabel?: (v: string) => string }> = {
+    status:     { options: statusOptions,     value: statusFilter,     onChange: onStatusChange,     formatLabel: labelFormatters?.status },
+    jobType:    { options: jobTypeOptions,    value: jobTypeFilter,    onChange: onJobTypeChange,    formatLabel: labelFormatters?.jobType },
+    priority:   { options: priorityOptions,   value: priorityFilter,   onChange: onPriorityChange,   formatLabel: labelFormatters?.priority },
+    technician: { options: technicianOptions, value: technicianFilter, onChange: onTechnicianChange, formatLabel: labelFormatters?.technician },
   };
   const availableCategories = CATEGORY_DEFS.filter(c => categoryData[c.key].options.length > 2);
   const currentKey = availableCategories.some(c => c.key === activeCategory) ? activeCategory : availableCategories[0]?.key;
@@ -121,10 +107,6 @@ export default function InspectionFilterModal({
         </View>
 
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
-          <Section icon="check-decagram-outline" label="Result">{chipsFor(resultOptions, resultFilter, onResultChange)}</Section>
-
-          <View style={[s.divider, { backgroundColor: C.border }]} />
-
           {availableCategories.length > 0 && current && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
@@ -149,7 +131,7 @@ export default function InspectionFilterModal({
                 })}
               </View>
               <View style={s.chipWrap}>
-                {chipsForMulti(current.options, current.value, current.onChange, currentKey === 'location' ? formatLocationCode : undefined)}
+                {chipsForMulti(current.options, current.value, current.onChange, current.formatLabel)}
               </View>
             </View>
           )}
@@ -158,18 +140,21 @@ export default function InspectionFilterModal({
 
           <Section icon="format-list-group" label="Group By">
             <View style={s.pillRow}>
-              {(['asset', 'routine', 'location'] as const).map(opt => {
-                const active = groupBy === opt;
-                const icon = opt === 'asset' ? 'cube-outline' : opt === 'routine' ? 'clipboard-list-outline' : 'map-marker-outline';
-                const label = opt === 'asset' ? 'Asset' : opt === 'routine' ? 'Routine' : 'Location';
+              {([
+                { key: 'none' as const, icon: 'view-agenda-outline' as IconName, label: 'None' },
+                { key: 'property' as const, icon: 'office-building-outline' as IconName, label: 'Property' },
+                { key: 'status' as const, icon: 'progress-clock' as IconName, label: 'Status' },
+                { key: 'technician' as const, icon: 'account-outline' as IconName, label: 'Technician' },
+              ]).map(opt => {
+                const active = groupBy === opt.key;
                 return (
                   <TouchableOpacity
-                    key={opt}
-                    onPress={() => onGroupByChange(opt)}
+                    key={opt.key}
+                    onPress={() => onGroupByChange(opt.key)}
                     style={[s.pillBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
-                    <MaterialCommunityIcons name={icon} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>{label}</Text>
+                    <MaterialCommunityIcons name={opt.icon} size={14} color={active ? '#fff' : C.textTertiary} />
+                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>{opt.label}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -178,18 +163,20 @@ export default function InspectionFilterModal({
 
           <Section icon="sort" label="Sort By">
             <View style={s.pillRow}>
-              {(['label', 'location'] as const).map(opt => {
-                const active = sortBy === opt;
+              {([
+                { key: 'date' as const, icon: 'calendar-outline' as IconName, label: 'Date' },
+                { key: 'priority' as const, icon: 'lightning-bolt' as IconName, label: 'Priority' },
+                { key: 'property' as const, icon: 'office-building-outline' as IconName, label: 'Property' },
+              ]).map(opt => {
+                const active = sortBy === opt.key;
                 return (
                   <TouchableOpacity
-                    key={opt}
-                    onPress={() => active ? onToggleSortDirection() : onSortByChange(opt)}
+                    key={opt.key}
+                    onPress={() => active ? onToggleSortDirection() : onSortByChange(opt.key)}
                     style={[s.pillBtn, { borderColor: active ? C.primary : C.border, backgroundColor: active ? C.primary : C.background }]}
                   >
-                    <MaterialCommunityIcons name={opt === 'label' ? 'text' : 'map-marker-outline'} size={14} color={active ? '#fff' : C.textTertiary} />
-                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>
-                      {opt === 'label' ? 'Label' : 'Location'}
-                    </Text>
+                    <MaterialCommunityIcons name={opt.icon} size={14} color={active ? '#fff' : C.textTertiary} />
+                    <Text style={[s.pillTxt, { color: active ? '#fff' : C.textSecondary }]}>{opt.label}</Text>
                     {active && (
                       <MaterialCommunityIcons name={sortAsc ? 'arrow-up' : 'arrow-down'} size={13} color="#fff" />
                     )}
@@ -216,15 +203,8 @@ const s = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  headerIconCircle: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerIconBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1,
-  },
+  headerIconCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  headerIconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   headerTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.4 },
   resetTxt: { fontSize: 13, fontWeight: '700' },
   body: { padding: 20, paddingBottom: 40 },

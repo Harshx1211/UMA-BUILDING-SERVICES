@@ -19,6 +19,7 @@ export type JobWithProperty = Job & {
   site_note: string | null;
   site_contact_name: string | null;
   site_contact_phone: string | null;
+  assigned_to_name: string | null;
 };
 
 export type JobFilter = 'today' | 'week' | 'all';

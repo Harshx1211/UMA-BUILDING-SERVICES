@@ -5,13 +5,15 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { useJobsStore } from '@/store/jobsStore';
+import { useJobsStore, JobWithProperty } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
 import { T } from '@/constants/Colors';
 import type { Job } from '@/types';
 import { ScreenHeader, Badge } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
+import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
+import JobFilterModal, { JobGroupBy, JobSortBy } from '@/components/jobs/JobFilterModal';
 
 type FilterTab = 'today' | 'week' | 'all';
 
@@ -24,12 +26,47 @@ const PRIORITY_COLOR: Record<string, string> = {
   low:    T.textMuted,
 };
 
+const ALL = 'All';
+
+// Real Supabase job_type CHECK-constraint values — NOT the stale JobType
+// enum (which only has 5 of the real 10 values). Keep this local; do not
+// import JobType here.
+const JOB_TYPE_LABEL: Record<string, string> = {
+  routine_service_monthly:   'Monthly Service',
+  routine_service_3_monthly: '3-Monthly Service',
+  routine_service_6_monthly: '6-Monthly Service',
+  routine_service_annual:    'Annual Service',
+  routine_service_5_yearly:  '5-Yearly Service',
+  defect_repair_quote:       'Defect Repair Quote',
+  defect_repair:             'Defect Repair',
+  quote:                     'Quote',
+  installation:              'Installation',
+  emergency:                 'Emergency',
+};
+const STATUS_LABEL: Record<string, string> = {
+  scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled',
+};
+const PRIORITY_LABEL: Record<string, string> = {
+  urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low',
+};
+
+type ListRow = { kind: 'header'; key: string; label: string } | { kind: 'job'; job: Job };
+
 export default function ScheduleScreen() {
   const { user } = useAuth();
   const { jobs, loadJobs } = useJobsStore();
   const [filter, setFilter]     = useState<FilterTab>('today');
   const [search, setSearch]     = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  const [statusFilter, setStatusFilter]         = useState<string[]>([]);
+  const [jobTypeFilter, setJobTypeFilter]       = useState<string[]>([]);
+  const [priorityFilter, setPriorityFilter]     = useState<string[]>([]);
+  const [technicianFilter, setTechnicianFilter] = useState<string[]>([]);
+  const [groupBy, setGroupBy] = useState<JobGroupBy>('none');
+  const [sortBy, setSortBy]   = useState<JobSortBy>('date');
+  const [sortAsc, setSortAsc] = useState(true);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // Use local timezone dates
   const getLocalDate = (d: Date = new Date()) =>
@@ -73,16 +110,69 @@ export default function ScheduleScreen() {
       if (!(jj.property_name ?? '').toLowerCase().includes(q) &&
           !(jj.address ?? '').toLowerCase().includes(q)) return false;
     }
+    if (statusFilter.length > 0 && !statusFilter.includes(j.status)) return false;
+    if (jobTypeFilter.length > 0 && !jobTypeFilter.includes(j.job_type)) return false;
+    if (priorityFilter.length > 0 && !priorityFilter.includes(j.priority)) return false;
+    if (technicianFilter.length > 0 && !technicianFilter.includes((j as JobWithProperty).assigned_to_name ?? '')) return false;
     return true;
   }).sort((a: Job, b: Job) => {
+    if (sortBy === 'priority') {
+      const rank = (p: string): number => ({ urgent: 0, high: 1, normal: 2, low: 3 }[p] ?? 4);
+      const r = rank(a.priority) - rank(b.priority);
+      return sortAsc ? r : -r;
+    }
+    if (sortBy === 'property') {
+      const an = (a as JobWithProperty).property_name ?? '';
+      const bn = (b as JobWithProperty).property_name ?? '';
+      return sortAsc ? an.localeCompare(bn) : bn.localeCompare(an);
+    }
+    // sortBy === 'date' — matches the screen's original default behavior
+    // exactly when sortAsc is true (status priority first, then date asc).
     const statusOrder = (s: string) =>
       s === 'in_progress' ? 0 : s === 'scheduled' ? 1 : s === 'completed' ? 2 : 3;
     const so = statusOrder(a.status) - statusOrder(b.status);
     if (so !== 0) return so;
     const dateA = a.status === 'completed' ? (a.updated_at || a.scheduled_date) : a.scheduled_date;
     const dateB = b.status === 'completed' ? (b.updated_at || b.scheduled_date) : b.scheduled_date;
-    return dateA.localeCompare(dateB);
-  }), [jobs, filter, search, today, weekStart, weekEnd]);
+    return sortAsc ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+  }), [jobs, filter, search, today, weekStart, weekEnd, statusFilter, jobTypeFilter, priorityFilter, technicianFilter, sortBy, sortAsc]);
+
+  // Filter option lists — [ALL, ...distinct values] matching the same
+  // convention InspectionFilterModal already uses for its own categories.
+  const statusOptions = useMemo(() => [ALL, ...Array.from(new Set(jobs.map(j => j.status))).sort()], [jobs]);
+  const jobTypeOptions = useMemo(() => [ALL, ...Array.from(new Set(jobs.map(j => j.job_type))).sort()], [jobs]);
+  const priorityOptions = useMemo(() => [ALL, ...Array.from(new Set(jobs.map(j => j.priority))).sort()], [jobs]);
+  const technicianOptions = useMemo(() => [
+    ALL,
+    ...Array.from(new Set(jobs.map(j => (j as JobWithProperty).assigned_to_name).filter((n): n is string => !!n))).sort(),
+  ], [jobs]);
+
+  const activeFilterCount = [statusFilter, jobTypeFilter, priorityFilter, technicianFilter].filter(a => a.length > 0).length;
+  const resetJobFilters = useCallback(() => {
+    setStatusFilter([]); setJobTypeFilter([]); setPriorityFilter([]); setTechnicianFilter([]);
+  }, []);
+
+  const listData = useMemo((): ListRow[] => {
+    if (groupBy === 'none') return filtered.map(job => ({ kind: 'job', job }));
+    const keyFor = (j: Job): string => {
+      const jj = j as JobWithProperty;
+      if (groupBy === 'property') return jj.property_name ?? 'Unknown Property';
+      if (groupBy === 'status') return STATUS_LABEL[j.status] ?? j.status;
+      return jj.assigned_to_name ?? 'Unassigned';
+    };
+    const buckets = new Map<string, Job[]>();
+    for (const job of filtered) {
+      const k = keyFor(job);
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k)!.push(job);
+    }
+    const rows: ListRow[] = [];
+    for (const k of Array.from(buckets.keys()).sort()) {
+      rows.push({ kind: 'header', key: `h-${k}`, label: k });
+      for (const job of buckets.get(k)!) rows.push({ kind: 'job', job });
+    }
+    return rows;
+  }, [filtered, groupBy]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -110,6 +200,17 @@ export default function ScheduleScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          style={[styles.filterIconBtn, activeFilterCount > 0 && styles.filterIconBtnActive]}
+          onPress={() => setFilterModalVisible(true)}
+        >
+          <MaterialCommunityIcons name="tune-variant" size={16} color={activeFilterCount > 0 ? T.textOnPrimary : T.textMuted} />
+          {activeFilterCount > 0 && (
+            <View style={styles.filterCountBadge}>
+              <Text style={styles.filterCountBadgeTxt}>{activeFilterCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* ── Search ── */}
@@ -132,12 +233,16 @@ export default function ScheduleScreen() {
       </View>
 
       <FlatList
-        data={filtered}
-        keyExtractor={(job) => job.id}
+        data={listData}
+        keyExtractor={(row) => row.kind === 'header' ? row.key : row.job.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
-        renderItem={({ item }) => <ScheduleJobCard key={item.id} job={item} />}
+        renderItem={({ item }) =>
+          item.kind === 'header'
+            ? <Text style={styles.groupHeader}>{item.label}</Text>
+            : <ScheduleJobCard key={item.job.id} job={item.job} />
+        }
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={8}
@@ -150,6 +255,24 @@ export default function ScheduleScreen() {
             </Text>
           </View>
         }
+      />
+
+      <JobFilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+        statusOptions={statusOptions} statusFilter={statusFilter} onStatusChange={setStatusFilter}
+        jobTypeOptions={jobTypeOptions} jobTypeFilter={jobTypeFilter} onJobTypeChange={setJobTypeFilter}
+        priorityOptions={priorityOptions} priorityFilter={priorityFilter} onPriorityChange={setPriorityFilter}
+        technicianOptions={technicianOptions} technicianFilter={technicianFilter} onTechnicianChange={setTechnicianFilter}
+        groupBy={groupBy} onGroupByChange={setGroupBy}
+        sortBy={sortBy} onSortByChange={setSortBy} sortAsc={sortAsc} onToggleSortDirection={() => setSortAsc(v => !v)}
+        activeCount={activeFilterCount}
+        onReset={resetJobFilters}
+        labelFormatters={{
+          status: (v) => STATUS_LABEL[v] ?? v,
+          jobType: (v) => JOB_TYPE_LABEL[v] ?? v,
+          priority: (v) => PRIORITY_LABEL[v] ?? v,
+        }}
       />
     </View>
   );
@@ -208,6 +331,9 @@ function ScheduleJobCard({ job }: { job: Job }) {
             </>
           )}
         </View>
+        {job.status === 'scheduled' && (
+          <ToleranceLabel scheduledDate={job.scheduled_date} jobType={job.job_type} style={{ marginTop: 4 }} />
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -220,6 +346,11 @@ const styles = StyleSheet.create({
   filterTabActive:      { backgroundColor: T.primary, borderColor: T.primary },
   filterTabText:        { color: T.textMuted, fontSize: 12, fontWeight: '600' },
   filterTabTextActive:  { color: T.textOnPrimary },
+  filterIconBtn:        { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
+  filterIconBtnActive:  { backgroundColor: T.primary, borderColor: T.primary },
+  filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 9.5, fontWeight: '800' },
+  groupHeader:          { color: T.textMuted, fontSize: 11.5, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 },
   searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14 },
   // padding around list + ensure list always grows to fill screen height

@@ -18,9 +18,10 @@ import {
 } from '@/constants/Enums';
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
-  getSignatureForJob, updateRecord, addToSyncQueue,
+  getSignatureForJob, getDocumentsForProperty, updateRecord, addToSyncQueue,
 } from '@/lib/database';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
+import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
@@ -133,6 +134,7 @@ export default function JobDetailScreen() {
   const [assets,  setAssets]  = useState<AssetWithResult[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
   const [photos,  setPhotos]  = useState<InspectionPhoto[]>([]);
+  const [documentCount, setDocumentCount] = useState(0);
   const [notes,   setNotes]   = useState('');
   const [isEditingNotes,   setIsEditingNotes]   = useState(false);
   const [isLoading,        setIsLoading]        = useState(true);
@@ -159,6 +161,9 @@ export default function JobDetailScreen() {
       setAssets(getAssetsWithJobResults<AssetWithResult>(id, j.property_id));
       setDefects(getDefectsForJob<Defect>(id));
       setPhotos(getPhotosForJob<InspectionPhoto>(id));
+      // Property-wide count (not job-scoped) — matches how the Documents
+      // screen itself lists every document for the site, not just this visit.
+      setDocumentCount(getDocumentsForProperty(j.property_id).length);
       setHasSig(!!getSignatureForJob(id));
     } catch (err) {
       console.error('[JobDetail] load error:', err);
@@ -361,6 +366,12 @@ export default function JobDetailScreen() {
   const isScheduled  = job.status === JobStatus.Scheduled;
 
   const actionRows: (Omit<React.ComponentProps<typeof ActionRow>, 'isLast' | 'C'> & { key: string })[] = [
+    {
+      key: 'documents', icon: 'file-document-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+      title: 'Documents',
+      subtitle: documentCount === 0 ? 'Scan a site document' : `${documentCount} document${documentCount !== 1 ? 's' : ''} on file`,
+      onPress: () => router.push(`/jobs/${id}/documents` as never),
+    },
     {
       key: 'defects', icon: 'alert-circle-outline',
       iconBg: defects.length > 0 ? C.error + '15' : C.backgroundTertiary,
@@ -611,6 +622,12 @@ export default function JobDetailScreen() {
                       <MaterialCommunityIcons name="calendar" size={15} color={C.textSecondary} />
                       <Text style={[s.chipTxt, { color: C.text }]}>Sch: {fmtDate(job.scheduled_date)}</Text>
                     </View>
+                    {!isCompleted && (
+                      <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
+                        <MaterialCommunityIcons name="calendar-range" size={15} color={C.textSecondary} />
+                        <ToleranceLabel scheduledDate={job.scheduled_date} jobType={job.job_type} />
+                      </View>
+                    )}
                     {(isCompleted || isInProgress) && job.updated_at && (
                       <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
                         <MaterialCommunityIcons name={isCompleted ? "check-circle-outline" : "play-circle-outline"} size={15} color={C.textSecondary} />
