@@ -81,6 +81,12 @@
           "color": "#111D3F",
           "sounds": []
         }
+      ],
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "SiteTrack needs camera access to scan on-site documents."
+        }
       ]
     ],
     "experiments": {

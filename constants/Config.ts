@@ -21,3 +21,4 @@ export const SESSION_KEY = '@sitetrack/session';
 /** Supabase Storage bucket names — must match services/report-generator/src/config.ts */
 export const PHOTO_BUCKET = 'job-photos';
 export const REPORT_BUCKET = 'job-reports';
+export const DOCUMENT_BUCKET = 'site-documents';

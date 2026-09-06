@@ -181,6 +181,28 @@ export interface InspectionPhoto {
   uploaded_by: string | null;
 }
 
+/**
+ * A scanned on-site document (compliance cert, manufacturer data plate,
+ * handwritten sign-off sheet), assembled into a PDF on-device. Anchored to
+ * property_id — like assets, not like InspectionPhoto — so it stays visible
+ * from every job at the same site, not just the one it was scanned during.
+ */
+export interface SiteDocument {
+  id: string;
+  company_id: string | null;
+  property_id: string;
+  /** Job this was captured during, for context — null if scanned outside a job. */
+  job_id: string | null;
+  title: string | null;
+  /** Supabase Storage public URL after upload, or a local file:// URI before upload. */
+  document_url: string;
+  /** Original device file:// path, preserved after upload for offline re-share. */
+  local_uri: string | null;
+  page_count: number | null;
+  uploaded_at: string;
+  uploaded_by: string | null;
+}
+
 /** Client + technician signatures captured at job completion */
 export interface Signature {
   id: string;
