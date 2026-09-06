@@ -1,16 +1,15 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Platform, TextInput,
+  Platform, TextInput, AppState, AppStateStatus,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
-import { InspectionResult, DefectSeverity, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
+import { InspectionResult, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 
@@ -19,7 +18,6 @@ import * as Haptics from 'expo-haptics';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { cardShadow } from '@/components/ui/Card';
 
-import AssetInspectModal from '@/components/inspections/AssetInspectModal';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
@@ -29,6 +27,8 @@ import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
+import { useDefectsStore } from '@/store/defectsStore';
+import { subscribeToJobLive, unsubscribeFromJobLive } from '@/lib/sync';
 
 const ALL = 'All';
 const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
@@ -75,18 +75,29 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   onDelete: (asset: AssetWithResult) => void;
 }) => {
   const C = useColors();
-  const noMotion = useReducedMotion();
   const { updateAssetResult, isSaving } = useInspectionStore();
 
-  const [showFailModal, setShowFailModal] = useState(false);
-
+  // Every result — Pass, Fail, N/T — saves instantly, then opens the asset
+  // detail screen, exactly the same shape for all three. Fail needs it to
+  // fill in Defect Details; Pass/N-T land there too now for full consistency
+  // (e.g. to add a photo or note right after), rather than only Fail hopping
+  // over while the other two stayed on the list.
   const handleResult = (res: InspectionResult) => {
     if (res === InspectionResult.Pass) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, asset.is_compliant ?? true, undefined, asset.technician_notes || '');
+      router.push(`/jobs/${jobId}/asset/${asset.id}` as never);
     } else if (res === InspectionResult.Fail) {
+      // Unlike Pass/N-T, Fail isn't a complete result by itself — it needs a
+      // defect description. Don't write a half-finished job_assets row here
+      // (result: 'fail', no defect, which used to happen instantly on this
+      // tap and could get stranded if the tech backed out before describing
+      // it) — just open the Asset Detail screen with the Fail card already
+      // showing, and let Save Defect there be the one real save. Same
+      // one-tap-one-save shape as Pass/N-T, just with a required field in
+      // between.
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setShowFailModal(true);
+      router.push(`/jobs/${jobId}/asset/${asset.id}?pendingFail=1` as never);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       // FIX: N/T (Not Tested) must store is_compliant=false.
@@ -95,18 +106,8 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       // directly corrupting AS1851 compliance data.
       // The site-inspect path correctly uses false — this now matches it.
       updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '');
+      router.push(`/jobs/${jobId}/asset/${asset.id}` as never);
     }
-  };
-
-  const handleSaveFail = (
-    reason: string,
-    notes: string,
-    severity?: DefectSeverity,
-    defectCode?: string | null,
-    quotePrice?: number | null,
-  ) => {
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, reason, notes, undefined, severity, defectCode, quotePrice);
-    setShowFailModal(false);
   };
 
   const result = asset.result;
@@ -188,18 +189,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </View>
           </View>
 
-          {isFailed && Boolean(asset.defect_reason) && (
-            <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)} style={[s.defectNotice, { backgroundColor: C.errorLight, borderColor: C.error }]}>
-              <MaterialCommunityIcons name="alert-circle" size={15} color={C.errorDark} />
-              <View style={{ flex: 1 }}>
-                <Text style={[s.defectNoticeTitle, { color: C.errorDark }]}>Defect Logged</Text>
-                <Text style={[s.defectNoticeBody, { color: C.error }]}>{asset.defect_reason}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowFailModal(true)} hitSlop={8}>
-                <Text style={[s.defectEditTxt, { color: C.errorDark }]}>Edit</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
+          {/* Defect description/details live only on the Asset Detail screen
+              now (tap the card to open it) — the list stays lean, no
+              "Defect Logged" banner duplicating that content out here. */}
 
           {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
@@ -252,14 +244,6 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
           </View>
         </View>
       </TouchableOpacity>
-
-      <AssetInspectModal
-        visible={showFailModal}
-        asset={asset}
-        jobId={jobId as string}
-        onClose={() => setShowFailModal(false)}
-        onSaveFail={handleSaveFail}
-      />
     </Animated.View>
   );
 });
@@ -347,6 +331,47 @@ export default function AssetInspectionScreen() {
     return () => store.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // Live-sync while this screen is actually on screen and this job is
+  // active — a crew job can have several technicians actioning assets at
+  // once, and this is what makes a teammate's change show up here in
+  // roughly real time via a Realtime push instead of waiting on the next
+  // background sync tick. Stops the moment the screen loses focus so it
+  // never runs in the background or costs anything once nobody's looking.
+  //
+  // The AppState listener exists because the OS can freeze JS timers and
+  // kill the underlying socket outright while backgrounded — the realtime
+  // client's own reconnect logic can't run during that window since it
+  // depends on those same frozen timers, so this explicitly tears the
+  // channel down on background and reopens it on foreground (whose
+  // subscribe callback runs a catch-up pull covering whatever a crew-mate
+  // changed while this device was away).
+  useFocusEffect(
+    useCallback(() => {
+      if (!jobId) return;
+
+      const handleChange = (table: 'job_assets' | 'defects') => {
+        if (table === 'job_assets') store.loadAssetsForInspection(jobId);
+        else useDefectsStore.getState().loadDefects(jobId);
+      };
+
+      subscribeToJobLive(jobId, handleChange);
+
+      const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+        if (next === 'background' || next === 'inactive') {
+          unsubscribeFromJobLive();
+        } else if (next === 'active') {
+          subscribeToJobLive(jobId, handleChange);
+        }
+      });
+
+      return () => {
+        appStateSub.remove();
+        unsubscribeFromJobLive();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [jobId])
+  );
 
   // asset_type -> inspection_routine, e.g. "10 - Portable and Wheeled Fire
   // Extinguishers (Annual)" — the same category grouping the PDF report
@@ -791,7 +816,7 @@ export default function AssetInspectionScreen() {
                 )}
               </View>
             </View>
-            <View style={s.searchWrap}>
+            <View style={s.searchRow}>
               <View style={[s.searchBar, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <MaterialCommunityIcons name="magnify" size={16} color={C.textTertiary} style={{ marginRight: 6 }} />
                 <TextInput
@@ -809,8 +834,6 @@ export default function AssetInspectionScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
-            <View style={s.filterWrap}>
               <TouchableOpacity
                 onPress={() => setShowFilterModal(true)}
                 activeOpacity={0.8}
@@ -822,13 +845,12 @@ export default function AssetInspectionScreen() {
                   },
                 ]}
               >
-                <View style={s.filterBtnLeft}>
-                  <MaterialCommunityIcons name="tune-variant" size={15} color={activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary} />
-                  <Text style={[s.filterBtnTxt, { color: activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary }]}>
-                    {activeFilterCount > 0 ? `Filters · ${activeFilterCount} active` : 'All Assets'}
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-down" size={16} color={activeFilterCount > 0 ? C.textOnPrimary : C.textTertiary} />
+                <MaterialCommunityIcons name="tune-variant" size={18} color={activeFilterCount > 0 ? C.textOnPrimary : C.textSecondary} />
+                {activeFilterCount > 0 && (
+                  <View style={[s.filterBadge, { backgroundColor: C.textOnPrimary }]}>
+                    <Text style={[s.filterBadgeTxt, { color: C.primary }]}>{activeFilterCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -955,13 +977,15 @@ const s = StyleSheet.create({
   formInfoLabel:   { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
   formInfoValue:   { fontSize: 14, fontWeight: '700' },
   formInfoDivider: { width: 1, marginHorizontal: 16, alignSelf: 'stretch' },
-  searchWrap:  { paddingHorizontal: 16, paddingTop: 12 },
-  searchBar:   { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  searchRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
+  searchBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14 },
-  filterWrap: { paddingVertical: 10, paddingHorizontal: 16 },
-  filterBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 42, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
-  filterBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  filterBtnTxt: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
+  // Compact icon-only button — sits beside the search bar instead of a
+  // full-width labeled row underneath it. Active-filter count shows as a
+  // small badge rather than a text label, keeping it a fixed square size.
+  filterBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1 },
+  filterBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  filterBadgeTxt: { fontSize: 10, fontWeight: '800' },
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
   routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
   routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
@@ -979,10 +1003,6 @@ const s = StyleSheet.create({
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
   cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
   assetPrevResult: { fontSize: 12, marginTop: 4 },
-  defectNotice:      { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, borderWidth: 1, marginTop: 10 },
-  defectNoticeTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2, textTransform: 'uppercase' },
-  defectNoticeBody:  { fontSize: 13, fontWeight: '500', marginTop: 1 },
-  defectEditTxt:     { fontSize: 12, fontWeight: '700' },
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
   resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },

@@ -12,11 +12,13 @@ import {
   queryRecords,
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
+  logFieldAudit,
 } from '@/lib/database';
 import { DefectStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
 import { queuePhotoUpload } from '@/lib/photoUpload';
 import { useAuthStore } from '@/store/authStore';
+import { syncNow } from '@/lib/sync';
 
 // ─── State & Actions ──────────────────────────────────────
 interface DefectsState {
@@ -124,6 +126,12 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       const userId = useAuthStore.getState().user?.id ?? '';
 
+      // A defect's Timeline should say when/by whom it first appeared, not
+      // just show later edits — a synthetic entry, not a real field diff.
+      logFieldAudit('defects', id, payload.job_id, companyId, userId || null, [
+        { field: '_created', old: null, new: 'defect created' },
+      ]);
+
       // Insert photos into inspection_photos and queue them
       if (photos && photos.length > 0) {
         for (const uri of photos) {
@@ -149,6 +157,11 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         isSaving: false,
       }));
 
+      // Push immediately so a crew-mate's inspect screen (which live-polls
+      // defects for the job) picks this up in seconds, not on the next
+      // background sync tick — same reasoning as inspectionStore.
+      syncNow();
+
       return id;
     } catch (err: unknown) {
       console.error('[DefectsStore] addDefect error:', err);
@@ -160,6 +173,11 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
   updateDefect: (defectId, updates) => {
     try {
       set({ isSaving: true, error: null });
+
+      // Read the OLD row before any write touches it — the audit diff needs
+      // this, and it must happen before updateRecord, not inside the set()
+      // callback below (which only sees post-write in-memory state).
+      const oldRow = get().defects.find((d) => d.id === defectId);
 
       // If photos array is updated, serialise before writing to SQLite
       // BUG-N10 FIX: inject company_id so UPDATE payload passes Supabase RLS on cold-start.
@@ -176,12 +194,24 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       updateRecord('defects', defectId, dbUpdates);
       addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
 
+      if (oldRow) {
+        const userId = useAuthStore.getState().user?.id ?? null;
+        // Skip `photos` — it has its own dedicated UI already, a raw array
+        // diff here would just be noise.
+        const changes = (Object.keys(updates) as (keyof Defect)[])
+          .filter((f) => f !== 'photos')
+          .map((f) => ({ field: f, old: (oldRow as unknown as Record<string, unknown>)[f] ?? null, new: (updates as unknown as Record<string, unknown>)[f] ?? null }))
+          .filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+        logFieldAudit('defects', defectId, oldRow.job_id, companyId, userId, changes);
+      }
+
       set((state) => ({
         defects: state.defects.map((d) =>
           d.id === defectId ? { ...d, ...updates } : d
         ),
         isSaving: false,
       }));
+      syncNow();
     } catch (err: unknown) {
       console.error('[DefectsStore] updateDefect error:', err);
       set({ error: errorMessage(err), isSaving: false });
@@ -190,16 +220,25 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
   updateDefectStatus: (defectId, status) => {
     try {
+      const oldRow = get().defects.find((d) => d.id === defectId);
       const companyId = useAuthStore.getState().user?.company_id ?? null;
       const dbUpdates = { status, updated_at: new Date().toISOString(), company_id: companyId };
       updateRecord('defects', defectId, dbUpdates);
       addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+
+      if (oldRow && oldRow.status !== status) {
+        const userId = useAuthStore.getState().user?.id ?? null;
+        logFieldAudit('defects', defectId, oldRow.job_id, companyId, userId, [
+          { field: 'status', old: oldRow.status, new: status },
+        ]);
+      }
 
       set((state) => ({
         defects: state.defects.map((d) =>
           d.id === defectId ? { ...d, status } : d
         ),
       }));
+      syncNow();
     } catch (err: unknown) {
       console.error('[DefectsStore] updateDefectStatus error:', err);
       set({ error: errorMessage(err) });
@@ -235,6 +274,7 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         defects: state.defects.filter((d) => d.id !== defectId),
         isSaving: false,
       }));
+      syncNow();
     } catch (err: unknown) {
       console.error('[DefectsStore] deleteDefect error:', err);
       set({ error: errorMessage(err), isSaving: false });

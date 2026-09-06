@@ -22,6 +22,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById } from '@/lib/database';
+import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
@@ -291,6 +292,13 @@ export default function DefectDetailScreen() {
                 Status updates managed by admin
               </Text>
             </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(210).duration(380)}>
+          <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
+            <Text style={[s.cardLabel, { color: C.textTertiary }]}>TIMELINE</Text>
+            <Timeline tableName="defects" recordId={defect.id} />
           </View>
         </Animated.View>
 

@@ -1,6 +1,7 @@
 // Background sync service — pulls from Supabase and pushes the offline sync queue every 60 seconds
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import {
   getPendingSyncItems,
@@ -10,6 +11,7 @@ import {
   upsertRecordBulk,
   getJobStatus,
   getDeletedPhotoIds,
+  getDeletedDocumentIds,
   getFailedSyncItems,
   getRecord,
   deleteRecord,
@@ -17,10 +19,11 @@ import {
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
-import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, PHOTO_BUCKET } from '@/constants/Config';
+import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
+import { processDocumentQueue } from '@/lib/documentUpload';
 import { classifySyncError } from '@/lib/syncErrors';
 
 /** Re-exported for convenience — UI components only need to import from sync.ts */
@@ -59,6 +62,8 @@ async function waitForReportServiceReady(baseUrl: string): Promise<void> {
 
 // Mutex for processPhotoQueue — prevents overlapping manual + interval calls (BUG-N12)
 let _isProcessingPhotos = false;
+// Same idea for processDocumentQueue — see the photo mutex above.
+let _isProcessingDocuments = false;
 
 /**
  * Status priority ladder for conflict resolution.
@@ -201,6 +206,7 @@ export function stopSync(): void {
     if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
   _cachedUserId = null;
+  unsubscribeFromJobLive();
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
   clearSyncFailureListeners();
@@ -309,6 +315,19 @@ export async function runSync(userId?: string): Promise<boolean> {
       if (__DEV__) console.log('[SiteTrack Sync] Photo queue already processing — skipping duplicate run');
     }
     if (_shouldStop) return false;
+
+    if (!_isProcessingDocuments) {
+      _isProcessingDocuments = true;
+      try {
+        await processDocumentQueue(resolvedUserId);
+      } finally {
+        _isProcessingDocuments = false;
+      }
+    } else {
+      if (__DEV__) console.log('[SiteTrack Sync] Document queue already processing — skipping duplicate run');
+    }
+    if (_shouldStop) return false;
+
     await _pushQueue();
     if (_shouldStop) return false;
 
@@ -391,7 +410,151 @@ export async function pushPendingWork(userId: string): Promise<void> {
       _isProcessingPhotos = false;
     }
   }
+  if (!_isProcessingDocuments) {
+    _isProcessingDocuments = true;
+    try {
+      await processDocumentQueue(userId);
+    } finally {
+      _isProcessingDocuments = false;
+    }
+  }
   await _pushQueue();
+}
+
+/**
+ * Live sync for ONE open job — a crew job can have several technicians
+ * actioning different (or occasionally the same) assets at once, and
+ * waiting on the full SYNC_INTERVAL_MS cycle (which also uploads
+ * photo/document binaries, pulls every job, and re-checks
+ * company/subscription status) made a teammate's change take up to two
+ * minutes to appear. This used to be a 2.5s poll; it's now a Supabase
+ * Realtime subscription — push instead of poll, so updates land in under a
+ * second and only the row that actually changed is ever sent, instead of
+ * re-fetching this job's entire asset/defect list on a timer regardless of
+ * whether anything changed.
+ *
+ * Each incoming row is reconciled through the same
+ * _shouldPreserveLocalJobAsset guard _pullRelated uses, so this carries the
+ * exact same correctness guarantee as the full sync pull, just scoped to
+ * one job. DELETE is deliberately not subscribed to — see the migration
+ * that enables this (supabase/migrations/20260901010000_*) for why that's
+ * not a regression versus the poll it replaces.
+ */
+let _liveChannel: RealtimeChannel | null = null;
+let _liveJobId: string | null = null;
+
+export type JobLiveChangeTable = 'job_assets' | 'defects';
+
+/**
+ * Opens (or re-opens, if jobId differs) a live channel for this job.
+ * Idempotent if already subscribed to the same job. Every successful
+ * (re)connect runs a one-time catch-up pull via the existing _pullRelated —
+ * a live channel never retroactively delivers events missed while
+ * disconnected, so this is what covers the offline-reconnect gap.
+ */
+export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChangeTable) => void): void {
+  if (!jobId) return;
+  if (_liveChannel && _liveJobId === jobId) return; // already live on this job
+  unsubscribeFromJobLive();
+  _liveJobId = jobId;
+
+  const applyJobAsset = (row: Record<string, unknown>) => {
+    const localRow = getRecord<{ result: string | null; actioned_at: string | null }>(
+      'job_assets', row.id as string
+    );
+    if (_shouldPreserveLocalJobAsset(row, localRow)) {
+      if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local job_asset result over incoming row for ${row.id}`);
+      return;
+    }
+    upsertRecord('job_assets', row as Record<string, string | number | boolean | null>);
+    onChange('job_assets');
+  };
+
+  const applyDefect = (row: Record<string, unknown>) => {
+    // defects.photos is a Postgres text[] — arrives as a real JS array over
+    // the wire; SQLite needs the same JSON string every other write path
+    // into this column already uses (see defectsStore.ts's normaliseDefects).
+    const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
+    upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
+    onChange('defects');
+  };
+
+  _liveChannel = supabase
+    .channel(`job-live:${jobId}`)
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'defects',    filter: `job_id=eq.${jobId}` }, (p) => applyDefect(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects',    filter: `job_id=eq.${jobId}` }, (p) => applyDefect(p.new))
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        if (__DEV__) console.log(`[SiteTrack Sync] Realtime subscribed for job ${jobId}`);
+        void _pullRelated('job_assets', 'job_id', [jobId]).then(() => onChange('job_assets'));
+        void _pullRelated('defects', 'job_id', [jobId]).then(() => onChange('defects'));
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (__DEV__) console.warn(`[SiteTrack Sync] Realtime ${status} for job ${jobId} — auto-retrying:`, err);
+      }
+    });
+}
+
+/** Tears down the live channel — call on screen blur, app background, and sign-out. */
+export function unsubscribeFromJobLive(): void {
+  if (_liveChannel) {
+    void supabase.removeChannel(_liveChannel);
+    _liveChannel = null;
+  }
+  _liveJobId = null;
+}
+
+// Own mutex for syncNow's push-only cycle — separate from _isProcessingPhotos/
+// _isProcessingDocuments (which it still shares with runSync, intentionally,
+// so the same photo/document is never uploaded twice concurrently).
+let _isPushingNow = false;
+
+/**
+ * Fire-and-forget immediate PUSH trigger — call right after a local write
+ * (e.g. marking an asset) so THIS device's own change reaches the server as
+ * fast as possible, without waiting for the next SYNC_INTERVAL_MS tick.
+ *
+ * Deliberately NOT a full runSync(): this only uploads pending photo/document
+ * binaries (both no-op instantly when nothing's queued) and pushes the sync
+ * queue — it skips runSync()'s full pull of every job/property/asset, which
+ * is the expensive part and isn't needed here (subscribeToJobLive's
+ * Realtime channel already covers the one job that's actually on screen).
+ * A technician tapping
+ * through a 100+ asset checklist calls this on nearly every tap, so keeping
+ * it cheap matters — the old version triggered a full runSync() each time.
+ *
+ * Skips entirely if a full runSync() is already in flight — that pass will
+ * push this queue item anyway within its own push phase, so there's nothing
+ * useful for a second concurrent push to do.
+ */
+export function syncNow(userId?: string): void {
+  if (_isSyncing || _isPushingNow) return;
+  void (async () => {
+    _isPushingNow = true;
+    try {
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
+      if (!isOnline) return;
+
+      const resolvedUserId = userId ?? _cachedUserId;
+      if (!resolvedUserId) return;
+
+      if (!_isProcessingPhotos) {
+        _isProcessingPhotos = true;
+        try { await processPhotoQueue(resolvedUserId); } finally { _isProcessingPhotos = false; }
+      }
+      if (!_isProcessingDocuments) {
+        _isProcessingDocuments = true;
+        try { await processDocumentQueue(resolvedUserId); } finally { _isProcessingDocuments = false; }
+      }
+      await _pushQueue();
+    } catch (err) {
+      if (__DEV__) console.warn('[SiteTrack Sync] syncNow error:', err);
+    } finally {
+      _isPushingNow = false;
+    }
+  })();
 }
 
 // ─────────────────────────────────────────────
@@ -496,6 +659,12 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
         }
         if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assets.length} asset(s)`);
       }
+
+      // Pull scanned documents for these properties — property-scoped like
+      // assets above (not job-scoped like inspection_photos), so a document
+      // captured during one job still shows up from every other job at the
+      // same site.
+      await _pullRelated('site_documents', 'property_id', propertyIds);
     }
   }
 
@@ -569,6 +738,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
 
     await _pullRelated('job_assets', 'job_id', jobIds);
     await _pullRelated('defects', 'job_id', jobIds);
+    await _pullRelated('field_audit_log', 'job_id', jobIds);
     // H6: _pullRelated already handles the deleted-photo tombstone internally
     // (it calls getDeletedPhotoIds() itself when table === 'inspection_photos')
     await _pullRelated('inspection_photos', 'job_id', jobIds);
@@ -648,6 +818,29 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   }
 }
 
+/**
+ * BUG-N4 guard, extracted so the bulk REST pull (_pullRelated) and the
+ * Realtime postgres_changes handler (subscribeToJobLive) apply the exact
+ * same "don't let the server overwrite a locally-actioned-but-not-yet-
+ * pushed result with a stale/null echo" rule, regardless of which path the
+ * server data arrived through.
+ *
+ * @returns true if serverRow should be DISCARDED (local wins).
+ */
+function _shouldPreserveLocalJobAsset(
+  serverRow: Record<string, unknown>,
+  localRow: { result: string | null; actioned_at: string | null } | null,
+): boolean {
+  if (!localRow?.result) return false; // nothing local to protect
+  if (!serverRow.result) return true;  // local has a result, server doesn't
+  if (localRow.actioned_at && serverRow.actioned_at) {
+    const localMs  = new Date(localRow.actioned_at as string).getTime();
+    const serverMs = new Date(serverRow.actioned_at as string).getTime();
+    if (localMs > serverMs) return true; // local is newer
+  }
+  return false;
+}
+
 /** Generic helper to pull a related table for a set of parent ids */
 async function _pullRelated(
   table: string,
@@ -664,10 +857,13 @@ async function _pullRelated(
     return;
   }
   if (data) {
-    // For inspection_photos: skip any row whose ID is in the permanent tombstone.
+    // For inspection_photos / site_documents: skip any row whose ID is in the
+    // permanent tombstone.
     let tombstoneIds = new Set<string>();
     if (table === 'inspection_photos') {
       tombstoneIds = getDeletedPhotoIds();
+    } else if (table === 'site_documents') {
+      tombstoneIds = getDeletedDocumentIds();
     }
 
     // Collect rows to upsert after applying all local-override logic.
@@ -699,23 +895,23 @@ async function _pullRelated(
         const localRow  = getRecord<{ result: string | null; actioned_at: string | null }>(
           'job_assets', rowId
         );
-        if (localRow?.result && !serverRow.result) {
-          // Local has an inspection result, server doesn't — preserve local.
+        if (_shouldPreserveLocalJobAsset(serverRow, localRow)) {
           if (__DEV__)
-            console.log(`[UMA BUILDING SERVICES Sync] PULL: preserving local job_asset result '${localRow.result}' over server null for ${rowId}`);
+            console.log(`[UMA BUILDING SERVICES Sync] PULL: preserving local job_asset result over server for ${rowId}`);
           skipped++;
           continue;
         }
-        // If server has a result and local also has a result, trust server only if
-        // server actioned_at is newer (the admin may have corrected the result remotely).
-        if (localRow?.result && serverRow.result && localRow.actioned_at && serverRow.actioned_at) {
-          const localMs  = new Date(localRow.actioned_at as string).getTime();
-          const serverMs = new Date(serverRow.actioned_at as string).getTime();
-          if (localMs > serverMs) {
-            // Local is newer — preserve it.
-            skipped++;
-            continue;
-          }
+      }
+
+      // defects.photos is a Postgres text[] — PostgREST hands it back as a
+      // real JS array, but SQLite needs the JSON string every other write
+      // path into this column already uses (see defectsStore.ts). Without
+      // this, db.runSync's bind values include a raw array, which isn't a
+      // valid SQLite bind type and silently fails the whole row's upsert.
+      if (table === 'defects') {
+        const defectRow = row as Record<string, unknown>;
+        if (Array.isArray(defectRow.photos)) {
+          defectRow.photos = JSON.stringify(defectRow.photos);
         }
       }
 
@@ -903,6 +1099,22 @@ export async function _pushQueue(): Promise<void> {
               const { error: storageErr } = await supabase.storage.from(PHOTO_BUCKET).remove([filePath]);
               if (storageErr && __DEV__) {
                 console.warn(`[UMA BUILDING SERVICES Sync] Failed to delete photo binary from storage:`, storageErr.message);
+              }
+            }
+          }
+        }
+        // Same cleanup for a deleted scanned document's PDF binary — without
+        // this, deleting a site_documents row leaves its PDF orphaned in the
+        // site-documents bucket forever (this table didn't exist when the
+        // inspection_photos case above was written, so it was never added).
+        if (item.table_name === 'site_documents' && typeof payload.document_url === 'string') {
+          const url = payload.document_url;
+          if (url.includes(`/object/public/${DOCUMENT_BUCKET}/`)) {
+            const filePath = url.split(`/object/public/${DOCUMENT_BUCKET}/`)[1];
+            if (filePath) {
+              const { error: storageErr } = await supabase.storage.from(DOCUMENT_BUCKET).remove([filePath]);
+              if (storageErr && __DEV__) {
+                console.warn(`[SiteTrack Sync] Failed to delete document binary from storage:`, storageErr.message);
               }
             }
           }

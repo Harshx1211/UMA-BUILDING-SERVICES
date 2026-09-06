@@ -33,6 +33,7 @@ import {
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
   openDatabase,
+  logFieldAudit,
 } from '@/lib/database';
 import { SyncOperation, InspectionResult, DefectStatus, DefectSeverity, JobStatus } from '@/constants/Enums';
 import { usePhotosStore } from '@/store/photosStore';
@@ -40,6 +41,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useDefectsStore } from '@/store/defectsStore';
 import { generateUUID } from '@/utils/uuid';
 import { queuePhotoUpload } from '@/lib/photoUpload';
+import { syncNow } from '@/lib/sync';
 
 // ─── Helper ───────────────────────────────────────────────────
 function errorMessage(err: unknown): string {
@@ -213,6 +215,15 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         actioned_at: new Date().toISOString(),
         actioned_by: userId || null,
       };
+
+      // Field-level audit Timeline — one row per SAVE (not per changed
+      // field). `asset` still holds the OLD values here, right up until
+      // upsertRecord below writes the new ones.
+      const AUDITED_JOB_ASSET_FIELDS = ['result', 'checklist_data', 'is_compliant', 'defect_reason', 'technician_notes'] as const;
+      const jobAssetChanges = AUDITED_JOB_ASSET_FIELDS
+        .map((field) => ({ field, old: (asset as unknown as Record<string, unknown>)[field] ?? null, new: jobAssetPayload[field] ?? null }))
+        .filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+      logFieldAudit('job_assets', jobAssetId, currentJobId, companyId, userId || null, jobAssetChanges);
 
       upsertRecord('job_assets', jobAssetPayload);
 
@@ -467,6 +478,13 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         progress: calcProgress(newAssets),
         isSaving: false,
       });
+
+      // Push this device's own change out immediately rather than waiting
+      // for the next background sync tick — the other half of making a
+      // crew job feel live: this device's writes reach the server fast,
+      // and lib/sync.ts's subscribeToJobLive() Realtime channel pushes it
+      // straight to other devices' screens.
+      syncNow();
     } catch (err: unknown) {
       set({ error: errorMessage(err), isSaving: false });
     }

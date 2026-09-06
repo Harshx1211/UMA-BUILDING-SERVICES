@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 37;
+const CURRENT_SCHEMA_VERSION = 39;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -262,6 +262,50 @@ export function initializeSchema(): void {
       id         TEXT PRIMARY KEY NOT NULL,
       deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Scanned on-site paperwork (compliance certs, manufacturer data plates,
+    -- handwritten sign-off sheets), assembled into a PDF on-device. Anchored
+    -- to property_id (like assets), not job_id (like inspection_photos) —
+    -- job_id is only kept to record which visit captured it, so a document
+    -- scanned during one job still shows up from every other job at the
+    -- same property.
+    CREATE TABLE IF NOT EXISTS site_documents (
+      id            TEXT PRIMARY KEY NOT NULL,
+      company_id    TEXT,
+      property_id   TEXT NOT NULL,
+      job_id        TEXT,
+      title         TEXT,
+      document_url  TEXT NOT NULL,
+      local_uri     TEXT,
+      page_count    INTEGER,
+      uploaded_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      uploaded_by   TEXT NOT NULL,
+      FOREIGN KEY (property_id) REFERENCES properties(id),
+      FOREIGN KEY (job_id)      REFERENCES jobs(id),
+      FOREIGN KEY (uploaded_by) REFERENCES users(id)
+    );
+
+    -- Tombstone table for site_documents, mirroring deleted_photo_ids above.
+    CREATE TABLE IF NOT EXISTS deleted_document_ids (
+      id         TEXT PRIMARY KEY NOT NULL,
+      deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- One row per SAVE (not per changed field) — a jsonb-equivalent TEXT
+    -- column holding [{field, old, new}, ...] for that save. See
+    -- supabase/migrations/20260905000000_field_audit_log.sql.
+    CREATE TABLE IF NOT EXISTS field_audit_log (
+      id          TEXT PRIMARY KEY NOT NULL,
+      company_id  TEXT,
+      table_name  TEXT NOT NULL,
+      record_id   TEXT NOT NULL,
+      job_id      TEXT NOT NULL,
+      changes     TEXT NOT NULL DEFAULT '[]',
+      changed_by  TEXT,
+      changed_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (job_id) REFERENCES jobs(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_field_audit_log_record ON field_audit_log(table_name, record_id);
 
     CREATE TABLE IF NOT EXISTS inventory_items (
       id          TEXT PRIMARY KEY NOT NULL,
@@ -1288,6 +1332,69 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '37')`);
   }
 
+  // Migration 38: site_documents + deleted_document_ids — scanned on-site
+  // paperwork (see supabase/migrations/20260901000000_site_documents.sql).
+  // Fresh installs already get both tables via the CREATE TABLE IF NOT
+  // EXISTS block above; this covers existing installs upgrading in place.
+  if (currentVersion < 38) {
+    try {
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS site_documents (
+          id            TEXT PRIMARY KEY NOT NULL,
+          company_id    TEXT,
+          property_id   TEXT NOT NULL,
+          job_id        TEXT,
+          title         TEXT,
+          document_url  TEXT NOT NULL,
+          local_uri     TEXT,
+          page_count    INTEGER,
+          uploaded_at   TEXT NOT NULL DEFAULT (datetime('now')),
+          uploaded_by   TEXT NOT NULL,
+          FOREIGN KEY (property_id) REFERENCES properties(id),
+          FOREIGN KEY (job_id)      REFERENCES jobs(id),
+          FOREIGN KEY (uploaded_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS deleted_document_ids (
+          id         TEXT PRIMARY KEY NOT NULL,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 38: added site_documents + deleted_document_ids');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 38 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 38;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '38')`);
+  }
+
+  // Migration 39: field_audit_log — per-save field-change history for
+  // job_assets/defects (see supabase/migrations/20260905000000_field_audit_log.sql).
+  // Fresh installs already get this via the CREATE TABLE IF NOT EXISTS block
+  // above; this covers existing installs upgrading in place.
+  if (currentVersion < 39) {
+    try {
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS field_audit_log (
+          id          TEXT PRIMARY KEY NOT NULL,
+          company_id  TEXT,
+          table_name  TEXT NOT NULL,
+          record_id   TEXT NOT NULL,
+          job_id      TEXT NOT NULL,
+          changes     TEXT NOT NULL DEFAULT '[]',
+          changed_by  TEXT,
+          changed_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (job_id) REFERENCES jobs(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_field_audit_log_record ON field_audit_log(table_name, record_id);
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 39: added field_audit_log');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 39 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 39;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '39')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1450,9 +1557,11 @@ export function getJobsForTechnician<T = RecordData>(userId: string): T[] {
               p.postcode AS property_postcode,
               p.compliance_status AS property_compliance_status,
               p.site_contact_name, p.site_contact_phone,
-              p.access_notes, p.hazard_notes, p.site_note
+              p.access_notes, p.hazard_notes, p.site_note,
+              u.full_name AS assigned_to_name
        FROM jobs j
        LEFT JOIN properties p ON j.property_id = p.id
+       LEFT JOIN users u ON j.assigned_to = u.id
        WHERE j.status != 'cancelled'
          AND (
            j.assigned_to = ?
@@ -1647,6 +1756,81 @@ export function getAssetHistory(assetId: string, excludeJobId: string): AssetHis
   }
 }
 
+export interface AuditLogChange {
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  table_name: string;
+  record_id: string;
+  changes: AuditLogChange[];
+  changed_by: string | null;
+  changed_at: string;
+}
+
+/**
+ * Writes one field_audit_log row for a save — takes companyId/changedBy as
+ * params rather than reading useAuthStore here, since lib/database.ts is a
+ * pure DB layer with no store dependencies anywhere else; callers already
+ * resolve both from useAuthStore.getState() for their own payload anyway.
+ * One row per SAVE (never one per field) — see field_audit_log's schema
+ * comment for why. No-ops if `changes` is empty (nothing to log).
+ */
+export function logFieldAudit(
+  tableName: 'job_assets' | 'defects',
+  recordId: string,
+  jobId: string,
+  companyId: string | null,
+  changedBy: string | null,
+  changes: AuditLogChange[],
+): void {
+  if (changes.length === 0) return;
+  const auditId = generateUUID();
+  const auditPayload: RecordData = {
+    id: auditId,
+    company_id: companyId,
+    table_name: tableName,
+    record_id: recordId,
+    job_id: jobId,
+    changes: JSON.stringify(changes),
+    changed_by: changedBy,
+    changed_at: new Date().toISOString(),
+  };
+  insertRecord('field_audit_log', auditPayload);
+  addToSyncQueue('field_audit_log', auditId, SyncOperation.Insert, auditPayload);
+}
+
+/**
+ * Field-level change history for one job_assets or defects row, newest
+ * first — one entry per SAVE (see field_audit_log's design: a single
+ * jsonb-equivalent `changes` array per save, not one row per changed
+ * field, to keep this to one sync-queue Insert per save regardless of how
+ * many fields changed at once).
+ */
+export function getFieldAuditLog(tableName: 'job_assets' | 'defects', recordId: string): AuditLogEntry[] {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ id: string; table_name: string; record_id: string; changes: string; changed_by: string | null; changed_at: string }>(
+      `SELECT id, table_name, record_id, changes, changed_by, changed_at
+       FROM field_audit_log
+       WHERE table_name = ? AND record_id = ?
+       ORDER BY changed_at DESC`,
+      [tableName, recordId],
+    );
+    return rows.map((r) => {
+      let changes: AuditLogChange[] = [];
+      try { changes = JSON.parse(r.changes); } catch { /* leave empty on malformed JSON */ }
+      return { ...r, changes };
+    });
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getFieldAuditLog(${tableName}, ${recordId}) error:`, err);
+    return [];
+  }
+}
+
 /** Returns the active (not clocked-out) time log for this job+user, or null. */
 export function getActiveTimeLog(jobId: string, userId: string): { id: string; clock_in: string } | null {
   try {
@@ -1683,7 +1867,7 @@ export function getJobAssetRecord(jobId: string, assetId: string): { id: string;
 export function addToSyncQueue(
   tableName: string,
   recordId: string,
-  operation: SyncOperation | 'photo_upload',
+  operation: SyncOperation | 'photo_upload' | 'document_upload',
   payload: RecordData,
 ): void {
   try {
@@ -1781,6 +1965,78 @@ export function getDeletedPhotoIds(): Set<string> {
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getDeletedPhotoIds error:`, err);
     return new Set();
+  }
+}
+
+/**
+ * Cancels any pending document_upload tasks for the given site_documents
+ * record ID. Mirrors cancelPendingPhotoUpload — called immediately when a
+ * scanned document is deleted so the PDF is never uploaded afterwards.
+ */
+export function cancelPendingDocumentUpload(recordId: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(
+      `UPDATE sync_queue SET synced = 1
+       WHERE table_name = 'site_documents'
+         AND record_id = ?
+         AND operation = 'document_upload'
+         AND synced = 0`,
+      [recordId],
+    );
+    if (__DEV__)
+      console.log(`[UMA BUILDING SERVICES DB] Cancelled pending document_upload for record ${recordId}`);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] cancelPendingDocumentUpload(${recordId}) error:`, err);
+  }
+}
+
+/**
+ * Records a site_documents ID in the permanent tombstone so it is never
+ * re-pulled from Supabase — mirrors recordDeletedPhoto.
+ */
+export function recordDeletedDocument(documentId: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(
+      `INSERT OR IGNORE INTO deleted_document_ids (id) VALUES (?)`,
+      [documentId],
+    );
+    if (__DEV__)
+      console.log(`[UMA BUILDING SERVICES DB] Tombstoned deleted document ${documentId}`);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] recordDeletedDocument(${documentId}) error:`, err);
+  }
+}
+
+/**
+ * Returns the set of site_documents IDs that have been locally deleted.
+ * Mirrors getDeletedPhotoIds.
+ */
+export function getDeletedDocumentIds(): Set<string> {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ id: string }>(
+      `SELECT id FROM deleted_document_ids`,
+    );
+    return new Set(rows.map(r => r.id));
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getDeletedDocumentIds error:`, err);
+    return new Set();
+  }
+}
+
+/** Returns every scanned document for a property, newest first. Mirrors getPhotosForJob. */
+export function getDocumentsForProperty<T = RecordData>(propertyId: string): T[] {
+  try {
+    const db = openDatabase();
+    return db.getAllSync<T>(
+      `SELECT * FROM site_documents WHERE property_id = ? ORDER BY uploaded_at DESC`,
+      [propertyId],
+    );
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getDocumentsForProperty(${propertyId}) error:`, err);
+    return [];
   }
 }
 
@@ -2397,14 +2653,15 @@ export function clearDatabase(): void {
   try {
     const db = openDatabase();
     const tables = [
-      'users', 'properties', 'assets', 'jobs', 'job_assets', 
+      'users', 'properties', 'assets', 'jobs', 'job_assets',
       'defects', 'inspection_photos', 'signatures', 'time_logs',
-      'quotes', 'quote_items', 'notifications', 'sync_queue'
+      'quotes', 'quote_items', 'notifications', 'sync_queue',
+      'site_documents', 'field_audit_log'
     ];
-    
+
     // Use WAL checkpointing first to ensure all pending operations commit
     db.execSync('PRAGMA wal_checkpoint(TRUNCATE);');
-    
+
     for (const table of tables) {
       try {
         db.runSync(`DELETE FROM ${_safeColumnName(table)};`);
@@ -2412,10 +2669,10 @@ export function clearDatabase(): void {
         console.warn(`[UMA BUILDING SERVICES DB] Failed to wipe ${table}:`, err);
       }
     }
-    
-    // We explicitly leave `asset_type_definitions`, `defect_codes`, `inventory_items`, 
-    // and `deleted_photo_ids` intact because they are global dictionary/tombstone tables 
-    // and redownloading them on every login is inefficient.
+
+    // We explicitly leave `asset_type_definitions`, `defect_codes`, `inventory_items`,
+    // `deleted_photo_ids`, and `deleted_document_ids` intact because they are global
+    // dictionary/tombstone tables and redownloading them on every login is inefficient.
     
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Database wiped successfully for sign-out');
   } catch (err) {
