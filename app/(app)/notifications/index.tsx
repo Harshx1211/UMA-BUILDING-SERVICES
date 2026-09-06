@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { openJob } from '@/utils/navigation';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { Card } from '@/components/ui/Card';
@@ -48,7 +48,7 @@ function NotifCard({ item }: { item: AppNotification }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!item.is_read) markAsRead(item.id);
     if (item.job_id) {
-      router.push(`/jobs/${item.job_id}` as never);
+      openJob(item.job_id);
     }
   };
 

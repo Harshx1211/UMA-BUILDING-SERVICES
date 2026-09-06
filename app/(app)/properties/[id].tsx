@@ -10,9 +10,11 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ComplianceStatus, AssetStatus, JobStatus } from '@/constants/Enums';
-import { getRecord, getAssetsForProperty, getJobsForProperty } from '@/lib/database';
-import type { Property, Asset, Job } from '@/types';
+import { getRecord, getAssetsForProperty, getJobsForProperty, getDocumentsForProperty } from '@/lib/database';
+import { openJob } from '@/utils/navigation';
+import type { Property, Asset, Job, SiteDocument } from '@/types';
 import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
+import DocumentCard from '@/components/documents/DocumentCard';
 import { localDateString } from '@/utils/dateHelpers';
 
 type ColorsType = ReturnType<typeof useColors>;
@@ -132,6 +134,7 @@ export default function PropertyDetailScreen() {
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
   const [jobHistory, setJobHistory] = useState<JobHistory[]>([]);
+  const [documents, setDocuments]   = useState<SiteDocument[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
 
   const load = useCallback(() => {
@@ -144,6 +147,7 @@ export default function PropertyDetailScreen() {
         setAssets(getAssetsForProperty<Asset>(id));
         // M2: Fetch all jobs (no limit) so the count badge reflects reality
         setJobHistory(getJobsForProperty<JobHistory>(id));
+        setDocuments(getDocumentsForProperty<SiteDocument>(id));
       }
     } catch (err) {
       console.error('[PropertyDetail] load error:', err);
@@ -427,7 +431,7 @@ export default function PropertyDetailScreen() {
                       s.historyRow,
                       i < Math.min(jobHistory.length, 5) - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
                     ]}
-                    onPress={() => router.push(`/jobs/${job.id}` as never)}
+                    onPress={() => openJob(job.id)}
                     activeOpacity={0.7}
                   >
                     <View style={[s.historyIconWrap, { backgroundColor: C.backgroundTertiary }]}>
@@ -456,6 +460,28 @@ export default function PropertyDetailScreen() {
                   </View>
                 )}
               </>
+            )}
+          </View>
+        </Animated.View>
+
+        {/* ── DOCUMENTS ────────────────────────────────────── */}
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(320).duration(400)}>
+          <SectionHeader
+            icon="file-document-outline"
+            title="Documents"
+            count={documents.length}
+          />
+          <View style={{ marginHorizontal: 16 }}>
+            {documents.length === 0 ? (
+              <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={s.emptyInCard}>
+                  <MaterialCommunityIcons name="file-document-outline" size={36} color={C.border} />
+                  <Text style={[s.emptyTitle, { color: C.textTertiary }]}>No documents yet</Text>
+                  <Text style={[s.emptySub, { color: C.textTertiary }]}>Scanned certificates and sign-off sheets from any visit will appear here.</Text>
+                </View>
+              </View>
+            ) : (
+              documents.map((doc) => <DocumentCard key={doc.id} document={doc} />)
             )}
           </View>
         </Animated.View>

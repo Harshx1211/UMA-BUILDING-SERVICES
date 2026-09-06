@@ -28,6 +28,7 @@ import type { Job } from '@/types';
 import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow, SkeletonBlock } from '@/components/ui';
 import { SyncStatusBar } from '@/components/SyncStatusBar';
 import { localDateString } from '@/utils/dateHelpers';
+import { openJob } from '@/utils/navigation';
 
 // ─── Priority left-bar color (semantic, matches the rule: urgent=danger, high=warning) ──
 const PRIORITY_BAR: Record<string, string> = {
@@ -83,7 +84,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
     >
       <TouchableOpacity
         style={styles.jobCard}
-        onPress={() => router.push(`/(app)/jobs/${job.id}`)}
+        onPress={() => openJob(job.id)}
         activeOpacity={0.82}
       >
         {/* Priority left bar */}
@@ -240,7 +241,7 @@ export default function HomeScreen() {
             <Card
               variant="default"
               noPadding
-              onPress={() => router.push(`/(app)/jobs/${inProgress.id}`)}
+              onPress={() => openJob(inProgress.id)}
             >
               <View style={styles.activeJobInner}>
                 {/* Pulsing orange dot */}
