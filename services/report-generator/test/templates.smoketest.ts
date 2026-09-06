@@ -66,10 +66,18 @@ const defects: Defect[] = [
   { id: 'd3', job_id: 'j1', asset_id: 'a4', description: 'Lamp not illuminating', severity: 'critical', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
 ];
 
+// ph1 is deliberately linked to BOTH a1 (asset_id) and d1 (defect_id) — that's
+// the real shape a photo taken for a failed asset ends up in (see
+// inspectionStore.ts's defect-auto-create backfill), and it's exactly what
+// used to make assetLogChunk render the same photo twice: once under the
+// asset row via photosByAsset, once again inside the defect card via
+// photosByDefect.
 const photosByAsset = new Map<string, InspectionPhoto[]>([
-  ['a1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: null, photo_url: 'https://example.com/x.jpg', caption: null }]],
+  ['a1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
 ]);
-const photosByDefect = new Map<string, InspectionPhoto[]>();
+const photosByDefect = new Map<string, InspectionPhoto[]>([
+  ['d1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
+]);
 const signedPhotoUrls = new Map<string, string>([['ph1', 'https://signed.example.com/x.jpg?token=abc']]); // ph2 (if any) intentionally unsigned -> exercises the placeholder path
 
 const data: ReportData = {
@@ -205,6 +213,15 @@ if (chunkHtml.includes('Inspected by')) {
   throw new Error('FAIL: assetLogChunk — "Inspected by" should not appear per-asset');
 }
 console.log('OK: assetLogChunk does not show per-asset inspector attribution');
+
+// A photo linked to both an asset and that asset's defect (ph1/d1 above) must
+// render exactly once — inside the defect card, not also in the asset's own
+// photo row above it.
+const ph1Occurrences = (chunkHtml.match(/signed\.example\.com\/x\.jpg/g) ?? []).length;
+if (ph1Occurrences !== 1) {
+  throw new Error(`FAIL: assetLogChunk — expected a defect-linked photo to appear exactly once, found ${ph1Occurrences}`);
+}
+console.log('OK: assetLogChunk does not duplicate a photo between the asset row and its own defect card');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections

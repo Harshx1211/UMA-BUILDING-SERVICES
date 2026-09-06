@@ -33,8 +33,21 @@ export function renderAssetLogChunk(
     }
 
     const { asset } = row;
-    const photos = photosByAsset.get(asset.id) ?? [];
     const assetDefects = defectsByAsset.get(asset.id) ?? [];
+
+    // A photo taken for a failed asset gets linked to BOTH the asset
+    // (asset_id) and its defect (defect_id) — see inspectionStore.ts's
+    // defect-auto-create backfill, which exists so a photo taken via the
+    // asset's own Photos section still shows up on the defect it caused.
+    // photosByAsset and photosByDefect both key off that same row, so
+    // rendering both photoRow()s here duplicated every defect photo: once
+    // under the asset, once again inside its defect card right below.
+    // Exclude anything already claimed by one of this asset's defects —
+    // it still renders once, just in the defect card instead of twice.
+    const defectPhotoIds = new Set(
+      assetDefects.flatMap((d) => (photosByDefect.get(d.id) ?? []).map((p) => p.id)),
+    );
+    const photos = (photosByAsset.get(asset.id) ?? []).filter((p) => !defectPhotoIds.has(p.id));
 
     // An asset's info, photos, and defect cards used to be 3 sibling <tr>
     // elements — theme.ts's `tr { break-inside: avoid }` protects each ONE
@@ -58,7 +71,7 @@ export function renderAssetLogChunk(
               <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
-            ${asset.technician_notes ? `<tr><td colspan="3" style="padding:2px 0 0;border-top:none"><div style="font-size:10.5px;color:${COLORS.MUTED};font-style:italic">Note: ${esc(asset.technician_notes)}</div></td></tr>` : ''}
+            ${asset.technician_notes ? `<tr><td colspan="3" style="padding:6px 0 0;border-top:none"><div style="display:flex;gap:8px;padding:8px 10px;background:${COLORS.BORDER_LIGHT};border:1px solid ${COLORS.BORDER};border-radius:6px"><div style="font-weight:800;color:${COLORS.SLATE};font-size:9.5px;text-transform:uppercase;flex-shrink:0">Note</div><div style="color:${COLORS.BLACK};font-size:10.5px">${esc(asset.technician_notes)}</div></div></td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
