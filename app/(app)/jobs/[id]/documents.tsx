@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, FlatList } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import DocumentScanSheet, { DocumentScanSheetRef } from '@/components/documents/
 import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Button, EmptyState, showConfirm } from '@/components/ui';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { SiteDocument } from '@/types';
 
 export default function DocumentsScreen() {
@@ -36,6 +37,15 @@ export default function DocumentsScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // Now that the background sync interval is a slow safety net rather than
+  // a 60s heartbeat (constants/Config.ts), a document another tech scans
+  // (or an admin uploads) mid-visit needs its own live path — this job's
+  // Realtime channel now carries site_documents (see subscribeToJobLive).
+  useJobLiveSync(jobId, useCallback((table) => {
+    if (table === 'site_documents' && propertyId) store.loadDocuments(propertyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyId, store.loadDocuments]));
 
   const handleLongPress = (doc: SiteDocument) => {
     showConfirm({

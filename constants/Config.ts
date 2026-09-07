@@ -1,7 +1,22 @@
 // App-wide configuration constants — no secrets here, all non-sensitive values
 
-/** How often the background sync service polls for changes (milliseconds) */
-export const SYNC_INTERVAL_MS = 60_000;
+/**
+ * How often the background full push+pull runs (milliseconds) — this is a
+ * safety net, not the app's primary data path. The actual "stay live while
+ * online" job is done by two other mechanisms: useNetworkStatus's
+ * offline->online reconnect trigger, and subscribeToJobLive's per-job
+ * Realtime channel (lib/sync.ts) for whatever job a technician currently
+ * has open. This interval only needs to catch what those two can't: a
+ * missed/dropped Realtime event, or a change to something with no Realtime
+ * channel at all (catalogue tables, properties, assets, a job not
+ * currently open on this device). Was 60s — every device was re-running
+ * the ~20-25-call full pull once a minute forever regardless of whether
+ * anything had changed, which was never the intent (see the "was this
+ * offline sync ever meant to run root this way" discussion). 10 minutes
+ * keeps that reconciliation pass without it being the thing everything
+ * else quietly depended on.
+ */
+export const SYNC_INTERVAL_MS = 10 * 60_000;
 
 /** Human-readable application name — SiteTrack is the platform brand */
 export const APP_NAME = 'SiteTrack';

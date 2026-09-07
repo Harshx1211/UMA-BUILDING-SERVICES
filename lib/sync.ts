@@ -437,17 +437,27 @@ export async function pushPendingWork(userId: string): Promise<void> {
  * re-fetching this job's entire asset/defect list on a timer regardless of
  * whether anything changed.
  *
- * Covers job_assets, defects, and (see 20260906000000_*) inspection_photos
- * — a photo attached to an asset or defect used to only reach other devices
- * on the next background sync tick, same gap the original poll had for
- * results. Each incoming row is reconciled through the same guards
- * _pullRelated uses for that table (_shouldPreserveLocalJobAsset for
- * job_assets, the deleted-photo tombstone for inspection_photos), so this
- * carries the exact same correctness guarantee as the full sync pull, just
- * scoped to one job. DELETE is deliberately not subscribed to for any of
- * these tables — see the migration that enables this
- * (supabase/migrations/20260901010000_*) for why that's not a regression
- * versus the poll it replaces.
+ * Covers job_assets, defects, inspection_photos (see 20260906000000_*),
+ * job_technicians, quotes, time_logs, and site_documents (see
+ * 20260908020000_*) — matters more now that SYNC_INTERVAL_MS itself has
+ * been stretched way out (see its own comment in constants/Config.ts):
+ * this channel, not the periodic pull, is now the primary way any of these
+ * tables reach a device while it's actively looking at the job, not just a
+ * safety net. Each incoming row is reconciled through the same guards
+ * _pullRelated uses for that table where one exists (_shouldPreserveLocalJobAsset
+ * for job_assets, the deleted-photo/deleted-document tombstone for
+ * inspection_photos/site_documents) — job_technicians/quotes/time_logs get
+ * a plain upsert, same as the periodic pull already gives them (no local
+ * write path exists for job_technicians/time_logs, and quotes/quote_items
+ * are admin-only edits, so there's nothing local to protect). quote_items
+ * has no job_id column to filter a postgres_changes subscription on, so
+ * it isn't subscribed directly — every quote_item write also updates its
+ * parent quote's total_amount in the same action (see quote.tsx/
+ * defectsStore's own write sites), so a quotes change re-pulls that
+ * quote's items as a catch-up instead. DELETE is deliberately not
+ * subscribed to for any of these tables — see the migration that enables
+ * this (supabase/migrations/20260901010000_*) for why that's not a
+ * regression versus the poll it replaces.
  */
 let _liveChannel: RealtimeChannel | null = null;
 let _liveJobId: string | null = null;
@@ -461,7 +471,9 @@ let _liveOnChange: ((table: JobLiveChangeTable) => void) | null = null;
 // on/off flag.
 let _liveRefCount = 0;
 
-export type JobLiveChangeTable = 'job_assets' | 'defects' | 'inspection_photos' | 'jobs';
+export type JobLiveChangeTable =
+  | 'job_assets' | 'defects' | 'inspection_photos' | 'jobs'
+  | 'job_technicians' | 'quotes' | 'quote_items' | 'time_logs' | 'site_documents';
 
 /**
  * Opens (or re-opens, if jobId differs) a live channel for this job, and
@@ -570,6 +582,40 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     _liveOnChange?.('jobs');
   };
 
+  // No local write path exists for job_technicians (crew assignment is
+  // admin-only, bar the one self-assign Insert in site-inspect.tsx which
+  // never races a live echo of itself) or time_logs (not written by the
+  // mobile app at all yet) — plain upsert, same as the periodic pull.
+  const applyJobTechnician = (row: Record<string, unknown>) => {
+    upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('job_technicians');
+  };
+
+  const applyTimeLog = (row: Record<string, unknown>) => {
+    upsertRecord('time_logs', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('time_logs');
+  };
+
+  // Quotes are admin-only edits (quote.tsx is read-only on the mobile side)
+  // so there's no local edit to protect against a stale echo — plain
+  // upsert. See this function's own doc comment for why quote_items rides
+  // along here instead of its own subscription.
+  const applyQuote = (row: Record<string, unknown>) => {
+    upsertRecord('quotes', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('quotes');
+    void _pullRelated('quote_items', 'quote_id', [row.id as string]).then(() => _liveOnChange?.('quote_items'));
+  };
+
+  // Same tombstone check applyPhoto uses above — a document this device (or
+  // one already synced here) deleted could otherwise be resurrected by a
+  // stray/late event for that same id.
+  const applyDocument = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    if (getDeletedDocumentIds().has(rowId)) return;
+    upsertRecord('site_documents', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('site_documents');
+  };
+
   _liveChannel = supabase
     .channel(`job-live:${jobId}`)
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
@@ -579,12 +625,32 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` }, (p) => applyJob(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_technicians', filter: `job_id=eq.${jobId}` }, (p) => applyJobTechnician(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_technicians', filter: `job_id=eq.${jobId}` }, (p) => applyJobTechnician(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'quotes', filter: `job_id=eq.${jobId}` }, (p) => applyQuote(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quotes', filter: `job_id=eq.${jobId}` }, (p) => applyQuote(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'time_logs', filter: `job_id=eq.${jobId}` }, (p) => applyTimeLog(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'time_logs', filter: `job_id=eq.${jobId}` }, (p) => applyTimeLog(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'site_documents', filter: `job_id=eq.${jobId}` }, (p) => applyDocument(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'site_documents', filter: `job_id=eq.${jobId}` }, (p) => applyDocument(p.new))
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] Realtime subscribed for job ${jobId}`);
         void _pullRelated('job_assets', 'job_id', [jobId]).then(() => _liveOnChange?.('job_assets'));
         void _pullRelated('defects', 'job_id', [jobId]).then(() => _liveOnChange?.('defects'));
         void _pullRelated('inspection_photos', 'job_id', [jobId]).then(() => _liveOnChange?.('inspection_photos'));
+        void _pullRelated('job_technicians', 'job_id', [jobId]).then(() => _liveOnChange?.('job_technicians'));
+        void _pullRelated('time_logs', 'job_id', [jobId]).then(() => _liveOnChange?.('time_logs'));
+        void _pullRelated('site_documents', 'job_id', [jobId]).then(() => _liveOnChange?.('site_documents'));
+        void (async () => {
+          await _pullRelated('quotes', 'job_id', [jobId]);
+          _liveOnChange?.('quotes');
+          const { data: quoteRows } = await supabase.from('quotes').select('id').eq('job_id', jobId);
+          if (quoteRows && quoteRows.length > 0) {
+            await _pullRelated('quote_items', 'quote_id', quoteRows.map((q) => q.id as string));
+            _liveOnChange?.('quote_items');
+          }
+        })();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (__DEV__) console.warn(`[SiteTrack Sync] Realtime ${status} for job ${jobId} — auto-retrying:`, err);
       }

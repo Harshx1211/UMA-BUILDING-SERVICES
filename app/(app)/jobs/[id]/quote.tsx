@@ -7,7 +7,7 @@
  * Total is summed from quote_price values.
  * No editing on this screen — all quote management is admin-only.
  */
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
@@ -20,6 +20,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { Defect } from '@/types';
 
 type ColorsType = ReturnType<typeof useColors>;
@@ -81,12 +82,24 @@ export default function QuoteScreen() {
     store.loadDefects(jobId);
 
     // A18: Re-load defects whenever a sync cycle completes so admin-updated
-    // prices appear immediately without requiring a screen remount.
+    // prices appear immediately without requiring a screen remount. Kept as
+    // a fallback alongside useJobLiveSync below — sync cycles are now a slow
+    // safety net (constants/Config.ts), so the live channel is what actually
+    // keeps this responsive day to day.
     const listener = () => store.loadDefects(jobId);
     onSyncComplete(listener);
     return () => offSyncComplete(listener);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // defects (which carry quote_price/status — this screen's only data
+  // source, see the header comment) already has its own Realtime channel;
+  // this is what keeps an admin-set price showing up in close to real time
+  // now that the periodic sync above only runs every 10 minutes.
+  useJobLiveSync(jobId, useCallback((table) => {
+    if (table === 'defects' && jobId) store.loadDefects(jobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, store.loadDefects]));
 
   // Group defects by severity
   const grouped = useMemo(() => ({
