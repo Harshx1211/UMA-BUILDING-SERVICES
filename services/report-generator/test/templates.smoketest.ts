@@ -66,12 +66,13 @@ const defects: Defect[] = [
   { id: 'd3', job_id: 'j1', asset_id: 'a4', description: 'Lamp not illuminating', severity: 'critical', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
 ];
 
-// ph1 is deliberately linked to BOTH a1 (asset_id) and d1 (defect_id) — that's
-// the real shape a photo taken for a failed asset ends up in (see
-// inspectionStore.ts's defect-auto-create backfill), and it's exactly what
-// used to make assetLogChunk render the same photo twice: once under the
-// asset row via photosByAsset, once again inside the defect card via
-// photosByDefect.
+// ph1 carries both asset_id and defect_id here to exercise a legacy row (photos
+// are no longer linked to a defect_id by inspectionStore going forward — see
+// its comment — but old synced data may still have one). assetLogChunk must
+// render it exactly once, at the asset level, and never inside the defect
+// card even though ph1's defect_id would still resolve via photosByDefect.
+// photosByDefect itself remains real/populated here only because
+// renderUnlinkedDefects/renderRepairs below still key defect photos off it.
 const photosByAsset = new Map<string, InspectionPhoto[]>([
   ['a1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
 ]);
@@ -186,7 +187,7 @@ const docs = [
   ['cover', renderCover(data, byValue)],
   ['tableOfContents', tocHtml],
   ...categoryLogs.flatMap((cat, ci) =>
-    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, photosByDefect, signedPhotoUrls)] as const),
+    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, signedPhotoUrls)] as const),
   ),
   ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
   ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls) ?? '(null — no repairs, unexpected here)'],
@@ -214,14 +215,19 @@ if (chunkHtml.includes('Inspected by')) {
 }
 console.log('OK: assetLogChunk does not show per-asset inspector attribution');
 
-// A photo linked to both an asset and that asset's defect (ph1/d1 above) must
-// render exactly once — inside the defect card, not also in the asset's own
-// photo row above it.
+// Photos are never associated with a specific defect — a photo carrying a
+// defect_id (ph1/d1 above, simulating legacy synced data) must still render
+// exactly once, in the asset's own photo row, and must NOT appear inside its
+// defect's card.
 const ph1Occurrences = (chunkHtml.match(/signed\.example\.com\/x\.jpg/g) ?? []).length;
 if (ph1Occurrences !== 1) {
-  throw new Error(`FAIL: assetLogChunk — expected a defect-linked photo to appear exactly once, found ${ph1Occurrences}`);
+  throw new Error(`FAIL: assetLogChunk — expected the photo to appear exactly once (at the asset level), found ${ph1Occurrences}`);
 }
-console.log('OK: assetLogChunk does not duplicate a photo between the asset row and its own defect card');
+const d1CardMatch = chunkHtml.match(/Asset has reached or past the last year of its service life[\s\S]*?<\/div>\s*<\/div>/);
+if (d1CardMatch && d1CardMatch[0].includes('signed.example.com/x.jpg')) {
+  throw new Error('FAIL: assetLogChunk — the photo rendered inside its defect card, not just at the asset level');
+}
+console.log('OK: assetLogChunk renders the photo once, at the asset level, never inside its defect card');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections

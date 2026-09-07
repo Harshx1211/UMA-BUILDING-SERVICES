@@ -9,11 +9,15 @@ import { Defect, InspectionPhoto } from '../types';
  * row expands inline into a colored defect card for any defects linked to that
  * asset, matching the reference report's per-asset defect layout.
  */
+// Passed to renderDefectCard for defects rendered inside this chunk — see
+// the comment at its call site below for why photos never render per-defect
+// here (only renderUnlinkedDefects/renderRepairs still use a real map).
+const EMPTY_PHOTOS = new Map<string, InspectionPhoto[]>();
+
 export function renderAssetLogChunk(
   chunk: AssetLogChunk,
   defectsByAsset: Map<string, Defect[]>,
   photosByAsset: Map<string, InspectionPhoto[]>,
-  photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
 ): string {
   let lastCategory: string | null = null;
@@ -35,19 +39,16 @@ export function renderAssetLogChunk(
     const { asset } = row;
     const assetDefects = defectsByAsset.get(asset.id) ?? [];
 
-    // A photo taken for a failed asset gets linked to BOTH the asset
-    // (asset_id) and its defect (defect_id) — see inspectionStore.ts's
-    // defect-auto-create backfill, which exists so a photo taken via the
-    // asset's own Photos section still shows up on the defect it caused.
-    // photosByAsset and photosByDefect both key off that same row, so
-    // rendering both photoRow()s here duplicated every defect photo: once
-    // under the asset, once again inside its defect card right below.
-    // Exclude anything already claimed by one of this asset's defects —
-    // it still renders once, just in the defect card instead of twice.
-    const defectPhotoIds = new Set(
-      assetDefects.flatMap((d) => (photosByDefect.get(d.id) ?? []).map((p) => p.id)),
-    );
-    const photos = (photosByAsset.get(asset.id) ?? []).filter((p) => !defectPhotoIds.has(p.id));
+    // FIX: photos are no longer associated with a specific defect at all —
+    // every photo for this asset (regardless of any defect_id a photo might
+    // still carry from before this change) renders once, here, at the
+    // asset level. Defect cards below get an empty photo map (see the
+    // `new Map()` passed to renderDefectCard) so a defect never shows its
+    // own separate photo row within this Asset Log section — that's still
+    // the right behavior for a genuinely unlinked defect (no asset row to
+    // attach to at all), which is why renderDefectCard itself still
+    // supports it and unlinkedDefects.ts/repairs.ts still pass the real map.
+    const photos = photosByAsset.get(asset.id) ?? [];
 
     // An asset's info, photos, and defect cards used to be 3 sibling <tr>
     // elements — theme.ts's `tr { break-inside: avoid }` protects each ONE
@@ -72,7 +73,7 @@ export function renderAssetLogChunk(
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
             ${asset.technician_notes ? `<tr><td colspan="3" style="padding:6px 0 0;border-top:none"><div style="display:flex;gap:8px;padding:8px 10px;background:${COLORS.BORDER_LIGHT};border:1px solid ${COLORS.BORDER};border-radius:6px"><div style="font-weight:800;color:${COLORS.SLATE};font-size:9.5px;text-transform:uppercase;flex-shrink:0">Note</div><div style="color:${COLORS.BLACK};font-size:10.5px">${esc(asset.technician_notes)}</div></div></td></tr>` : ''}
-            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
+            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
       </tr>`);

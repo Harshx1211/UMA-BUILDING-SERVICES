@@ -132,7 +132,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
         catIndex,
         chunkIndex,
         label: cat.label,
-        html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls),
+        html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.signedPhotoUrls),
       })),
     ),
     ...tailDocs.map((doc, tailIndex) => ({ kind: 'tail' as const, tailIndex, key: doc.key, html: doc.html })),
