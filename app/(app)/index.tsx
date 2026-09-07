@@ -154,7 +154,18 @@ export default function HomeScreen() {
   // toISOString() is UTC — before ~10am AEST the UTC date is already "yesterday".
   // This caused "Today's Jobs" to show 0 jobs all morning in Australian timezones.
   const today      = localDateString();
-  const todayJobs  = jobs.filter((j: Job) => j.scheduled_date === today);
+  // FIX: a job actually started/completed today but scheduled for a
+  // different day used to fall out of "Today's jobs" entirely (strict
+  // scheduled_date === today), undercounting "Done today" and hiding jobs
+  // worked on today under Upcoming/nothing instead. updateJobStatus()
+  // (jobsStore.ts) stamps updated_at with the exact status-change moment,
+  // so an in_progress/completed job counts as "today's" if either its
+  // schedule or its actual activity falls today — matches the same fix
+  // applied to the Schedule tab's Today/Week filters.
+  const todayJobs  = jobs.filter((j: Job) =>
+    j.scheduled_date === today ||
+    ((j.status === JobStatus.InProgress || j.status === JobStatus.Completed) && j.updated_at?.substring(0, 10) === today)
+  );
   const doneToday  = todayJobs.filter((j: Job) => j.status === JobStatus.Completed).length;
   const inProgress = jobs.find((j: Job) => j.status === JobStatus.InProgress);
   const openCount  = jobs.filter((j: Job) =>
@@ -313,7 +324,13 @@ export default function HomeScreen() {
 
         {/* ── Upcoming ── */}
         {(() => {
-          const upcoming = jobs.filter((j: Job) => j.scheduled_date > today).slice(0, 5);
+          // Exclude anything already shown above — a job scheduled ahead but
+          // started early now qualifies for todayJobs via updated_at too, and
+          // without this it would render twice (once per section).
+          const todayJobIds = new Set(todayJobs.map((j: Job) => j.id));
+          const upcoming = jobs
+            .filter((j: Job) => j.scheduled_date > today && !todayJobIds.has(j.id))
+            .slice(0, 5);
           if (!upcoming.length) return null;
           return (
             <View style={styles.section}>

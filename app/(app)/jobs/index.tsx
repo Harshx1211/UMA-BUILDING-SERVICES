@@ -96,7 +96,19 @@ export default function ScheduleScreen() {
   }, [user, loadJobs]);
 
   const filtered = useMemo(() => jobs.filter((j: Job) => {
-    const effectiveDateStr = j.status === 'completed' ? (j.updated_at || j.scheduled_date) : j.scheduled_date;
+    // FIX: an in_progress job used to be bucketed by scheduled_date alone,
+    // same as a still-scheduled job — so a job started today but scheduled
+    // for some other day (ahead of schedule, or simply re-dated) vanished
+    // from Today/This Week the moment it was started, only findable in All
+    // Jobs looking like unrelated old work. updateJobStatus() (jobsStore.ts)
+    // already stamps updated_at with the exact start moment, and the card
+    // below already displays it as "Started {updated_at}" — this just makes
+    // the Today/Week filters agree with what the card itself is showing,
+    // the same way completed jobs already use updated_at as their effective
+    // date.
+    const effectiveDateStr = (j.status === 'completed' || j.status === 'in_progress')
+      ? (j.updated_at || j.scheduled_date)
+      : j.scheduled_date;
     const filterDate = effectiveDateStr.substring(0, 10);
     // FIX: this used to be a raw `scheduled_date < today` check with zero
     // slack — but the very same card renders <ToleranceLabel>, which shows
