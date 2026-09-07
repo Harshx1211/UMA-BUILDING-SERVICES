@@ -139,24 +139,25 @@ export function useReportGeneration(
           poll(jobId);
           return;
         }
-        // FIX: multi-technician gap — if a crew-mate already generated (and
-        // finished) a report for this job on another device before this
-        // device's own pull caught up, this device's local `report_url` can
-        // still read null/stale. Without this check, tapping Generate/View
-        // Report here fell through to queuing a brand new server-side
-        // generation — wasted server work, and a second PDF nobody asked
-        // for — instead of just adopting the one that already exists.
-        if (existing.status === 'completed') {
-          stop();
-          setStatus('completed');
-          setPdfUrl(existing.pdfUrl);
-          updateRecord('jobs', jobId, { report_url: existing.pdfUrl, updated_at: new Date().toISOString() });
-          if (!notifiedRef.current) {
-            notifiedRef.current = true;
-            Toast.show({ type: 'success', text1: 'Report Ready', text2: 'Tap View Report to open it.' });
-          }
-          return;
-        }
+        // REVERTED: this used to also adopt an already-'completed' status
+        // instead of regenerating, meant for the multi-technician case where
+        // a crew-mate already generated a CURRENT report on another device
+        // before this device's own pull caught up. Real bug, wrong fix —
+        // the server's /report-status has no timestamp, so there was no way
+        // to tell "this existing report is still current" apart from "the
+        // job has since been edited and this report is now stale." Since
+        // `generate()` is the same function behind every explicit Generate/
+        // Regenerate tap (not just the passive multi-device case), this
+        // silently served a stale PDF after every real edit made following
+        // the very first generation — status stays 'completed' forever once
+        // set, so regeneration was effectively disabled from that point on
+        // for the job's whole lifetime. Confirmed in the field: changing a
+        // Pass to Not-Tested and adding a note after an earlier generation
+        // never made it into the PDF. A stale compliance report is a much
+        // worse failure than an occasional redundant duplicate generation,
+        // so this reverts to the original guarantee — an explicit generate
+        // request always produces a fresh report — until the server can
+        // report a real generatedAt to compare against the job's last edit.
       } catch {
         // Status check itself failed for some other reason — fall through
         // and queue locally same as the offline path below.
