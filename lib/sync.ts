@@ -15,6 +15,7 @@ import {
   getFailedSyncItems,
   getRecord,
   deleteRecord,
+  remapSyncQueueRecordId,
   updateSyncQueuePayload,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
@@ -206,7 +207,10 @@ export function stopSync(): void {
     if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
   _cachedUserId = null;
-  unsubscribeFromJobLive();
+  // Hard reset, not the refcounted unsubscribeFromJobLive() — sign-out must
+  // guarantee no channel survives into a different user's session on this
+  // device, regardless of how many job screens think they still want it open.
+  _teardownLiveChannel();
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
   clearSyncFailureListeners();
@@ -433,30 +437,72 @@ export async function pushPendingWork(userId: string): Promise<void> {
  * re-fetching this job's entire asset/defect list on a timer regardless of
  * whether anything changed.
  *
- * Each incoming row is reconciled through the same
- * _shouldPreserveLocalJobAsset guard _pullRelated uses, so this carries the
- * exact same correctness guarantee as the full sync pull, just scoped to
- * one job. DELETE is deliberately not subscribed to — see the migration
- * that enables this (supabase/migrations/20260901010000_*) for why that's
- * not a regression versus the poll it replaces.
+ * Covers job_assets, defects, and (see 20260906000000_*) inspection_photos
+ * — a photo attached to an asset or defect used to only reach other devices
+ * on the next background sync tick, same gap the original poll had for
+ * results. Each incoming row is reconciled through the same guards
+ * _pullRelated uses for that table (_shouldPreserveLocalJobAsset for
+ * job_assets, the deleted-photo tombstone for inspection_photos), so this
+ * carries the exact same correctness guarantee as the full sync pull, just
+ * scoped to one job. DELETE is deliberately not subscribed to for any of
+ * these tables — see the migration that enables this
+ * (supabase/migrations/20260901010000_*) for why that's not a regression
+ * versus the poll it replaces.
  */
 let _liveChannel: RealtimeChannel | null = null;
 let _liveJobId: string | null = null;
+// Always points at the MOST RECENTLY focused screen's callback — updated on
+// every subscribeToJobLive call, even when the channel itself doesn't need
+// recreating, so events reach whichever screen is actually on-screen right
+// now rather than whichever one happened to create the channel first.
+let _liveOnChange: ((table: JobLiveChangeTable) => void) | null = null;
+// How many currently-focused screens want this job's channel open — see
+// subscribeToJobLive's comment for why this is counted rather than a plain
+// on/off flag.
+let _liveRefCount = 0;
 
-export type JobLiveChangeTable = 'job_assets' | 'defects';
+export type JobLiveChangeTable = 'job_assets' | 'defects' | 'inspection_photos';
 
 /**
- * Opens (or re-opens, if jobId differs) a live channel for this job.
- * Idempotent if already subscribed to the same job. Every successful
- * (re)connect runs a one-time catch-up pull via the existing _pullRelated —
- * a live channel never retroactively delivers events missed while
- * disconnected, so this is what covers the offline-reconnect gap.
+ * Opens (or re-opens, if jobId differs) a live channel for this job, and
+ * registers as one more caller that wants it open.
+ *
+ * Reference-counted rather than a plain idempotency check: several of a
+ * job's screens (checklist list, an asset's detail screen, the defects
+ * list, the job overview) each call this on their own focus and
+ * unsubscribeFromJobLive() on their own blur, via useJobLiveSync. Only one
+ * screen is ever actually focused at a time, but React Navigation doesn't
+ * guarantee whether the outgoing screen's blur or the incoming screen's
+ * focus fires first during a transition — with a plain flag, an unlucky
+ * order could have the outgoing screen's unconditional teardown kill a
+ * channel the incoming screen just opened (or leave the channel silently
+ * bound to a callback whose screen already left, since the original
+ * version captured `onChange` once in a closure and skipped rebinding it
+ * whenever a channel already existed). Counting wanting-callers instead
+ * means the channel only actually closes once NOTHING wants it, in either
+ * firing order — worst case one extra reconnect, never a dropped
+ * connection or a stale callback.
+ *
+ * Every successful (re)connect runs a one-time catch-up pull via the
+ * existing _pullRelated — a live channel never retroactively delivers
+ * events missed while disconnected, so this also covers the
+ * offline-reconnect gap and the brief handoff between two of this job's
+ * screens if the channel did momentarily close and reopen.
  */
 export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChangeTable) => void): void {
   if (!jobId) return;
-  if (_liveChannel && _liveJobId === jobId) return; // already live on this job
-  unsubscribeFromJobLive();
+
+  if (_liveJobId && _liveJobId !== jobId) {
+    // Actually switching jobs, not a same-job screen handoff — the old
+    // channel is unconditionally wrong now regardless of its refcount.
+    _teardownLiveChannel();
+  }
+
   _liveJobId = jobId;
+  _liveOnChange = onChange;
+  _liveRefCount++;
+
+  if (_liveChannel) return; // already open for this job — just swapped the handler in and bumped the count
 
   const applyJobAsset = (row: Record<string, unknown>) => {
     const localRow = getRecord<{ result: string | null; actioned_at: string | null }>(
@@ -467,16 +513,35 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
       return;
     }
     upsertRecord('job_assets', row as Record<string, string | number | boolean | null>);
-    onChange('job_assets');
+    _liveOnChange?.('job_assets');
   };
 
   const applyDefect = (row: Record<string, unknown>) => {
+    // FIX: same anti-clobber protection applyJobAsset already had — a
+    // realtime echo of someone else's write (or a stale replay from a
+    // channel that only just reconnected) could otherwise overwrite a
+    // locally-edited defect that hasn't pushed yet.
+    const localRow = getRecord<{ updated_at: string | null }>('defects', row.id as string);
+    if (_shouldPreserveLocalRow(row, localRow)) {
+      if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local defect over incoming row for ${row.id}`);
+      return;
+    }
     // defects.photos is a Postgres text[] — arrives as a real JS array over
     // the wire; SQLite needs the same JSON string every other write path
     // into this column already uses (see defectsStore.ts's normaliseDefects).
     const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
     upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
-    onChange('defects');
+    _liveOnChange?.('defects');
+  };
+
+  // Same tombstone check _pullRelated applies for this table — without it, a
+  // photo this device (or another one, already synced here) deleted could
+  // get resurrected by a stray/late INSERT or UPDATE event for that same id.
+  const applyPhoto = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    if (getDeletedPhotoIds().has(rowId)) return;
+    upsertRecord('inspection_photos', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('inspection_photos');
   };
 
   _liveChannel = supabase
@@ -485,24 +550,39 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'defects',    filter: `job_id=eq.${jobId}` }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects',    filter: `job_id=eq.${jobId}` }, (p) => applyDefect(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] Realtime subscribed for job ${jobId}`);
-        void _pullRelated('job_assets', 'job_id', [jobId]).then(() => onChange('job_assets'));
-        void _pullRelated('defects', 'job_id', [jobId]).then(() => onChange('defects'));
+        void _pullRelated('job_assets', 'job_id', [jobId]).then(() => _liveOnChange?.('job_assets'));
+        void _pullRelated('defects', 'job_id', [jobId]).then(() => _liveOnChange?.('defects'));
+        void _pullRelated('inspection_photos', 'job_id', [jobId]).then(() => _liveOnChange?.('inspection_photos'));
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (__DEV__) console.warn(`[SiteTrack Sync] Realtime ${status} for job ${jobId} — auto-retrying:`, err);
       }
     });
 }
 
-/** Tears down the live channel — call on screen blur, app background, and sign-out. */
+/**
+ * One fewer screen wants the live channel open. Only actually tears it down
+ * once nothing does (see subscribeToJobLive's comment on the refcounting) —
+ * call this on screen blur and app background, exactly once per matching
+ * subscribeToJobLive call. Sign-out uses the internal hard reset instead
+ * (see stopSync) since it must guarantee no channel survives regardless of
+ * how many screens think they still want it.
+ */
 export function unsubscribeFromJobLive(): void {
-  if (_liveChannel) {
-    void supabase.removeChannel(_liveChannel);
-    _liveChannel = null;
-  }
+  if (_liveRefCount > 0) _liveRefCount--;
+  if (_liveRefCount === 0) _teardownLiveChannel();
+}
+
+function _teardownLiveChannel(): void {
+  if (_liveChannel) void supabase.removeChannel(_liveChannel);
+  _liveChannel = null;
   _liveJobId = null;
+  _liveOnChange = null;
+  _liveRefCount = 0;
 }
 
 // Own mutex for syncNow's push-only cycle — separate from _isProcessingPhotos/
@@ -767,7 +847,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   // Pull catalogue reference tables (asset types + defect codes)
   const { data: assetTypeDefs } = await supabase
     .from('asset_type_definitions')
-    .select('id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
+    .select('id,company_id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
     .eq('is_active', true);
   if (assetTypeDefs) {
     for (const row of assetTypeDefs) {
@@ -783,7 +863,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
 
   const { data: defectCodes } = await supabase
     .from('defect_codes')
-    .select('id,code,description,quote_price,category,is_active,sort_order,created_at')
+    .select('id,company_id,code,description,quote_price,category,is_active,sort_order,created_at')
     .eq('is_active', true);
   if (defectCodes) {
     for (const row of defectCodes) {
@@ -839,6 +919,28 @@ function _shouldPreserveLocalJobAsset(
     if (localMs > serverMs) return true; // local is newer
   }
   return false;
+}
+
+/**
+ * Generalized version of _shouldPreserveLocalJobAsset for tables keyed by a
+ * plain `updated_at` column (defects, assets) rather than job_assets' own
+ * actioned_at. FIX: previously only job_assets (via the function above) and
+ * jobs.status (via STATUS_PRIORITY below) had any protection against a pull
+ * overwriting a fresher local edit with a stale server copy — defects and
+ * assets had none at all, so an edit made offline (or one whose push
+ * attempt raced behind a pull in the same sync cycle) could be silently
+ * reverted in the UI until the queued push eventually landed.
+ *
+ * @returns true if serverRow should be DISCARDED (local wins).
+ */
+function _shouldPreserveLocalRow(
+  serverRow: Record<string, unknown>,
+  localRow: { updated_at: string | null } | null,
+): boolean {
+  if (!localRow?.updated_at || !serverRow.updated_at) return false;
+  const localMs  = new Date(localRow.updated_at as string).getTime();
+  const serverMs = new Date(serverRow.updated_at as string).getTime();
+  return localMs > serverMs;
 }
 
 /** Generic helper to pull a related table for a set of parent ids */
@@ -898,6 +1000,20 @@ async function _pullRelated(
         if (_shouldPreserveLocalJobAsset(serverRow, localRow)) {
           if (__DEV__)
             console.log(`[UMA BUILDING SERVICES Sync] PULL: preserving local job_asset result over server for ${rowId}`);
+          skipped++;
+          continue;
+        }
+      }
+
+      // FIX: same anti-clobber protection job_assets already had, applied
+      // to defects/assets — never let a pull overwrite a locally-edited row
+      // with an older server copy.
+      if (table === 'defects' || table === 'assets') {
+        const serverRow = row as Record<string, unknown>;
+        const localRow = getRecord<{ updated_at: string | null }>(table, rowId);
+        if (_shouldPreserveLocalRow(serverRow, localRow)) {
+          if (__DEV__)
+            console.log(`[UMA BUILDING SERVICES Sync] PULL: preserving local ${table} row over server for ${rowId}`);
           skipped++;
           continue;
         }
@@ -1016,6 +1132,13 @@ export async function _pushQueue(): Promise<void> {
             } else if (__DEV__) {
               console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: server row ${existing.id} is already the more recent result, discarding this device's older one`);
             }
+            // FIX: repoint any OTHER still-pending queue item for this local
+            // row (e.g. a follow-up Update queued after this Insert, made
+            // before the conflict was known) at the canonical existing.id —
+            // otherwise it would silently target a local id that no longer
+            // exists anywhere once deleted below, and be marked synced
+            // without ever actually being applied.
+            remapSyncQueueRecordId('job_assets', item.record_id, existing.id);
             // This device's own locally-generated row is now an orphan either
             // way — the canonical row lives at `existing.id`. Drop it locally;
             // the next pull brings the canonical (winning) row down normally.
@@ -1090,6 +1213,25 @@ export async function _pushQueue(): Promise<void> {
           error = result.error;
         }
       } else if (item.operation === SyncOperation.Delete) {
+        // FIX: same deferral idiom as Update above, applied to Delete too.
+        // The id-tiebreaker in getPendingSyncItems now guarantees this
+        // record's own Insert sorts earlier in `pending`, but if that
+        // Insert attempt fails for a transient reason (network blip) right
+        // before this Delete runs in the same pass, the Delete would just
+        // no-op (0 rows match server-side) and mark itself complete — then
+        // the Insert's own retry on a LATER pass would actually create the
+        // row, resurrecting something the technician explicitly deleted.
+        // Deferring instead means this always re-checks against
+        // up-to-date state next pass.
+        if (openInsertKeys.has(`${item.table_name}:${item.record_id}`)) {
+          if (__DEV__) console.warn(
+            `[SiteTrack Sync] Delete for ${item.table_name}/${item.record_id} deferred — its own Insert hasn't been confirmed yet`
+          );
+          if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
+            incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to resolve first`, MAX_SYNC_RETRIES);
+          }
+          continue;
+        }
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
         if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
           const url = payload.photo_url;

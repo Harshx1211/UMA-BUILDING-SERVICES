@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 39;
+const CURRENT_SCHEMA_VERSION = 41;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -134,6 +134,7 @@ export function initializeSchema(): void {
       next_service_date TEXT,
       status            TEXT NOT NULL DEFAULT 'active',
       created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at        TEXT,
       FOREIGN KEY (property_id) REFERENCES properties(id)
     );
 
@@ -309,6 +310,7 @@ export function initializeSchema(): void {
 
     CREATE TABLE IF NOT EXISTS inventory_items (
       id          TEXT PRIMARY KEY NOT NULL,
+      company_id  TEXT,
       name        TEXT NOT NULL,
       description TEXT,
       price       REAL NOT NULL DEFAULT 0.0,
@@ -1395,6 +1397,66 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '39')`);
   }
 
+  // Migration 40: add company_id to the catalogue reference tables
+  // (asset_type_definitions, defect_codes, inventory_items). These are
+  // nullable-company_id tables remotely — NULL rows are the global template
+  // used only to seed a brand-new company's own clone (see
+  // supabase/migrations/20260829000000_auto_seed_company_catalogue.sql);
+  // every real company already has its own company_id-scoped rows. Without
+  // this column locally there was no way to tell one company's cached
+  // catalogue apart from another's, so a device reused across companies
+  // (or that simply never had its local DB wiped) could silently merge two
+  // companies' defect codes/asset types/pricing into one dropdown. Paired
+  // with a company_id filter in catalogueStore.load() and clearDatabase()
+  // now wiping these tables on sign-out instead of preserving them.
+  if (currentVersion < 40) {
+    for (const table of ['asset_type_definitions', 'defect_codes', 'inventory_items']) {
+      const safeTable = _safeColumnName(table);
+      try {
+        db.runSync(`ALTER TABLE ${safeTable} ADD COLUMN company_id TEXT;`);
+      } catch (err: unknown) {
+        // Already has the column (e.g. a fresh install's bootstrap block) — fine to ignore.
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 40: ${table}.company_id already present or failed:`, err instanceof Error ? err.message : String(err));
+      }
+      // Every existing row just got company_id = NULL from the ALTER above,
+      // which would otherwise read as "global template" and keep showing
+      // whatever mix of companies' data this device had accumulated until
+      // the next sync happens to overwrite each row by id. Wipe now instead
+      // — the next sync (which runs automatically on launch) repopulates
+      // this device's own company's rows correctly under the new RLS
+      // policy, and the UI has hardcoded constants as a safe fallback in
+      // the meantime (see store/catalogueStore.ts's initial state).
+      try {
+        db.runSync(`DELETE FROM ${safeTable};`);
+      } catch (err: unknown) {
+        if (__DEV__) console.log(`[UMA BUILDING SERVICES DB] Migration 40: could not clear ${table}:`, err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 40: added company_id to catalogue tables and cleared stale cross-company cache');
+    currentVersion = 40;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '40')`);
+  }
+
+  // Migration 41: add updated_at to the local `assets` table. It never had
+  // this column even though components/inspections/EditAssetModal.tsx has
+  // always written one on every edit — every asset edit's updateRecord()
+  // call was therefore throwing internally ("no such column: updated_at"),
+  // silently failing to update the LOCAL row (the queued sync push still
+  // succeeded, since the remote table does have this column, which is why
+  // this went unnoticed: the edit reappeared correctly after the next pull
+  // happened to bring the server's copy back down). Needed here anyway so
+  // the pull side can correctly compare local vs. server freshness.
+  if (currentVersion < 41) {
+    try {
+      db.runSync(`ALTER TABLE assets ADD COLUMN updated_at TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 41: assets.updated_at already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 41: added assets.updated_at');
+    currentVersion = 41;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '41')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1457,6 +1519,40 @@ export function updateRecord(
  * Deletes a row by id — sync queue handles remote deletion separately.
  * @returns Number of rows changed
  */
+/**
+ * Repoints any still-pending sync_queue rows for (tableName, oldId) at
+ * newId — both the `record_id` column AND, since some payloads embed their
+ * own `id` field (e.g. job_assets upserts), the id inside the stored JSON
+ * payload too. Used when a local row turns out to be a loser in a
+ * conflict-resolution redirect (see lib/sync.ts's job_assets 23505
+ * handling): without this, a queued Update that was made AFTER the
+ * conflicting Insert (e.g. the technician added notes right after marking
+ * an asset Fail, still offline) would keep targeting the now-deleted local
+ * id — `.eq('id', oldId)` matches zero rows server-side, Postgrest reports
+ * no error for that, and the edit was silently marked synced without ever
+ * being applied anywhere.
+ */
+export function remapSyncQueueRecordId(tableName: string, oldId: string, newId: string): void {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ id: string; payload: string }>(
+      `SELECT id, payload FROM sync_queue WHERE table_name = ? AND record_id = ? AND synced = 0`,
+      [tableName, oldId],
+    );
+    for (const row of rows) {
+      let payload: Record<string, unknown>;
+      try { payload = JSON.parse(row.payload) as Record<string, unknown>; } catch { payload = {}; }
+      if (payload.id === oldId) payload.id = newId;
+      db.runSync(
+        `UPDATE sync_queue SET record_id = ?, payload = ? WHERE id = ?`,
+        [newId, JSON.stringify(payload), row.id],
+      );
+    }
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] remapSyncQueueRecordId(${tableName}, ${oldId} -> ${newId}) error:`, err);
+  }
+}
+
 export function deleteRecord(table: string, id: string): number {
   try {
     const db = openDatabase();
@@ -1831,6 +1927,87 @@ export function getFieldAuditLog(tableName: 'job_assets' | 'defects', recordId: 
   }
 }
 
+/**
+ * Reconciles job_assets after a defect is deleted:
+ *  - If NO defects remain for the asset and it's still marked Fail, resets
+ *    it back to not-inspected — a Fail with nothing recorded to explain it
+ *    isn't a meaningful result, just a stuck state with no defect a
+ *    compliance report can point to. Mirrors the existing inverse rule
+ *    (marking Pass/N-T auto-deletes any now-stale defect) from the other
+ *    direction.
+ *  - If OTHER defects remain, job_assets.defect_reason is refreshed to the
+ *    most severe survivor's description whenever it no longer matches any
+ *    remaining defect (i.e. it described the one just deleted) — otherwise
+ *    the field permanently describes a defect that no longer exists, since
+ *    nothing else ever writes to it except a full re-save through the
+ *    inspection screen. Same severity ordering getDefectsForJob (and the
+ *    UI's own "primary defect" notion) already uses, so the promoted
+ *    reason matches whichever defect the technician now sees as primary.
+ * A no-op if the asset was never Fail or has no job_assets row yet.
+ *
+ * Deliberately a plain DB-layer function, not a store action — it's called
+ * from defectsStore.deleteDefect, and store/inspectionStore.ts already
+ * imports store/defectsStore.ts, so the reverse reference would be a
+ * circular import between the two stores.
+ *
+ * @returns true if it actually changed something (callers use this to
+ * decide whether to also refresh their own in-memory asset state).
+ */
+export function reconcileJobAssetOnDefectDelete(
+  jobId: string,
+  assetId: string,
+  companyId: string | null,
+  changedBy: string | null,
+): boolean {
+  try {
+    const jobAsset = queryRecords<{ id: string; result: string | null; defect_reason: string | null }>(
+      'job_assets', { job_id: jobId, asset_id: assetId },
+    )[0];
+    if (!jobAsset || jobAsset.result !== 'fail') return false;
+
+    const remaining = queryRecords<{ id: string; description: string; severity: string }>(
+      'defects', { job_id: jobId, asset_id: assetId },
+    );
+
+    if (remaining.length === 0) {
+      const updates: RecordData = {
+        result: null,
+        defect_reason: null,
+        is_compliant: 0,
+        actioned_at: new Date().toISOString(),
+        actioned_by: changedBy,
+      };
+      const changes: AuditLogChange[] = [
+        { field: 'result', old: jobAsset.result, new: null },
+        { field: 'defect_reason', old: jobAsset.defect_reason, new: null },
+      ];
+      logFieldAudit('job_assets', jobAsset.id, jobId, companyId, changedBy, changes);
+      updateRecord('job_assets', jobAsset.id, updates);
+      addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+      return true;
+    }
+
+    const stillDescribed = remaining.some((d) => d.description === jobAsset.defect_reason);
+    if (stillDescribed) return false;
+
+    const severityRank: Record<string, number> = { critical: 1, non_critical: 2, non_conformance: 3 };
+    const promoted = [...remaining].sort(
+      (a, b) => (severityRank[a.severity] ?? 4) - (severityRank[b.severity] ?? 4),
+    )[0];
+
+    const updates: RecordData = { defect_reason: promoted.description };
+    logFieldAudit('job_assets', jobAsset.id, jobId, companyId, changedBy, [
+      { field: 'defect_reason', old: jobAsset.defect_reason, new: promoted.description },
+    ]);
+    updateRecord('job_assets', jobAsset.id, updates);
+    addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+    return true;
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] reconcileJobAssetOnDefectDelete(${jobId}, ${assetId}) error:`, err);
+    return false;
+  }
+}
+
 /** Returns the active (not clocked-out) time log for this job+user, or null. */
 export function getActiveTimeLog(jobId: string, userId: string): { id: string; clock_in: string } | null {
   try {
@@ -1890,8 +2067,16 @@ export function addToSyncQueue(
         let merged: RecordData = {};
         try { merged = JSON.parse(existing.payload) as RecordData; } catch { /* start fresh */ }
         Object.assign(merged, payload);
+        // FIX: also reset retry_count/last_error/next_retry_at. Previously
+        // only `payload` was overwritten, so a brand-new, valid edit merged
+        // into a queue row that had already accumulated retries/backoff
+        // from an earlier, unrelated failure inherited that backoff timer
+        // (delaying its first real attempt) and started with fewer than
+        // MAX_SYNC_RETRIES attempts left before being marked permanently
+        // failed — under-serving a fresh edit because of stale history that
+        // no longer describes the content actually being retried.
         db.runSync(
-          `UPDATE sync_queue SET payload = ? WHERE id = ?`,
+          `UPDATE sync_queue SET payload = ?, retry_count = 0, last_error = NULL, next_retry_at = NULL WHERE id = ?`,
           [JSON.stringify(merged), existing.id],
         );
         return;
@@ -2051,11 +2236,20 @@ export function getPendingSyncItems(maxRetries = 5): SyncQueueItem[] {
   try {
     const db = openDatabase();
     const now = new Date().toISOString();
+    // FIX: `created_at` only has 1-second resolution (SQLite's datetime('now'))
+    // and was the sole ordering key, so two queue rows created within the same
+    // second — e.g. add a defect then immediately delete it, both while
+    // offline — had no deterministic order and could be returned Delete-
+    // before-Insert. That runs the Delete against a not-yet-existent server
+    // row (a silent no-op) and then the Insert afterward genuinely creates
+    // it — resurrecting something the technician explicitly deleted. `id` is
+    // an AUTOINCREMENT primary key, so it reflects true insertion order and
+    // is a correct, always-available tiebreaker.
     return db.getAllSync<SyncQueueItem>(
       `SELECT * FROM sync_queue
        WHERE synced = 0 AND retry_count < ?
          AND (next_retry_at IS NULL OR next_retry_at <= ?)
-       ORDER BY CASE WHEN operation = 'report_generate' THEN 1 ELSE 0 END ASC, created_at ASC`,
+       ORDER BY CASE WHEN operation = 'report_generate' THEN 1 ELSE 0 END ASC, created_at ASC, id ASC`,
       [maxRetries, now],
     );
   } catch (err) {
@@ -2656,7 +2850,19 @@ export function clearDatabase(): void {
       'users', 'properties', 'assets', 'jobs', 'job_assets',
       'defects', 'inspection_photos', 'signatures', 'time_logs',
       'quotes', 'quote_items', 'notifications', 'sync_queue',
-      'site_documents', 'field_audit_log'
+      'site_documents', 'field_audit_log',
+      // FIX: these four are per-company catalogue/tagging data, not a
+      // global dictionary — leaving them un-wiped let one company's custom
+      // defect codes, asset types, pricing, and tags persist locally and
+      // get merged with the next company's data on a reused/shared device
+      // (they were never scoped by company_id locally either; see
+      // Migration 40). Cheap to redownload — a company's catalogue is a
+      // few dozen rows.
+      'asset_type_definitions', 'defect_codes', 'inventory_items',
+      'asset_tags', 'asset_tag_assignments',
+      // Junk once `jobs`/`users` above are wiped — no company_id of its own,
+      // but stale rows referencing now-gone jobs serve no purpose.
+      'job_technicians',
     ];
 
     // Use WAL checkpointing first to ensure all pending operations commit
@@ -2670,10 +2876,10 @@ export function clearDatabase(): void {
       }
     }
 
-    // We explicitly leave `asset_type_definitions`, `defect_codes`, `inventory_items`,
-    // `deleted_photo_ids`, and `deleted_document_ids` intact because they are global
-    // dictionary/tombstone tables and redownloading them on every login is inefficient.
-    
+    // `deleted_photo_ids`/`deleted_document_ids` are left intact — they're
+    // pure tombstone id lists (no company-identifying content) that the
+    // pull-side dedup logic still needs to consult correctly.
+
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Database wiped successfully for sign-out');
   } catch (err) {
     console.error('[UMA BUILDING SERVICES DB] clearDatabase fatal error:', err);
