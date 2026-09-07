@@ -159,6 +159,20 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
         const publicUrl = await uploadDocument(payload.localUri, payload.propertyId);
 
         if (publicUrl && payload.recordId) {
+          // FIX: mirrors lib/photoUpload.ts's equivalent fix — re-check the
+          // local row still exists before queuing anything further.
+          // documentsStore.deleteDocument() deletes the local row and
+          // tombstones the id synchronously, with no awareness of an
+          // upload already in flight, so without this check a document
+          // deleted mid-upload would still get its Insert queued below and
+          // permanently resurrected on the server.
+          const stillExists = getRecord<{ id: string }>('site_documents', payload.recordId);
+          if (!stillExists) {
+            if (__DEV__) console.log(`[DocumentUpload] Document ${payload.recordId} was deleted during upload — discarding, not queuing Insert`);
+            markSyncItemComplete(task.id);
+            return;
+          }
+
           updateRecord('site_documents', payload.recordId, { document_url: publicUrl });
 
           const localRow = getRecord<{
@@ -166,6 +180,7 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             company_id: string | null;
             job_id: string | null;
             page_count: number | null;
+            uploaded_at: string | null;
           }>('site_documents', payload.recordId);
 
           addToSyncQueue('site_documents', payload.recordId, SyncOperation.Insert, {
@@ -176,7 +191,11 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             document_url: publicUrl,
             page_count:   localRow?.page_count ?? null,
             company_id:   localRow?.company_id ?? null,
-            uploaded_at:  new Date().toISOString(),
+            // FIX: mirrors lib/photoUpload.ts's equivalent fix — preserve
+            // the true capture-time value already recorded locally instead
+            // of stamping a fresh one at upload-completion time, which
+            // could invert real order under concurrent uploads.
+            uploaded_at:  localRow?.uploaded_at ?? new Date().toISOString(),
             uploaded_by:  currentUserId,
           });
 

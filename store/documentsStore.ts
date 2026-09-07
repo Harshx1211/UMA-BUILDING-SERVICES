@@ -14,6 +14,8 @@ import {
 import { SyncOperation } from '@/constants/Enums';
 import { queueDocumentUpload } from '@/lib/documentUpload';
 import { generateUUID } from '@/utils/uuid';
+import * as FileSystem from 'expo-file-system/legacy';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 
 // ─── Helper — extract a message from an unknown catch value ─
 function errorMessage(err: unknown): string {
@@ -34,6 +36,7 @@ interface DocumentsState {
   /** Number of documents still stored as local file:// URIs (pending upload) */
   getPendingCount: () => number;
   clearError: () => void;
+  reset: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────
@@ -88,11 +91,21 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
       // Read current state from SQLite, not the in-memory store — same reasoning
       // as photosStore.deletePhoto: processDocumentQueue updates document_url in
       // SQLite but never touches the Zustand store.
-      const dbDocument = getRecord<{ document_url: string | null }>('site_documents', documentId);
+      const dbDocument = getRecord<{ document_url: string | null; local_uri: string | null }>('site_documents', documentId);
       const documentUrl = dbDocument?.document_url ?? get().documents.find(d => d.id === documentId)?.document_url;
+      const localUri = dbDocument?.local_uri ?? get().documents.find(d => d.id === documentId)?.local_uri;
 
       deleteRecord('site_documents', documentId);
       recordDeletedDocument(documentId);
+
+      // FIX: mirrors photosStore.deletePhoto's equivalent fix — the local
+      // PDF file was never removed here, only the database row, so every
+      // deleted document's on-disk file stayed on the device forever.
+      // Best-effort and non-blocking.
+      if (localUri) {
+        const path = getValidLocalUri(localUri);
+        FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+      }
 
       if (documentUrl?.startsWith('https://')) {
         addToSyncQueue('site_documents', documentId, SyncOperation.Delete, {
@@ -133,4 +146,6 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reset: () => set({ documents: [], isLoading: false, error: null }),
 }));

@@ -13,6 +13,7 @@ import { ScreenHeader, Badge } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
+import { getToleranceWindow } from '@/utils/toleranceWindow';
 import JobFilterModal, { JobGroupBy, JobSortBy } from '@/components/jobs/JobFilterModal';
 
 type FilterTab = 'today' | 'week' | 'all';
@@ -28,9 +29,10 @@ const PRIORITY_COLOR: Record<string, string> = {
 
 const ALL = 'All';
 
-// Real Supabase job_type CHECK-constraint values — NOT the stale JobType
-// enum (which only has 5 of the real 10 values). Keep this local; do not
-// import JobType here.
+// Real Supabase job_type CHECK-constraint values, matched directly rather
+// than importing constants/Enums.ts's JobType — kept local so this list
+// can never drift out of sync with the DB regardless of that enum's own
+// membership.
 const JOB_TYPE_LABEL: Record<string, string> = {
   routine_service_monthly:   'Monthly Service',
   routine_service_3_monthly: '3-Monthly Service',
@@ -96,8 +98,16 @@ export default function ScheduleScreen() {
   const filtered = useMemo(() => jobs.filter((j: Job) => {
     const effectiveDateStr = j.status === 'completed' ? (j.updated_at || j.scheduled_date) : j.scheduled_date;
     const filterDate = effectiveDateStr.substring(0, 10);
-    const scheduledOnlyDate = j.scheduled_date.substring(0, 10);
-    const isOverdue = scheduledOnlyDate < today && j.status !== 'completed' && j.status !== 'cancelled';
+    // FIX: this used to be a raw `scheduled_date < today` check with zero
+    // slack — but the very same card renders <ToleranceLabel>, which shows
+    // a job-type-aware tolerance window (e.g. an annual service has 30
+    // days' grace either side). A job well within its own tolerance window
+    // was still swept into "Today"/overdue here, directly contradicting the
+    // neutral, not-yet-due label sitting on the same card. Using the same
+    // getToleranceWindow() the label itself reads from keeps both signals
+    // in agreement.
+    const isOverdue = j.status !== 'completed' && j.status !== 'cancelled'
+      && getToleranceWindow(j.scheduled_date, j.job_type, today).isLate;
 
     if (filter === 'today' && filterDate !== today && !isOverdue) return false;
     if (filter === 'week') {

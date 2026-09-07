@@ -5,12 +5,13 @@
  * plus a day-count ("3d late" / "5d until due") for a job — purely derived
  * from jobs.scheduled_date + jobs.job_type, no new schema/columns needed.
  *
- * Keys off the REAL Supabase job_type CHECK-constraint values, not the
- * stale JobType enum in constants/Enums.ts (that enum only has 5 values;
- * the live DB constraint has 10 — a pre-existing mismatch, flagged here,
- * not fixed — fixing it touches every file that imports JobType). Any
- * unrecognized job_type string falls back to DEFAULT_TOLERANCE rather than
- * throwing, since this must never crash a job list row.
+ * Keys off the raw Supabase job_type CHECK-constraint values directly
+ * rather than importing constants/Enums.ts's JobType — this file has no
+ * other reason to depend on that enum, and matching the DB's own string
+ * literals here means it can't drift even if that enum's membership ever
+ * changes again. Any unrecognized job_type string falls back to
+ * DEFAULT_TOLERANCE rather than throwing, since this must never crash a
+ * job list row.
  */
 import { localDateString } from '@/utils/dateHelpers';
 

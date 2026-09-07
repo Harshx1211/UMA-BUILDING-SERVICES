@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { openDatabase } from '@/lib/database';
 import { JobStatus } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { getToleranceWindow } from '@/utils/toleranceWindow';
 import type { Job } from '@/types';
 
 interface DashboardStats {
@@ -34,6 +35,7 @@ interface DashboardActions {
   subscribeToSync: (userId: string) => void;
   unsubscribeFromSync: () => void;
   clearError: () => void;
+  reset: () => void;
 }
 
 const today = () => {
@@ -74,23 +76,55 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       // "Assigned" = job_technicians membership (flat list, no primary), OR
       // (fallback) assigned_to for any job synced before job_technicians
       // rows existed for it.
+      //
+      // FIX: this used to be a plain `scheduled_date = today` match, which
+      // disagreed with the Schedule tab's own "Today" definition
+      // (app/(app)/jobs/index.tsx) — that screen also counts a job as
+      // "today" if it's overdue (scheduled in the past, still open) or was
+      // completed today despite being scheduled a different day. A job
+      // slipping past its scheduled date is the NORMAL case in field
+      // service, not an edge case, so the dashboard's "N jobs today" count
+      // disagreed with the real list underneath it every time that
+      // happened. Mirrors that screen's three conditions exactly.
       const todayJobRows = db.getAllSync<Job>(
         `SELECT DISTINCT j.*, p.name AS property_name, p.address AS property_address,
                 p.suburb AS property_suburb, p.state AS property_state
          FROM jobs j
          LEFT JOIN properties p ON j.property_id = p.id
          WHERE (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
-           AND j.scheduled_date = ?
-           AND j.status != ?
+           AND (
+             j.scheduled_date = ?
+             OR (j.scheduled_date < ? AND j.status NOT IN (?, ?))
+             OR (j.status = ? AND substr(j.updated_at, 1, 10) = ?)
+           )
          ORDER BY j.scheduled_time ASC, j.priority DESC`,
-        [userId, userId, todayStr, JobStatus.Cancelled]
+        [
+          userId, userId,
+          todayStr,
+          todayStr, JobStatus.Completed, JobStatus.Cancelled,
+          JobStatus.Completed, todayStr,
+        ]
       );
 
+      // The SQL above casts a slightly wider net than the real definition
+      // (a plain `scheduled_date < today`, with no tolerance) — narrow it
+      // down here using the exact same job-type-aware tolerance window
+      // jobs/index.tsx's own "Today" filter and <ToleranceLabel> both use,
+      // so a job well within its tolerance (e.g. an annual service a few
+      // days past its scheduled date) doesn't count as "today" on the
+      // dashboard while the Schedule tab agrees it isn't overdue yet either.
+      const todayJobs = todayJobRows.filter((j) => {
+        if (j.scheduled_date.substring(0, 10) === todayStr) return true;
+        if (j.status === JobStatus.Completed && j.updated_at?.substring(0, 10) === todayStr) return true;
+        return j.status !== JobStatus.Completed && j.status !== JobStatus.Cancelled
+          && getToleranceWindow(j.scheduled_date, j.job_type, todayStr).isLate;
+      });
+
       // ── Today stats ──────────────────────────────────────────
-      const total = todayJobRows.length;
-      const completed = todayJobRows.filter((j) => j.status === JobStatus.Completed).length;
-      const inProgress = todayJobRows.filter((j) => j.status === JobStatus.InProgress).length;
-      const pending = todayJobRows.filter((j) => j.status === JobStatus.Scheduled).length;
+      const total = todayJobs.length;
+      const completed = todayJobs.filter((j) => j.status === JobStatus.Completed).length;
+      const inProgress = todayJobs.filter((j) => j.status === JobStatus.InProgress).length;
+      const pending = todayJobs.filter((j) => j.status === JobStatus.Scheduled).length;
 
       // ── This week stats ──────────────────────────────────────
       const { start, end } = weekRange();
@@ -136,7 +170,7 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       const allPending    = allStatsRow?.pending ?? 0;
 
       set({
-        todayJobs: todayJobRows,
+        todayJobs,
         todayStats: { total, completed, inProgress, pending },
         allStats: { total: allTotal, completed: allCompleted, inProgress: allInProgress, pending: allPending },
         weekStats: { total: weekTotal, completed: weekCompleted },
@@ -174,5 +208,20 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set,
       offSyncComplete(listener);
       set({ _syncListenerRef: null });
     }
+  },
+
+  reset: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) offSyncComplete(listener);
+    set({
+      todayJobs: [],
+      todayStats: { total: 0, completed: 0, inProgress: 0, pending: 0 },
+      allStats:   { total: 0, completed: 0, inProgress: 0, pending: 0 },
+      weekStats:  { total: 0, completed: 0 },
+      openDefectsCount: 0,
+      isLoading: false,
+      error: null,
+      _syncListenerRef: null,
+    });
   },
 }));

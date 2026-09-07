@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Platform, TextInput, AppState, AppStateStatus,
+  Platform, TextInput,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
@@ -28,7 +28,7 @@ import { Asset } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { useDefectsStore } from '@/store/defectsStore';
-import { subscribeToJobLive, unsubscribeFromJobLive } from '@/lib/sync';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 
 const ALL = 'All';
 const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
@@ -332,46 +332,21 @@ export default function AssetInspectionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  // Live-sync while this screen is actually on screen and this job is
-  // active — a crew job can have several technicians actioning assets at
-  // once, and this is what makes a teammate's change show up here in
-  // roughly real time via a Realtime push instead of waiting on the next
-  // background sync tick. Stops the moment the screen loses focus so it
-  // never runs in the background or costs anything once nobody's looking.
-  //
-  // The AppState listener exists because the OS can freeze JS timers and
-  // kill the underlying socket outright while backgrounded — the realtime
-  // client's own reconnect logic can't run during that window since it
-  // depends on those same frozen timers, so this explicitly tears the
-  // channel down on background and reopens it on foreground (whose
-  // subscribe callback runs a catch-up pull covering whatever a crew-mate
-  // changed while this device was away).
-  useFocusEffect(
-    useCallback(() => {
-      if (!jobId) return;
-
-      const handleChange = (table: 'job_assets' | 'defects') => {
-        if (table === 'job_assets') store.loadAssetsForInspection(jobId);
-        else useDefectsStore.getState().loadDefects(jobId);
-      };
-
-      subscribeToJobLive(jobId, handleChange);
-
-      const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-        if (next === 'background' || next === 'inactive') {
-          unsubscribeFromJobLive();
-        } else if (next === 'active') {
-          subscribeToJobLive(jobId, handleChange);
-        }
-      });
-
-      return () => {
-        appStateSub.remove();
-        unsubscribeFromJobLive();
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [jobId])
-  );
+  // Live-sync while this screen is focused — a crew job can have several
+  // technicians actioning assets at once, and this is what makes a
+  // teammate's change show up here in roughly real time via a Realtime push
+  // instead of waiting on the next background sync tick. See
+  // useJobLiveSync's own comment: every job screen that uses this hook hands
+  // the live channel off to whichever one is currently focused, so it stays
+  // live across the whole checklist-list -> asset-detail -> back flow
+  // instead of dropping the instant you leave this one screen.
+  useJobLiveSync(jobId, useCallback((table) => {
+    // job_assets AND inspection_photos both land on the same AssetCard (result
+    // and the photo-count badge respectively) — both live on the assets array.
+    if (table === 'defects') useDefectsStore.getState().loadDefects(jobId);
+    else store.loadAssetsForInspection(jobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, store.loadAssetsForInspection]));
 
   // asset_type -> inspection_routine, e.g. "10 - Portable and Wheeled Fire
   // Extinguishers (Annual)" — the same category grouping the PDF report
@@ -635,7 +610,27 @@ export default function AssetInspectionScreen() {
                   }
                 }
 
-                // 2. Delete the job_asset (inspection result) row for this asset
+                // 2. Delete any defects logged against this asset for this job.
+                // FIX: previously not cleaned up at all — getDefectsForJob has
+                // no dependency on a job_assets row existing, so removing an
+                // asset from the checklist left its defect(s) still surfacing
+                // in the Defects list and in the generated compliance report,
+                // for an asset the technician explicitly removed. (Their
+                // photos are already covered by step 1 above, which deletes
+                // every inspection_photos row for this job+asset regardless
+                // of defect_id.)
+                const assetDefects = queryRecords<{ id: string }>(
+                  'defects', { job_id: jobId, asset_id: assetToDelete.id }
+                );
+                for (const d of assetDefects) {
+                  deleteRecord('defects', d.id);
+                  addToSyncQueue('defects', d.id, SyncOperation.Delete, { id: d.id });
+                }
+                if (assetDefects.length > 0) {
+                  useDefectsStore.getState().loadDefects(jobId);
+                }
+
+                // 3. Delete the job_asset (inspection result) row for this asset
                 const jobAssetRows = queryRecords<{ id: string }>(
                   'job_assets', { job_id: jobId, asset_id: assetToDelete.id }
                 );
@@ -645,7 +640,7 @@ export default function AssetInspectionScreen() {
                 }
               }
 
-              // 3. Soft-delete the asset by setting status = decommissioned
+              // 4. Soft-delete the asset by setting status = decommissioned
               const payload = { status: AssetStatus.Decommissioned, updated_at: new Date().toISOString() };
               updateRecord('assets', assetToDelete.id, payload);
               addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
@@ -668,9 +663,20 @@ export default function AssetInspectionScreen() {
   // Pass/Fail require actually inspecting each asset individually, so Not
   // Tested is the only option here, not a 3-way choice.
   const handleBulkMark = useCallback((label: string, assetIds: string[]) => {
+    // FIX: warn explicitly when this would touch already-Failed assets —
+    // updateAssetResult only auto-deletes a still-Open defect (an
+    // already-quoted/repaired/monitoring one survives), but an Open Fail
+    // is still real, recorded work this bulk action is about to erase, and
+    // the generic message gave no hint that could happen.
+    const failedCount = assetIds.filter(
+      id => store.assets.find(a => a.id === id)?.result === InspectionResult.Fail,
+    ).length;
+    const warning = failedCount > 0
+      ? ` ${failedCount} of these ${failedCount === 1 ? 'is' : 'are'} currently marked Fail — any recorded defect still Open will be deleted.`
+      : '';
     showConfirm({
       title: 'No Access',
-      message: `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?`,
+      message: `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?${warning}`,
       icon: 'lock-outline',
       buttons: [
         { text: 'Cancel', style: 'cancel' },

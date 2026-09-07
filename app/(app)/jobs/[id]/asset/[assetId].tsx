@@ -30,31 +30,17 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import Toast from 'react-native-toast-message';
 
-import DefectCodePicker from '@/components/defects/DefectCodePicker';
-import type { DefectCode } from '@/constants/DefectCodes';
+import { DefectFieldsCard, DefectFieldsValue } from '@/components/defects/DefectFieldsCard';
+import DefectCard from '@/components/defects/DefectCard';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
+import { useDefectsStore } from '@/store/defectsStore';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-
-// ─── Severity config — short labels here (chip width is tight at 1/3 of the
-// card); the full name still appears everywhere else (history, PDF, etc.) ──
-const SEVERITIES: { value: DefectSeverity; label: string; chipLabel: string; icon: MCIconName; desc: string }[] = [
-  { value: DefectSeverity.NonConformance, label: 'Non-conformance', chipLabel: 'Minor',        icon: 'alert-circle-outline', desc: "Doesn't affect system operation" },
-  { value: DefectSeverity.NonCritical,    label: 'Non-critical',    chipLabel: 'Non-critical',  icon: 'alert',                desc: 'Action within 30 days' },
-  { value: DefectSeverity.Critical,       label: 'Critical',        chipLabel: 'Critical',      icon: 'alert-octagon',        desc: 'Immediate action required' },
-];
-
-function getSeverityColors(severity: DefectSeverity, C: ColorsType) {
-  switch (severity) {
-    case DefectSeverity.NonConformance: return { active: C.info,    light: C.infoLight,    dark: C.infoDark };
-    case DefectSeverity.NonCritical:    return { active: C.warning, light: C.warningLight, dark: C.warningDark };
-    case DefectSeverity.Critical:       return { active: C.error,   light: C.errorLight,   dark: C.errorDark };
-  }
-}
 
 // ─── Small bottom sheet: Take Photo / Choose from Gallery ─────────────────
 function PhotoChooserSheet({
@@ -173,6 +159,43 @@ export default function AssetDetailScreen() {
   const { assets, updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
   const asset = assets.find((a) => a.id === assetId);
 
+  // An asset can have more than one defect (e.g. "past service life" AND
+  // "bracket damaged"). The oldest one (by created_at) is the "primary" —
+  // it's the one a fresh Fail creates via updateAssetResult below, so it
+  // keeps that exact save path; any further ones are independent defects
+  // saved directly through defectsStore. Whichever isn't the one currently
+  // being edited renders as a DefectCard summary (see editingDefectId).
+  const { defects: jobDefects, loadDefects: loadJobDefects } = useDefectsStore();
+  const assetDefects = jobDefects
+    .filter((d) => d.asset_id === assetId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const primaryDefect = assetDefects[0] ?? null;
+  const additionalDefects = assetDefects.slice(1);
+  // A real defect's id = editing that one; 'new' = composing an additional
+  // defect that doesn't exist yet; null = everything collapsed to summaries.
+  const [editingDefectId, setEditingDefectId] = useState<string | 'new' | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (jobId) loadJobDefects(jobId);
+    }, [jobId, loadJobDefects])
+  );
+
+  // This screen — not the checklist list — is where a technician actually
+  // spends their time (viewing photos, filling in a defect, tapping Save
+  // Defect), so it needs its own live subscription just like inspect.tsx
+  // does. Without this, opening any asset's detail screen silently dropped
+  // the job's live channel (inspect.tsx's own useFocusEffect tore it down on
+  // blur) and nothing here ever reopened it — a teammate's change made while
+  // you were sitting on this exact screen just never arrived. See
+  // useJobLiveSync's comment for how multiple screens hand the channel off.
+  useJobLiveSync(jobId, useCallback((table) => {
+    // job_assets AND inspection_photos both surface on this asset's own
+    // fields (result/notes, and the Photos section respectively).
+    if (table === 'defects') loadJobDefects(jobId);
+    else useInspectionStore.getState().loadAssetsForInspection(jobId);
+  }, [jobId, loadJobDefects]));
+
   // Fail is selected but not yet saved — set when arriving here straight off
   // a Fail tap (see inspect.tsx's AssetCard) or by tapping Fail below on an
   // asset that wasn't already failed. Nothing is written to job_assets until
@@ -189,24 +212,21 @@ export default function AssetDetailScreen() {
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  // ── Inline defect details (Fail) + note (Pass/N-T) — replaces the old
-  // AssetInspectModal/AssetNoteModal popups. Severity/code/price never round-
-  // trip from the asset (same as the modal they replace — only defectReason
-  // and technician_notes are persisted columns), so they always start at
-  // their defaults; the tech re-picks them if they're editing an existing
-  // defect. `note` backs job_assets.technician_notes for BOTH the Fail
-  // section's "Technician Notes" field and the Pass/N-T "Note" field — same
-  // column, mutually-exclusive UI depending on the result.
-  const [severity, setSeverity] = useState<DefectSeverity>(DefectSeverity.NonConformance);
-  // Inline dropdown, not a bottom-sheet modal — tap the trigger row to expand
-  // the 3 options directly underneath it, tap an option to select + collapse.
-  const [severityExpanded, setSeverityExpanded] = useState(false);
-  const [codePickerVisible, setCodePickerVisible] = useState(false);
-  const [selectedCode, setSelectedCode] = useState<DefectCode | null>(null);
-  const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
-  const [defectReason, setDefectReason] = useState(asset?.defect_reason || '');
-  const [reasonError, setReasonError] = useState(false);
+  // `note` backs job_assets.technician_notes for both the Fail and Pass/N-T
+  // "Note" cards — same column, same field, whichever card happens to be
+  // showing for the current result.
   const [note, setNote] = useState(asset?.technician_notes || '');
+
+  // Live draft of whichever defect card is currently expanded for editing —
+  // reported up via DefectFieldsCard's onDraftChange.
+  const [primaryDraft, setPrimaryDraft] = useState<DefectFieldsValue | null>(null);
+  // FIX: an in-progress ADDITIONAL defect (new, or editing an existing one)
+  // previously had no equivalent leave-without-saving protection — a
+  // technician who started a second defect, typed a description, then left
+  // (interrupted, wrong screen, phone call) lost the whole draft silently,
+  // while the exact same interruption on the primary defect was already
+  // protected. Mirrors primaryDraft below.
+  const [additionalDraft, setAdditionalDraft] = useState<DefectFieldsValue | null>(null);
 
   useEffect(() => {
     if (!assetId || !jobId) return;
@@ -220,8 +240,16 @@ export default function AssetDetailScreen() {
   // `useEffect`) so the focus-effect's cleanup — set up once, at the last
   // time this screen gained focus — never sees stale values no matter how
   // long the screen's been open or how many keystrokes happened since.
-  const latestRef = useRef({ note, defectReason, severity, selectedCode, suggestedPrice, isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset });
-  latestRef.current = { note, defectReason, severity, selectedCode, suggestedPrice, isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset };
+  const latestRef = useRef({
+    note, primaryDraft, additionalDraft, editingDefectId,
+    isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
+    primaryDefectId: primaryDefect?.id ?? null,
+  });
+  latestRef.current = {
+    note, primaryDraft, additionalDraft, editingDefectId,
+    isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
+    primaryDefectId: primaryDefect?.id ?? null,
+  };
 
   // Persist whatever's unsaved the moment this screen loses focus — back
   // button, swipe-back, or navigating elsewhere — so typing a note or a
@@ -232,19 +260,50 @@ export default function AssetDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        const { note: n, defectReason: dr, severity: sev, selectedCode: sc, suggestedPrice: sp, isFailed: failed, asset: a } = latestRef.current;
+        const {
+          note: n, primaryDraft: pd, additionalDraft: ad, editingDefectId: eid,
+          isFailed: failed, asset: a, primaryDefectId,
+        } = latestRef.current;
         if (!a) return;
-        if (failed) {
-          const drTrim = dr.trim();
+        const descTrim = pd?.description.trim() ?? '';
+        if (failed && descTrim) {
           const noteTrim = n.trim();
-          if (drTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '')) {
-            updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, drTrim, noteTrim, undefined, sev, sc?.code ?? null, sp);
+          if (descTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '')) {
+            updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice);
           }
-        } else if (n.trim() !== (a.technician_notes || '')) {
+        } else if (!failed && n.trim() !== (a.technician_notes || '')) {
           updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim());
         }
+
+        // FIX: same safety net as above, extended to an in-progress
+        // additional defect — `eid` is only a real additional-defect id or
+        // 'new' while that card is actively expanded; Cancel/Save both
+        // clear it immediately, so this can't double-fire against an
+        // already-handled save.
+        const adDescTrim = ad?.description.trim() ?? '';
+        if (adDescTrim && eid && eid !== primaryDefectId) {
+          if (eid === 'new') {
+            useDefectsStore.getState().addDefect({
+              job_id: jobId as string,
+              property_id: a.property_id,
+              asset_id: a.id,
+              description: ad!.description,
+              severity: ad!.severity,
+              photos: [],
+              defect_code: ad!.defectCode,
+              quote_price: ad!.quotePrice,
+            });
+          } else {
+            useDefectsStore.getState().updateDefect(eid, {
+              description: ad!.description,
+              severity: ad!.severity,
+              defect_code: ad!.defectCode,
+              quote_price: ad!.quotePrice,
+            });
+          }
+        }
       };
-    }, [updateAssetResult])
+    }, [updateAssetResult, jobId])
   );
 
   if (!asset) {
@@ -353,57 +412,103 @@ export default function AssetDetailScreen() {
     }
   };
 
-  const handleSelectSeverity = (v: DefectSeverity) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSeverity(v);
-    setSeverityExpanded(false);
-  };
-
-  const handleCodeSelect = (code: DefectCode | null) => {
-    setCodePickerVisible(false);
-    if (code === null) {
-      // Custom note — clear any selected code but keep free-text
-      setSelectedCode(null);
-      setSuggestedPrice(null);
-    } else {
-      setSelectedCode(code);
-      setDefectReason(code.description);
-      setSuggestedPrice(code.quote_price ?? null);
-      setReasonError(false);
-      // Auto-suggest severity based on price/category
-      if (code.category === 'Alarm' || (code.quote_price && code.quote_price >= 300)) {
-        setSeverity(DefectSeverity.NonCritical);
-      }
-    }
-  };
-
-  const handleSaveDefect = () => {
-    if (!defectReason.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setReasonError(true);
-      return;
-    }
-    setReasonError(false);
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, defectReason.trim(), note.trim(), undefined, severity, selectedCode?.code ?? null, suggestedPrice);
+  // The primary defect's real save — unchanged from before: still the one
+  // write that actually commits result: 'fail' via updateAssetResult.
+  // Validation now happens inside DefectFieldsCard itself, so onSave only
+  // ever fires with a non-empty description.
+  const handleSaveDefect = (value: DefectFieldsValue) => {
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice);
     setPendingFail(false);
+    setPrimaryDraft(null);
+    setEditingDefectId(null);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Toast.show({ type: 'success', text1: 'Defect saved' });
   };
 
-  const handleReplaceNow = () => {
-    if (!defectReason.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setReasonError(true);
-      return;
-    }
-    setReasonError(false);
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, defectReason.trim(), note.trim(), undefined, DefectSeverity.Critical, selectedCode?.code ?? null, suggestedPrice);
+  const handleReplaceNow = (value: DefectFieldsValue) => {
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice);
     setPendingFail(false);
+    setPrimaryDraft(null);
+    setEditingDefectId(null);
     setTimeout(() => router.push(`/jobs/${jobId}/quote` as never), 400);
   };
 
+  // Any defect beyond the first is a genuinely independent record, saved
+  // directly through defectsStore — the same store the standalone Defects
+  // screen already uses, not routed through updateAssetResult at all.
+  const handleSaveAdditionalDefect = (defectId: string | null, value: DefectFieldsValue) => {
+    if (defectId) {
+      useDefectsStore.getState().updateDefect(defectId, {
+        description: value.description,
+        severity: value.severity,
+        defect_code: value.defectCode,
+        quote_price: value.quotePrice,
+      });
+      Toast.show({ type: 'success', text1: 'Defect updated' });
+    } else {
+      const newId = useDefectsStore.getState().addDefect({
+        job_id: jobId as string,
+        property_id: asset.property_id,
+        asset_id: asset.id,
+        description: value.description,
+        severity: value.severity,
+        photos: [],
+        defect_code: value.defectCode,
+        quote_price: value.quotePrice,
+      });
+      if (!newId) {
+        Toast.show({ type: 'error', text1: 'Could not save defect', text2: useDefectsStore.getState().error ?? 'Please try again.' });
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Defect added' });
+    }
+    loadJobDefects(jobId as string);
+    setAdditionalDraft(null);
+    setEditingDefectId(null);
+  };
+
+  const handleDeleteAdditionalDefect = (defectId: string) => {
+    showConfirm({
+      title: 'Remove Defect',
+      message: 'This will permanently remove this defect record. Continue?',
+      icon: 'trash-can-outline',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            useDefectsStore.getState().deleteDefect(defectId);
+            loadJobDefects(jobId as string);
+            // Removing the last defect on this asset resets it back to
+            // not-inspected (see deleteDefect's clearOrphanedFail) — refresh
+            // so this screen's Result track reflects that immediately
+            // instead of still showing a stale Fail.
+            useInspectionStore.getState().loadAssetsForInspection(jobId as string);
+            setEditingDefectId(null);
+            Toast.show({ type: 'success', text1: 'Defect removed' });
+          },
+        },
+      ],
+    });
+  };
+
+  // Notes-only save, shared by Pass/N-T's Note card AND Fail's (once a
+  // primary defect already exists — see the Notes card's onBlur guard).
+  // updateAssetResult still re-syncs the defects table whenever result is
+  // Fail and defect_reason is truthy (unchanged, pre-existing behaviour —
+  // see its own "Defect auto-create / update" block), so a Fail asset's
+  // notes save MUST pass the primary defect's real current severity/code/
+  // price through here too. Omitting them isn't "leave them alone" — that
+  // block defaults a missing severity to Non-critical, which would have
+  // silently downgraded a Critical defect on every single notes edit.
   const handleSaveNote = () => {
-    updateAssetResult(asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant, asset.defect_reason ?? undefined, note.trim());
+    updateAssetResult(
+      asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant,
+      asset.defect_reason ?? undefined, note.trim(), undefined,
+      primaryDefect?.severity, primaryDefect?.defect_code ?? null, primaryDefect?.quote_price ?? null,
+    );
   };
 
   const result = asset.result;
@@ -492,155 +597,104 @@ export default function AssetDetailScreen() {
           </View>
         </SectionCard>
 
-        {/* ── Defect Details (Fail) — tinted card, inline severity chips ── */}
+        {/* ── Defects — one card per defect. Whichever one isn't being
+            actively edited collapses to a DefectCard summary (the same
+            component the standalone Defects screen uses), so a fresh Fail's
+            form, a re-opened existing defect, and a second/third defect
+            added later all look and behave like the same feature instead of
+            three different ones. ─────────────────────────────────────── */}
         {isFailed && (
           <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)}>
-            <SectionCard icon="alert-octagon-outline" title="Defect Details" variant="danger" C={C}>
-              <Text style={[s.chipRowLabel, { color: C.textTertiary }]}>Severity</Text>
-              {(() => {
-                const current = SEVERITIES.find((sv) => sv.value === severity) ?? SEVERITIES[0];
-                const currentColors = getSeverityColors(current.value, C);
-                return (
-                  <View style={{ marginBottom: 14 }}>
-                    <TouchableOpacity
-                      style={[s.severityDropdown, { backgroundColor: C.surface, borderColor: C.border }]}
-                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityExpanded((v) => !v); }}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[s.severityDropdownIconWrap, { backgroundColor: currentColors.active + '18' }]}>
-                        <MaterialCommunityIcons name={current.icon} size={18} color={currentColors.active} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.severityDropdownLabel, { color: C.text }]}>{current.label}</Text>
-                        <Text style={[s.severityDropdownDesc, { color: C.textTertiary }]}>{current.desc}</Text>
-                      </View>
-                      <MaterialCommunityIcons name={severityExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={C.textTertiary} />
-                    </TouchableOpacity>
+            <Text style={[s.sectionLabel, { color: C.textTertiary }]}>
+              Defects{assetDefects.length > 0 ? ` · ${assetDefects.length}` : ''}
+            </Text>
 
-                    {severityExpanded && (
-                      <View style={[s.severityOptions, { backgroundColor: C.surface, borderColor: C.border }]}>
-                        {SEVERITIES.map((sev, i) => {
-                          const active = severity === sev.value;
-                          const colors = getSeverityColors(sev.value, C);
-                          return (
-                            <TouchableOpacity
-                              key={sev.value}
-                              style={[s.severityOptionRow, i > 0 && { borderTopColor: C.border, borderTopWidth: StyleSheet.hairlineWidth }]}
-                              onPress={() => handleSelectSeverity(sev.value)}
-                              activeOpacity={0.7}
-                            >
-                              <View style={[s.severityDropdownIconWrap, { backgroundColor: colors.active + '18' }]}>
-                                <MaterialCommunityIcons name={sev.icon} size={18} color={colors.active} />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={[s.severityDropdownLabel, { color: C.text }]}>{sev.label}</Text>
-                                <Text style={[s.severityDropdownDesc, { color: C.textTertiary }]}>{sev.desc}</Text>
-                              </View>
-                              {active && <MaterialCommunityIcons name="check" size={20} color={colors.active} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-                );
-              })()}
+            {primaryDefect === null ? (
+              // Nothing saved yet — this IS the Fail commit (see
+              // handleSaveDefect), so there's no summary state to collapse to.
+              <DefectFieldsCard
+                onSave={handleSaveDefect}
+                onReplace={handleReplaceNow}
+                onDraftChange={setPrimaryDraft}
+                saving={isSaving}
+                saveLabel="Save Defect"
+              />
+            ) : editingDefectId === primaryDefect.id ? (
+              <DefectFieldsCard
+                initial={primaryDefect}
+                onSave={handleSaveDefect}
+                onReplace={handleReplaceNow}
+                onCancel={() => { setPrimaryDraft(null); setEditingDefectId(null); }}
+                onDraftChange={setPrimaryDraft}
+                saving={isSaving}
+                saveLabel="Save Changes"
+              />
+            ) : (
+              <DefectCard
+                defect={primaryDefect}
+                style={s.defectCardFlush}
+                onPress={() => router.push(`/jobs/${jobId}/defects/${primaryDefect.id}` as never)}
+                onEdit={() => setEditingDefectId(primaryDefect.id)}
+              />
+            )}
 
-              {reasonError && (
-                <View style={[s.errorBanner, { backgroundColor: C.surface, borderColor: C.error }]}>
-                  <MaterialCommunityIcons name="alert-circle" size={14} color={C.error} />
-                  <Text style={[s.errorBannerTxt, { color: C.error }]}>Please describe the defect before saving.</Text>
-                </View>
-              )}
+            {additionalDefects.map((d) => (
+              editingDefectId === d.id ? (
+                <DefectFieldsCard
+                  key={d.id}
+                  initial={d}
+                  onSave={(v) => handleSaveAdditionalDefect(d.id, v)}
+                  onDelete={() => handleDeleteAdditionalDefect(d.id)}
+                  onCancel={() => { setAdditionalDraft(null); setEditingDefectId(null); }}
+                  onDraftChange={setAdditionalDraft}
+                  saveLabel="Save Changes"
+                />
+              ) : (
+                <DefectCard
+                  key={d.id}
+                  defect={d}
+                  style={s.defectCardFlush}
+                  onPress={() => router.push(`/jobs/${jobId}/defects/${d.id}` as never)}
+                  onEdit={() => setEditingDefectId(d.id)}
+                />
+              )
+            ))}
+
+            {editingDefectId === 'new' ? (
+              <DefectFieldsCard
+                onSave={(v) => handleSaveAdditionalDefect(null, v)}
+                onCancel={() => { setAdditionalDraft(null); setEditingDefectId(null); }}
+                onDraftChange={setAdditionalDraft}
+                saveLabel="Add Defect"
+              />
+            ) : primaryDefect !== null && (
               <TouchableOpacity
-                style={[s.codePickerBtn, { backgroundColor: C.surface, borderColor: selectedCode ? C.primary : C.border }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCodePickerVisible(true); }}
+                style={[s.addDefectBtn, { borderColor: C.borderStrong }]}
+                onPress={() => setEditingDefectId('new')}
                 activeOpacity={0.8}
               >
-                <View style={[s.codePickerIcon, { backgroundColor: selectedCode ? C.primary + '18' : C.background }]}>
-                  <MaterialCommunityIcons
-                    name={selectedCode ? 'tag-check-outline' : 'tag-search-outline'}
-                    size={18}
-                    color={selectedCode ? C.primary : C.textSecondary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.codePickerTitle, { color: selectedCode ? C.primary : C.text }]}>
-                    {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from Code Library'}
-                  </Text>
-                  <Text style={[s.codePickerSub, { color: C.textSecondary }]} numberOfLines={1}>
-                    {selectedCode ? selectedCode.description : 'Browse 100+ Uptick defect codes'}
-                  </Text>
-                </View>
-                {suggestedPrice !== null && (
-                  <View style={s.priceBadge}><Text style={s.priceBadgeTxt}>${suggestedPrice}</Text></View>
-                )}
-                {selectedCode ? (
-                  <TouchableOpacity onPress={() => { setSelectedCode(null); setSuggestedPrice(null); }} hitSlop={8} style={{ padding: 4 }}>
-                    <MaterialCommunityIcons name="close-circle" size={18} color={C.textTertiary} />
-                  </TouchableOpacity>
-                ) : (
-                  <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
-                )}
+                <MaterialCommunityIcons name="plus" size={16} color={C.accent} />
+                <Text style={[s.addDefectBtnTxt, { color: C.accent }]}>Add Defect</Text>
               </TouchableOpacity>
-              <TextInput
-                placeholder="Or type a custom description…"
-                placeholderTextColor={C.textTertiary}
-                value={defectReason}
-                onChangeText={(v) => {
-                  setDefectReason(v);
-                  if (v.trim()) setReasonError(false);
-                  if (selectedCode && v !== selectedCode.description) { setSelectedCode(null); setSuggestedPrice(null); }
-                }}
-                multiline
-                textAlignVertical="top"
-                style={[s.input, s.textArea, { backgroundColor: C.surface, borderColor: reasonError ? C.error : C.border, color: C.text, marginTop: 10 }]}
-              />
-
-              <Text style={[s.formLabel, { color: C.text }]}>Technician Notes</Text>
-              <TextInput
-                placeholder="Recommended actions, parts required, or follow-up details…"
-                placeholderTextColor={C.textTertiary}
-                value={note}
-                onChangeText={setNote}
-                multiline
-                textAlignVertical="top"
-                style={[s.input, s.textArea, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
-              />
-
-              {/* The one real commit for a Fail — sits last, after every field
-                  it saves, not in the middle of the card. */}
-              <View style={s.defectActionsRow}>
-                <TouchableOpacity
-                  style={[s.replaceBtn, { backgroundColor: C.warning + '18', borderColor: C.warning }]}
-                  onPress={handleReplaceNow}
-                  activeOpacity={0.8}
-                >
-                  <MaterialCommunityIcons name="tools" size={16} color={C.warning} />
-                  <Text style={[s.replaceBtnTxt, { color: C.warning }]}>Replace</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.saveDefectBtn, { backgroundColor: C.error }]}
-                  onPress={handleSaveDefect}
-                  activeOpacity={0.85}
-                >
-                  <MaterialCommunityIcons name="content-save-outline" size={16} color={C.textOnPrimary} />
-                  <Text style={[s.saveDefectBtnTxt, { color: C.textOnPrimary }]}>Save Defect</Text>
-                </TouchableOpacity>
-              </View>
-            </SectionCard>
+            )}
           </Animated.View>
         )}
 
-        {/* ── Note (Pass/N-T) — auto-saves on blur ─────────────────────── */}
-        {result !== null && !isFailed && (
-          <SectionCard icon="note-text-outline" title="Note" C={C}>
+        {/* ── Technician Notes — one field, one place, for all three results.
+            Auto-saves on blur once there's an actual saved result to attach
+            it to; a first-ever Fail (nothing saved yet) instead bundles
+            whatever's typed here into that same Save Defect / Replace call,
+            and the leave-without-saving safety net below covers the rest. */}
+        {(result !== null || pendingFail) && (
+          <SectionCard icon="note-text-outline" title="Technician Notes" C={C}>
             <TextInput
-              placeholder="e.g. Flow test done, unit relocated, access restricted…"
+              placeholder={isFailed
+                ? 'Recommended actions, parts required, or follow-up details…'
+                : 'e.g. Flow test done, unit relocated, access restricted…'}
               placeholderTextColor={C.textTertiary}
               value={note}
               onChangeText={setNote}
-              onBlur={() => { if (note !== (asset.technician_notes || '')) handleSaveNote(); }}
+              onBlur={() => { if (result !== null && note !== (asset.technician_notes || '')) handleSaveNote(); }}
               multiline
               textAlignVertical="top"
               style={[s.input, s.textArea, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
@@ -708,11 +762,6 @@ export default function AssetDetailScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
 
-      <DefectCodePicker
-        visible={codePickerVisible}
-        onSelect={handleCodeSelect}
-        onClose={() => setCodePickerVisible(false)}
-      />
       <PhotoChooserSheet
         visible={showPhotoChooser}
         onClose={() => setShowPhotoChooser(false)}
@@ -749,41 +798,20 @@ const s = StyleSheet.create({
   resultSeg: { flex: 1, height: 42, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   resultSegTxt: { fontSize: 14, fontWeight: '700' },
 
-  // Section card — every section (Photos / Defect Details / Note / History)
+  // Section card — every section (Photos / Note / History / Timeline)
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   cardHeaderIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   cardHeaderTitle: { fontSize: 13.5, fontWeight: '700' },
 
-  chipRowLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 8 },
+  // Defects — DefectFieldsCard/DefectCard (both their own components) sit
+  // flush against this screen's own 16px padding instead of DefectCard's
+  // default list-level margin.
+  defectCardFlush: { marginHorizontal: 0 },
+  addDefectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', marginBottom: 12 },
+  addDefectBtnTxt: { fontSize: 13.5, fontWeight: '700' },
 
-  // Severity — inline dropdown (trigger row + expanding options list, no modal)
-  severityDropdown: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, padding: 12 },
-  severityDropdownIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  severityDropdownLabel: { fontSize: 14, fontWeight: '700' },
-  severityDropdownDesc: { fontSize: 12, marginTop: 1 },
-  severityOptions: { borderRadius: 12, borderWidth: 1, marginTop: 8, overflow: 'hidden' },
-  severityOptionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-
-  formLabel: { fontSize: 13, fontWeight: '700', marginBottom: 8, marginTop: 18, letterSpacing: 0.1 },
-
-  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 4 },
-  errorBannerTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
-
-  codePickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
-  codePickerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  codePickerTitle: { fontSize: 13, fontWeight: '700' },
-  codePickerSub: { fontSize: 11, marginTop: 2 },
-  priceBadge: { backgroundColor: 'rgba(34,197,94,0.15)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#16A34A' },
-
-  defectActionsRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  replaceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16 },
-  replaceBtnTxt: { fontSize: 13.5, fontWeight: '700' },
-  saveDefectBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14 },
-  saveDefectBtnTxt: { fontSize: 14, fontWeight: '700' },
-
-  // Input (shared by Defect Details description/notes + Pass/N-T note)
+  // Input (shared by the Technician Notes card)
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12, textAlignVertical: 'top' },
 

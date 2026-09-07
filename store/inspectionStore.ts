@@ -179,6 +179,13 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         set({ isSaving: false });
         throw new Error('This job is completed — tap "Continue Working" to make changes.');
       }
+      // FIX: Cancelled was never treated as a locked state here — an asset
+      // result/defect could still be written against a job that had already
+      // been cancelled.
+      if (job?.status === JobStatus.Cancelled) {
+        set({ isSaving: false });
+        throw new Error('This job has been cancelled and can no longer be edited.');
+      }
 
       const assetIndex = assets.findIndex(a => a.id === assetId);
       if (assetIndex === -1) throw new Error('Asset not found');
@@ -313,13 +320,18 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
       // ── Auto-delete defect when asset passes / not-tested ─
       // If the previous result was Fail and the new result is Pass or NotTested,
-      // the defect is no longer valid — remove it automatically.
+      // an OPEN defect is no longer valid — remove it automatically. A defect
+      // that has already progressed past Open (quoted/repaired/monitoring —
+      // i.e. someone has actually actioned it) is a real historical record
+      // and must survive a later re-inspection finding the asset now passes;
+      // it's deliberately NOT filtered back out here.
       // A3 FIX: Also cancel/delete the defect's associated inspection_photos so
       // they don't get uploaded as orphaned rows in Supabase.
       if (result !== InspectionResult.Fail) {
         const staleDefects = queryRecords<{ id: string }>('defects', {
           job_id: currentJobId,
           asset_id: assetId,
+          status: DefectStatus.Open,
         });
         for (const stale of staleDefects) {
           // Cancel associated photos first
@@ -348,7 +360,10 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
       // ── Defect auto-create / update ───────────────────────
       if (result === InspectionResult.Fail && defectReason) {
-        const existingDefects = queryRecords<{ id: string }>('defects', {
+        const existingDefects = queryRecords<{
+          id: string; description: string; severity: string;
+          defect_code: string | null; quote_price: number | null;
+        }>('defects', {
           job_id: currentJobId,
           asset_id: assetId,
         });
@@ -395,6 +410,16 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           insertRecord('defects', defectPayload);
           addToSyncQueue('defects', defectId, SyncOperation.Insert, defectPayload);
 
+          // FIX: this path bypasses defectsStore.addDefect (which already
+          // logs this synthetic entry) — without it, every asset's FIRST
+          // defect (the vast majority of all defects, created here rather
+          // than through the "additional defect" flow) showed an
+          // permanently empty Timeline no matter how many times it was
+          // later edited.
+          logFieldAudit('defects', defectId, currentJobId, companyId, userId || null, [
+            { field: '_created', old: null, new: 'defect created' },
+          ]);
+
           // Back-fill defect_id on every inspection_photos row that belongs to
           // this new defect (both just-inserted-this-call and previously
           // orphaned ones) — queued as its own Update so the link reaches
@@ -416,11 +441,21 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           // Refresh defects store so the badge updates immediately
           useDefectsStore.getState().loadDefects(currentJobId);
         } else {
-          // Update existing defect description/severity and reconcile photos
-          const existingId = existingDefects[0].id;
+          // Update existing defect description/severity/code/price and reconcile photos
+          const existing = existingDefects[0];
+          const existingId = existing.id;
           const updates: Record<string, string | number | null> = {
             description: defectReason,
             severity: severity ?? DefectSeverity.NonCritical,
+            // FIX: defect_code/quote_price were never included in this
+            // update payload, so re-picking a Defect Code (or its price) on
+            // an asset's primary defect appeared to save — the form showed
+            // the new value — but updateRecord's partial SET left the
+            // column at its old value forever. Same bug class as the
+            // already-fixed Notes/severity-reset issue, on two other
+            // fields of this same update path.
+            defect_code: defectCode ?? null,
+            quote_price: quotePrice ?? null,
             updated_at: new Date().toISOString(),
           };
 
@@ -449,6 +484,23 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
           updateRecord('defects', existingId, updates);
           addToSyncQueue('defects', existingId, SyncOperation.Update, updates);
+
+          // FIX: this path bypasses defectsStore.updateDefect (which already
+          // does both of these) — without them, editing an asset's primary
+          // defect (a) never appeared in its own Timeline and (b) showed
+          // stale pre-edit data immediately after saving, since nothing
+          // reloaded defectsStore until the technician left and returned to
+          // this screen.
+          const changes = [
+            { field: 'description', old: existing.description ?? null, new: updates.description },
+            { field: 'severity',    old: existing.severity ?? null,    new: updates.severity },
+            { field: 'defect_code', old: existing.defect_code ?? null, new: updates.defect_code },
+            { field: 'quote_price', old: existing.quote_price ?? null, new: updates.quote_price },
+          ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+          if (changes.length > 0) {
+            logFieldAudit('defects', existingId, currentJobId, companyId, userId || null, changes);
+          }
+          useDefectsStore.getState().loadDefects(currentJobId);
         }
       }
 
@@ -500,12 +552,21 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       return;
     }
 
-    // If this asset currently has an open defect, link the photo to it too so
-    // it shows up with the defect (in-app and in the report), not just on the
-    // asset's own row.
-    const existingDefect = queryRecords<{ id: string; photos: string | null }>(
+    // If this asset has EXACTLY ONE defect, link the photo to it too so it
+    // shows up with the defect (in-app and in the report), not just on the
+    // asset's own row. FIX: with multi-defect support, querying `[0]` with
+    // no ordering picked an arbitrary defect once more than one existed —
+    // a photo meant generally for the asset (or taken with a different
+    // defect in mind) could silently land on the wrong one. Safer to leave
+    // it asset-only (still visible on the asset's own photo grid) than to
+    // guess wrong when it's genuinely ambiguous which defect it belongs to.
+    // There's currently no UI to deliberately attach a photo to a specific
+    // non-primary defect — that's a real gap, but a bigger feature addition
+    // than this fix, not a one-line change.
+    const assetDefects = queryRecords<{ id: string; photos: string | null }>(
       'defects', { job_id: currentJobId, asset_id: assetId },
-    )[0];
+    );
+    const existingDefect = assetDefects.length === 1 ? assetDefects[0] : undefined;
 
     usePhotosStore.getState().addPhoto({
       job_id: currentJobId,

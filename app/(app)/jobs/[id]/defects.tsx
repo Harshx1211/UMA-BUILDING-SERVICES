@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import type { Defect } from '@/types';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 
 export default function DefectsScreen() {
   const C = useColors();
@@ -37,6 +38,15 @@ export default function DefectsScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // See useJobLiveSync's comment: every job screen using this hook hands the
+  // live channel off to whichever one is currently focused, so a defect a
+  // teammate adds/updates elsewhere shows up here too, not just on whichever
+  // screen happens to still hold the connection.
+  useJobLiveSync(jobId, useCallback((table) => {
+    if (table === 'defects' && jobId) store.loadDefects(jobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, store.loadDefects]));
 
   const filteredDefects = useMemo(() => {
     let list = store.defects;

@@ -4,6 +4,7 @@ import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as ImageManipulator from 'expo-image-manipulator';
 import DocumentScanner, { ResponseType, ScanDocumentResponseStatus } from 'react-native-document-scanner-plugin';
 import { useDocumentsStore } from '@/store/documentsStore';
 import { useAuthStore } from '@/store/authStore';
@@ -21,6 +22,35 @@ interface Props {
 export interface DocumentScanSheetRef {
   /** Launches the native document scanner immediately. */
   open: () => void;
+}
+
+/** Hard cap on pages in one document — see compressScannedPage's comment. */
+const MAX_DOCUMENT_PAGES = 60;
+
+/**
+ * Downscales/compresses one scanned page before it's held in state —
+ * mirrors PhotoCaptureSheet's photo pipeline (resize to 1600px wide,
+ * compress 0.6, JPEG). Without this, every page's FULL-resolution base64
+ * (the scanner plugin's raw output) was held simultaneously in React state
+ * and then concatenated into a single HTML string handed across the native
+ * bridge to expo-print — on a long document (15-20+ pages) this risks a
+ * native OOM kill or a WebView rendering failure, invisible to any JS
+ * `catch` (a native crash doesn't raise a JS exception), silently losing
+ * the whole scan session with no diagnostic. A 2-page manual test can't
+ * surface this.
+ */
+async function compressScannedPage(base64: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      `data:image/jpeg;base64,${base64}`,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    return result.base64 ?? base64;
+  } catch (e) {
+    console.warn('[DocumentScanSheet] page compression failed, using original page:', e);
+    return base64;
+  }
 }
 
 /** Wraps a set of scanned page images in a minimal HTML doc for expo-print. */
@@ -81,7 +111,8 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
         const scannedImages = await runScan();
         if (scannedImages.length === 0) return;
 
-        setPendingPages(scannedImages.map((base64) => ({ id: generateUUID(), base64 })));
+        const compressed = await Promise.all(scannedImages.map(compressScannedPage));
+        setPendingPages(compressed.map((base64) => ({ id: generateUUID(), base64 })));
         setTitle(defaultTitle());
         setShowReview(true);
       } catch (e) {
@@ -97,7 +128,19 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
     try {
       const scannedImages = await runScan();
       if (scannedImages.length === 0) return;
-      setPendingPages((prev) => [...prev, ...scannedImages.map((base64) => ({ id: generateUUID(), base64 }))]);
+      const compressed = await Promise.all(scannedImages.map(compressScannedPage));
+      setPendingPages((prev) => {
+        const combined = [...prev, ...compressed.map((base64) => ({ id: generateUUID(), base64 }))];
+        if (combined.length > MAX_DOCUMENT_PAGES) {
+          Toast.show({
+            type: 'info',
+            text1: 'Page limit reached',
+            text2: `Only the first ${MAX_DOCUMENT_PAGES} pages were kept — save this document and start a new one for the rest.`,
+          });
+          return combined.slice(0, MAX_DOCUMENT_PAGES);
+        }
+        return combined;
+      });
     } catch (e) {
       console.error('[DocumentScanSheet] add page error:', e);
       Toast.show({ type: 'error', text1: 'Scan failed', text2: 'Please try again.' });

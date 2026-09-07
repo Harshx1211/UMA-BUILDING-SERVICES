@@ -8,11 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureScreenCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { upsertRecord, addToSyncQueue, getSignatureForJob } from '@/lib/database';
+import { upsertRecord, addToSyncQueue, getSignatureForJob, getJobById } from '@/lib/database';
 import { runSync } from '@/lib/sync';
 import { generateUUID } from '@/utils/uuid';
 import { useColors } from '@/hooks/useColors';
-import { SyncOperation } from '@/constants/Enums';
+import { SyncOperation, JobStatus } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import type { Signature } from '@/types';
 import { ScreenHeader, Button, Card, showConfirm } from '@/components/ui';
@@ -43,6 +43,12 @@ export default function SignatureScreen() {
   const [isEditing, setIsEditing]   = useState(false);
   const [step, setStep]             = useState<'tech' | 'client'>('tech');
   const [techSigBase64, setTechSigBase64] = useState<string | null>(null);
+  // FIX: this screen never checked the job's own status at all — a
+  // signature (which asserts "the inspection described in this report was
+  // completed") could be captured on a job that was never started or had
+  // since been cancelled. Mirrors the same Completed/Cancelled lock used
+  // by inspectionStore/defectsStore elsewhere.
+  const [jobLocked, setJobLocked] = useState(false);
 
   const canvasRef = step === 'tech' ? techCanvasRef : clientCanvasRef;
 
@@ -53,6 +59,9 @@ export default function SignatureScreen() {
   // ── Load existing / draft ──────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
+    const job = getJobById<{ status: string }>(id);
+    setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
+
     const existing = getSignatureForJob(id) as Signature | null;
     if (existing) {
       setExistingSig(existing);
@@ -155,7 +164,14 @@ export default function SignatureScreen() {
       return;
     }
 
-    // Client step — final save
+    // Client step — final save. Defense-in-depth: the UI already hides
+    // every path here when jobLocked, but guard the actual write too so no
+    // other/future call site can silently sign a locked job.
+    if (jobLocked) {
+      setSaving(false);
+      setSigError('This job is no longer active and can\'t be signed.');
+      return;
+    }
     try {
       const now      = new Date().toISOString();
       const recordId = existingRecordId.current ?? generateUUID();
@@ -234,8 +250,8 @@ export default function SignatureScreen() {
     }
   }
 
-  const showCanvas   = !existingSig || isEditing;
-  const showTechView = !showCanvas; // view-only after completion
+  const showCanvas   = !jobLocked && (!existingSig || isEditing);
+  const showTechView = !showCanvas; // view-only after completion, cancellation, or lock
   const isClientStep = step === 'client';
 
   // Shared canvas webStyle — hides the library's own buttons/footer
@@ -300,13 +316,25 @@ export default function SignatureScreen() {
             <Text style={[s.bannerTxt, { color: C.successDark }]}>
               Signed by {existingSig.signed_by_name} · {new Date(existingSig.signed_at).toLocaleDateString('en-AU')}
             </Text>
-            <TouchableOpacity
-              onPress={() => { setIsEditing(true); setStep('tech'); setHasSig(false); setSigError(''); }}
-              style={[s.resignBtn, { backgroundColor: C.warning + '20', borderColor: C.warning + '60' }]}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={13} color={C.warningDark} />
-              <Text style={[s.resignTxt, { color: C.warningDark }]}>Re-sign</Text>
-            </TouchableOpacity>
+            {!jobLocked && (
+              <TouchableOpacity
+                onPress={() => { setIsEditing(true); setStep('tech'); setHasSig(false); setSigError(''); }}
+                style={[s.resignBtn, { backgroundColor: C.warning + '20', borderColor: C.warning + '60' }]}
+              >
+                <MaterialCommunityIcons name="pencil-outline" size={13} color={C.warningDark} />
+                <Text style={[s.resignTxt, { color: C.warningDark }]}>Re-sign</Text>
+              </TouchableOpacity>
+            )}
+          </Card>
+        )}
+
+        {/* Locked notice — job is completed/cancelled, no signing possible */}
+        {jobLocked && !existingSig && (
+          <Card variant="info" style={s.bannerCard} padding={14}>
+            <MaterialCommunityIcons name="lock-outline" size={16} color={C.textTertiary} />
+            <Text style={[s.bannerTxt, { color: C.textSecondary }]}>
+              This job is no longer active — a signature can&apos;t be captured.
+            </Text>
           </Card>
         )}
 

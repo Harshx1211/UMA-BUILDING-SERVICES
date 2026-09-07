@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, StyleProp, ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Defect } from '@/types';
 import { useColors } from '@/hooks/useColors';
@@ -15,9 +15,14 @@ interface Props {
   defect: Defect & { asset_type?: string; location_on_site?: string };
   onPress?: () => void;
   onEdit?: () => void;
+  /** Overrides this card's own list-level spacing — for embedding it inside
+   * a screen that already provides its own horizontal padding (e.g. an
+   * asset's own defects list), where the default marginHorizontal would
+   * double up. */
+  style?: StyleProp<ViewStyle>;
 }
 
-export default function DefectCard({ defect, onPress, onEdit }: Props) {
+export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
   const C = useColors();
 
   const borderColor = useMemo(() => {
@@ -60,7 +65,7 @@ export default function DefectCard({ defect, onPress, onEdit }: Props) {
 
   return (
     <TouchableOpacity
-      style={[s.card, { borderLeftColor: borderColor, backgroundColor: C.surface }, cardShadow]}
+      style={[s.card, { borderLeftColor: borderColor, backgroundColor: C.surface }, cardShadow, style]}
       onPress={onPress}
       activeOpacity={onPress ? 0.78 : 1}
     >

@@ -65,7 +65,14 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       setFloorNo('');
       setUnitNo('');
 
-      setAllTags(queryRecords<AssetTag>('asset_tags').sort((a, b) => a.name.localeCompare(b.name)));
+      // FIX: asset_tags is per-company (never global) — an unfiltered query
+      // could surface another company's tag vocabulary if this device ever
+      // cached one (see lib/database.ts Migration 40 / clearDatabase()).
+      const companyId = useAuthStore.getState().user?.company_id;
+      setAllTags(
+        (companyId ? queryRecords<AssetTag>('asset_tags', { company_id: companyId }) : queryRecords<AssetTag>('asset_tags'))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
       const current = queryRecords<AssetTagAssignment>('asset_tag_assignments', { asset_id: asset.id });
       setSelectedTagIds(current.map(a => a.tag_id));
       setInitialAssignments(current);
@@ -247,12 +254,17 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                 />
               </View>
 
-              {/* Serial number */}
+              {/* Serial number. FIX: labeled "Serial Number / Barcode" but
+                  only ever wrote to serial_number — the asset detail
+                  screen's separate "Barcode / QR ID" row reads a distinct
+                  barcode_id column nothing in this app populates, so it
+                  always showed "No barcode" regardless of what was typed
+                  here. Relabeled to stop implying otherwise. */}
               <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
+                <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                  placeholder="Serial number or barcode..."
+                  placeholder="Serial number..."
                   placeholderTextColor={C.textTertiary}
                   value={serialNumber}
                   onChangeText={setSerialNumber}

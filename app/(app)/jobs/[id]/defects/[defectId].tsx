@@ -24,6 +24,8 @@ import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
+import { useInspectionStore } from '@/store/inspectionStore';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
@@ -74,7 +76,7 @@ export default function DefectDetailScreen() {
   const [defect,      setDefect]      = useState<FullDefect | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
-  const [jobLocked,   setJobLocked]   = useState(false); // true when job is completed
+  const [jobLocked,   setJobLocked]   = useState(false); // true when job is completed or cancelled
 
   const loadDefect = useCallback(() => {
     if (!defectId) return;
@@ -82,15 +84,25 @@ export default function DefectDetailScreen() {
     const d = getDefectById<FullDefect>(defectId);
     setDefect(d);
 
-    // Determine lock state from the job record
+    // Determine lock state from the job record. FIX: Cancelled was never
+    // checked here, only Completed — a defect on a cancelled job showed as
+    // fully editable (Delete button and all).
     if (d?.job_id) {
       const job = getJobById<{ status: string }>(d.job_id);
-      setJobLocked(job?.status === JobStatus.Completed);
+      setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
     }
     setIsLoading(false);
   }, [defectId]);
 
   useEffect(() => { loadDefect(); }, [loadDefect]);
+
+  // See useJobLiveSync's comment: every job screen using this hook hands the
+  // live channel off to whichever one is currently focused — e.g. admin
+  // setting a status/price, or another tech editing this same defect, shows
+  // up here without needing to back out and re-open the screen.
+  useJobLiveSync(defect?.job_id, useCallback((table) => {
+    if (table === 'defects') loadDefect();
+  }, [loadDefect]));
 
   const handleDelete = () => {
     showConfirm({
@@ -105,6 +117,12 @@ export default function DefectDetailScreen() {
           onPress: () => {
             if (!defect) return;
             deleteDefect(defect.id);
+            // Removing an asset's last defect resets it back to
+            // not-inspected (see deleteDefect's clearOrphanedFail) —
+            // refresh so whichever screen the tech lands back on (the
+            // asset's own detail screen, most likely) shows that
+            // immediately instead of a stale Fail.
+            useInspectionStore.getState().loadAssetsForInspection(defect.job_id);
             Toast.show({ type: 'success', text1: 'Defect removed' });
             router.back();
           },

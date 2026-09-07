@@ -22,35 +22,12 @@ export type JobWithProperty = Job & {
   assigned_to_name: string | null;
 };
 
-export type JobFilter = 'today' | 'week' | 'all';
-
-// ─── Date helpers ─────────────────────────────────────────────
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-}
-
-function weekRange(): { start: string; end: string } {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day; // adjust so Mon=start
-  const mon = new Date(now);
-  mon.setDate(now.getDate() + diff);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return {
-    start: mon.toISOString().slice(0, 10),
-    end: sun.toISOString().slice(0, 10),
-  };
-}
-
 // ─── State & Actions types ────────────────────────────────────
 interface JobsState {
   jobs: JobWithProperty[];
   selectedJob: JobWithProperty | null;
   isLoading: boolean;
   error: string | null;
-  activeFilter: JobFilter;
-  searchQuery: string;
   /** Internal — ref to the current sync listener so we can cleanly unsubscribe */
   _syncListenerRef: (() => void) | null;
 }
@@ -59,13 +36,11 @@ interface JobsActions {
   loadJobs: (userId: string) => void;
   subscribeToSync: (userId: string) => void;
   unsubscribeFromSync: () => void;
-  getFilteredJobs: () => JobWithProperty[];
   selectJob: (jobId: string) => void;
   clearSelectedJob: () => void;
-  setFilter: (filter: JobFilter) => void;
-  setSearchQuery: (q: string) => void;
   updateJobStatus: (jobId: string, newStatus: JobStatus) => void;
   clearError: () => void;
+  reset: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────
@@ -74,8 +49,6 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   selectedJob: null,
   isLoading: false,
   error: null,
-  activeFilter: 'all',
-  searchQuery: '',
   _syncListenerRef: null,
 
   loadJobs: (userId) => {
@@ -110,49 +83,12 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
     }
   },
 
-  getFilteredJobs: () => {
-    const { jobs, activeFilter, searchQuery } = get();
-    const today = todayISO();
-    const { start, end } = weekRange();
-
-    let filtered = jobs;
-
-    // Date filter
-    if (activeFilter === 'today') {
-      filtered = jobs.filter((j) => j.scheduled_date === today);
-    } else if (activeFilter === 'week') {
-      filtered = jobs.filter(
-        (j) => j.scheduled_date >= start && j.scheduled_date <= end
-      );
-    }
-
-    // Search filter — all relevant fields
-    const q = searchQuery.toLowerCase().trim();
-    if (q) {
-      filtered = filtered.filter(
-        (j) =>
-          (j.property_name ?? '').toLowerCase().includes(q) ||
-          (j.property_address ?? '').toLowerCase().includes(q) ||
-          (j.property_suburb ?? '').toLowerCase().includes(q) ||
-          (j.property_state ?? '').toLowerCase().includes(q) ||
-          (j.job_type ?? '').toLowerCase().includes(q) ||
-          (j.notes ?? '').toLowerCase().includes(q)
-      );
-    }
-
-    return filtered;
-  },
-
   selectJob: (jobId) => {
     const job = get().jobs.find((j) => j.id === jobId) ?? null;
     set({ selectedJob: job });
   },
 
   clearSelectedJob: () => set({ selectedJob: null }),
-
-  setFilter: (filter) => set({ activeFilter: filter }),
-
-  setSearchQuery: (q) => set({ searchQuery: q }),
 
   updateJobStatus: (jobId, newStatus) => {
     try {
@@ -206,4 +142,10 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reset: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) offSyncComplete(listener);
+    set({ jobs: [], selectedJob: null, isLoading: false, error: null, _syncListenerRef: null });
+  },
 }));

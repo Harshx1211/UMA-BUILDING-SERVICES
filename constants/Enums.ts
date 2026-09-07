@@ -17,13 +17,33 @@ export enum QuoteStatus {
   Rejected = 'rejected',
 }
 
-/** Category of work being performed */
+/**
+ * Category of work being performed — must mirror Supabase's own
+ * `jobs.job_type` CHECK constraint exactly (supabase/schema.sql), which
+ * allows these 10 values and no others.
+ *
+ * This previously had only 5 members, including a `RoutineService =
+ * 'routine_service'` that doesn't match ANY real DB value — writing it
+ * failed the CHECK constraint silently on sync (fixed one live instance of
+ * this in site-inspect/[id].tsx). The 5 routine_service_* frequency
+ * variants below had no enum member at all.
+ *
+ * DefectRepair ('defect_repair') and Quote ('quote') are legacy values —
+ * still valid and still readable (existing rows use them), but new jobs
+ * should use DefectRepairQuote instead (see the admin dashboard's
+ * src/constants/jobTypes.ts, which already treats them this way).
+ */
 export enum JobType {
-  RoutineService = 'routine_service',
+  RoutineServiceMonthly = 'routine_service_monthly',
+  RoutineService3Monthly = 'routine_service_3_monthly',
+  RoutineService6Monthly = 'routine_service_6_monthly',
+  RoutineServiceAnnual = 'routine_service_annual',
+  RoutineService5Yearly = 'routine_service_5_yearly',
+  DefectRepairQuote = 'defect_repair_quote',
   DefectRepair = 'defect_repair',
+  Quote = 'quote',
   Installation = 'installation',
   Emergency = 'emergency',
-  Quote = 'quote',
 }
 
 /** Operational state of a fire safety asset */

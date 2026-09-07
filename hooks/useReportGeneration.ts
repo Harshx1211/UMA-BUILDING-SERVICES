@@ -3,6 +3,7 @@ import Toast from 'react-native-toast-message';
 import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
 import { runSync } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 const POLL_MS = 5_000;
 
@@ -22,6 +23,7 @@ export function useReportGeneration(
   jobId: string | undefined,
   opts?: { hasExistingReport?: boolean; forceOnMount?: boolean },
 ) {
+  const { isOnline } = useNetworkStatus();
   const [status, setStatus] = useState<ReportGenStatus>('idle');
   const [elapsedS, setElapsedS] = useState(0);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -110,22 +112,63 @@ export function useReportGeneration(
     void check();
   }, [stop]);
 
-  const generate = useCallback(() => {
+  const generate = useCallback(async () => {
     if (!jobId) return;
     notifiedRef.current = false;
-    startedAtMs.current = Date.now();
     setError(null);
+
+    // FIX: resume an already in-flight generation instead of always
+    // re-queuing a new one. report_url is null both before ANY generation
+    // and DURING one, so this hook previously had no way to tell those
+    // apart — navigating away and back (or the app being killed/relaunched
+    // mid-generation) always fired a brand new server-side generation for
+    // every "Generate/Regenerate" button, contradicting the very "come back
+    // later" messaging shown when the first one was queued.
+    if (isOnline) {
+      try {
+        const existing = await pollReportStatus(jobId);
+        if (existing.status === 'generating') {
+          startedAtMs.current = existing.startedAt ? new Date(existing.startedAt).getTime() : Date.now();
+          setElapsedS(0);
+          setStatus('generating');
+          Toast.show({
+            type: 'info',
+            text1: 'Already Generating',
+            text2: "We'll let you know as soon as it's ready.",
+          });
+          poll(jobId);
+          return;
+        }
+      } catch {
+        // Status check itself failed for some other reason — fall through
+        // and queue locally same as the offline path below.
+      }
+    }
+
+    startedAtMs.current = Date.now();
     setElapsedS(0);
     setStatus('generating');
     queueReportGeneration(jobId);
     runSync();
-    Toast.show({
+    // FIX: this always said "processing on our servers," even when offline
+    // — misleading, since queueReportGeneration only writes to the local
+    // sync queue and the request hasn't actually reached the server yet.
+    // It could sit queued for as long as the technician stays offline with
+    // nothing telling them that's what's happening. The poll loop below
+    // tolerates being offline fine (pollReportStatus failing is already
+    // handled as a transient, retried-every-5s error), so this only changes
+    // what the technician is told, not the underlying mechanics.
+    Toast.show(isOnline ? {
       type: 'info',
       text1: 'Generating Report',
       text2: "We'll let you know as soon as it's ready — you can keep working.",
+    } : {
+      type: 'info',
+      text1: 'Queued — Waiting for Connection',
+      text2: "This will start generating automatically once you're back online.",
     });
     poll(jobId);
-  }, [jobId, poll]);
+  }, [jobId, poll, isOnline]);
 
   // On mount: either always start a fresh generation (forceOnMount — used by
   // "Generate"/"Draft Preview"/"Regenerate", which all mean "make me a

@@ -26,6 +26,7 @@ import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -64,12 +65,21 @@ const PRIORITY_LABEL: Record<Priority, string> = {
   [Priority.Urgent]: 'Urgent', [Priority.High]: 'High',
   [Priority.Normal]: 'Normal', [Priority.Low]: 'Low',
 };
+// Labels match app/(app)/jobs/index.tsx's own JOB_TYPE_LABEL exactly, so the
+// list and this detail screen never show two different names for the same
+// job_type — that one can't import this enum (it predates the fix that made
+// this one accurate), so the two are kept in sync by hand.
 const JOB_TYPE_LABEL: Record<JobType, string> = {
-  [JobType.RoutineService]: 'Routine Service',
-  [JobType.DefectRepair]:   'Defect Repair',
-  [JobType.Installation]:   'Installation',
-  [JobType.Emergency]:      'Emergency',
-  [JobType.Quote]:          'Quote',
+  [JobType.RoutineServiceMonthly]:  'Monthly Service',
+  [JobType.RoutineService3Monthly]: '3-Monthly Service',
+  [JobType.RoutineService6Monthly]: '6-Monthly Service',
+  [JobType.RoutineServiceAnnual]:   'Annual Service',
+  [JobType.RoutineService5Yearly]:  '5-Yearly Service',
+  [JobType.DefectRepairQuote]:      'Defect Repair Quote',
+  [JobType.DefectRepair]:           'Defect Repair',
+  [JobType.Quote]:                  'Quote',
+  [JobType.Installation]:           'Installation',
+  [JobType.Emergency]:              'Emergency',
 };
 
 // ─── ActionRow mini-component ──────────────────────────────────────────────
@@ -188,6 +198,12 @@ export default function JobDetailScreen() {
   useEffect(() => { loadJob(); }, [loadJob]);
   // Refresh data whenever we navigate back to this screen
   useFocusEffect(useCallback(() => { loadJob(); }, [loadJob]));
+
+  // This overview screen shows defect/photo counts a crew-mate might be
+  // updating from elsewhere — see useJobLiveSync's comment: every job
+  // screen using this hook hands the live channel off to whichever one is
+  // currently focused, so it stays live everywhere inside this job.
+  useJobLiveSync(id, useCallback(() => { loadJob(); }, [loadJob]));
 
   // Warn before leaving if there are unsaved notes
   useEffect(() => {
@@ -365,6 +381,15 @@ export default function JobDetailScreen() {
   const isCancelled  = job.status === JobStatus.Cancelled;
   const isScheduled  = job.status === JobStatus.Scheduled;
 
+  // FIX: these action rows write compliance-relevant data (a defect record,
+  // a legally-binding signature attesting the inspection was completed, a
+  // quote) — none of that should be reachable on a Cancelled job. Previously
+  // this whole list rendered unconditionally regardless of job.status (only
+  // the separate "Inspection Progress" card was gated), so a technician
+  // could open Signature on a job that was cancelled after being scheduled
+  // and capture a "the inspection was completed" attestation for work that
+  // never happened. Documents/Navigate/Checklist-guide/Call stay visible —
+  // none of them assert the inspection itself was performed.
   const actionRows: (Omit<React.ComponentProps<typeof ActionRow>, 'isLast' | 'C'> & { key: string })[] = [
     {
       key: 'documents', icon: 'file-document-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
@@ -372,31 +397,31 @@ export default function JobDetailScreen() {
       subtitle: documentCount === 0 ? 'Scan a site document' : `${documentCount} document${documentCount !== 1 ? 's' : ''} on file`,
       onPress: () => router.push(`/jobs/${id}/documents` as never),
     },
-    {
-      key: 'defects', icon: 'alert-circle-outline',
+    ...(!isCancelled ? [{
+      key: 'defects', icon: 'alert-circle-outline' as MCIconName,
       iconBg: defects.length > 0 ? C.error + '15' : C.backgroundTertiary,
       iconColor: defects.length > 0 ? C.error : C.textSecondary,
       title: 'Defects',
       subtitle: defects.length === 0 ? 'None logged' : `${defects.length} defect${defects.length !== 1 ? 's' : ''}`,
       badge: defects.length, badgeColor: C.error,
       onPress: () => router.push(`/jobs/${id}/defects` as never),
-    },
-    {
-      key: 'photos', icon: 'camera-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+    }] : []),
+    ...(!isCancelled ? [{
+      key: 'photos', icon: 'camera-outline' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Photos',
       subtitle: photos.length === 0 ? 'None captured' : `${photos.length} photo${photos.length !== 1 ? 's' : ''}`,
       onPress: () => router.push(`/jobs/${id}/photos` as never),
-    },
-    {
-      key: 'quote', icon: 'file-document-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+    }] : []),
+    ...(!isCancelled ? [{
+      key: 'quote', icon: 'file-document-outline' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Quote', subtitle: 'Parts & labour',
       onPress: () => router.push(`/jobs/${id}/quote` as never),
-    },
-    {
-      key: 'signature', icon: 'draw', iconBg: hasSig ? C.success + '15' : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
+    }] : []),
+    ...(!isCancelled ? [{
+      key: 'signature', icon: 'draw' as MCIconName, iconBg: hasSig ? C.success + '15' : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
       title: 'Signature', subtitle: hasSig ? 'Captured' : 'Required for report',
       onPress: () => router.push(`/jobs/${id}/signature` as never),
-    },
+    }] : []),
     {
       key: 'navigate', icon: 'map-marker-path', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Navigate to Site',
@@ -609,7 +634,7 @@ export default function JobDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[s.detailsTitle, { color: C.text }]}>Details</Text>
                   <Text style={[s.detailsSub, { color: C.textSecondary }]} numberOfLines={1}>
-                    {JOB_TYPE_LABEL[job.job_type as JobType] ?? job.job_type} · {PRIORITY_LABEL[job.priority] ?? job.priority} priority · Sch: {fmtDate(job.scheduled_date)}
+                    {JOB_TYPE_LABEL[job.job_type] ?? job.job_type} · {PRIORITY_LABEL[job.priority] ?? job.priority} priority · Sch: {fmtDate(job.scheduled_date)}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={C.textTertiary} />
@@ -645,7 +670,7 @@ export default function JobDetailScreen() {
                     <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
                       <MaterialCommunityIcons name="wrench-outline" size={15} color={C.textSecondary} />
                       <Text style={[s.chipTxt, { color: C.text }]}>
-                        {JOB_TYPE_LABEL[job.job_type as JobType] ?? job.job_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        {JOB_TYPE_LABEL[job.job_type] ?? job.job_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                       </Text>
                     </View>
                     <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.accent) + '18' }]}>

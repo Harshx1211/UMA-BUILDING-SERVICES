@@ -145,8 +145,14 @@ export default function PropertyDetailScreen() {
       setProperty(p);
       if (p) {
         setAssets(getAssetsForProperty<Asset>(id));
-        // M2: Fetch all jobs (no limit) so the count badge reflects reality
-        setJobHistory(getJobsForProperty<JobHistory>(id));
+        // M2: Fetch all jobs (no limit) so the count badge reflects reality.
+        // FIX: this call was still relying on getJobsForProperty's own
+        // `limit = 5` default — the comment's own intent was never actually
+        // implemented, so the count badge, the "+N more" footer (which can
+        // only ever render past 5), and the "JOBS DONE" stat below were all
+        // silently capped at 5 for any property with a longer history.
+        // SQLite's LIMIT -1 means "no limit."
+        setJobHistory(getJobsForProperty<JobHistory>(id, -1));
         setDocuments(getDocumentsForProperty<SiteDocument>(id));
       }
     } catch (err) {

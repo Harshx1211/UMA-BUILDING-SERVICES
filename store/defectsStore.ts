@@ -13,6 +13,7 @@ import {
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
   logFieldAudit,
+  reconcileJobAssetOnDefectDelete,
 } from '@/lib/database';
 import { DefectStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
@@ -34,6 +35,7 @@ interface DefectsState {
   updateDefectStatus: (defectId: string, status: DefectStatus) => void;
   deleteDefect: (defectId: string) => void;
   clearError: () => void;
+  reset: () => void;
 }
 
 // ─── Helper — extract a message from an unknown catch value ─
@@ -87,12 +89,18 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       // Defense-in-depth: same "Continue Working is the only way back into edit
       // mode" invariant as store/inspectionStore.ts's updateAssetResult — a
-      // completed job's report is treated as final.
+      // completed job's report is treated as final. Cancelled is the same
+      // kind of locked state (FIX: previously not checked anywhere — a
+      // defect could be logged against a job that was cancelled).
       if (defectData.job_id) {
         const job = getJobById<{ status: string }>(defectData.job_id);
         if (job?.status === JobStatus.Completed) {
           set({ isSaving: false });
           throw new Error('This job is completed — tap "Continue Working" to make changes.');
+        }
+        if (job?.status === JobStatus.Cancelled) {
+          set({ isSaving: false });
+          throw new Error('This job has been cancelled and can no longer be edited.');
         }
       }
 
@@ -249,6 +257,10 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     try {
       set({ isSaving: true, error: null });
 
+      // Read before anything is deleted — need asset_id/job_id afterward to
+      // check whether this was the asset's LAST defect (see clearOrphanedFail).
+      const defectRow = get().defects.find((d) => d.id === defectId);
+
       // A4 FIX: Cancel / delete all inspection_photos associated with this defect
       // BEFORE deleting the defect row, so we don't leave orphaned upload tasks.
       const defectPhotos = queryRecords<{ id: string; photo_url: string }>(
@@ -274,6 +286,18 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         defects: state.defects.filter((d) => d.id !== defectId),
         isSaving: false,
       }));
+
+      // Reconciles job_assets after this delete: resets a now-defect-less
+      // Fail back to not-inspected, or (if other defects remain) refreshes
+      // defect_reason so it doesn't keep describing the one just deleted.
+      // No-op if this defect was never linked to an asset or the asset
+      // wasn't Fail.
+      if (defectRow?.asset_id) {
+        const companyId = useAuthStore.getState().user?.company_id ?? null;
+        const userId = useAuthStore.getState().user?.id ?? null;
+        reconcileJobAssetOnDefectDelete(defectRow.job_id, defectRow.asset_id, companyId, userId);
+      }
+
       syncNow();
     } catch (err: unknown) {
       console.error('[DefectsStore] deleteDefect error:', err);
@@ -282,4 +306,6 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reset: () => set({ defects: [], isLoading: false, isSaving: false, error: null }),
 }));

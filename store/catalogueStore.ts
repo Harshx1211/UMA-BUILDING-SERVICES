@@ -10,6 +10,7 @@ import type { DefectCode, DefectCategory } from '@/constants/DefectCodes';
 import type { ComponentProps } from 'react';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { useAuthStore } from '@/store/authStore';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -22,6 +23,7 @@ interface CatalogueState {
   /** Wire up automatic reload after every sync cycle (mirrors dashboardStore pattern) */
   subscribeToSync: () => void;
   unsubscribeFromSync: () => void;
+  reset: () => void;
 }
 
 export const useCatalogueStore = create<CatalogueState>((set, get) => ({
@@ -32,12 +34,24 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
   load: () => {
     try {
       const db = openDatabase();
+      // FIX: these tables were never filtered by company locally, so a
+      // device reused across companies (or simply pre-dating the
+      // company_id column) could show a merged mix of every company's
+      // custom asset types/defect codes/pricing. company_id can also be
+      // NULL for the platform's own seed template — that template is only
+      // used to seed a brand-new company (see
+      // auto_seed_company_catalogue.sql), every real company already has
+      // its own cloned rows, but we still fall back to it defensively if
+      // this company somehow has no rows of its own yet.
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const scope = companyId ? `AND (company_id = ? OR company_id IS NULL)` : `AND company_id IS NULL`;
+      const scopeArgs = companyId ? [companyId] : [];
 
       // ── Asset Types ──────────────────────────────────────
       const rows = db.getAllSync<{
         value: string; label: string; full_label: string;
         icon: string; color: string; inspection_routine: string; variants: string;
-      }>('SELECT * FROM asset_type_definitions WHERE is_active = 1 ORDER BY sort_order ASC');
+      }>(`SELECT * FROM asset_type_definitions WHERE is_active = 1 ${scope} ORDER BY sort_order ASC`, scopeArgs);
 
       if (rows.length > 0) {
         const typesMap = new Map<string, AssetTypeDefinition>();
@@ -96,5 +110,14 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
       offSyncComplete(listener);
       set({ _syncListenerRef: null });
     }
+  },
+
+  reset: () => {
+    const listener = get()._syncListenerRef;
+    if (listener) offSyncComplete(listener);
+    // Fall back to the hardcoded constants (never the previous company's
+    // cached rows) until the next login's load() repopulates this device's
+    // own company data.
+    set({ assetTypes: ASSET_TYPES, defectCodes: DEFECT_CODES, _syncListenerRef: null });
   },
 }));

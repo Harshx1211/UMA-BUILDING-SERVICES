@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import PhotoCaptureSheet, { PhotoCaptureSheetRef } from '@/components/camera/Pho
 import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Button, showConfirm } from '@/components/ui';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 
 export default function PhotosScreen() {
   const C = useColors();
@@ -35,6 +36,14 @@ export default function PhotosScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // See useJobLiveSync's comment: every job screen using this hook hands the
+  // live channel off to whichever one is currently focused, so a photo a
+  // teammate uploads from elsewhere shows up in this shared gallery too.
+  useJobLiveSync(jobId, useCallback((table) => {
+    if (table === 'inspection_photos' && jobId) store.loadPhotos(jobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, store.loadPhotos]));
 
   /** Long-press handler — confirms then deletes photo from SQLite + syncs */
   const handlePhotoLongPress = (photo: { id: string }) => {

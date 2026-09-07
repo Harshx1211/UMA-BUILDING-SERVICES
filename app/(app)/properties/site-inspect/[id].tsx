@@ -24,7 +24,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useAuth } from '@/hooks/useAuth';
 import { ScreenHeader, FilterPills, Button, showConfirm } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
-import { InspectionResult, SyncOperation, JobStatus, Priority, DefectSeverity } from '@/constants/Enums';
+import { InspectionResult, SyncOperation, JobStatus, Priority, DefectSeverity, JobType, DefectStatus } from '@/constants/Enums';
 import {
   getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue,
 } from '@/lib/database';
@@ -55,9 +55,16 @@ function getDefectChips(assetType: string): string[] {
 type AssetResult = {
   result: InspectionResult | null;
   defectReason: string;
+  // FIX: this quick flow used to hardcode every defect it created to
+  // Non-Critical with no way to say otherwise, even for a chip like
+  // "Missing"/"No Response" that would often warrant Critical under
+  // AS1851 — every defect found on-site was understated until someone
+  // manually corrected it downstream. Defaults to Non-Critical (unchanged
+  // behavior) but the technician can now flag one as Critical.
+  severity: DefectSeverity;
 };
 function initResult(): AssetResult {
-  return { result: null, defectReason: '' };
+  return { result: null, defectReason: '', severity: DefectSeverity.NonCritical };
 }
 
 // ─── Asset icon by type ──────────────────────────────────────
@@ -77,12 +84,13 @@ function assetIcon(t: string): React.ComponentProps<typeof MaterialCommunityIcon
 // ASSET CARD
 // ═══════════════════════════════════════════════════════════════
 const AssetInspectCard = React.memo(({
-  asset, result, onResult, onDefectChange, index,
+  asset, result, onResult, onDefectChange, onSeverityToggle, index,
 }: {
   asset: Asset;
   result: AssetResult;
   onResult: (id: string, r: InspectionResult) => void;
   onDefectChange: (id: string, reason: string) => void;
+  onSeverityToggle: (id: string) => void;
   index: number;
 }) => {
   const C     = useColors();
@@ -171,6 +179,29 @@ const AssetInspectCard = React.memo(({
                 placeholderTextColor={C.textTertiary}
                 returnKeyType="done"
               />
+              {/* FIX: this quick flow had no way to flag a defect as
+                  Critical at all — every one it created was silently
+                  filed Non-Critical regardless of severity. */}
+              <TouchableOpacity
+                style={[s.criticalToggle, {
+                  backgroundColor: result.severity === DefectSeverity.Critical ? C.error : C.surface,
+                  borderColor: C.error,
+                }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  onSeverityToggle(asset.id);
+                }}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name={result.severity === DefectSeverity.Critical ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                  size={16}
+                  color={result.severity === DefectSeverity.Critical ? C.textOnPrimary : C.error}
+                />
+                <Text style={[s.criticalToggleTxt, { color: result.severity === DefectSeverity.Critical ? C.textOnPrimary : C.error }]}>
+                  Critical — immediate action required
+                </Text>
+              </TouchableOpacity>
             </Animated.View>
           )}
 
@@ -309,8 +340,21 @@ export default function SiteInspectScreen() {
   }, [results, assets]);
 
   // ── Complete & save ──────────────────────────────────────
+  // FIX: this whole function runs synchronously (every write is a plain
+  // SQLite call, no `await` anywhere in the body) despite being declared
+  // async, so `setIsSaving(true)` cannot be reflected on the native Complete
+  // button until the JS event handler returns and a render commits. A rapid
+  // double-tap under normal field-work time pressure could dispatch both
+  // presses before that happens, running this entire function twice against
+  // the same `results` and minting two separate completed jobs with
+  // duplicate job_assets/defects. `savingRef` is a plain ref mutated
+  // synchronously and immediately — unlike `isSaving` state, it can't be
+  // read stale by a second tap that fires before any render commits.
+  const savingRef = useRef(false);
   const saveInspection = useCallback(async () => {
     if (!property || !user) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const now   = new Date().toISOString();
@@ -335,7 +379,10 @@ export default function SiteInspectScreen() {
       // walkthrough of every asset at the property.
       const jobPayload = {
         id: jobId, property_id: property.id, assigned_to: user.id,
-        job_type: 'routine_service_annual', status: JobStatus.Completed,
+        // FIX: was a bare string literal — the exact anti-pattern that
+        // caused the JobType.RoutineService bug above. Importing the real
+        // enum member gives compiler protection against this recurring.
+        job_type: JobType.RoutineServiceAnnual, status: JobStatus.Completed,
         scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
         notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
@@ -373,8 +420,14 @@ export default function SiteInspectScreen() {
           const dId = generateUUID();
           const dPayload = {
             id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
-            description: r.defectReason.trim(), severity: DefectSeverity.NonCritical,
-            status: 'open', photos: '[]', created_at: now,
+            // FIX: severity was hardcoded to Non-Critical regardless of what
+            // the technician actually found — now reflects the Critical
+            // toggle above (still defaults to Non-Critical, unchanged for
+            // the common case). `status` was also a bare 'open' string
+            // literal — imported enum used instead, same reasoning as
+            // job_type above.
+            description: r.defectReason.trim(), severity: r.severity,
+            status: DefectStatus.Open, photos: '[]', created_at: now,
           };
           upsertRecord('defects', dPayload as RecordData);
           addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
@@ -398,6 +451,7 @@ export default function SiteInspectScreen() {
       console.error('[SiteInspect] save error:', err);
       Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }, [property, user, assets, results, counts, navigateAway]);
@@ -462,12 +516,25 @@ export default function SiteInspectScreen() {
         ...prev[assetId],
         result: r,
         defectReason: r !== InspectionResult.Fail ? '' : prev[assetId]?.defectReason ?? '',
+        severity: r !== InspectionResult.Fail ? DefectSeverity.NonCritical : prev[assetId]?.severity ?? DefectSeverity.NonCritical,
       },
     }));
   }, []);
 
   const handleDefectChange = useCallback((assetId: string, reason: string) => {
     setResults(prev => ({ ...prev, [assetId]: { ...prev[assetId], defectReason: reason } }));
+  }, []);
+
+  const handleSeverityToggle = useCallback((assetId: string) => {
+    setResults(prev => ({
+      ...prev,
+      [assetId]: {
+        ...prev[assetId],
+        severity: prev[assetId]?.severity === DefectSeverity.Critical
+          ? DefectSeverity.NonCritical
+          : DefectSeverity.Critical,
+      },
+    }));
   }, []);
 
   // ── Add asset ────────────────────────────────────────────
@@ -527,9 +594,10 @@ export default function SiteInspectScreen() {
       result={results[item.id] ?? initResult()}
       onResult={handleResult}
       onDefectChange={handleDefectChange}
+      onSeverityToggle={handleSeverityToggle}
       index={index}
     />
-  ), [results, handleResult, handleDefectChange]);
+  ), [results, handleResult, handleDefectChange, handleSeverityToggle]);
 
   const filterOptions = [
     { label: 'All',       count: assets.length },
@@ -799,6 +867,8 @@ const s = StyleSheet.create({
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipTxt:       { fontSize: 13, fontWeight: '800' },
   defectInput:   { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, fontWeight: '600' },
+  criticalToggle:   { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 10 },
+  criticalToggleTxt:{ fontSize: 13, fontWeight: '800', flex: 1 },
 
   // Buttons
   btnRow:    { flexDirection: 'row', gap: 10, marginTop: 16 },

@@ -1,6 +1,6 @@
 // AddAssetModal — Type (with variant picked inline) → Details, two-step flow
 // Mirrors the "Edit Asset" form captured in reference screenshots from Uptick
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
   ScrollView, Platform,
@@ -151,7 +151,18 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   };
 
   // ── Save ──────────────────────────────────────────────────────
+  // FIX: this function is fully synchronous (a plain loop of upsertRecord/
+  // addToSyncQueue calls, no `await` anywhere), guarded only by
+  // `disabled={isSaving}` on the Save button — which can't reflect on the
+  // native view until this handler returns and a render commits. A rapid
+  // double-tap (or a slow device where the modal doesn't visually close
+  // instantly) could run the whole quantity loop twice, inserting two full
+  // sets of brand-new assets for the same physical items. `savingRef` is a
+  // plain ref mutated synchronously and immediately, so a second tap that
+  // fires before any render commits still sees it.
+  const savingRef = useRef(false);
   const handleSave = () => {
+    if (savingRef.current) return;
     const e: { location?: string; type?: string } = {};
     if (!selectedType) e.type = 'Please select an asset type.';
     if (!effectiveLocation.trim()) {
@@ -166,6 +177,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       showConfirm({ title: 'Max Quantity', message: 'You can add up to 100 assets at once.', icon: 'alert-circle-outline' });
       return;
     }
+    savingRef.current = true;
     setIsSaving(true);
     const now   = new Date().toISOString();
     const today = now.slice(0, 10);
@@ -200,6 +212,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       console.error('[AddAssetModal] save error:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -512,13 +525,20 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   </View>
                 )}
 
-                {/* Serial number (single asset only) */}
+                {/* Serial number (single asset only). FIX: this was labeled
+                    "Serial Number / Barcode" but only ever wrote to
+                    serial_number — the asset detail screen's separate
+                    "Barcode / QR ID" row reads a distinct barcode_id column
+                    that nothing in this app ever populates, so it always
+                    showed "No barcode" regardless of what was typed here.
+                    Relabeled to stop implying this field captures a
+                    separate scannable barcode ID. */}
                 {quantity === 1 && (
                   <View style={[s.field, { marginBottom: 0 }]}>
-                    <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number / Barcode</Text>
+                    <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
                     <TextInput
                       style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                      placeholder="Serial number or barcode..."
+                      placeholder="Serial number..."
                       placeholderTextColor={C.textTertiary}
                       value={serialNumber}
                       onChangeText={setSerialNumber}

@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
+import { useAuthStore } from '@/store/authStore';
 
 /** Maximum notifications loaded into memory. Older ones are not discarded — just not shown. */
 const MAX_NOTIFICATIONS = 100;
@@ -38,6 +39,7 @@ interface NotificationsState {
   addNotification: (n: Omit<AppNotification, 'id' | 'is_read' | 'created_at'>) => void;
   clearAll: () => void;
   clearError: () => void;
+  reset: () => void;
 }
 
 // ─── Helper — extract a message from an unknown catch value ─
@@ -71,13 +73,20 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
     try {
       set({ isLoading: true, error: null });
       const db = openDatabase();
-      // Get total count first so we can tell the user if they're seeing a capped view
-      const countRow = db.getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM notifications`);
+      // FIX: this was completely unfiltered, so on a device shared between
+      // technicians (or mid-transition around a sign-out) it showed every
+      // user's notifications merged together — badge count included. A row
+      // with user_id NULL is a genuine broadcast meant for everyone; a
+      // targeted one should only ever surface for its own user.
+      const userId = useAuthStore.getState().user?.id ?? '';
+      const countRow = db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? OR user_id IS NULL`, [userId],
+      );
       const totalCount = countRow?.count ?? 0;
 
       const rows = db.getAllSync<Record<string, unknown>>(
-        `SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?`,
-        [MAX_NOTIFICATIONS],
+        `SELECT * FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT ?`,
+        [userId, MAX_NOTIFICATIONS],
       );
       const notifications = rows.map(mapRow);
       set({
@@ -111,7 +120,8 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   markAllAsRead: () => {
     try {
       const db = openDatabase();
-      db.runSync(`UPDATE notifications SET is_read = 1`);
+      const userId = useAuthStore.getState().user?.id ?? '';
+      db.runSync(`UPDATE notifications SET is_read = 1 WHERE user_id = ? OR user_id IS NULL`, [userId]);
       set((state) => ({
         notifications: state.notifications.map((n) => ({ ...n, is_read: true })),
         unreadCount: 0,
@@ -155,7 +165,8 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   clearAll: () => {
     try {
       const db = openDatabase();
-      db.runSync(`DELETE FROM notifications`);
+      const userId = useAuthStore.getState().user?.id ?? '';
+      db.runSync(`DELETE FROM notifications WHERE user_id = ? OR user_id IS NULL`, [userId]);
       set({ notifications: [], unreadCount: 0, totalCount: 0, error: null });
     } catch (err: unknown) {
       console.error('[NotificationsStore] clearAll error:', err);
@@ -164,4 +175,6 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reset: () => set({ notifications: [], unreadCount: 0, totalCount: 0, isLoading: false, error: null }),
 }));

@@ -67,8 +67,16 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
 
   const handleCodeSelect = (code: DefectCode | null) => {
     setCodeVisible(false);
+    // FIX: previously always overwrote whatever the technician had already
+    // typed. Only auto-fill when the current text is empty or still
+    // exactly the PREVIOUS code's auto-filled description (i.e. swapping
+    // codes before typing anything custom) — never clobber text they
+    // actually wrote themselves, with no undo.
+    if (code && (!description.trim() || description === selectedCode?.description)) {
+      setDescription(code.description);
+    }
     setSelectedCode(code);
-    if (code) { setDescription(code.description); setDescError(false); }
+    if (code) setDescError(false);
   };
 
   const handlePhoto = async () => {

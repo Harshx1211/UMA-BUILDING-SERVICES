@@ -55,6 +55,37 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([promise, timer]);
 }
 
+// FIX: every OTHER feature store (jobs, dashboard, notifications, defects,
+// photos, documents, catalogue, inspection) used to keep whatever it last
+// held in memory across a sign-out — only authStore's own fields and SQLite
+// (via clearDatabase()) were ever cleared. Since these are module-level
+// Zustand singletons, a fast second login on a shared device could render a
+// frame of the PREVIOUS technician's jobs/photos/notifications before each
+// store's own next load() call happened to overwrite it. Dynamic imports
+// here (not static ones) are deliberate: several of these stores already
+// import authStore for company_id/user lookups, so a static import back
+// from authStore would be a circular dependency — same pattern this file
+// already uses for lib/sync.ts below.
+async function resetAllFeatureStores(): Promise<void> {
+  const [
+    { useJobsStore }, { useDashboardStore }, { useNotificationsStore },
+    { useDefectsStore }, { usePhotosStore }, { useDocumentsStore },
+    { useCatalogueStore }, { useInspectionStore },
+  ] = await Promise.all([
+    import('@/store/jobsStore'), import('@/store/dashboardStore'), import('@/store/notificationsStore'),
+    import('@/store/defectsStore'), import('@/store/photosStore'), import('@/store/documentsStore'),
+    import('@/store/catalogueStore'), import('@/store/inspectionStore'),
+  ]);
+  useJobsStore.getState().reset();
+  useDashboardStore.getState().reset();
+  useNotificationsStore.getState().reset();
+  useDefectsStore.getState().reset();
+  usePhotosStore.getState().reset();
+  useDocumentsStore.getState().reset();
+  useCatalogueStore.getState().reset();
+  useInspectionStore.getState().reset();
+}
+
 // ---------------------------------------------
 // Store
 // ---------------------------------------------
@@ -221,8 +252,15 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // via biometrics would restore the previous user's profile.
       await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY, COMPANY_CACHE_KEY]);
       clearDatabase();
+      await resetAllFeatureStores();
       set({
         user: null,
+        company: null, // FIX: this was never cleared here — only via the
+        // onAuthStateChange listener's own set() a moment later, which
+        // worked only because supabaseSignOut() above happens to trigger
+        // it first. Two separately-maintained copies of "what a full
+        // sign-out clears" is exactly how the SIGNED_OUT listener's own
+        // gap (see below) went unnoticed — set it directly here too.
         session: null,
         isAuthenticated: false,
         isLoading: false,
@@ -464,19 +502,62 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 // ---------------------------------------------
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || !session) {
-    // FIX A3: Clear SQLite and AsyncStorage on sign-out so a previous user's
-    // data doesn't persist on shared devices. stopSync() prevents the sync
-    // engine from trying to pull data for a user who is no longer logged in.
+    // FIX A3 (original): Clear SQLite and AsyncStorage on sign-out so a
+    // previous user's data doesn't persist on shared devices. stopSync()
+    // prevents the sync engine from trying to pull data for a user who is
+    // no longer logged in.
+    //
+    // CRITICAL FIX: this used to call clearDatabase() unconditionally the
+    // instant this fired — but Supabase fires SIGNED_OUT not only on a
+    // user-initiated sign-out but also silently, in the background,
+    // whenever a token refresh fails (autoRefreshToken is on — see
+    // lib/supabase.ts — so this happens on its own after e.g. a long
+    // offline stretch with an expired refresh token). That wiped a
+    // technician's entire day of offline inspection work — results,
+    // defects, photos, all still sitting in sync_queue — with zero warning,
+    // via a path that completely bypassed the "Unsynced Work" safeguard
+    // signOut() has, just above. Mirror that same bounded flush-then-check
+    // here, and only wipe local data once nothing is left waiting to sync.
     stopSync();
-    clearDatabase();
-    AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY]).catch(() => null);
-    useAuthStore.setState({
-      user: null,
-      company: null,
-      session: null,
-      isAuthenticated: false,
-      isLoading: false,
-    });
+    void (async () => {
+      let pending = getPendingSyncItems();
+      if (pending.length > 0) {
+        try {
+          const { pushPendingWork } = await import('@/lib/sync');
+          const currentUserId = useAuthStore.getState().user?.id ?? useAuthStore.getState().session?.user.id ?? '';
+          for (let i = 0; i < 5; i++) {
+            await pushPendingWork(currentUserId);
+            pending = getPendingSyncItems();
+            if (pending.length === 0) break;
+            await new Promise((r) => setTimeout(r, (i + 1) * 1000));
+          }
+        } catch (err) {
+          // Session is likely already invalid — expected in the common
+          // "background refresh failed" case. Fall through to the
+          // pending.length check below, which decides whether it's safe
+          // to wipe.
+          if (__DEV__) console.log('[AuthStore] SIGNED_OUT final flush attempt failed:', err);
+        }
+      }
+
+      if (pending.length > 0) {
+        console.warn(
+          `[AuthStore] Session ended with ${pending.length} item(s) still unsynced — preserving local data instead of wiping it. It will finish syncing next time a valid session is available.`,
+        );
+      } else {
+        clearDatabase();
+      }
+
+      await resetAllFeatureStores();
+      AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY]).catch(() => null);
+      useAuthStore.setState({
+        user: null,
+        company: null,
+        session: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+    })();
   } else if (event === 'TOKEN_REFRESHED' && session) {
     useAuthStore.setState({ session });
   }

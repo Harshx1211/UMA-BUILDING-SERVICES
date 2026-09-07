@@ -14,6 +14,8 @@ import {
 import { SyncOperation } from '@/constants/Enums';
 import { queuePhotoUpload } from '@/lib/photoUpload';
 import { generateUUID } from '@/utils/uuid';
+import * as FileSystem from 'expo-file-system/legacy';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 
 // ─── Helper — extract a message from an unknown catch value ─
 function errorMessage(err: unknown): string {
@@ -33,6 +35,7 @@ interface PhotosState {
   /** Number of photos still stored as local file:// URIs (pending upload) */
   getPendingCount: () => number;
   clearError: () => void;
+  reset: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────
@@ -94,11 +97,24 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       // already on Supabase. Using the stale in-memory value caused
       // cancelPendingPhotoUpload() to fire on an already-uploaded photo,
       // leaving an orphaned Supabase row and binary that could never be deleted.
-      const dbPhoto = getRecord<{ photo_url: string | null }>('inspection_photos', photoId);
+      const dbPhoto = getRecord<{ photo_url: string | null; local_uri: string | null }>('inspection_photos', photoId);
       const photoUrl = dbPhoto?.photo_url ?? get().photos.find(p => p.id === photoId)?.photo_url;
+      const localUri = dbPhoto?.local_uri ?? get().photos.find(p => p.id === photoId)?.local_uri;
 
       // 1. Remove from local SQLite immediately
       deleteRecord('inspection_photos', photoId);
+
+      // FIX: the local device file was never removed here — only the
+      // database row — so every deleted photo's on-disk file (and, for
+      // never-uploaded ones, the only copy that ever existed) stayed on the
+      // device forever, an unbounded, unrecoverable storage leak. Uploaded
+      // photos are safe to remove immediately (the Storage copy is queued
+      // for deletion below or already gone); best-effort and non-blocking —
+      // a failed/missing file here must never stop the rest of the delete.
+      if (localUri) {
+        const path = getValidLocalUri(localUri);
+        FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+      }
 
       // 2. Permanently record in tombstone — survives retries/reinstalls
       recordDeletedPhoto(photoId);
@@ -150,4 +166,6 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reset: () => set({ photos: [], isLoading: false, error: null }),
 }));

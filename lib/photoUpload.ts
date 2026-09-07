@@ -188,6 +188,23 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
         const publicUrl = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
 
         if (publicUrl && payload.recordId) {
+          // FIX: re-check the local row still exists before doing anything
+          // else — photosStore.deletePhoto() deletes the local row and
+          // tombstones the id SYNCHRONOUSLY, with no awareness of (or wait
+          // for) an upload already in flight for that same photo. Without
+          // this check, a photo the technician explicitly deleted while it
+          // was still uploading would have its Insert queued below anyway
+          // using this task's original payload — permanently resurrecting
+          // it on the server the moment that queued item pushes, with no
+          // way to ever delete it again (its own Delete already ran and
+          // completed before the row existed remotely).
+          const stillExists = getRecord<{ id: string }>('inspection_photos', payload.recordId);
+          if (!stillExists) {
+            if (__DEV__) console.log(`[PhotoUpload] Photo ${payload.recordId} was deleted during upload — discarding, not queuing Insert`);
+            markSyncItemComplete(task.id);
+            return;
+          }
+
           // Update local SQLite row with the now-public URL
           updateRecord('inspection_photos', payload.recordId, { photo_url: publicUrl });
 
@@ -211,6 +228,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             company_id: string | null;
             asset_id: string | null;
             defect_id: string | null;
+            uploaded_at: string | null;
           }>('inspection_photos', payload.recordId);
 
           // Insert the row into Supabase via sync queue.
@@ -223,7 +241,15 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             photo_url:   publicUrl,
             caption:     localRow?.caption ?? null,
             company_id:  localRow?.company_id ?? null,
-            uploaded_at: new Date().toISOString(),
+            // FIX: this used to stamp a FRESH timestamp at upload-completion
+            // time instead of preserving the true capture-time value
+            // photosStore.addPhoto already recorded locally — under
+            // UPLOAD_CONCURRENCY's parallel batches, whichever photo's
+            // upload happens to finish last (e.g. the largest file over a
+            // slow connection) could get a LATER uploaded_at than photos
+            // captured after it, inverting real capture order in the only
+            // copy of this data any server-side consumer ever sees.
+            uploaded_at: localRow?.uploaded_at ?? new Date().toISOString(),
             uploaded_by: currentUserId,
           });
 
