@@ -72,7 +72,7 @@ export function renderAssetLogChunk(
               <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
-            ${asset.technician_notes ? `<tr><td colspan="3" style="padding:6px 0 0;border-top:none"><div style="display:flex;gap:8px;padding:8px 10px;background:${COLORS.BORDER_LIGHT};border:1px solid ${COLORS.BORDER};border-radius:6px"><div style="font-weight:800;color:${COLORS.SLATE};font-size:9.5px;text-transform:uppercase;flex-shrink:0">Note</div><div style="color:${COLORS.BLACK};font-size:10.5px">${esc(asset.technician_notes)}</div></div></td></tr>` : ''}
+            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes)}</td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
@@ -83,6 +83,28 @@ export function renderAssetLogChunk(
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
 <body><div class="page">${parts.join('')}</div></body></html>`;
+}
+
+/**
+ * FIX: was a plain gray flex row labeled just "Note" — inconsistent with
+ * the mobile app, which calls this same field (job_assets.technician_notes)
+ * "Technician Notes" everywhere (the asset screen's card title, the audit
+ * Timeline's field label). Restyled to match the report's own defect-card
+ * visual language (left accent bar + padded body) instead of a bare box, so
+ * it reads as a considered part of the report rather than a debug dump —
+ * label above the text (not squeezed alongside it) and a lightly italicised
+ * note body to visually mark it as commentary, distinct from the factual
+ * rows around it.
+ */
+function renderTechnicianNote(note: string): string {
+  return `
+    <div class="defect-card" style="background:${COLORS.SURFACE};border:1px solid ${COLORS.BORDER}">
+      <div class="defect-bar" style="background:${COLORS.MUTED_LIGHT}"></div>
+      <div class="defect-body">
+        <div style="font-weight:800;color:${COLORS.SLATE};font-size:8.5px;text-transform:uppercase;letter-spacing:0.5px">Technician Notes</div>
+        <div style="margin-top:4px;color:${COLORS.BLACK};font-size:10px;line-height:1.45;font-style:italic">${esc(note)}</div>
+      </div>
+    </div>`;
 }
 
 // AS1851-2012 Clause 1.5.6's own wording — a non-conformance is explicitly
