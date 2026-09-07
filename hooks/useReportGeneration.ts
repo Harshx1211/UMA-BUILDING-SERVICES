@@ -139,6 +139,24 @@ export function useReportGeneration(
           poll(jobId);
           return;
         }
+        // FIX: multi-technician gap — if a crew-mate already generated (and
+        // finished) a report for this job on another device before this
+        // device's own pull caught up, this device's local `report_url` can
+        // still read null/stale. Without this check, tapping Generate/View
+        // Report here fell through to queuing a brand new server-side
+        // generation — wasted server work, and a second PDF nobody asked
+        // for — instead of just adopting the one that already exists.
+        if (existing.status === 'completed') {
+          stop();
+          setStatus('completed');
+          setPdfUrl(existing.pdfUrl);
+          updateRecord('jobs', jobId, { report_url: existing.pdfUrl, updated_at: new Date().toISOString() });
+          if (!notifiedRef.current) {
+            notifiedRef.current = true;
+            Toast.show({ type: 'success', text1: 'Report Ready', text2: 'Tap View Report to open it.' });
+          }
+          return;
+        }
       } catch {
         // Status check itself failed for some other reason — fall through
         // and queue locally same as the offline path below.

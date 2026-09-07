@@ -101,7 +101,10 @@ export default function DefectDetailScreen() {
   // setting a status/price, or another tech editing this same defect, shows
   // up here without needing to back out and re-open the screen.
   useJobLiveSync(defect?.job_id, useCallback((table) => {
-    if (table === 'defects') loadDefect();
+    // 'jobs' too — loadDefect() also recomputes jobLocked from the job's
+    // current status, so a completion/cancellation elsewhere reflects here
+    // immediately instead of only on next focus.
+    if (table === 'defects' || table === 'jobs') loadDefect();
   }, [loadDefect]));
 
   const handleDelete = () => {

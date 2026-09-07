@@ -21,7 +21,7 @@ import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
-import { InspectionResult, DefectSeverity } from '@/constants/Enums';
+import { InspectionResult, DefectSeverity, JobStatus } from '@/constants/Enums';
 import { useInspectionStore } from '@/store/inspectionStore';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -34,7 +34,7 @@ import { DefectFieldsCard, DefectFieldsValue } from '@/components/defects/Defect
 import DefectCard from '@/components/defects/DefectCard';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
-import { getAssetHistory, AssetHistoryEntry } from '@/lib/database';
+import { getAssetHistory, AssetHistoryEntry, getJobById } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -175,10 +175,27 @@ export default function AssetDetailScreen() {
   // defect that doesn't exist yet; null = everything collapsed to summaries.
   const [editingDefectId, setEditingDefectId] = useState<string | 'new' | null>(null);
 
+  // FIX: this screen had NO awareness at all of the job being Completed/
+  // Cancelled — updateAssetResult/defectsStore already refuse the write in
+  // that case, but nothing here reflected that upfront. A technician who
+  // landed here via back-navigation (or a stale nav stack) after the job
+  // had been completed elsewhere saw a fully interactive-looking screen —
+  // every button, the defect form, notes — and only discovered it was
+  // locked when a save silently failed with a toast. Mirrors the same
+  // locked-banner treatment defects/[defectId].tsx already has.
+  const [jobLocked, setJobLocked] = useState(false);
+
+  const refreshJobLocked = useCallback(() => {
+    if (!jobId) return;
+    const job = getJobById<{ status: string }>(jobId);
+    setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
+  }, [jobId]);
+
   useFocusEffect(
     useCallback(() => {
       if (jobId) loadJobDefects(jobId);
-    }, [jobId, loadJobDefects])
+      refreshJobLocked();
+    }, [jobId, loadJobDefects, refreshJobLocked])
   );
 
   // This screen — not the checklist list — is where a technician actually
@@ -192,9 +209,10 @@ export default function AssetDetailScreen() {
   useJobLiveSync(jobId, useCallback((table) => {
     // job_assets AND inspection_photos both surface on this asset's own
     // fields (result/notes, and the Photos section respectively).
-    if (table === 'defects') loadJobDefects(jobId);
+    if (table === 'jobs') refreshJobLocked();
+    else if (table === 'defects') loadJobDefects(jobId);
     else useInspectionStore.getState().loadAssetsForInspection(jobId);
-  }, [jobId, loadJobDefects]));
+  }, [jobId, loadJobDefects, refreshJobLocked]));
 
   // Fail is selected but not yet saved — set when arriving here straight off
   // a Fail tap (see inspect.tsx's AssetCard) or by tapping Fail below on an
@@ -537,6 +555,16 @@ export default function AssetDetailScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {jobLocked && (
+          <Animated.View entering={noMotion ? undefined : FadeIn.duration(220)}>
+            <View style={[s.lockedBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+              <MaterialCommunityIcons name="lock-outline" size={15} color={C.textTertiary} />
+              <Text style={[s.lockedTxt, { color: C.textTertiary }]}>
+                This job is completed or cancelled — read-only. Tap &quot;Continue Working&quot; on the job screen to make changes.
+              </Text>
+            </View>
+          </Animated.View>
+        )}
         {(asset.asset_ref || asset.serial_number || history[0]?.date) && (
           <Text style={[s.refLine, { color: C.textTertiary }]}>
             {asset.asset_ref ? `Ref: ${asset.asset_ref}` : asset.serial_number ? `S/N: ${asset.serial_number}` : ''}
@@ -546,30 +574,30 @@ export default function AssetDetailScreen() {
 
         {/* ── Result — one segmented track, not three separate boxes ──── */}
         <Text style={[s.sectionLabel, { color: C.textTertiary, marginTop: 0 }]}>Result</Text>
-        <View style={[s.resultTrack, { backgroundColor: C.backgroundTertiary, opacity: isSaving ? 0.5 : 1 }]}>
+        <View style={[s.resultTrack, { backgroundColor: C.backgroundTertiary, opacity: (isSaving || jobLocked) ? 0.5 : 1 }]}>
           <TouchableOpacity
             style={[s.resultSeg, isPassed && { backgroundColor: C.success }]}
-            onPress={() => !isSaving && handleResult(InspectionResult.Pass)}
+            onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.Pass)}
             activeOpacity={0.8}
-            disabled={isSaving}
+            disabled={isSaving || jobLocked}
           >
             <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.success} />
             <Text style={[s.resultSegTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.resultSeg, isFailed && { backgroundColor: C.error }]}
-            onPress={() => !isSaving && handleResult(InspectionResult.Fail)}
+            onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.Fail)}
             activeOpacity={0.8}
-            disabled={isSaving}
+            disabled={isSaving || jobLocked}
           >
             <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.error} />
             <Text style={[s.resultSegTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.resultSeg, isNT && { backgroundColor: C.textSecondary }]}
-            onPress={() => !isSaving && handleResult(InspectionResult.NotTested)}
+            onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.NotTested)}
             activeOpacity={0.8}
-            disabled={isSaving}
+            disabled={isSaving || jobLocked}
           >
             <MaterialCommunityIcons name="minus-circle-outline" size={16} color={isNT ? C.textOnPrimary : C.textSecondary} />
             <Text style={[s.resultSegTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
@@ -584,16 +612,18 @@ export default function AssetDetailScreen() {
                 <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={[s.photoAddTile, { backgroundColor: C.background, borderColor: C.border }]}
-              onPress={() => !isAddingPhoto && setShowPhotoChooser(true)}
-              activeOpacity={0.8}
-              disabled={isAddingPhoto}
-            >
-              {isAddingPhoto
-                ? <ActivityIndicator size="small" color={C.textSecondary} />
-                : <MaterialCommunityIcons name="camera-plus-outline" size={20} color={C.textSecondary} />}
-            </TouchableOpacity>
+            {!jobLocked && (
+              <TouchableOpacity
+                style={[s.photoAddTile, { backgroundColor: C.background, borderColor: C.border }]}
+                onPress={() => !isAddingPhoto && setShowPhotoChooser(true)}
+                activeOpacity={0.8}
+                disabled={isAddingPhoto}
+              >
+                {isAddingPhoto
+                  ? <ActivityIndicator size="small" color={C.textSecondary} />
+                  : <MaterialCommunityIcons name="camera-plus-outline" size={20} color={C.textSecondary} />}
+              </TouchableOpacity>
+            )}
           </View>
         </SectionCard>
 
@@ -616,10 +646,10 @@ export default function AssetDetailScreen() {
                 onSave={handleSaveDefect}
                 onReplace={handleReplaceNow}
                 onDraftChange={setPrimaryDraft}
-                saving={isSaving}
+                saving={isSaving || jobLocked}
                 saveLabel="Save Defect"
               />
-            ) : editingDefectId === primaryDefect.id ? (
+            ) : editingDefectId === primaryDefect.id && !jobLocked ? (
               <DefectFieldsCard
                 initial={primaryDefect}
                 onSave={handleSaveDefect}
@@ -634,12 +664,12 @@ export default function AssetDetailScreen() {
                 defect={primaryDefect}
                 style={s.defectCardFlush}
                 onPress={() => router.push(`/jobs/${jobId}/defects/${primaryDefect.id}` as never)}
-                onEdit={() => setEditingDefectId(primaryDefect.id)}
+                onEdit={jobLocked ? undefined : () => setEditingDefectId(primaryDefect.id)}
               />
             )}
 
             {additionalDefects.map((d) => (
-              editingDefectId === d.id ? (
+              editingDefectId === d.id && !jobLocked ? (
                 <DefectFieldsCard
                   key={d.id}
                   initial={d}
@@ -655,19 +685,19 @@ export default function AssetDetailScreen() {
                   defect={d}
                   style={s.defectCardFlush}
                   onPress={() => router.push(`/jobs/${jobId}/defects/${d.id}` as never)}
-                  onEdit={() => setEditingDefectId(d.id)}
+                  onEdit={jobLocked ? undefined : () => setEditingDefectId(d.id)}
                 />
               )
             ))}
 
-            {editingDefectId === 'new' ? (
+            {editingDefectId === 'new' && !jobLocked ? (
               <DefectFieldsCard
                 onSave={(v) => handleSaveAdditionalDefect(null, v)}
                 onCancel={() => { setAdditionalDraft(null); setEditingDefectId(null); }}
                 onDraftChange={setAdditionalDraft}
                 saveLabel="Add Defect"
               />
-            ) : primaryDefect !== null && (
+            ) : primaryDefect !== null && !jobLocked && (
               <TouchableOpacity
                 style={[s.addDefectBtn, { borderColor: C.borderStrong }]}
                 onPress={() => setEditingDefectId('new')}
@@ -694,10 +724,11 @@ export default function AssetDetailScreen() {
               placeholderTextColor={C.textTertiary}
               value={note}
               onChangeText={setNote}
-              onBlur={() => { if (result !== null && note !== (asset.technician_notes || '')) handleSaveNote(); }}
+              onBlur={() => { if (!jobLocked && result !== null && note !== (asset.technician_notes || '')) handleSaveNote(); }}
               multiline
               textAlignVertical="top"
-              style={[s.input, s.textArea, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+              editable={!jobLocked}
+              style={[s.input, s.textArea, { backgroundColor: C.background, borderColor: C.border, color: C.text, opacity: jobLocked ? 0.6 : 1 }]}
             />
           </SectionCard>
         )}
@@ -771,7 +802,7 @@ export default function AssetDetailScreen() {
       <PhotoViewer
         uri={viewingPhoto}
         onClose={() => setViewingPhoto(null)}
-        onDelete={() => viewingPhoto && handleRemovePhoto(viewingPhoto)}
+        onDelete={jobLocked ? undefined : () => viewingPhoto && handleRemovePhoto(viewingPhoto)}
       />
       <PhotoViewer
         uri={viewingHistoryPhoto}
@@ -787,6 +818,8 @@ const s = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
 
   refLine: { fontSize: 12, fontWeight: '600', marginBottom: 18 },
+  lockedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 16 },
+  lockedTxt: { fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 17 },
 
   sectionLabel: {
     fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',

@@ -258,8 +258,6 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       //                       photo_upload task so it never reaches Supabase.
       //   • Kept photos     → leave as-is (preserve upload state).
       //   • New photos      → insert into SQLite and queue for upload.
-      let savedPhotoUris: string[] = []; // newly-inserted URIs (for defect back-fill)
-
       if (photos !== undefined) {
         const existingRows = queryRecords<{ id: string; photo_url: string }>(
           'inspection_photos',
@@ -296,7 +294,6 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
         // ── Insertions ────────────────────────────────────────────────────────
         const newPhotoUris = photos.filter(uri => !existingUrlSet.has(uri));
-        savedPhotoUris = newPhotoUris;
 
         for (const uri of newPhotoUris) {
           const photoId = generateUUID();
@@ -372,27 +369,16 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           const defectId = generateUUID();
           const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
 
-          // Photos can reach this asset two ways: passed directly via this
-          // call's `photos` arg (savedPhotoUris — the old Fail-modal flow), or
-          // added earlier through addPhotoToAsset() while no defect existed
-          // yet (the current flow: the photo icon on each asset card works
-          // independently of Pass/Fail/N-T, so a technician commonly
-          // photographs the fault before tapping Fail). addPhotoToAsset can
-          // only link a photo to a defect that already exists, so any
-          // inspection_photos row for this asset still sitting with
-          // defect_id NULL belongs to the defect being created right now —
-          // without this, those photos would show on the asset card but
-          // never appear on the Defects list/detail screen or in the synced
-          // defects.photos column, since both read defect.photos exclusively.
-          const unlinkedPhotos = queryRecords<{ id: string; photo_url: string; defect_id: string | null }>(
-            'inspection_photos',
-            { job_id: currentJobId, asset_id: assetId },
-          ).filter(p => !p.defect_id);
-          const allDefectPhotoUris = [...new Set([...savedPhotoUris, ...unlinkedPhotos.map(p => p.photo_url)])];
-          const resolvedPhotos = allDefectPhotoUris.length > 0
-            ? JSON.stringify(allDefectPhotoUris)
-            : '[]';
-
+          // FIX: photos are deliberately NOT linked to a specific defect —
+          // they live purely on the asset (inspection_photos.asset_id),
+          // shown once in the asset's own Photos section and once in the
+          // PDF's asset-level photo row. This used to back-fill defect_id
+          // onto every unlinked photo for this asset and copy them into
+          // defects.photos, which made the SAME photo also show up under
+          // the defect card (in-app) and, in the report, under whichever
+          // rendering path checked defect_id first — a form of the same
+          // "photo association" the report's own asset/defect split was
+          // built to avoid duplicating.
           const defectPayload: Record<string, string | number | null> = {
             id: defectId,
             job_id: currentJobId,
@@ -402,7 +388,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             description: defectReason,
             severity: resolvedSeverity,
             status: DefectStatus.Open,
-            photos: resolvedPhotos,
+            photos: '[]',
             created_at: new Date().toISOString(),
             defect_code: defectCode ?? null,
             quote_price: quotePrice ?? null,
@@ -419,24 +405,6 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           logFieldAudit('defects', defectId, currentJobId, companyId, userId || null, [
             { field: '_created', old: null, new: 'defect created' },
           ]);
-
-          // Back-fill defect_id on every inspection_photos row that belongs to
-          // this new defect (both just-inserted-this-call and previously
-          // orphaned ones) — queued as its own Update so the link reaches
-          // Supabase too, not just local SQLite (the row's own Insert may
-          // already have gone out with defect_id: null before this runs).
-          if (allDefectPhotoUris.length > 0) {
-            const recentPhotos = queryRecords<{ id: string; photo_url: string }>(
-              'inspection_photos',
-              { job_id: currentJobId, asset_id: assetId },
-            );
-            for (const p of recentPhotos) {
-              if (allDefectPhotoUris.includes(p.photo_url)) {
-                updateRecord('inspection_photos', p.id, { defect_id: defectId });
-                addToSyncQueue('inspection_photos', p.id, SyncOperation.Update, { defect_id: defectId });
-              }
-            }
-          }
 
           // Refresh defects store so the badge updates immediately
           useDefectsStore.getState().loadDefects(currentJobId);
@@ -459,28 +427,9 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
             updated_at: new Date().toISOString(),
           };
 
-          // Replace defect.photos with the COMPLETE current desired set.
-          // Using the full desired photos array (not just new ones) ensures that:
-          //   • Photos deleted by the user are removed from the defect record.
-          //   • New photos are added to the defect record.
-          //   • Previously saved photos that the user kept are preserved.
-          if (photos !== undefined) {
-            updates.photos = JSON.stringify(photos);
-          }
-
-          // Back-fill defect_id on newly inserted inspection_photos rows
-          if (savedPhotoUris.length > 0) {
-            const recentPhotos = queryRecords<{ id: string; photo_url: string }>(
-              'inspection_photos',
-              { job_id: currentJobId, asset_id: assetId },
-            );
-            for (const p of recentPhotos) {
-              if (savedPhotoUris.includes(p.photo_url)) {
-                updateRecord('inspection_photos', p.id, { defect_id: existingId });
-                addToSyncQueue('inspection_photos', p.id, SyncOperation.Update, { defect_id: existingId });
-              }
-            }
-          }
+          // FIX: photos are deliberately NOT copied onto defect.photos or
+          // linked via defect_id — see the matching comment in the create
+          // branch above. They stay purely asset-scoped.
 
           updateRecord('defects', existingId, updates);
           addToSyncQueue('defects', existingId, SyncOperation.Update, updates);
@@ -552,41 +501,21 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       return;
     }
 
-    // If this asset has EXACTLY ONE defect, link the photo to it too so it
-    // shows up with the defect (in-app and in the report), not just on the
-    // asset's own row. FIX: with multi-defect support, querying `[0]` with
-    // no ordering picked an arbitrary defect once more than one existed —
-    // a photo meant generally for the asset (or taken with a different
-    // defect in mind) could silently land on the wrong one. Safer to leave
-    // it asset-only (still visible on the asset's own photo grid) than to
-    // guess wrong when it's genuinely ambiguous which defect it belongs to.
-    // There's currently no UI to deliberately attach a photo to a specific
-    // non-primary defect — that's a real gap, but a bigger feature addition
-    // than this fix, not a one-line change.
-    const assetDefects = queryRecords<{ id: string; photos: string | null }>(
-      'defects', { job_id: currentJobId, asset_id: assetId },
-    );
-    const existingDefect = assetDefects.length === 1 ? assetDefects[0] : undefined;
-
+    // FIX: photos taken from the asset's own Photos section are
+    // deliberately never linked to a defect (defect_id stays null) — they
+    // belong to the asset generally, shown once in the asset's own Photos
+    // section and once in the PDF's asset-level photo row, not duplicated
+    // or reassigned under whichever defect happens to exist.
     usePhotosStore.getState().addPhoto({
       job_id: currentJobId,
       company_id: useAuthStore.getState().user?.company_id ?? null,
       asset_id: assetId,
-      defect_id: existingDefect?.id ?? null,
+      defect_id: null,
       photo_url: photoUri,
       local_uri: (photoUri.startsWith('file://') || photoUri.startsWith('content://')) ? photoUri : null,
       caption: null,
       uploaded_by: userId,
     });
-
-    if (existingDefect) {
-      let defectPhotos: string[] = [];
-      try { defectPhotos = existingDefect.photos ? JSON.parse(existingDefect.photos) : []; }
-      catch { defectPhotos = []; }
-      const updates = { photos: JSON.stringify([...defectPhotos, photoUri]) };
-      updateRecord('defects', existingDefect.id, updates);
-      addToSyncQueue('defects', existingDefect.id, SyncOperation.Update, updates);
-    }
 
     const newAssets = assets.map(a =>
       a.id === assetId ? { ...a, photos: [...a.photos, photoUri] } : a

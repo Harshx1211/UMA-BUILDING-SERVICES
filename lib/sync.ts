@@ -461,7 +461,7 @@ let _liveOnChange: ((table: JobLiveChangeTable) => void) | null = null;
 // on/off flag.
 let _liveRefCount = 0;
 
-export type JobLiveChangeTable = 'job_assets' | 'defects' | 'inspection_photos';
+export type JobLiveChangeTable = 'job_assets' | 'defects' | 'inspection_photos' | 'jobs';
 
 /**
  * Opens (or re-opens, if jobId differs) a live channel for this job, and
@@ -544,6 +544,32 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     _liveOnChange?.('inspection_photos');
   };
 
+  // FIX: the live channel never listened to the `jobs` table itself — only
+  // job_assets/defects/inspection_photos. So a plain status change (e.g.
+  // "Start Job", Scheduled -> In Progress) never reached a teammate's device
+  // that already had this job open; it only APPEARED to eventually catch up
+  // because completing a job is normally preceded by a flurry of job_assets/
+  // defects changes that already trigger a refresh, or because the next
+  // periodic 60s sync cycle happened to land. Same status-priority guard
+  // _pullJobs already uses for the periodic pull, applied here too so a
+  // stale/out-of-order realtime echo can't regress a locally-more-advanced
+  // status.
+  const applyJob = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    if (rowId !== jobId) return;
+    const localStatus = getJobStatus(rowId);
+    if (localStatus) {
+      const serverPriority = STATUS_PRIORITY[row.status as string] ?? 1;
+      const localPriority  = STATUS_PRIORITY[localStatus.status]   ?? 1;
+      if (localPriority > serverPriority) {
+        const localUpdateMs = new Date(localStatus.updated_at).getTime();
+        if (Date.now() - localUpdateMs <= STALE_THRESHOLD_MS) return; // local wins
+      }
+    }
+    upsertRecord('jobs', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('jobs');
+  };
+
   _liveChannel = supabase
     .channel(`job-live:${jobId}`)
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
@@ -552,6 +578,7 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects',    filter: `job_id=eq.${jobId}` }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inspection_photos', filter: `job_id=eq.${jobId}` }, (p) => applyPhoto(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` }, (p) => applyJob(p.new))
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] Realtime subscribed for job ${jobId}`);
@@ -643,6 +670,26 @@ export function syncNow(userId?: string): void {
 
 /** Pulls all jobs assigned to the user and the related properties/assets */
 async function _pullJobs(userId: string, _lastSynced: string | null): Promise<void> {
+  // FIX: this whole pull used to be one long chain of 20+ sequentially
+  // awaited network round trips, and nothing in the UI could show any data
+  // until the ENTIRE chain finished (onSyncComplete only fires once, at the
+  // very end of runSync). On a real mobile connection that's what made a
+  // first-ever sync (new install, or a fresh login with a real workload)
+  // feel like it hung before any job appeared. Restructured to run every
+  // genuinely-independent fetch concurrently — the local WRITE order that
+  // actually matters for foreign-key safety (jobs before job_assets/defects,
+  // properties before assets) is unchanged; only fetches with no real
+  // dependency on each other now overlap. _pullRelated's bulk upserts are
+  // safe to run concurrently with each other: each one disables/re-enables
+  // FK checks in a single synchronous block with no `await` inside it, so
+  // JS's single-threaded execution can never interleave two of them
+  // mid-write — only their network fetches actually overlap.
+
+  // Catalogue/reference tables (inventory, asset types, defect codes, tags)
+  // have zero dependency on this user's own jobs — start them now and let
+  // them run for this whole function's duration, only awaited at the end.
+  const cataloguePromise = _pullCatalogueTables();
+
   // "Assigned to this technician" now means job_technicians membership (a
   // flat crew list, no primary) OR the legacy assigned_to column — the
   // latter kept as a fallback for any job whose job_technicians rows
@@ -663,24 +710,29 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   const orFilter = assignedJobIds.length > 0
     ? `assigned_to.eq.${userId},id.in.(${assignedJobIds.join(',')})`
     : `assigned_to.eq.${userId}`;
-  const { data: jobs, error: jobsError } = await supabase
-    .from('jobs')
-    .select('*')
-    .or(orFilter)
-    .neq('status', 'cancelled');
+
+  // jobs and techUser both depend only on userId, not on each other — fetch
+  // concurrently instead of sequentially.
+  const [jobsResult, techUserResult] = await Promise.all([
+    supabase.from('jobs').select('*').or(orFilter).neq('status', 'cancelled'),
+    supabase.from('users').select('*').eq('id', userId).maybeSingle(),
+  ]);
+  const { data: jobs, error: jobsError } = jobsResult;
 
   if (jobsError) {
     console.error('[UMA BUILDING SERVICES Sync] PULL jobs error:', jobsError.message);
+    await cataloguePromise;
     return;
   }
 
   if (!jobs || jobs.length === 0) {
     if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] No jobs to pull');
+    await cataloguePromise;
     return;
   }
 
-  // Preemptively fetch and upsert the current user to satisfy job's assigned_to FK
-  const { data: techUser } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
+  // Preemptively upsert the current user to satisfy job's assigned_to FK
+  const techUser = techUserResult.data;
   if (techUser) {
     if (techUser.is_active === false) {
       console.warn('[UMA BUILDING SERVICES Sync] User deactivated. Forcing logout.');
@@ -688,6 +740,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       // offline work first (and aborts the logout with a warning if it can't),
       // rather than risking a deactivated tech's queued inspection data.
       import('@/store/authStore').then((m) => m.useAuthStore.getState().forceFinalSyncAndSignOut());
+      await cataloguePromise;
       return;
     }
     if (techUser.company_id) {
@@ -696,6 +749,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
         if (company.subscription_status !== 'active') {
           console.warn('[UMA BUILDING SERVICES Sync] Company suspended. Forcing logout.');
           import('@/store/authStore').then((m) => m.useAuthStore.getState().forceFinalSyncAndSignOut());
+          await cataloguePromise;
           return;
         }
         // Save company locally so PDFs have proper headers (name, ABN, etc.)
@@ -711,11 +765,17 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
 
   // Pull properties for these jobs
   if (propertyIds.length > 0) {
-    const { data: properties, error: propError } = await supabase
-      .from('properties')
-      .select('*')
-      .in('id', propertyIds);
+    // properties and assets both depend only on propertyIds, not on each
+    // other's data — fetch concurrently, but still WRITE in the same
+    // dependency-safe order the old sequential code used (assets.property_id
+    // references properties.id via plain upsertRecord, which isn't
+    // FK-disabled the way _pullRelated's bulk upsert is).
+    const [propsResult, assetsResult] = await Promise.all([
+      supabase.from('properties').select('*').in('id', propertyIds),
+      supabase.from('assets').select('*').in('property_id', propertyIds).eq('status', 'active'),
+    ]);
 
+    const { data: properties, error: propError } = propsResult;
     if (propError) {
       console.error('[UMA BUILDING SERVICES Sync] PULL properties error:', propError.message);
     } else if (properties) {
@@ -724,13 +784,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       }
       if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${properties.length} property/ies`);
 
-      // Pull assets for these properties
-      const { data: assets, error: assetError } = await supabase
-        .from('assets')
-        .select('*')
-        .in('property_id', propertyIds)
-        .eq('status', 'active');
-
+      const { data: assets, error: assetError } = assetsResult;
       if (assetError) {
         console.error('[UMA BUILDING SERVICES Sync] PULL assets error:', assetError.message);
       } else if (assets) {
@@ -743,8 +797,8 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       // Pull scanned documents for these properties — property-scoped like
       // assets above (not job-scoped like inspection_photos), so a document
       // captured during one job still shows up from every other job at the
-      // same site.
-      await _pullRelated('site_documents', 'property_id', propertyIds);
+      // same site. Safe to run without awaiting here (FK-disabled bulk
+      // upsert) — collected below alongside the other independent pulls.
     }
   }
 
@@ -784,58 +838,107 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
     console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${upsertedCount} job(s), preserved local status on ${preservedCount}`);
   }
 
-  // Pull job_assets, defects, and inspection_photos for these jobs
+  // Pull job_assets, defects, inspection_photos, and everything else these
+  // jobs need. FIX: all of these are siblings — none of them reference each
+  // other, only the already-upserted jobs/assets above — so they run
+  // concurrently now instead of as 7+ sequential round trips. The two multi-
+  // step chains (crew user_ids -> crew users, and quotes -> quote_items) each
+  // stay internally sequential (real data dependency) but run as their own
+  // branch alongside the independent ones.
+  const relatedPulls: Promise<unknown>[] = [];
   if (jobIds.length > 0) {
     // Full crew list per job (everyone assigned, not just this user's own
     // membership) — needed locally so screens can show/name the whole crew.
-    await _pullRelated('job_technicians', 'job_id', jobIds);
+    relatedPulls.push(_pullRelated('job_technicians', 'job_id', jobIds));
 
     // The crew may include technicians other than this device's own user —
     // fetch+upsert their user rows too so names resolve locally instead of
     // showing blank. (This device's own user row is already upserted above.)
-    const { data: crewRows, error: crewError } = await supabase
-      .from('job_technicians')
-      .select('user_id')
-      .in('job_id', jobIds);
-    if (crewError) {
-      console.error('[UMA BUILDING SERVICES Sync] PULL crew user_ids error:', crewError.message);
-    } else if (crewRows && crewRows.length > 0) {
+    relatedPulls.push((async () => {
+      const { data: crewRows, error: crewError } = await supabase
+        .from('job_technicians')
+        .select('user_id')
+        .in('job_id', jobIds);
+      if (crewError) {
+        console.error('[UMA BUILDING SERVICES Sync] PULL crew user_ids error:', crewError.message);
+        return;
+      }
+      if (!crewRows || crewRows.length === 0) return;
       const crewUserIds = [...new Set(crewRows.map((r) => r.user_id as string))].filter((id) => id !== userId);
-      if (crewUserIds.length > 0) {
-        const { data: crewUsers, error: crewUsersError } = await supabase
-          .from('users')
-          .select('*')
-          .in('id', crewUserIds);
-        if (crewUsersError) {
-          console.error('[UMA BUILDING SERVICES Sync] PULL crew users error:', crewUsersError.message);
-        } else if (crewUsers) {
-          for (const u of crewUsers) {
-            upsertRecord('users', u as Record<string, string | number | boolean | null>);
-          }
+      if (crewUserIds.length === 0) return;
+      const { data: crewUsers, error: crewUsersError } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', crewUserIds);
+      if (crewUsersError) {
+        console.error('[UMA BUILDING SERVICES Sync] PULL crew users error:', crewUsersError.message);
+      } else if (crewUsers) {
+        for (const u of crewUsers) {
+          upsertRecord('users', u as Record<string, string | number | boolean | null>);
         }
       }
-    }
+    })());
 
-    await _pullRelated('job_assets', 'job_id', jobIds);
-    await _pullRelated('defects', 'job_id', jobIds);
-    await _pullRelated('field_audit_log', 'job_id', jobIds);
+    relatedPulls.push(_pullRelated('job_assets', 'job_id', jobIds));
+    relatedPulls.push(_pullRelated('defects', 'job_id', jobIds));
+    relatedPulls.push(_pullRelated('field_audit_log', 'job_id', jobIds));
     // H6: _pullRelated already handles the deleted-photo tombstone internally
     // (it calls getDeletedPhotoIds() itself when table === 'inspection_photos')
-    await _pullRelated('inspection_photos', 'job_id', jobIds);
-    await _pullRelated('signatures', 'job_id', jobIds);
-    await _pullRelated('time_logs', 'job_id', jobIds);
-    await _pullRelated('quotes', 'job_id', jobIds);
+    relatedPulls.push(_pullRelated('inspection_photos', 'job_id', jobIds));
+    relatedPulls.push(_pullRelated('signatures', 'job_id', jobIds));
+    relatedPulls.push(_pullRelated('time_logs', 'job_id', jobIds));
 
-    // quote_items — need quote IDs for this job batch first
-    const { data: quoteRows } = await supabase.from('quotes').select('id').in('job_id', jobIds);
-    if (quoteRows && quoteRows.length > 0) {
-      const parentQuoteIds = quoteRows.map((q) => q.id as string);
-      await _pullRelated('quote_items', 'quote_id', parentQuoteIds);
-    }
+    // quote_items needs quote IDs for this job batch first — stays its own
+    // sequential chain, run alongside everything else in this group.
+    relatedPulls.push((async () => {
+      await _pullRelated('quotes', 'job_id', jobIds);
+      const { data: quoteRows } = await supabase.from('quotes').select('id').in('job_id', jobIds);
+      if (quoteRows && quoteRows.length > 0) {
+        const parentQuoteIds = quoteRows.map((q) => q.id as string);
+        await _pullRelated('quote_items', 'quote_id', parentQuoteIds);
+      }
+    })());
   }
+  if (propertyIds.length > 0) {
+    relatedPulls.push(_pullRelated('site_documents', 'property_id', propertyIds));
+  }
+  await Promise.all(relatedPulls);
 
-  // Pull global inventory items
-  const { data: inventoryItems, error: invError } = await supabase.from('inventory_items').select('*');
+  await cataloguePromise;
+}
+
+/**
+ * Pulls the small, company-wide catalogue/reference tables that have no
+ * dependency on this user's own jobs at all — split out so _pullJobs can
+ * kick this off at the very start and run it concurrently with everything
+ * else instead of tacking 5 more sequential round trips onto the end.
+ */
+async function _pullCatalogueTables(): Promise<void> {
+  // None of these five depend on each other — fetch all concurrently.
+  const [
+    { data: inventoryItems, error: invError },
+    { data: assetTypeDefs },
+    { data: defectCodes },
+    { data: assetTags },
+    { data: assetTagAssignments },
+  ] = await Promise.all([
+    supabase.from('inventory_items').select('*'),
+    supabase
+      .from('asset_type_definitions')
+      .select('id,company_id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
+      .eq('is_active', true),
+    supabase
+      .from('defect_codes')
+      .select('id,company_id,code,description,quote_price,category,is_active,sort_order,created_at')
+      .eq('is_active', true),
+    // Asset tag vocabulary + assignments — small/company-wide like the
+    // catalogue tables above, so pulled unconditionally rather than scoped
+    // to this batch's asset ids (keeps this consistent/simple; a company's
+    // total tag assignment count is not expected to be large).
+    supabase.from('asset_tags').select('*'),
+    supabase.from('asset_tag_assignments').select('*'),
+  ]);
+
   if (invError) {
     console.error('[UMA BUILDING SERVICES Sync] PULL inventory_items error:', invError.message);
   } else if (inventoryItems) {
@@ -844,11 +947,6 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
     }
   }
 
-  // Pull catalogue reference tables (asset types + defect codes)
-  const { data: assetTypeDefs } = await supabase
-    .from('asset_type_definitions')
-    .select('id,company_id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
-    .eq('is_active', true);
   if (assetTypeDefs) {
     for (const row of assetTypeDefs) {
       // PostgreSQL TEXT[] arrives as JS array; SQLite needs a JSON string
@@ -861,10 +959,6 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assetTypeDefs.length} asset_type_definitions`);
   }
 
-  const { data: defectCodes } = await supabase
-    .from('defect_codes')
-    .select('id,company_id,code,description,quote_price,category,is_active,sort_order,created_at')
-    .eq('is_active', true);
   if (defectCodes) {
     for (const row of defectCodes) {
       upsertRecord('defect_codes', {
@@ -875,11 +969,6 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${defectCodes.length} defect_codes`);
   }
 
-  // Asset tag vocabulary + assignments — small/company-wide like the
-  // catalogue tables above, so pulled unconditionally rather than scoped
-  // to this batch's asset ids (keeps this consistent/simple; a company's
-  // total tag assignment count is not expected to be large).
-  const { data: assetTags } = await supabase.from('asset_tags').select('*');
   if (assetTags) {
     for (const row of assetTags) {
       upsertRecord('asset_tags', row as Record<string, string | number | boolean | null>);
@@ -888,7 +977,6 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assetTags.length} asset_tags`);
   }
 
-  const { data: assetTagAssignments } = await supabase.from('asset_tag_assignments').select('*');
   if (assetTagAssignments) {
     for (const row of assetTagAssignments) {
       upsertRecord('asset_tag_assignments', row as Record<string, string | number | boolean | null>);
