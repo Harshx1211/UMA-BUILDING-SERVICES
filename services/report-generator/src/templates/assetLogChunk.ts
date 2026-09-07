@@ -21,6 +21,15 @@ export function renderAssetLogChunk(
   signedPhotoUrls: Map<string, string>,
 ): string {
   let lastCategory: string | null = null;
+  // FIX: tracks whether the row about to render is the first one under a
+  // freshly-opened <table> (right below the Asset/Location/Status header) —
+  // every OTHER asset row in that same table got literally zero separation
+  // from the one before it (padding:0, border-top:none, unconditionally),
+  // so with more than one asset in a category (e.g. three near-identical
+  // "BGA, MCP or Manual Call Point" entries back-to-back) it was genuinely
+  // hard to tell where one asset's photos/notes/defect cards ended and the
+  // next asset's row began.
+  let isFirstRowOfTable = true;
   const parts: string[] = [];
 
   for (const row of chunk.rows) {
@@ -34,6 +43,7 @@ export function renderAssetLogChunk(
       parts.push(`<div class="section-bar" style="margin-top:14px">${esc(row.categoryLabel)}${suffix}</div>`);
       parts.push(`<table class="card"><thead><tr><th style="width:55%">Asset</th><th style="width:30%">Location</th><th style="width:15%;text-align:right">Status</th></tr></thead><tbody>`);
       lastCategory = row.categoryLabel;
+      isFirstRowOfTable = true;
     }
 
     const { asset } = row;
@@ -59,17 +69,26 @@ export function renderAssetLogChunk(
     // the whole record as one atomic unit — explicit widths on both the
     // outer <thead> and this inner table keep the columns aligned since
     // they're otherwise two independently auto-sized tables.
+    // First asset under a header needs no extra separation (the header
+    // itself already does that job); every asset after it gets real
+    // breathing room plus a clearly visible divider, not just whatever
+    // hairline its own first inner row happened to inherit.
+    const wrapperStyle = isFirstRowOfTable
+      ? 'padding:0;border-top:none'
+      : `padding-top:16px;border-top:2px solid ${COLORS.BORDER}`;
+    isFirstRowOfTable = false;
+
     parts.push(`
       <tr>
-        <td colspan="3" style="padding:0;border-top:none">
+        <td colspan="3" style="${wrapperStyle}">
           <table style="width:100%"><tbody>
             <tr>
-              <td style="width:55%">
+              <td style="width:55%;border-top:none">
                 <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
                 ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
               </td>
-              <td style="width:30%">${esc(asset.location_on_site) || '—'}</td>
-              <td style="width:15%;text-align:right">${resultPill(asset.result)}</td>
+              <td style="width:30%;border-top:none">${esc(asset.location_on_site) || '—'}</td>
+              <td style="width:15%;text-align:right;border-top:none">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
             ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes)}</td></tr>` : ''}
