@@ -255,14 +255,21 @@ export function DefectFieldsCard({
           </TouchableOpacity>
         )}
         {onReplace && (
+          // FIX: was a wide icon+text pill, which — on the one screen where
+          // it actually appears (editing an already-saved primary defect,
+          // alongside Cancel AND Save Changes) — squeezed three buttons into
+          // one row, crowding the two flex-1 primary actions on either side
+          // of it. Matches the Delete icon button's compact treatment
+          // instead, so Cancel/Save Changes keep comfortable room.
           <TouchableOpacity
-            style={[s.replaceBtn, { backgroundColor: C.warning + '18', borderColor: C.warning }]}
+            style={[s.iconBtn, { backgroundColor: C.warning + '18', borderColor: C.warning }]}
             onPress={() => { if (validate()) onReplace(currentValue()); }}
             activeOpacity={0.8}
             disabled={saving}
+            accessibilityLabel="Replace asset"
+            hitSlop={8}
           >
-            <MaterialCommunityIcons name="tools" size={16} color={C.warning} />
-            <Text style={[s.replaceTxt, { color: C.warning }]}>Replace</Text>
+            <MaterialCommunityIcons name="tools" size={18} color={C.warning} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -312,8 +319,6 @@ const s = StyleSheet.create({
   iconBtn: { width: 46, height: 46, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cancelBtn: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cancelTxt: { fontSize: 13.5, fontWeight: '700' },
-  replaceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16 },
-  replaceTxt: { fontSize: 13.5, fontWeight: '700' },
   saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14 },
   saveTxt: { fontSize: 14, fontWeight: '700' },
 });
