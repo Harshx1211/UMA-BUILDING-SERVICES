@@ -1,5 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid, Modal, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Text } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
@@ -72,6 +73,16 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
   const [showReview, setShowReview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingPage, setAddingPage] = useState(false);
+  // FIX: the initial scan (open()) had no loading state at all — the native
+  // scanner UI covers the screen during capture, but once it dismisses,
+  // compressScannedPage() ran across every page (can take a real moment on
+  // a many-page document) before the review screen appeared, with nothing
+  // on screen in between. Felt like the tap did nothing / the app had
+  // frozen. handleAddPage already had this covered via `addingPage`
+  // (shown as "Scanning…" in the review screen's own footer) — this is the
+  // same idea for the screen that exists *before* the review screen is even
+  // mounted, so it needs its own visible overlay instead.
+  const [initialScanning, setInitialScanning] = useState(false);
 
   const defaultTitle = () => `Document – ${localDateString()}`;
 
@@ -107,6 +118,12 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
 
   useImperativeHandle(ref, () => ({
     open: async () => {
+      // FIX: guards against a double-tap on the FAB firing two concurrent
+      // scanDocument() sessions before the first one's review screen ever
+      // appears (no earlier guard existed here, unlike handleAddPage's
+      // addingPage||saving check below).
+      if (initialScanning || showReview) return;
+      setInitialScanning(true);
       try {
         const scannedImages = await runScan();
         if (scannedImages.length === 0) return;
@@ -118,6 +135,8 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
       } catch (e) {
         console.error('[DocumentScanSheet] scan error:', e);
         Toast.show({ type: 'error', text1: 'Scan failed', text2: 'Please try again.' });
+      } finally {
+        setInitialScanning(false);
       }
     },
   }));
@@ -215,20 +234,33 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
   };
 
   return (
-    <ScanReviewModal
-      visible={showReview}
-      pages={pendingPages}
-      title={title}
-      onTitleChange={setTitle}
-      onReorder={setPendingPages}
-      onDeletePage={handleDeletePage}
-      onAddPage={handleAddPage}
-      onCancel={handleCancel}
-      onSave={handleSave}
-      saving={saving}
-      addingPage={addingPage}
-    />
+    <>
+      <ScanReviewModal
+        visible={showReview}
+        pages={pendingPages}
+        title={title}
+        onTitleChange={setTitle}
+        onReorder={setPendingPages}
+        onDeletePage={handleDeletePage}
+        onAddPage={handleAddPage}
+        onCancel={handleCancel}
+        onSave={handleSave}
+        saving={saving}
+        addingPage={addingPage}
+      />
+      <Modal visible={initialScanning} transparent animationType="fade">
+        <View style={overlayStyles.wrap}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={overlayStyles.text}>Processing scan…</Text>
+        </View>
+      </Modal>
+    </>
   );
+});
+
+const overlayStyles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', gap: 14 },
+  text: { color: '#fff', fontSize: 14.5, fontWeight: '600' },
 });
 
 DocumentScanSheet.displayName = 'DocumentScanSheet';
