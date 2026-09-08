@@ -602,8 +602,12 @@ export default function AssetInspectionScreen() {
                   deleteRecord('inspection_photos', p.id);
                   recordDeletedPhoto(p.id);
                   if (p.photo_url.startsWith('https://')) {
+                    // FIX: job_id included so lib/sync.ts's report-generation
+                    // blocker check can see this pending Delete via its
+                    // payload substring fallback (the local row is always
+                    // gone by the time that check runs).
                     addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
-                      id: p.id, photo_url: p.photo_url,
+                      id: p.id, photo_url: p.photo_url, job_id: jobId,
                     });
                   } else {
                     cancelPendingPhotoUpload(p.id);
@@ -624,7 +628,7 @@ export default function AssetInspectionScreen() {
                 );
                 for (const d of assetDefects) {
                   deleteRecord('defects', d.id);
-                  addToSyncQueue('defects', d.id, SyncOperation.Delete, { id: d.id });
+                  addToSyncQueue('defects', d.id, SyncOperation.Delete, { id: d.id, job_id: jobId });
                 }
                 if (assetDefects.length > 0) {
                   useDefectsStore.getState().loadDefects(jobId);
@@ -636,7 +640,7 @@ export default function AssetInspectionScreen() {
                 );
                 for (const ja of jobAssetRows) {
                   deleteRecord('job_assets', ja.id);
-                  addToSyncQueue('job_assets', ja.id, SyncOperation.Delete, { id: ja.id });
+                  addToSyncQueue('job_assets', ja.id, SyncOperation.Delete, { id: ja.id, job_id: jobId });
                 }
               }
 

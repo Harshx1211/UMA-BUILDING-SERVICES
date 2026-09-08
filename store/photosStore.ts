@@ -97,9 +97,10 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       // already on Supabase. Using the stale in-memory value caused
       // cancelPendingPhotoUpload() to fire on an already-uploaded photo,
       // leaving an orphaned Supabase row and binary that could never be deleted.
-      const dbPhoto = getRecord<{ photo_url: string | null; local_uri: string | null }>('inspection_photos', photoId);
+      const dbPhoto = getRecord<{ photo_url: string | null; local_uri: string | null; job_id: string | null }>('inspection_photos', photoId);
       const photoUrl = dbPhoto?.photo_url ?? get().photos.find(p => p.id === photoId)?.photo_url;
       const localUri = dbPhoto?.local_uri ?? get().photos.find(p => p.id === photoId)?.local_uri;
+      const jobId = dbPhoto?.job_id ?? get().photos.find(p => p.id === photoId)?.job_id;
 
       // 1. Remove from local SQLite immediately
       deleteRecord('inspection_photos', photoId);
@@ -122,9 +123,16 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       if (photoUrl?.startsWith('https://')) {
         // Photo already uploaded to Supabase — queue a delete for both the DB row
         // and the Storage binary (sync.ts _pushQueue handles the binary deletion).
+        // FIX: job_id is included so lib/sync.ts's report-generation blocker
+        // check can see this pending Delete — that check falls back to a
+        // payload substring search whenever the local row is gone (which it
+        // always is for a Delete, deleted just above), and a bare {id,
+        // photo_url} payload gave it nothing to match against, letting a
+        // report generate before this photo's removal had actually synced.
         addToSyncQueue('inspection_photos', photoId, SyncOperation.Delete, {
           id: photoId,
           photo_url: photoUrl,
+          job_id: jobId ?? null,
         });
       } else {
         // Photo only exists locally (file:// URI, never uploaded).

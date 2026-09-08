@@ -283,14 +283,30 @@ export default function AssetDetailScreen() {
           isFailed: failed, asset: a, primaryDefectId,
         } = latestRef.current;
         if (!a) return;
+        // FIX: both stores reject a write against a locked (Completed/
+        // Cancelled) job by catching their own thrown error internally and
+        // setting it on `error` state — neither ever surfaces to a caller
+        // that doesn't explicitly check. This leave-effect fires silently on
+        // blur, so an edit made just as the job locked (e.g. a crew-mate
+        // completing it elsewhere) used to vanish with zero indication to
+        // the technician. Checking each store's own error state right after
+        // the call reliably reflects THIS call's outcome, since both clear
+        // `error` to null at the very start of their own try block.
+        const notifyIfRejected = (getError: () => string | null) => {
+          const err = getError();
+          if (err) Toast.show({ type: 'error', text1: "Couldn't save your change", text2: err });
+        };
+
         const descTrim = pd?.description.trim() ?? '';
         if (failed && descTrim) {
           const noteTrim = n.trim();
           if (descTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '')) {
             updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice);
+            notifyIfRejected(() => useInspectionStore.getState().error);
           }
         } else if (!failed && n.trim() !== (a.technician_notes || '')) {
           updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim());
+          notifyIfRejected(() => useInspectionStore.getState().error);
         }
 
         // FIX: same safety net as above, extended to an in-progress
@@ -319,6 +335,7 @@ export default function AssetDetailScreen() {
               quote_price: ad!.quotePrice,
             });
           }
+          notifyIfRejected(() => useDefectsStore.getState().error);
         }
       };
     }, [updateAssetResult, jobId])
@@ -435,7 +452,12 @@ export default function AssetDetailScreen() {
   // Validation now happens inside DefectFieldsCard itself, so onSave only
   // ever fires with a non-empty description.
   const handleSaveDefect = (value: DefectFieldsValue) => {
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice);
+    // FIX: forceNewDefect=pendingFail — a fresh Pass/N-T -> Fail transition
+    // must never merge into whatever unrelated defect might already exist
+    // on this asset (see updateAssetResult's own comment on this param).
+    // Re-editing an already-Fail asset's existing defect (pendingFail is
+    // false by then) still merges into it exactly as before.
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail);
     setPendingFail(false);
     setPrimaryDraft(null);
     setEditingDefectId(null);
@@ -639,9 +661,19 @@ export default function AssetDetailScreen() {
               Defects{assetDefects.length > 0 ? ` · ${assetDefects.length}` : ''}
             </Text>
 
-            {primaryDefect === null ? (
+            {primaryDefect === null || pendingFail ? (
               // Nothing saved yet — this IS the Fail commit (see
               // handleSaveDefect), so there's no summary state to collapse to.
+              // FIX: `pendingFail` (a fresh Pass/N-T -> Fail transition) is
+              // included here too, not just `primaryDefect === null` — this
+              // asset can already carry a genuinely unrelated defect (logged
+              // earlier via the standalone Defects screen against an asset
+              // that wasn't Fail yet), and collapsing straight to that
+              // defect's own DefectCard summary meant the only way to
+              // actually commit this new Fail was to tap Edit on it and
+              // overwrite its unrelated content. A fresh Fail always gets
+              // its own blank form; handleSaveDefect's forceNewDefect keeps
+              // this as an independent record rather than merging the two.
               <DefectFieldsCard
                 onSave={handleSaveDefect}
                 onReplace={handleReplaceNow}

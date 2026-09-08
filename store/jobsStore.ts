@@ -1,7 +1,7 @@
 // Zustand store — full jobs state: loading, filtering, searching, status updates
 import { create } from 'zustand';
-import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, getAssetsWithJobResults } from '@/lib/database';
-import { JobStatus, SyncOperation, ComplianceStatus, InspectionResult } from '@/constants/Enums';
+import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, getAssetsWithJobResults, getDefectsForJob } from '@/lib/database';
+import { JobStatus, SyncOperation, ComplianceStatus, InspectionResult, DefectStatus } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useAuthStore } from '@/store/authStore';
 import type { Job } from '@/types';
@@ -111,13 +111,23 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
       // properties.compliance_status, so a property inspected exclusively
       // through ordinary scheduled jobs stayed "Pending" in the admin
       // dashboard forever, no matter how many jobs were completed against
-      // it. Same formula as that flow: any Fail among the property's
-      // (job-scoped) asset results makes it non-compliant.
+      // it.
       if (newStatus === JobStatus.Completed) {
         const completedJob = getJobById<{ property_id: string }>(jobId);
         if (completedJob?.property_id) {
           const propertyAssets = getAssetsWithJobResults<{ result: string | null }>(jobId, completedJob.property_id);
-          const compliance = propertyAssets.some(a => a.result === InspectionResult.Fail)
+          // FIX: this used to check ONLY job_assets.result, so a defect
+          // logged via the standalone Defects screen (AddDefectSheet lets a
+          // technician log a defect against any asset regardless of its
+          // current result — it never touches job_assets.result) could sit
+          // open, unresolved, and completely invisible to this check. A
+          // property could clear as Compliant with a real, unaddressed
+          // Critical defect on file. Any defect not yet Repaired (Open,
+          // Quoted, or Monitoring all mean "not actually fixed yet") now
+          // also forces NonCompliant, same as a Fail result does.
+          const jobDefects = getDefectsForJob<{ status: string }>(jobId);
+          const hasUnresolvedDefect = jobDefects.some((d) => d.status !== DefectStatus.Repaired);
+          const compliance = (propertyAssets.some(a => a.result === InspectionResult.Fail) || hasUnresolvedDefect)
             ? ComplianceStatus.NonCompliant
             : ComplianceStatus.Compliant;
           const propertyUpdate = { compliance_status: compliance, updated_at: now };
