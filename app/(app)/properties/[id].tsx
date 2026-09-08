@@ -229,7 +229,22 @@ export default function PropertyDetailScreen() {
     setJobHistoryLoadingMore(true);
     try {
       const { jobs } = getJobsForProperty<JobHistory>(id, { limit: count, offset: jobHistory.length });
-      setJobHistory((prev) => [...prev, ...jobs]);
+      // FIX: this was the one call site refreshKeepingHistorySize's ref fix
+      // missed — jobHistoryLengthRef was only updated inside load() and
+      // refreshKeepingHistorySize itself, not here, so tapping "+5"/"+10"
+      // grew the visible list without the ref ever reflecting it. The very
+      // next sync event (the 10-minute interval, or the my-data-live
+      // channel's own reconnect catch-up) then re-derived `keep` from the
+      // stale, pre-expansion ref value and silently truncated the list
+      // right back down — the exact regression this ref exists to prevent.
+      // Using the functional updater's own callback to set the ref keeps it
+      // synchronous with the real, current array, not a value captured in
+      // this closure.
+      setJobHistory((prev) => {
+        const next = [...prev, ...jobs];
+        jobHistoryLengthRef.current = next.length;
+        return next;
+      });
     } finally {
       setJobHistoryLoadingMore(false);
     }
