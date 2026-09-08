@@ -2347,10 +2347,39 @@ const REMOTE_DELETABLE_TABLES = new Set([
  * delete already does (recordDeletedPhoto/recordDeletedDocument) — without
  * that, a slightly-stale INSERT/UPDATE echo of the same row arriving right
  * after this deletion could resurrect it.
+ *
+ * FIX: deleting a defects/quotes row whose local copy still has a
+ * NOT-YET-PUSHED child row referencing it (inspection_photos.defect_id,
+ * quote_items.quote_id — both real, FK-enforced local relationships, no
+ * ON DELETE CASCADE) used to throw straight out of deleteRecord below,
+ * silently caught by this function's own catch — the parent row was never
+ * removed, becoming a permanent local ghost, since deletion_log's
+ * checkpoint had already advanced past this id by the time anything
+ * noticed. Concretely: a technician captures a photo for defect D while
+ * offline (or just hasn't pushed yet); someone else deletes D server-side
+ * in the meantime, which succeeds there (nothing server-side references it
+ * yet) and gets logged — but D's local row can't go until this device's
+ * own dangling child row is cleaned up first, exactly like
+ * defectsStore.deleteDefect's own photo-cleanup-before-defect-delete
+ * ordering already does for a LOCAL delete.
  */
 export function applyRemoteDeletion(tableName: string, recordId: string): void {
   if (!REMOTE_DELETABLE_TABLES.has(tableName)) return;
   try {
+    if (tableName === 'defects') {
+      const orphanedPhotos = queryRecords<{ id: string }>('inspection_photos', { defect_id: recordId });
+      for (const p of orphanedPhotos) {
+        deleteRecord('inspection_photos', p.id);
+        recordDeletedPhoto(p.id);
+        cancelPendingPhotoUpload(p.id);
+      }
+    }
+    if (tableName === 'quotes') {
+      const orphanedItems = queryRecords<{ id: string }>('quote_items', { quote_id: recordId });
+      for (const item of orphanedItems) {
+        deleteRecord('quote_items', item.id);
+      }
+    }
     deleteRecord(tableName, recordId);
     if (tableName === 'inspection_photos') recordDeletedPhoto(recordId);
     if (tableName === 'site_documents') recordDeletedDocument(recordId);

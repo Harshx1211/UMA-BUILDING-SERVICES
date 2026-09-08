@@ -29,6 +29,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 const ALL = 'All';
 const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
@@ -354,6 +355,26 @@ export default function AssetInspectionScreen() {
     else if (table === 'job_assets' || table === 'inspection_photos') store.loadAssetsForInspection(jobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, store.loadAssetsForInspection]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any table
+  // (job_id-filtered DELETE needs REPLICA IDENTITY FULL, not set — see its
+  // own migration comment) — the only way a deletion made on another device
+  // ever reaches this device is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, a crew-mate deleting an
+  // asset/defect/photo while this screen was open and staying open left it
+  // showing stale, already-gone data with no live signal at all — worse
+  // still, inspectionStore.updateAssetResult's stale-id fast path could
+  // then silently resurrect a deleted job_assets row locally (see its own
+  // fix comment). Same reload this screen's live-sync callback already
+  // does for job_assets/inspection_photos.
+  useEffect(() => {
+    if (!jobId) return;
+    const reload = () => store.loadAssetsForInspection(jobId);
+    onSyncComplete(reload);
+    return () => offSyncComplete(reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   // asset_type -> inspection_routine, e.g. "10 - Portable and Wheeled Fire
   // Extinguishers (Annual)" — the same category grouping the PDF report

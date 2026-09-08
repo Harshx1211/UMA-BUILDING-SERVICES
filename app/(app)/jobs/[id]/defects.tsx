@@ -15,6 +15,7 @@ import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import type { Defect } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 export default function DefectsScreen() {
   const C = useColors();
@@ -47,6 +48,21 @@ export default function DefectsScreen() {
     if (table === 'defects' && jobId) store.loadDefects(jobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, store.loadDefects]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, a crew-mate deleting a
+  // defect left it sitting in this list indefinitely while this screen
+  // stayed open.
+  useEffect(() => {
+    if (!jobId) return;
+    const reload = () => store.loadDefects(jobId);
+    onSyncComplete(reload);
+    return () => offSyncComplete(reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   const filteredDefects = useMemo(() => {
     let list = store.defects;

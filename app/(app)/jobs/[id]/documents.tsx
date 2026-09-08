@@ -13,6 +13,7 @@ import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Button, EmptyState, showConfirm } from '@/components/ui';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import type { SiteDocument } from '@/types';
 
 export default function DocumentsScreen() {
@@ -46,6 +47,21 @@ export default function DocumentsScreen() {
     if (table === 'site_documents' && propertyId) store.loadDocuments(propertyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId, store.loadDocuments]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, another tech/admin
+  // deleting a document left it sitting in this list indefinitely while
+  // this screen stayed open.
+  useEffect(() => {
+    if (!propertyId) return;
+    const reload = () => store.loadDocuments(propertyId);
+    onSyncComplete(reload);
+    return () => offSyncComplete(reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyId]);
 
   const handleLongPress = (doc: SiteDocument) => {
     showConfirm({

@@ -26,6 +26,7 @@ import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useInspectionStore } from '@/store/inspectionStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
@@ -106,6 +107,20 @@ export default function DefectDetailScreen() {
     // immediately instead of only on next focus.
     if (table === 'defects' || table === 'jobs') loadDefect();
   }, [loadDefect]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, a crew-mate deleting the
+  // exact defect being viewed left this screen showing it as fully present
+  // and editable indefinitely. loadDefect() already handles a genuinely
+  // missing defect correctly (the "Defect not found" state below), so this
+  // is a safe, graceful transition, not a crash risk.
+  useEffect(() => {
+    onSyncComplete(loadDefect);
+    return () => offSyncComplete(loadDefect);
+  }, [loadDefect]);
 
   const handleDelete = () => {
     showConfirm({

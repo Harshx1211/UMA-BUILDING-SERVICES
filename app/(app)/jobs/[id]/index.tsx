@@ -27,6 +27,7 @@ import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui'
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -212,6 +213,18 @@ export default function JobDetailScreen() {
     if (table === 'job_technicians' || table === 'quotes' || table === 'quote_items' || table === 'time_logs') return;
     loadJob();
   }, [loadJob]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, a defect/photo/document
+  // deleted elsewhere left this screen's counts stale indefinitely while
+  // it stayed open.
+  useEffect(() => {
+    onSyncComplete(loadJob);
+    return () => offSyncComplete(loadJob);
+  }, [loadJob]);
 
   // Warn before leaving if there are unsaved notes
   useEffect(() => {

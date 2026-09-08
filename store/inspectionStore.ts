@@ -29,6 +29,7 @@ import {
   insertRecord,
   updateRecord,
   deleteRecord,
+  getRecord,
   getJobById,
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
@@ -201,9 +202,25 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // back to a DB lookup.  This prevents duplicate rows when the modal is saved
       // before the in-memory state has been refreshed with the newly-assigned id.
       // A9 FIX: Merged two separate queryRecords calls into one.
-      let jobAssetId = asset.job_asset_id;
-      let isExistingRecord = Boolean(asset.job_asset_id);
-      if (!jobAssetId) {
+      // FIX: the in-memory job_asset_id can be stale if this exact row was
+      // deleted by someone else (e.g. "Delete Asset" on inspect.tsx, from
+      // another device) while this screen was open — this screen has no
+      // live-deletion signal while focused (a deletion only ever arrives via
+      // deletion_log's own onSyncComplete event, a separate bus from the
+      // per-job channel's onChange this screen actually listens to).
+      // Trusting a stale id blindly meant upsertRecord's INSERT ... ON
+      // CONFLICT DO UPDATE silently RESURRECTED the deleted row locally
+      // under its old id below, then queued an Update (isExistingRecord
+      // looked true) that matched zero rows server-side and "succeeded" as
+      // a no-op — a permanent, silent, per-device data divergence with no
+      // error anywhere. A cheap local existence check closes this: if the
+      // row's actually gone, this falls through to the exact same path a
+      // first-ever inspection of this asset already takes.
+      let jobAssetId: string;
+      let isExistingRecord = Boolean(asset.job_asset_id) && Boolean(getRecord('job_assets', asset.job_asset_id as string));
+      if (isExistingRecord) {
+        jobAssetId = asset.job_asset_id as string;
+      } else {
         const existing = queryRecords<{ id: string }>(
           'job_assets', { job_id: currentJobId, asset_id: assetId }
         )[0];

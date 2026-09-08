@@ -13,6 +13,7 @@ import { getJobById } from '@/lib/database';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Button, showConfirm } from '@/components/ui';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 export default function PhotosScreen() {
   const C = useColors();
@@ -44,6 +45,21 @@ export default function PhotosScreen() {
     if (table === 'inspection_photos' && jobId) store.loadPhotos(jobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, store.loadPhotos]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. Without this, a crew-mate deleting a
+  // photo left it sitting in this shared gallery indefinitely while this
+  // screen stayed open.
+  useEffect(() => {
+    if (!jobId) return;
+    const reload = () => store.loadPhotos(jobId);
+    onSyncComplete(reload);
+    return () => offSyncComplete(reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   /** Long-press handler — confirms then deletes photo from SQLite + syncs */
   const handlePhotoLongPress = (photo: { id: string }) => {

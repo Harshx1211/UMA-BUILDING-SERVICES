@@ -38,6 +38,7 @@ import { getAssetHistory, AssetHistoryEntry, getJobById } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -223,6 +224,28 @@ export default function AssetDetailScreen() {
     else if (table === 'defects') loadJobDefects(jobId);
     else if (table === 'job_assets' || table === 'inspection_photos') useInspectionStore.getState().loadAssetsForInspection(jobId);
   }, [jobId, loadJobDefects, refreshJobLocked]));
+
+  // FIX: subscribeToJobLive never subscribes to DELETE events for any
+  // table — the only way a deletion made on another device reaches this
+  // device at all is via deletion_log's own onSyncComplete event
+  // (subscribeToMyDataLive), a completely separate signal from
+  // useJobLiveSync's onChange above. This is the screen a technician
+  // actually spends the most time on (viewing photos, filling in a
+  // defect), so without this a crew-mate deleting the very asset/defect
+  // being viewed left it showing fully editable stale data with zero live
+  // signal — and saving against it could silently resurrect the deleted
+  // job_assets row locally (see updateAssetResult's own fix comment in
+  // store/inspectionStore.ts). Same reloads the live-sync callback above
+  // already does.
+  useEffect(() => {
+    if (!jobId) return;
+    const reload = () => {
+      loadJobDefects(jobId);
+      useInspectionStore.getState().loadAssetsForInspection(jobId);
+    };
+    onSyncComplete(reload);
+    return () => offSyncComplete(reload);
+  }, [jobId, loadJobDefects]);
 
   // Fail is selected but not yet saved — set when arriving here straight off
   // a Fail tap (see inspect.tsx's AssetCard) or by tapping Fail below on an

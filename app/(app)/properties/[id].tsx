@@ -145,6 +145,16 @@ export default function PropertyDetailScreen() {
   const [documents, setDocuments]   = useState<SiteDocument[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
 
+  // Tracks how many job-history rows are currently on screen, kept in sync
+  // SYNCHRONOUSLY at every point jobHistory itself is set (load,
+  // refreshKeepingHistorySize, loadMoreJobHistory below) — not via a
+  // separate effect watching jobHistory.length, which would still leave a
+  // window (React defers a passive effect to run after commit) where a
+  // sync event landing in between could read a stale length and collapse
+  // an expanded list. See refreshKeepingHistorySize's own comment for why
+  // this ref exists at all.
+  const jobHistoryLengthRef = useRef(0);
+
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
@@ -163,6 +173,7 @@ export default function PropertyDetailScreen() {
         // queries, and only fetch more if explicitly asked for.
         const { jobs, totalCount, completedCount } = getJobsForProperty<JobHistory>(id, { limit: JOB_HISTORY_PAGE_SIZE });
         setJobHistory(jobs);
+        jobHistoryLengthRef.current = jobs.length;
         setJobHistoryTotal(totalCount);
         setJobHistoryCompleted(completedCount);
         setDocuments(getDocumentsForProperty<SiteDocument>(id));
@@ -174,29 +185,15 @@ export default function PropertyDetailScreen() {
     }
   }, [id]);
 
-  // FIX: refreshKeepingHistorySize used to depend on [id, jobHistory.length]
-  // directly, so every time loadMoreJobHistory expanded the list, this
-  // callback got a NEW identity and onSyncComplete/offSyncComplete (which
-  // register/unregister by function identity — see lib/sync.ts) had to
-  // unsubscribe the old one and resubscribe the new one. React does that
-  // swap in a later passive-effect flush, not synchronously with the state
-  // update — so there was a real window where the OLD closure (still
-  // holding the pre-expansion jobHistory.length) was the one actually
-  // registered. A sync event landing in that window — plausible, since the
-  // my-data-live channel can fire at any time independent of this screen's
-  // render cycle — re-fetched only the smaller old page size, visibly
-  // collapsing a technician's "+5"/"+10" expansion right after they asked
-  // for more. A ref sidesteps this: refreshKeepingHistorySize now has a
-  // stable identity (only depends on `id`), so onSyncComplete never needs
-  // to resubscribe at all when the history size changes.
-  const jobHistoryLengthRef = useRef(0);
-  useEffect(() => { jobHistoryLengthRef.current = jobHistory.length; }, [jobHistory.length]);
-
   // Used by the live/fallback sync refresher below — a plain load() would
   // reset an already-expanded job history (via the "+5"/"+10"/"Show all"
   // chips) back down to JOB_HISTORY_PAGE_SIZE every time anything synced,
   // discarding progress the technician already asked for. Re-fetches
-  // however many are currently showing instead of the default page size.
+  // however many are currently showing (jobHistoryLengthRef, kept
+  // synchronously current — see its own comment) instead of the default
+  // page size. Has a stable identity (only depends on `id`), so
+  // onSyncComplete below never needs to resubscribe when the history size
+  // changes.
   const refreshKeepingHistorySize = useCallback(() => {
     if (!id) return;
     const p = getRecord<Property>('properties', id);
@@ -206,6 +203,7 @@ export default function PropertyDetailScreen() {
     const keep = Math.max(JOB_HISTORY_PAGE_SIZE, jobHistoryLengthRef.current);
     const { jobs, totalCount, completedCount } = getJobsForProperty<JobHistory>(id, { limit: keep });
     setJobHistory(jobs);
+    jobHistoryLengthRef.current = jobs.length;
     setJobHistoryTotal(totalCount);
     setJobHistoryCompleted(completedCount);
     setDocuments(getDocumentsForProperty<SiteDocument>(id));

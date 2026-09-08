@@ -844,10 +844,7 @@ export function subscribeToMyDataLive(userId: string): void {
   // INSERT, and applyMyJobTechnician's catch-up fetch right after being
   // added to a job's crew) are both cases where relevance is already
   // established a different way, so there's nothing to gate.
-  const applyJob = (row: Record<string, unknown>, requireLocal: boolean) => {
-    const rowId = row.id as string;
-    const localStatus = getJobStatus(rowId);
-    if (requireLocal && !localStatus) return;
+  const doUpsertJob = (row: Record<string, unknown>, localStatus: { status: string; updated_at: string } | null) => {
     // Same 'cancelled' override as subscribeToJobLive's own applyJob — an
     // administrative override, not a step on the priority ladder.
     if (localStatus && row.status !== 'cancelled') {
@@ -860,6 +857,41 @@ export function subscribeToMyDataLive(userId: string): void {
     }
     upsertRecord('jobs', row as Record<string, string | number | boolean | null>);
     _emitSyncComplete();
+  };
+
+  const applyJob = (row: Record<string, unknown>, requireLocal: boolean) => {
+    const rowId = row.id as string;
+    const localStatus = getJobStatus(rowId);
+    if (requireLocal && !localStatus) return;
+    if (localStatus) {
+      doUpsertJob(row, localStatus);
+      return;
+    }
+    // FIX: a genuinely new job locally (only reachable here when
+    // requireLocal=false — a fresh assignment or a new crew addition) can
+    // reference a property/assignee this device has never synced before.
+    // jobs.property_id and jobs.assigned_to are both NOT NULL, FK-enforced
+    // locally (initializeSchema turns PRAGMA foreign_keys ON, and unlike
+    // the bulk pull's upsertRecordBulk, upsertRecord never disables it) —
+    // inserting the job before its parents exist threw and was silently
+    // swallowed inside upsertRecord's own catch-all error handling,
+    // permanently dropping the job. This channel also has no catch-up pull
+    // on (re)connect the way subscribeToJobLive does, so nothing else would
+    // ever retry it before the next full periodic sync. Fetch+insert any
+    // missing parent first.
+    void (async () => {
+      const propertyId = row.property_id as string | undefined;
+      const assignedTo = row.assigned_to as string | undefined;
+      if (propertyId && !getRecord('properties', propertyId)) {
+        const { data } = await supabase.from('properties').select('*').eq('id', propertyId).maybeSingle();
+        if (data) upsertRecord('properties', data as Record<string, string | number | boolean | null>);
+      }
+      if (assignedTo && !getRecord('users', assignedTo)) {
+        const { data } = await supabase.from('users').select('*').eq('id', assignedTo).maybeSingle();
+        if (data) upsertRecord('users', data as Record<string, string | number | boolean | null>);
+      }
+      doUpsertJob(row, null);
+    })();
   };
 
   // Being newly ADDED to a job's crew — job_technicians alone doesn't carry
@@ -1030,6 +1062,17 @@ export function subscribeToMyDataLive(userId: string): void {
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] my-data-live subscribed for user ${userId}`);
+        // FIX: unlike subscribeToJobLive (which runs an explicit catch-up
+        // pull on every (re)connect), this channel had none at all — so
+        // anything that changed while the device was offline, backgrounded
+        // (app/(app)/_layout.tsx tears this channel down and rebuilds it on
+        // every background/foreground transition), or simply before this
+        // first connection completed would silently wait for the next full
+        // periodic sync. runSync() already has its own _isSyncing mutex, so
+        // this is a safe, bounded no-op if one happens to already be
+        // running — same pattern useNetworkStatus's own reconnect trigger
+        // already uses for the same reason.
+        void runSync(userId);
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (__DEV__) console.warn(`[SiteTrack Sync] my-data-live ${status} for user ${userId} — auto-retrying:`, err);
       }
