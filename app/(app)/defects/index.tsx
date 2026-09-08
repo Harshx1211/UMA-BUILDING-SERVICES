@@ -2,7 +2,7 @@
  * Global Defects Screen — app/(app)/defects/index.tsx
  * Cross-job view of all defects with filtering, status badges, and navigation to detail.
  */
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl,
 } from 'react-native';
@@ -21,6 +21,7 @@ import type { Defect } from '@/types';
 import { findDefectCode } from '@/constants/DefectCodes';
 import * as Haptics from 'expo-haptics';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { getDefectCounts } from '@/lib/database';
 
 type ExtendedDefect = Defect & {
   asset_type?: string;
@@ -136,35 +137,50 @@ export default function GlobalDefectsScreen() {
   const { defects, isLoading, loadAllDefects } = useDefectsStore();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>('all');
+  // FIX: header/result-bar stats used to come from .filter()/.length over
+  // the full unbounded fetch below — now that the fetch itself is filtered
+  // in SQL (see loadAllDefects), these need their own lightweight
+  // aggregate query so "X of Y total" and the open/critical counts still
+  // reflect the WHOLE company history, not just whatever's currently
+  // showing.
+  const [counts, setCounts] = useState({ total: 0, open: 0, critical: 0 });
 
+  // FIX: severity/status filtering used to happen entirely client-side
+  // after an unbounded fetch of the company's entire defect history — this
+  // table only grows over a tenant's lifetime, so that full 3-table-JOIN
+  // fetch got linearly slower over time, refetched on every sync. Both
+  // filters now push into the SQL WHERE clause (loadAllDefects/
+  // getAllDefects), so an active filter actually reduces what's read.
   const load = useCallback(() => {
-    loadAllDefects();
-  }, [loadAllDefects]);
+    loadAllDefects(
+      statusFilter === 'all' ? undefined : statusFilter,
+      severityFilter === 'all' ? undefined : severityFilter,
+    );
+    setCounts(getDefectCounts());
+  }, [loadAllDefects, statusFilter, severityFilter]);
 
-  // H1: Load once on mount + subscribe to sync events— no wasteful full-scan on every tab visit
+  // Re-run whenever a filter changes, not just on mount/sync.
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, severityFilter]);
+
+  // H1: subscribe to sync events — no wasteful full-scan on every tab visit
+  useEffect(() => {
     onSyncComplete(load);
     return () => offSyncComplete(load);
   }, [load]);
 
-  const filtered = useMemo(() =>
-    (defects as ExtendedDefect[]).filter(d => {
-      if (severityFilter !== 'all' && d.severity !== severityFilter) return false;
-      if (statusFilter   !== 'all' && d.status   !== statusFilter)   return false;
-      return true;
-    })
-  , [defects, severityFilter, statusFilter]);
-
-  const openCount     = useMemo(() => defects.filter(d => d.status === DefectStatus.Open).length, [defects]);
-  const criticalCount = useMemo(() => defects.filter(d => d.severity === DefectSeverity.Critical).length, [defects]);
+  const filtered = defects as ExtendedDefect[];
+  const openCount     = counts.open;
+  const criticalCount = counts.critical;
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
         eyebrow="DEFECTS"
         title="All Defects"
-        subtitle={`${defects.length} total · ${openCount} open · ${criticalCount} critical`}
+        subtitle={`${counts.total} total · ${openCount} open · ${criticalCount} critical`}
         showBack
         rightComponent={
           openCount > 0 ? (
@@ -208,7 +224,7 @@ export default function GlobalDefectsScreen() {
       {/* Result count */}
       <View style={[s.resultBar, { backgroundColor: C.backgroundTertiary }]}>
         <Text style={[s.resultTxt, { color: C.textTertiary }]}>
-          {filtered.length} of {defects.length} defects
+          {filtered.length} of {counts.total} defects
         </Text>
       </View>
 
@@ -218,12 +234,16 @@ export default function GlobalDefectsScreen() {
         </View>
       ) : filtered.length === 0 ? (
         <View style={s.center}>
-          <MaterialCommunityIcons name={defects.length === 0 ? "party-popper" : "magnify"} size={44} color={C.textTertiary} style={{ marginBottom: 10 }} />
+          {/* FIX: `defects` is now the already-filtered fetch (see load()),
+              so it can no longer tell "genuinely nothing in the company"
+              apart from "nothing matches the current filter" — counts.total
+              (a separate, unfiltered aggregate query) is the real signal. */}
+          <MaterialCommunityIcons name={counts.total === 0 ? "party-popper" : "magnify"} size={44} color={C.textTertiary} style={{ marginBottom: 10 }} />
           <Text style={[s.emptyTitle, { color: C.text }]}>
-            {defects.length === 0 ? 'No defects on record' : 'No results match filters'}
+            {counts.total === 0 ? 'No defects on record' : 'No results match filters'}
           </Text>
           <Text style={[s.emptySub, { color: C.textSecondary }]}>
-            {defects.length === 0
+            {counts.total === 0
               ? 'All inspections are currently defect-free'
               : 'Try clearing your filters'}
           </Text>

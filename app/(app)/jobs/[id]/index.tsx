@@ -199,11 +199,19 @@ export default function JobDetailScreen() {
   // Refresh data whenever we navigate back to this screen
   useFocusEffect(useCallback(() => { loadJob(); }, [loadJob]));
 
-  // This overview screen shows defect/photo counts a crew-mate might be
-  // updating from elsewhere — see useJobLiveSync's comment: every job
-  // screen using this hook hands the live channel off to whichever one is
-  // currently focused, so it stays live everywhere inside this job.
-  useJobLiveSync(id, useCallback(() => { loadJob(); }, [loadJob]));
+  // This overview screen shows defect/photo/document counts a crew-mate
+  // might be updating from elsewhere — see useJobLiveSync's comment: every
+  // job screen using this hook hands the live channel off to whichever one
+  // is currently focused, so it stays live everywhere inside this job.
+  // FIX: this used to reload on ANY table change, including
+  // job_technicians/quotes/quote_items/time_logs — none of which loadJob()
+  // actually reads (it only reads jobs/job_assets/defects/inspection_photos/
+  // site_documents/signatures), so those three previously fired the same
+  // full 6-query reload for no reason.
+  useJobLiveSync(id, useCallback((table) => {
+    if (table === 'job_technicians' || table === 'quotes' || table === 'quote_items' || table === 'time_logs') return;
+    loadJob();
+  }, [loadJob]));
 
   // Warn before leaving if there are unsaved notes
   useEffect(() => {

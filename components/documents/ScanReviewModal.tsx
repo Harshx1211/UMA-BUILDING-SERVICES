@@ -29,6 +29,11 @@ import { MAX_LENGTHS } from '@/utils/sanitize';
 export interface ScannedPage {
   id: string;
   base64: string;
+  /** Small (~200px) copy for this row's thumbnail — see generateThumbnail's
+   * own comment in DocumentScanSheet.tsx for why the full page isn't used
+   * directly here. Falls back to `base64` for any page that predates this
+   * field (defensive only — every current creation site sets it). */
+  thumbnailBase64?: string;
 }
 
 interface Props {
@@ -92,7 +97,7 @@ export function ScanReviewModal({
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => setViewingIndex(index)} disabled={busy} activeOpacity={0.8}>
-          <Image source={{ uri: dataUri(item.base64) }} style={[s.thumb, { borderColor: C.border }]} contentFit="cover" />
+          <Image source={{ uri: dataUri(item.thumbnailBase64 ?? item.base64) }} style={[s.thumb, { borderColor: C.border }]} contentFit="cover" />
         </TouchableOpacity>
 
         <Text style={[s.pageLabel, { color: C.text }]}>Page {index + 1}</Text>

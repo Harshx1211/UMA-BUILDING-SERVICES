@@ -332,7 +332,7 @@ export async function runSync(userId?: string): Promise<boolean> {
     }
     if (_shouldStop) return false;
 
-    await _pushQueue();
+    await _pushQueue(resolvedUserId);
     if (_shouldStop) return false;
 
     // ── 3. PULL — server → local SQLite ──────────────────────────
@@ -447,7 +447,7 @@ export async function pushPendingWork(userId: string): Promise<void> {
       _isProcessingDocuments = false;
     }
   }
-  await _pushQueue();
+  await _pushQueue(userId);
 }
 
 /**
@@ -626,6 +626,17 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     _liveOnChange?.('time_logs');
   };
 
+  // FIX: every quote_item write also bumps its parent quote's total_amount
+  // in the same action (see this function's own doc comment), so an admin
+  // editing several line items in one save fires one `quotes` UPDATE per
+  // item — each independently kicking off its own quote_items re-fetch
+  // below. Ordinary network jitter between concurrent requests means an
+  // OLDER fetch can resolve AFTER a newer one, silently overwriting fresher
+  // line items with stale ones. This sequence number lets each fetch tell
+  // whether a newer one has since superseded it before it's allowed to
+  // write anything.
+  const quotePullSeq = new Map<string, number>();
+
   // Quotes are admin-only edits (quote.tsx is read-only on the mobile side)
   // so there's no local edit to protect against a stale echo — plain
   // upsert. See this function's own doc comment for why quote_items rides
@@ -633,7 +644,25 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   const applyQuote = (row: Record<string, unknown>) => {
     upsertRecord('quotes', row as Record<string, string | number | boolean | null>);
     _liveOnChange?.('quotes');
-    void _pullRelated('quote_items', 'quote_id', [row.id as string]).then(() => _liveOnChange?.('quote_items'));
+    const quoteId = row.id as string;
+    const seq = (quotePullSeq.get(quoteId) ?? 0) + 1;
+    quotePullSeq.set(quoteId, seq);
+    void (async () => {
+      const { data, error } = await supabase.from('quote_items').select('*').eq('quote_id', quoteId);
+      // A newer quotes event for this same quote already superseded this
+      // fetch — discard rather than write stale line items over it.
+      if (quotePullSeq.get(quoteId) !== seq) return;
+      if (error) {
+        console.error('[SiteTrack Sync] Realtime: PULL quote_items error:', error.message);
+        return;
+      }
+      if (data) {
+        for (const item of data) {
+          upsertRecord('quote_items', item as Record<string, string | number | boolean | null>);
+        }
+      }
+      _liveOnChange?.('quote_items');
+    })();
   };
 
   // Same tombstone check applyPhoto uses above — a document this device (or
@@ -761,7 +790,7 @@ export function syncNow(userId?: string): void {
         _isProcessingDocuments = true;
         try { await processDocumentQueue(resolvedUserId); } finally { _isProcessingDocuments = false; }
       }
-      await _pushQueue();
+      await _pushQueue(resolvedUserId);
     } catch (err) {
       if (__DEV__) console.warn('[SiteTrack Sync] syncNow error:', err);
     } finally {
@@ -1266,7 +1295,20 @@ async function _pullRelated(
 // Exported for emergency use by authStore.forceFinalSyncAndSignOut only.
 // The leading underscore signals this is an internal function — do not call
 // it from screens or other stores. Use runSync() for normal sync triggering.
-export async function _pushQueue(): Promise<void> {
+//
+// FIX: the company_id-injection fallback below used to read only the
+// module-level _cachedUserId — which stopSync() nulls out immediately, as
+// part of sign-out, BEFORE authStore's own final flush (pushPendingWork ->
+// this function) ever runs. A queued Insert/Update whose payload never
+// carried its own company_id (e.g. documentsStore.renameDocument's {title}-
+// only Update) then pushed with none at all, and got rejected by any RLS
+// policy that checks the payload's company_id on write — leaving that item
+// permanently stuck pending, which in turn made signOut() think there was
+// still unsynced work and refuse to sign out at all. Callers that already
+// know their own userId (every current caller does) now pass it explicitly
+// so this doesn't depend on _cachedUserId still being set.
+export async function _pushQueue(fallbackUserId?: string): Promise<void> {
+  const uid = fallbackUserId ?? _cachedUserId;
   const pending = getPendingSyncItems();
 
   if (pending.length === 0) {
@@ -1308,8 +1350,8 @@ export async function _pushQueue(): Promise<void> {
 
       if (item.operation === SyncOperation.Insert) {
         // Inject company_id from the active user profile so SaaS RLS doesn't reject it
-        if (_cachedUserId && !payload.company_id) {
-          const u = getRecord<{ company_id: string }>('users', _cachedUserId);
+        if (uid && !payload.company_id) {
+          const u = getRecord<{ company_id: string }>('users', uid);
           if (u?.company_id) {
             payload.company_id = u.company_id;
           }
@@ -1399,8 +1441,8 @@ export async function _pushQueue(): Promise<void> {
         // Although RLS on UPDATE typically filters on existing column values (not
         // the payload), some Supabase policies check the payload's company_id to
         // prevent cross-tenant writes. Injecting it here is safe and idempotent.
-        if (_cachedUserId && !payload.company_id) {
-          const u = getRecord<{ company_id: string }>('users', _cachedUserId);
+        if (uid && !payload.company_id) {
+          const u = getRecord<{ company_id: string }>('users', uid);
           if (u?.company_id) payload.company_id = u.company_id;
         }
 

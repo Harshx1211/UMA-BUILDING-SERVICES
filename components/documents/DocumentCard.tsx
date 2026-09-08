@@ -140,7 +140,7 @@ export default function DocumentCard({ document, currentJobId, onLongPress }: Pr
           ) : document.job_id ? (
             <TouchableOpacity
               style={[s.badge, { backgroundColor: C.backgroundTertiary }]}
-              onPress={() => openJob(document.job_id as string)}
+              onPress={() => openJob(document.job_id as string, { alreadyInJobsTab: true })}
             >
               <Text style={[s.badgeTxt, { color: C.textSecondary }]}>Other visit</Text>
             </TouchableOpacity>

@@ -2777,25 +2777,21 @@ export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
  * Retrieves ALL defects across all jobs, with joined asset and property info.
  * Used by the global defects screen. Optionally filter by status.
  */
-export function getAllDefects<T = RecordData>(status?: string): T[] {
+// FIX: severity was always filtered client-side in app/(app)/defects/index.tsx
+// after an unbounded fetch of the company's ENTIRE defect history — this
+// table only ever grows, never gets pruned, so that full fetch (plus a
+// 3-table LEFT JOIN) got linearly slower over a tenant's lifetime, and ran
+// again on every sync. Both severity and status now push into the WHERE
+// clause, so an active filter actually reduces what's read off disk.
+export function getAllDefects<T = RecordData>(filters?: { status?: string; severity?: string }): T[] {
   try {
     const db = openDatabase();
-    // Security: use parameterised query — never interpolate status string directly into SQL
-    if (status) {
-      return db.getAllSync<T>(
-        `SELECT d.*,
-                a.asset_type, a.location_on_site,
-                p.name AS property_name,
-                j.scheduled_date, j.job_type
-         FROM defects d
-         LEFT JOIN assets a ON d.asset_id = a.id
-         LEFT JOIN properties p ON d.property_id = p.id
-         LEFT JOIN jobs j ON d.job_id = j.id
-         WHERE d.status = ?
-         ORDER BY d.created_at DESC`,
-        [status],
-      );
-    }
+    const clauses: string[] = [];
+    const params: string[] = [];
+    // Security: parameterised query — never interpolate these directly into SQL
+    if (filters?.status) { clauses.push('d.status = ?'); params.push(filters.status); }
+    if (filters?.severity) { clauses.push('d.severity = ?'); params.push(filters.severity); }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     return db.getAllSync<T>(
       `SELECT d.*,
               a.asset_type, a.location_on_site,
@@ -2805,11 +2801,36 @@ export function getAllDefects<T = RecordData>(status?: string): T[] {
        LEFT JOIN assets a ON d.asset_id = a.id
        LEFT JOIN properties p ON d.property_id = p.id
        LEFT JOIN jobs j ON d.job_id = j.id
+       ${where}
        ORDER BY d.created_at DESC`,
+      params,
     );
   } catch (err) {
     console.error('[UMA BUILDING SERVICES DB] getAllDefects error:', err);
     return [];
+  }
+}
+
+/**
+ * Lightweight aggregate counts for the global Defects screen's header stats
+ * (total / open / critical) — a single COUNT-only query instead of pulling
+ * every defect row just to .length/.filter() them in JS, so the header
+ * stats stay cheap even while a severity/status filter narrows the list
+ * itself down to a subset.
+ */
+export function getDefectCounts(): { total: number; open: number; critical: number } {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ total: number; open: number; critical: number }>(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open,
+              SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical
+       FROM defects`,
+    );
+    return { total: row?.total ?? 0, open: row?.open ?? 0, critical: row?.critical ?? 0 };
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getDefectCounts error:', err);
+    return { total: 0, open: 0, critical: 0 };
   }
 }
 
@@ -2873,8 +2894,13 @@ export function seedInventoryFromDefectCodes(): void {
 export function getUnreadNotificationCount(userId: string): number {
   try {
     const db = openDatabase();
+    // FIX: this excluded broadcast notifications (user_id IS NULL) — the
+    // Notifications screen's own unread count (store/notificationsStore.ts)
+    // already includes them, so whenever an unread broadcast existed the
+    // dashboard bell under-reported relative to the count the technician
+    // actually saw on opening the list.
     const res = db.getFirstSync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`,
+      `SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR user_id IS NULL) AND is_read = 0`,
       [userId],
     );
     return res?.count ?? 0;

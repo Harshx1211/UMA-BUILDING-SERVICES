@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
@@ -204,6 +204,18 @@ export default function HomeScreen() {
       pulseAnimation.stop();
     };
   }, [user, loadJobs, pulseAnim, today]);
+
+  // FIX: the bell badge only refreshed on mount or on a full sync cycle —
+  // now up to 10 minutes apart (constants/Config.ts) — so marking
+  // notifications read and coming straight back here left a stale count
+  // showing for a long time. Notifications are purely local-DB reads with
+  // no realtime channel of their own, so refetching on every return to this
+  // screen is the simplest correct fix.
+  useFocusEffect(
+    useCallback(() => {
+      if (user) setUnreadCount(getUnreadNotificationCount(user.id));
+    }, [user])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

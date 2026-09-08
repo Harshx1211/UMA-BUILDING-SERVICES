@@ -54,6 +54,32 @@ async function compressScannedPage(base64: string): Promise<string> {
   }
 }
 
+/**
+ * A genuinely small (200px-wide) copy of an already-compressed page, for the
+ * review list's 44x60 row thumbnail — ScanReviewModal used to hand that same
+ * 1600px compressed page straight to expo-image for the thumbnail too. As a
+ * `data:` URI, native downsampling-to-display-size doesn't apply the way it
+ * would for a file source, so the full 1600px bitmap was being decoded into
+ * memory just to show a 44x60 pixel row. On a long document (a realistic
+ * 20-60 page compliance binder scan, MAX_DOCUMENT_PAGES below) that's a real
+ * source of scroll/reorder jank and memory pressure on lower-end devices.
+ * Derived from the already-1600px page (already smaller than the original
+ * capture), not the raw scan.
+ */
+async function generateThumbnail(compressedBase64: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      `data:image/jpeg;base64,${compressedBase64}`,
+      [{ resize: { width: 200 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    return result.base64 ?? compressedBase64;
+  } catch (e) {
+    console.warn('[DocumentScanSheet] thumbnail generation failed, using full page:', e);
+    return compressedBase64;
+  }
+}
+
 /** Wraps a set of scanned page images in a minimal HTML doc for expo-print. */
 function buildPdfHtml(base64Pages: string[]): string {
   const pages = base64Pages
@@ -129,7 +155,8 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
         if (scannedImages.length === 0) return;
 
         const compressed = await Promise.all(scannedImages.map(compressScannedPage));
-        setPendingPages(compressed.map((base64) => ({ id: generateUUID(), base64 })));
+        const thumbnails = await Promise.all(compressed.map(generateThumbnail));
+        setPendingPages(compressed.map((base64, i) => ({ id: generateUUID(), base64, thumbnailBase64: thumbnails[i] })));
         setTitle(defaultTitle());
         setShowReview(true);
       } catch (e) {
@@ -148,8 +175,9 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
       const scannedImages = await runScan();
       if (scannedImages.length === 0) return;
       const compressed = await Promise.all(scannedImages.map(compressScannedPage));
+      const thumbnails = await Promise.all(compressed.map(generateThumbnail));
       setPendingPages((prev) => {
-        const combined = [...prev, ...compressed.map((base64) => ({ id: generateUUID(), base64 }))];
+        const combined = [...prev, ...compressed.map((base64, i) => ({ id: generateUUID(), base64, thumbnailBase64: thumbnails[i] }))];
         if (combined.length > MAX_DOCUMENT_PAGES) {
           Toast.show({
             type: 'info',

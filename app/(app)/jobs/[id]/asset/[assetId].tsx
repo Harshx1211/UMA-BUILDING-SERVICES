@@ -209,9 +209,15 @@ export default function AssetDetailScreen() {
   useJobLiveSync(jobId, useCallback((table) => {
     // job_assets AND inspection_photos both surface on this asset's own
     // fields (result/notes, and the Photos section respectively).
+    // FIX: this used to be an unconditional `else` written when the live
+    // channel only ever carried job_assets/defects/inspection_photos/jobs —
+    // now that it also carries job_technicians/quotes/quote_items/
+    // time_logs/site_documents (none of which this screen displays), that
+    // catch-all fired a full, unnecessary loadAssetsForInspection reload
+    // for every one of them too.
     if (table === 'jobs') refreshJobLocked();
     else if (table === 'defects') loadJobDefects(jobId);
-    else useInspectionStore.getState().loadAssetsForInspection(jobId);
+    else if (table === 'job_assets' || table === 'inspection_photos') useInspectionStore.getState().loadAssetsForInspection(jobId);
   }, [jobId, loadJobDefects, refreshJobLocked]));
 
   // Fail is selected but not yet saved — set when arriving here straight off

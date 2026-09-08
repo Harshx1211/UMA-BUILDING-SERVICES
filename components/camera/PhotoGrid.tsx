@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, SectionList } from 'react-native';
 import { Text } from 'react-native-paper';
 import { InspectionPhoto } from '@/types';
@@ -7,7 +7,7 @@ import { T } from '@/constants/Colors';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getValidLocalUri } from '@/utils/fileHelpers';
-import { getRecord } from '@/lib/database';
+import { queryRecordsIn } from '@/lib/database';
 
 interface Props {
   photos: InspectionPhoto[];
@@ -22,30 +22,43 @@ const CELL_SIZE = (width - 32 - (GRID_GAPS * (numColumns - 1))) / numColumns;
 export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   const C = useColors();
 
-  // Grouping logic
-  const sectionsObj = photos.reduce((acc, photo) => {
-    let key = 'Site Photos (General)';
-    if (photo.asset_id) {
-      try {
-        const asset = getRecord<{ asset_type: string; location_on_site: string }>('assets', photo.asset_id);
-        if (asset) {
-          key = `${asset.asset_type} - ${asset.location_on_site}`;
-        } else {
-          key = `Asset Photos (${photo.asset_id.substring(0, 6)})`;
-        }
-      } catch {
-        key = `Asset Photos (${photo.asset_id.substring(0, 6)})`;
-      }
-    }
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(photo);
-    return acc;
-  }, {} as Record<string, InspectionPhoto[]>);
+  // FIX: this used to call getRecord('assets', ...) — a synchronous SQLite
+  // hit — once PER PHOTO, on every render (the grouping ran directly in the
+  // render body, not memoized), so a job with 100+ photos fired 100+
+  // queries on every single re-render, not just mount. Batched into one
+  // queryRecordsIn call and memoized so it only re-runs when the photo list
+  // itself actually changes.
+  const sections = useMemo(() => {
+    const assetIds = [...new Set(photos.map((p) => p.asset_id).filter((id): id is string => !!id))];
+    const assets = queryRecordsIn<{ id: string; asset_type: string; location_on_site: string }>(
+      'assets', 'id', assetIds,
+    );
+    const assetById = new Map(assets.map((a) => [a.id, a]));
 
-  const sections = Object.keys(sectionsObj).map(key => ({
-    title: key,
-    data: [{ list: sectionsObj[key] }] // FlatList or grid wrapper inside section list
-  }));
+    const sectionsObj: Record<string, InspectionPhoto[]> = {};
+    for (const photo of photos) {
+      let key = 'Site Photos (General)';
+      if (photo.asset_id) {
+        const asset = assetById.get(photo.asset_id);
+        key = asset ? `${asset.asset_type} - ${asset.location_on_site}` : `Asset Photos (${photo.asset_id.substring(0, 6)})`;
+      }
+      if (!sectionsObj[key]) sectionsObj[key] = [];
+      sectionsObj[key].push(photo);
+    }
+
+    // FIX: every section used to be ONE SectionList data item holding its
+    // entire photo array, `.map()`'d out in a single renderItem call — that
+    // defeated virtualization at the photo level entirely, since every
+    // photo in a section decoded and mounted immediately regardless of
+    // scroll position. Chunking into rows of `numColumns` gives each row
+    // its own list item, so SectionList can actually window them.
+    return Object.keys(sectionsObj).map((key) => {
+      const list = sectionsObj[key];
+      const rows: InspectionPhoto[][] = [];
+      for (let i = 0; i < list.length; i += numColumns) rows.push(list.slice(i, i + numColumns));
+      return { title: key, count: list.length, data: rows };
+    });
+  }, [photos]);
 
   const renderPhotoContent = (item: InspectionPhoto) => {
     const isPending = item.photo_url.startsWith('file://');
@@ -84,19 +97,19 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   return (
     <SectionList
       sections={sections}
-      keyExtractor={(item, index) => index.toString()}
+      keyExtractor={(row, index) => (row[0]?.id ?? index.toString())}
       contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
-      renderSectionHeader={({ section: { title, data } }) => (
+      renderSectionHeader={({ section: { title, count } }) => (
         <View style={s.sectionHeader}>
           <Text style={[s.sectionTitle, { color: C.text }]}>{title}</Text>
           <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>
-            <Text style={[s.countText, { color: C.textSecondary }]}>{data[0].list.length}</Text>
+            <Text style={[s.countText, { color: C.textSecondary }]}>{count}</Text>
           </View>
         </View>
       )}
-      renderItem={({ item }) => (
+      renderItem={({ item: row }) => (
         <View style={s.gridContainer}>
-          {item.list.map(photo => renderPhotoContent(photo))}
+          {row.map(photo => renderPhotoContent(photo))}
         </View>
       )}
     />

@@ -22,7 +22,7 @@ import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
 import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
-import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
+import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
 import { useAuthStore } from '@/store/authStore';
@@ -343,8 +343,15 @@ export default function AssetInspectionScreen() {
   useJobLiveSync(jobId, useCallback((table) => {
     // job_assets AND inspection_photos both land on the same AssetCard (result
     // and the photo-count badge respectively) — both live on the assets array.
+    // FIX: this used to be an unconditional `else` written when the live
+    // channel only ever carried job_assets/defects/inspection_photos/jobs —
+    // now that it also carries job_technicians/quotes/quote_items/
+    // time_logs/site_documents (none of which this checklist screen
+    // displays), that catch-all fired a full, unnecessary
+    // loadAssetsForInspection reload (itself several queries plus an O(n·m)
+    // merge) for every one of them too.
     if (table === 'defects') useDefectsStore.getState().loadDefects(jobId);
-    else store.loadAssetsForInspection(jobId);
+    else if (table === 'job_assets' || table === 'inspection_photos') store.loadAssetsForInspection(jobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, store.loadAssetsForInspection]));
 
@@ -365,7 +372,13 @@ export default function AssetInspectionScreen() {
     const tags = queryRecords<AssetTagRow>('asset_tags');
     setAllTags(tags);
     const tagNameById = new Map(tags.map(t => [t.id, t.name]));
-    const assignments = queryRecords<AssetTagAssignmentRow>('asset_tag_assignments');
+    // FIX: this used to fetch every tag ASSIGNMENT in the whole company
+    // unfiltered, unbounded as the company's total asset base grows — tags
+    // themselves are genuinely small company-wide vocabulary (fine as-is),
+    // but assignments are naturally scoped to these specific assets.
+    const assignments = queryRecordsIn<AssetTagAssignmentRow>(
+      'asset_tag_assignments', 'asset_id', store.assets.map(a => a.id),
+    );
     const map = new Map<string, string[]>();
     for (const a of assignments) {
       const name = tagNameById.get(a.tag_id);

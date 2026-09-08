@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -120,83 +120,97 @@ export default function PropertyAssetsScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 }}
-        >
-          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)} style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-            {assets.map((asset, i) => {
-              const isOverdue = asset.next_service_date && asset.next_service_date < today;
-              const statusColor = assetStatusColor(asset.status, C);
-              return (
-                <TouchableOpacity
-                  key={asset.id}
-                  style={[
-                    s.assetRow,
-                    i < assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
-                  ]}
-                  onPress={() => router.push(`/assets/${asset.id}` as never)}
-                  activeOpacity={0.7}
-                >
-                  {/* Icon */}
-                  <View style={[s.assetIconWrap, { backgroundColor: isOverdue ? C.errorLight : C.primary + '12' }]}>
-                    <MaterialCommunityIcons
-                      name={assetIconName(asset.asset_type)}
-                      size={20}
-                      color={isOverdue ? C.error : C.primary}
-                    />
-                  </View>
-
-                  {/* Info */}
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.assetType, { color: C.text }]}>{asset.asset_type}</Text>
-                    {asset.location_on_site
-                      ? <Text style={[s.assetLocation, { color: C.textSecondary }]}>{asset.location_on_site}</Text>
-                      : null
-                    }
-                    {asset.serial_number
-                      ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text>
-                      : null
-                    }
-
-                    {/* Date chips */}
-                    <View style={s.dateChipsRow}>
-                      {asset.last_service_date && (
-                        <View style={[s.dateChip, { backgroundColor: C.backgroundTertiary }]}>
-                          <MaterialCommunityIcons name="history" size={10} color={C.textTertiary} />
-                          <Text style={[s.dateChipTxt, { color: C.textTertiary }]}>
-                            Last: {asset.last_service_date}
-                          </Text>
-                        </View>
-                      )}
-                      {asset.next_service_date && (
-                        <View style={[s.dateChip, isOverdue
-                          ? { backgroundColor: C.errorLight }
-                          : { backgroundColor: C.successLight }
-                        ]}>
-                          <MaterialCommunityIcons
-                            name={isOverdue ? 'alert-circle' : 'calendar-check'}
-                            size={10}
-                            color={isOverdue ? C.error : C.success}
-                          />
-                          <Text style={[s.dateChipTxt, { color: isOverdue ? C.error : C.success }]}>
-                            {isOverdue ? 'Overdue: ' : 'Due: '}{asset.next_service_date}
-                          </Text>
-                        </View>
-                      )}
+        // FIX: a large commercial property in this domain (fire safety
+        // compliance) can easily have 100-300+ assets — extinguishers, exit
+        // lights, hose reels, etc. throughout a building — and this used to
+        // render every one of them into a single ScrollView via .map(), all
+        // mounted immediately with no windowing. FlatList windows off-screen
+        // rows; the card's border/radius/background move onto the wrapping
+        // View so the visual "one bordered list" look is unchanged.
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+          <Animated.View
+            entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}
+            style={[s.card, { backgroundColor: C.surface, borderColor: C.border, flex: 1, marginBottom: 40 }]}
+          >
+            <FlatList
+              data={assets}
+              keyExtractor={(asset) => asset.id}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={12}
+              maxToRenderPerBatch={12}
+              windowSize={8}
+              renderItem={({ item: asset, index: i }) => {
+                const isOverdue = asset.next_service_date && asset.next_service_date < today;
+                const statusColor = assetStatusColor(asset.status, C);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      s.assetRow,
+                      i < assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
+                    ]}
+                    onPress={() => router.push(`/assets/${asset.id}` as never)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Icon */}
+                    <View style={[s.assetIconWrap, { backgroundColor: isOverdue ? C.errorLight : C.primary + '12' }]}>
+                      <MaterialCommunityIcons
+                        name={assetIconName(asset.asset_type)}
+                        size={20}
+                        color={isOverdue ? C.error : C.primary}
+                      />
                     </View>
-                  </View>
 
-                  {/* Status indicator */}
-                  <View style={s.assetRight}>
-                    <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-                    <MaterialCommunityIcons name="chevron-right" size={18} color={C.border} />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+                    {/* Info */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.assetType, { color: C.text }]}>{asset.asset_type}</Text>
+                      {asset.location_on_site
+                        ? <Text style={[s.assetLocation, { color: C.textSecondary }]}>{asset.location_on_site}</Text>
+                        : null
+                      }
+                      {asset.serial_number
+                        ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text>
+                        : null
+                      }
+
+                      {/* Date chips */}
+                      <View style={s.dateChipsRow}>
+                        {asset.last_service_date && (
+                          <View style={[s.dateChip, { backgroundColor: C.backgroundTertiary }]}>
+                            <MaterialCommunityIcons name="history" size={10} color={C.textTertiary} />
+                            <Text style={[s.dateChipTxt, { color: C.textTertiary }]}>
+                              Last: {asset.last_service_date}
+                            </Text>
+                          </View>
+                        )}
+                        {asset.next_service_date && (
+                          <View style={[s.dateChip, isOverdue
+                            ? { backgroundColor: C.errorLight }
+                            : { backgroundColor: C.successLight }
+                          ]}>
+                            <MaterialCommunityIcons
+                              name={isOverdue ? 'alert-circle' : 'calendar-check'}
+                              size={10}
+                              color={isOverdue ? C.error : C.success}
+                            />
+                            <Text style={[s.dateChipTxt, { color: isOverdue ? C.error : C.success }]}>
+                              {isOverdue ? 'Overdue: ' : 'Due: '}{asset.next_service_date}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Status indicator */}
+                    <View style={s.assetRight}>
+                      <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+                      <MaterialCommunityIcons name="chevron-right" size={18} color={C.border} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
           </Animated.View>
-        </ScrollView>
+        </View>
       )}
 
       {/* ── ADD ASSET MODAL ── */}

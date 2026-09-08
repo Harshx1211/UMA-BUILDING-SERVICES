@@ -30,7 +30,7 @@ interface DefectsState {
   error: string | null;
 
   loadDefects: (jobId: string) => void;
-  loadAllDefects: (statusFilter?: string) => void;
+  loadAllDefects: (statusFilter?: string, severityFilter?: string) => void;
   addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'updated_at' | 'status' | 'company_id'>) => string | null;
   updateDefect: (defectId: string, updates: Partial<Defect>) => void;
   updateDefectStatus: (defectId: string, status: DefectStatus) => void;
@@ -95,10 +95,10 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     }
   },
 
-  loadAllDefects: (statusFilter) => {
+  loadAllDefects: (statusFilter, severityFilter) => {
     try {
       set({ isLoading: true, error: null, defects: [] });
-      const records = getAllDefects<Defect>(statusFilter);
+      const records = getAllDefects<Defect>({ status: statusFilter, severity: severityFilter });
       set({ defects: normaliseDefects(records), isLoading: false });
     } catch (err: unknown) {
       console.error('[DefectsStore] loadAllDefects error:', err);

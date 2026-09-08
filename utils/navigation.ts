@@ -14,10 +14,21 @@
  * first fixes that: the Schedule tab always has its list at the bottom of
  * its stack, so both back navigation and the Schedule tab itself behave the
  * way a user actually expects.
+ *
+ * FIX: `alreadyInJobsTab` opts out of that re-seed for a caller that's
+ * structurally guaranteed to already be inside the Jobs tab's own stack
+ * (currently only DocumentCard's "Other visit" badge, which only ever
+ * renders from jobs/[id]/documents.tsx) — without it, tapping that badge
+ * pushed a SECOND, redundant jobs-list screen on top of the job already
+ * being viewed, so the back button from the new job landed on that
+ * duplicate list instead of back on the documents screen the technician
+ * actually came from.
  */
 import { router } from 'expo-router';
 
-export function openJob(jobId: string): void {
-  router.push('/jobs' as never);
+export function openJob(jobId: string, opts?: { alreadyInJobsTab?: boolean }): void {
+  if (!opts?.alreadyInJobsTab) {
+    router.push('/jobs' as never);
+  }
   router.push(`/jobs/${jobId}` as never);
 }
