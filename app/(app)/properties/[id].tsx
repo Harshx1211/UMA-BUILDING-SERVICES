@@ -1,5 +1,5 @@
 // Property detail screen — professional inspection-officer view inspired by Uptick
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking, ScrollView, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
@@ -174,6 +174,24 @@ export default function PropertyDetailScreen() {
     }
   }, [id]);
 
+  // FIX: refreshKeepingHistorySize used to depend on [id, jobHistory.length]
+  // directly, so every time loadMoreJobHistory expanded the list, this
+  // callback got a NEW identity and onSyncComplete/offSyncComplete (which
+  // register/unregister by function identity — see lib/sync.ts) had to
+  // unsubscribe the old one and resubscribe the new one. React does that
+  // swap in a later passive-effect flush, not synchronously with the state
+  // update — so there was a real window where the OLD closure (still
+  // holding the pre-expansion jobHistory.length) was the one actually
+  // registered. A sync event landing in that window — plausible, since the
+  // my-data-live channel can fire at any time independent of this screen's
+  // render cycle — re-fetched only the smaller old page size, visibly
+  // collapsing a technician's "+5"/"+10" expansion right after they asked
+  // for more. A ref sidesteps this: refreshKeepingHistorySize now has a
+  // stable identity (only depends on `id`), so onSyncComplete never needs
+  // to resubscribe at all when the history size changes.
+  const jobHistoryLengthRef = useRef(0);
+  useEffect(() => { jobHistoryLengthRef.current = jobHistory.length; }, [jobHistory.length]);
+
   // Used by the live/fallback sync refresher below — a plain load() would
   // reset an already-expanded job history (via the "+5"/"+10"/"Show all"
   // chips) back down to JOB_HISTORY_PAGE_SIZE every time anything synced,
@@ -185,13 +203,13 @@ export default function PropertyDetailScreen() {
     setProperty(p);
     if (!p) return;
     setAssets(getAssetsForProperty<Asset>(id));
-    const keep = Math.max(JOB_HISTORY_PAGE_SIZE, jobHistory.length);
+    const keep = Math.max(JOB_HISTORY_PAGE_SIZE, jobHistoryLengthRef.current);
     const { jobs, totalCount, completedCount } = getJobsForProperty<JobHistory>(id, { limit: keep });
     setJobHistory(jobs);
     setJobHistoryTotal(totalCount);
     setJobHistoryCompleted(completedCount);
     setDocuments(getDocumentsForProperty<SiteDocument>(id));
-  }, [id, jobHistory.length]);
+  }, [id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 

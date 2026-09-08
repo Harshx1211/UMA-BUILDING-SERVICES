@@ -865,18 +865,51 @@ export function subscribeToMyDataLive(userId: string): void {
   // Being newly ADDED to a job's crew — job_technicians alone doesn't carry
   // the job's own fields, so fetch that job's row too, same one-time
   // catch-up shape subscribeToJobLive already uses elsewhere.
+  //
+  // FIX: local job_technicians has a foreign key to jobs(id), enforced
+  // (initializeSchema turns PRAGMA foreign_keys ON). This used to upsert
+  // the crew row FIRST, synchronously, then fetch+insert the job
+  // afterward — but this handler exists specifically for the case where
+  // the technician has never had this job synced locally before, meaning
+  // the parent jobs row doesn't exist yet at the moment the crew row tries
+  // to insert. That threw inside upsertRecord, which only retries on a
+  // missing-column error and otherwise just logs and swallows everything
+  // else — so the crew membership was silently dropped, invisible until
+  // whatever next full periodic sync happened to re-pull it. The job row
+  // now goes in first (awaited), then the crew row.
   const applyMyJobTechnician = (row: Record<string, unknown>) => {
-    upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
     void (async () => {
       const jobId = row.job_id as string;
-      const { data } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
-      if (data) applyJob(data as Record<string, unknown>, false);
-      else _emitSyncComplete();
+      if (!getJobStatus(jobId)) {
+        const { data } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
+        if (data) {
+          applyJob(data as Record<string, unknown>, false);
+        } else {
+          // Fetch failed, or the job doesn't exist server-side — inserting
+          // the crew row now would just hit the same FK violation. Skip;
+          // the periodic pull's own catch-up retries both once possible.
+          return;
+        }
+      }
+      upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
+      _emitSyncComplete();
     })();
   };
 
+  // FIX: this table is subscribed company-wide/unfiltered below (Realtime
+  // can't filter by "job_id IN (my jobs)"), but the periodic pull has
+  // ALWAYS scoped defects to this technician's own jobs only
+  // (_pullRelated('defects', 'job_id', jobIds)) — "the global Defects list"
+  // has only ever meant "across my own jobs," never company-wide. Without
+  // this gate, a defect logged on a completely unrelated technician's job
+  // would get upserted here with no ownership check at all, leaking into
+  // getAllDefects() (app/(app)/defects/index.tsx) for a job/property this
+  // technician has no relationship to. Same requireLocal reasoning as
+  // applyJob — only apply if the defect's own job is already known locally.
   const applyDefect = (row: Record<string, unknown>) => {
     const rowId = row.id as string;
+    const jobId = row.job_id as string | null;
+    if (!jobId || !getJobStatus(jobId)) return;
     const localRow = getRecord<{ updated_at: string | null }>('defects', rowId);
     if (_shouldPreserveLocalRow(row, localRow)) return;
     // Same text[] -> JSON string normalisation subscribeToJobLive's own
@@ -886,8 +919,15 @@ export function subscribeToMyDataLive(userId: string): void {
     _emitSyncComplete();
   };
 
+  // Same leak risk and same fix as applyDefect above — assets is also
+  // subscribed company-wide, and the periodic pull only ever fetches assets
+  // for this technician's own properties (_pullJobs's own properties/assets
+  // fetch, scoped to propertyIds derived from this technician's jobs).
+  // Gate on the asset's property already being known locally.
   const applyAsset = (row: Record<string, unknown>) => {
     const rowId = row.id as string;
+    const propertyId = row.property_id as string | null;
+    if (!propertyId || !getRecord('properties', propertyId)) return;
     const localRow = getRecord<{ updated_at: string | null }>('assets', rowId);
     if (_shouldPreserveLocalRow(row, localRow)) return;
     upsertRecord('assets', row as Record<string, string | number | boolean | null>);
