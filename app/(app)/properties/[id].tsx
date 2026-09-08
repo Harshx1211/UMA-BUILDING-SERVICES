@@ -36,6 +36,10 @@ type JobHistory = Job & {
   property_name?: string;
 };
 
+// Jobs shown by default before the technician has to explicitly ask for
+// more — see loadMoreJobHistory's own comment.
+const JOB_HISTORY_PAGE_SIZE = 5;
+
 // ─── Quick-stat pill ─────────────────────────────────────────
 function StatPill({ icon, value, label, color, bg }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -134,6 +138,9 @@ export default function PropertyDetailScreen() {
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
   const [jobHistory, setJobHistory] = useState<JobHistory[]>([]);
+  const [jobHistoryTotal, setJobHistoryTotal] = useState(0);
+  const [jobHistoryCompleted, setJobHistoryCompleted] = useState(0);
+  const [jobHistoryLoadingMore, setJobHistoryLoadingMore] = useState(false);
   const [documents, setDocuments]   = useState<SiteDocument[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
 
@@ -145,14 +152,18 @@ export default function PropertyDetailScreen() {
       setProperty(p);
       if (p) {
         setAssets(getAssetsForProperty<Asset>(id));
-        // M2: Fetch all jobs (no limit) so the count badge reflects reality.
-        // FIX: this call was still relying on getJobsForProperty's own
-        // `limit = 5` default — the comment's own intent was never actually
-        // implemented, so the count badge, the "+N more" footer (which can
-        // only ever render past 5), and the "JOBS DONE" stat below were all
-        // silently capped at 5 for any property with a longer history.
-        // SQLite's LIMIT -1 means "no limit."
-        setJobHistory(getJobsForProperty<JobHistory>(id, -1));
+        // FIX: this used to fetch the property's ENTIRE job history
+        // unbounded (SQLite LIMIT -1) on every screen open — a property
+        // visited monthly for years builds up a genuinely large list, but
+        // only the first 5 were ever shown; the rest was fetched purely to
+        // .length it for the count badge/footer and .filter().length it for
+        // the JOBS DONE stat. Same fix as getAssetHistory's own pagination:
+        // load a small page up front, get the stats from lightweight COUNT
+        // queries, and only fetch more if explicitly asked for.
+        const { jobs, totalCount, completedCount } = getJobsForProperty<JobHistory>(id, { limit: JOB_HISTORY_PAGE_SIZE });
+        setJobHistory(jobs);
+        setJobHistoryTotal(totalCount);
+        setJobHistoryCompleted(completedCount);
         setDocuments(getDocumentsForProperty<SiteDocument>(id));
       }
     } catch (err) {
@@ -163,6 +174,20 @@ export default function PropertyDetailScreen() {
   }, [id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // `count` is however many MORE jobs the technician asked for (see the
+  // "+5"/"+10"/"Show all" chips below) — always starts reading right after
+  // whatever's already loaded, never refetches jobs already on screen.
+  const loadMoreJobHistory = useCallback((count: number) => {
+    if (!id || jobHistoryLoadingMore) return;
+    setJobHistoryLoadingMore(true);
+    try {
+      const { jobs } = getJobsForProperty<JobHistory>(id, { limit: count, offset: jobHistory.length });
+      setJobHistory((prev) => [...prev, ...jobs]);
+    } finally {
+      setJobHistoryLoadingMore(false);
+    }
+  }, [id, jobHistory.length, jobHistoryLoadingMore]);
 
   if (isLoading) {
     return (
@@ -194,7 +219,12 @@ export default function PropertyDetailScreen() {
   const today         = localDateString();
   const activeAssets  = assets.filter(a => a.status === AssetStatus.Active).length;
   const isOverdue     = property.next_inspection_date && property.next_inspection_date < today;
-  const passedJobs    = jobHistory.filter(j => j.status === JobStatus.Completed).length;
+  // FIX: derived from a dedicated COUNT query (jobHistoryCompleted) rather
+  // than .filter().length over `jobHistory` — that array is now only a
+  // page of the property's jobs (see loadMoreJobHistory), so filtering it
+  // directly would undercount once the history goes back further than
+  // whatever's currently loaded on screen.
+  const passedJobs    = jobHistoryCompleted;
 
   const fullAddress = [property.address, property.suburb, property.state, property.postcode]
     .filter(Boolean).join(', ');
@@ -418,7 +448,7 @@ export default function PropertyDetailScreen() {
           <SectionHeader
             icon="clipboard-list-outline"
             title="Job History"
-            count={jobHistory.length}
+            count={jobHistoryTotal}
           />
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16, padding: 0 }]}>
             {jobHistory.length === 0 ? (
@@ -428,14 +458,16 @@ export default function PropertyDetailScreen() {
                 <Text style={[s.emptySub, { color: C.textTertiary }]}>This property has no job history yet.</Text>
               </View>
             ) : (
-              // M2: Show first 5, then a "View all" footer
+              // FIX: `jobHistory` is now only the loaded page itself (see
+              // loadMoreJobHistory) rather than the property's whole history
+              // — no more .slice(0, 5) needed, every loaded job renders.
               <>
-                {jobHistory.slice(0, 5).map((job, i) => (
+                {jobHistory.map((job, i) => (
                   <TouchableOpacity
                     key={job.id}
                     style={[
                       s.historyRow,
-                      i < Math.min(jobHistory.length, 5) - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
+                      i < jobHistory.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
                     ]}
                     onPress={() => openJob(job.id)}
                     activeOpacity={0.7}
@@ -446,8 +478,8 @@ export default function PropertyDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={[s.historyDate, { color: C.text }]}>
                         {job.scheduled_date}
-                        {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at 
-                          ? ` → ${job.updated_at.substring(0, 10)}` 
+                        {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at
+                          ? ` → ${job.updated_at.substring(0, 10)}`
                           : ''}
                       </Text>
                       <Badge status={job.job_type} />
@@ -458,11 +490,37 @@ export default function PropertyDetailScreen() {
                     </View>
                   </TouchableOpacity>
                 ))}
-                {jobHistory.length > 5 && (
-                  <View style={[s.historyRow, { justifyContent: 'center', borderTopWidth: 1, borderTopColor: C.border }]}>
-                    <Text style={[s.historyDate, { color: C.textTertiary, fontSize: 12, fontWeight: '600' }]}>
-                      + {jobHistory.length - 5} more job{jobHistory.length - 5 !== 1 ? 's' : ''} on record
-                    </Text>
+                {/* Only ever fetches more when explicitly asked — see
+                    loadMoreJobHistory's own comment. Same pattern as the
+                    asset screen's History section. */}
+                {jobHistory.length < jobHistoryTotal && (
+                  <View style={[s.historyRow, { borderTopWidth: 1, borderTopColor: C.border, flexDirection: 'column', alignItems: 'stretch', gap: 8 }]}>
+                    {jobHistoryLoadingMore ? (
+                      <ActivityIndicator size="small" color={C.textTertiary} />
+                    ) : (
+                      <>
+                        <Text style={[s.historyDate, { color: C.textTertiary, fontSize: 12, fontWeight: '600', textAlign: 'center' }]}>
+                          {jobHistoryTotal - jobHistory.length} more job{jobHistoryTotal - jobHistory.length !== 1 ? 's' : ''} on record
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+                          {[5, 10].filter((n) => n < jobHistoryTotal - jobHistory.length).map((n) => (
+                            <TouchableOpacity
+                              key={n}
+                              style={[s.jobHistoryLoadMoreChip, { borderColor: C.border }]}
+                              onPress={() => loadMoreJobHistory(n)}
+                            >
+                              <Text style={[s.jobHistoryLoadMoreChipTxt, { color: C.text }]}>+{n}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity
+                            style={[s.jobHistoryLoadMoreChip, { borderColor: C.border }]}
+                            onPress={() => loadMoreJobHistory(jobHistoryTotal - jobHistory.length)}
+                          >
+                            <Text style={[s.jobHistoryLoadMoreChipTxt, { color: C.text }]}>Show all</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
                   </View>
                 )}
               </>
@@ -560,6 +618,8 @@ const s = StyleSheet.create({
   historyRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   historyIconWrap:{ width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   historyDate:    { fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  jobHistoryLoadMoreChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  jobHistoryLoadMoreChipTxt: { fontSize: 12.5, fontWeight: '700' },
 
   // Empty states
   emptyInCard: { alignItems: 'center', gap: 8, paddingVertical: 32 },

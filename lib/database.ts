@@ -2668,31 +2668,68 @@ export function getAssetsWithJobResults<T = RecordData>(
 }
 
 
+export interface PropertyJobHistoryPage<T> {
+  jobs: T[];
+  /** Every job the property has ever had, regardless of `opts.limit`. */
+  totalCount: number;
+  /** Completed count across ALL of the property's jobs, not just this page
+   * — backs the "JOBS DONE" stat tile, which must reflect the whole history
+   * even while the visible list itself only shows a handful. */
+  completedCount: number;
+}
+
 /**
- * Returns recent jobs for a property (for property detail history section).
- * @param limit defaults to 5
+ * Returns jobs for a property (for property detail's Job History section),
+ * newest first.
+ *
+ * FIX: this used to always fetch and return the property's ENTIRE job
+ * history in one shot (properties/[id].tsx called it with `limit: -1`,
+ * SQLite's "no limit") — a property visited monthly for years builds up a
+ * genuinely large job list, but the screen only ever displayed the first 5;
+ * the rest was fetched solely to `.length` it for the count badge and
+ * "+N more" footer, and to `.filter().length` it for the JOBS DONE stat.
+ * Same shape as getAssetHistory's own pagination fix. opts.limit/offset
+ * page the visible list; totalCount/completedCount come from separate
+ * lightweight COUNT queries so those stats stay correct regardless of how
+ * many rows are actually loaded.
  */
 export function getJobsForProperty<T = RecordData>(
   propertyId: string,
-  limit = 5,
-): T[] {
+  opts?: { limit?: number; offset?: number },
+): PropertyJobHistoryPage<T> {
   try {
     const db = openDatabase();
-    return db.getAllSync<T>(
+    const countRow = db.getFirstSync<{ total: number; completed: number }>(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+       FROM jobs WHERE property_id = ?`,
+      [propertyId],
+    );
+    const totalCount = countRow?.total ?? 0;
+    const completedCount = countRow?.completed ?? 0;
+
+    const params: (string | number)[] = [propertyId];
+    let limitClause = '';
+    if (opts?.limit != null) {
+      limitClause = 'LIMIT ? OFFSET ?';
+      params.push(opts.limit, opts.offset ?? 0);
+    }
+    const jobs = db.getAllSync<T>(
       `SELECT j.*, u.full_name AS technician_name
        FROM jobs j
        LEFT JOIN users u ON j.assigned_to = u.id
        WHERE j.property_id = ?
        ORDER BY j.scheduled_date DESC, j.created_at DESC
-       LIMIT ?`,
-      [propertyId, limit],
+       ${limitClause}`,
+      params,
     );
+    return { jobs, totalCount, completedCount };
   } catch (err) {
     console.error(
       `[UMA BUILDING SERVICES DB] getJobsForProperty(${propertyId}) error:`,
       err,
     );
-    return [];
+    return { jobs: [], totalCount: 0, completedCount: 0 };
   }
 }
 
