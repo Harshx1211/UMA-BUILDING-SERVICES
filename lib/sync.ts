@@ -21,7 +21,7 @@ import {
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
-import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
+import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
@@ -343,6 +343,8 @@ export async function runSync(userId?: string): Promise<boolean> {
     await _pullJobs(resolvedUserId, lastSynced);
     if (_shouldStop) return false;
     await _pullDeletions();
+    if (_shouldStop) return false;
+    await _pullNotifications(resolvedUserId);
     if (_shouldStop) return false;
 
     // ── 4. Timestamp ──────────────────────────────────────────────
@@ -1180,6 +1182,48 @@ async function _pullDeletions(): Promise<void> {
     if (__DEV__) console.log(`[SiteTrack Sync] Applied ${data.length} remote deletion(s), checkpoint now ${highestId}`);
   } catch (err) {
     console.error('[SiteTrack Sync] _pullDeletions unexpected error:', err);
+  }
+}
+
+/**
+ * Catch-up for notifications created while this device was
+ * offline/backgrounded. Unlike jobs/defects/assets, notifications have no
+ * other periodic pull path at all — they were built Realtime-only (see
+ * applyNotification above), so a notification created while disconnected
+ * would otherwise never arrive. Checkpointed on created_at rather than an
+ * id (notifications.id is a UUID, not sequential) — ties within the same
+ * millisecond are rare enough for a notification feed that the tiny risk
+ * of re-applying one (upsertRecord is idempotent on id) is preferable to
+ * missing one on a boundary.
+ */
+async function _pullNotifications(userId: string): Promise<void> {
+  try {
+    const lastPulled = await AsyncStorage.getItem(LAST_NOTIFICATION_PULL_KEY);
+    let query = supabase
+      .from('notifications')
+      .select('*')
+      .or(`user_id.eq.${userId},user_id.is.null`)
+      .order('created_at', { ascending: true })
+      .limit(200);
+    if (lastPulled) query = query.gt('created_at', lastPulled);
+    const { data, error } = await query;
+    if (error) {
+      console.error('[SiteTrack Sync] PULL notifications error:', error.message);
+      return;
+    }
+    if (!data || data.length === 0) return;
+    for (const row of data) {
+      upsertRecord('notifications', row as Record<string, string | number | boolean | null>);
+    }
+    const newestCreatedAt = data[data.length - 1].created_at as string;
+    await AsyncStorage.setItem(LAST_NOTIFICATION_PULL_KEY, newestCreatedAt);
+    // Not calling _emitSyncComplete() here — runSync's own final step already
+    // fires it unconditionally after every pull phase (same pattern as
+    // _pullDeletions/_pullJobs above), so a second call here would just be a
+    // redundant, wasted reload.
+    if (__DEV__) console.log(`[SiteTrack Sync] Pulled ${data.length} notification(s), checkpoint now ${newestCreatedAt}`);
+  } catch (err) {
+    console.error('[SiteTrack Sync] _pullNotifications unexpected error:', err);
   }
 }
 

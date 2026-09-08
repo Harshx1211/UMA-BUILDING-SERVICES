@@ -34,6 +34,12 @@ export const LAST_SYNCED_KEY = '@sitetrack/last_synced';
  * already applied — see _pullDeletions in lib/sync.ts. */
 export const LAST_DELETION_LOG_ID_KEY = '@sitetrack/last_deletion_log_id';
 
+/** AsyncStorage key for the newest notifications.created_at this device has
+ * already pulled — see _pullNotifications in lib/sync.ts. Notifications have
+ * no periodic REST pull otherwise (Realtime-only), so one made while this
+ * device was offline/backgrounded would never arrive without this. */
+export const LAST_NOTIFICATION_PULL_KEY = '@sitetrack/last_notification_pull';
+
 /** AsyncStorage key for the authenticated user session */
 export const SESSION_KEY = '@sitetrack/session';
 
