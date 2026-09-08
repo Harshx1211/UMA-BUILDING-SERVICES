@@ -355,10 +355,17 @@ export function initializeSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_jobs_assigned_to       ON jobs(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_jobs_status            ON jobs(status);
     CREATE INDEX IF NOT EXISTS idx_jobs_scheduled_date    ON jobs(scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_jobs_property_id       ON jobs(property_id);
     CREATE INDEX IF NOT EXISTS idx_assets_property_id     ON assets(property_id);
     CREATE INDEX IF NOT EXISTS idx_defects_job_id         ON defects(job_id);
+    CREATE INDEX IF NOT EXISTS idx_defects_asset_id       ON defects(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_defects_status         ON defects(status);
+    CREATE INDEX IF NOT EXISTS idx_defects_property_id    ON defects(property_id);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_synced       ON sync_queue(synced);
     CREATE INDEX IF NOT EXISTS idx_job_assets_asset_id    ON job_assets(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_inspection_photos_job_id   ON inspection_photos(job_id);
+    CREATE INDEX IF NOT EXISTS idx_inspection_photos_asset_id ON inspection_photos(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_time_logs_job_id        ON time_logs(job_id);
 
     CREATE TABLE IF NOT EXISTS asset_type_definitions (
       id                 TEXT    PRIMARY KEY NOT NULL,
@@ -1474,6 +1481,35 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '42')`);
   }
 
+  // Migration 43: add indexes on several frequently-filtered columns that
+  // never had one — jobs.property_id (getJobsForProperty, the property
+  // detail screen's job history), defects.asset_id/status/property_id
+  // (getDefectsForAsset, getAssetHistory's own defects lookup,
+  // getAllDefects's client-side-filtered global list), and
+  // inspection_photos.job_id/asset_id + time_logs.job_id (getPhotosForJob,
+  // getAssetHistory's photos lookup, getTimeLogsForJob). Every one of these
+  // was a full table scan of the whole company's rows for that table on
+  // every call — impact scales with total company history, which only
+  // grows over the life of a tenant, not with any one job/property.
+  if (currentVersion < 43) {
+    try {
+      db.execSync(`
+        CREATE INDEX IF NOT EXISTS idx_jobs_property_id       ON jobs(property_id);
+        CREATE INDEX IF NOT EXISTS idx_defects_asset_id       ON defects(asset_id);
+        CREATE INDEX IF NOT EXISTS idx_defects_status         ON defects(status);
+        CREATE INDEX IF NOT EXISTS idx_defects_property_id    ON defects(property_id);
+        CREATE INDEX IF NOT EXISTS idx_inspection_photos_job_id   ON inspection_photos(job_id);
+        CREATE INDEX IF NOT EXISTS idx_inspection_photos_asset_id ON inspection_photos(asset_id);
+        CREATE INDEX IF NOT EXISTS idx_time_logs_job_id        ON time_logs(job_id);
+      `);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 43: index creation already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 43: added missing indexes on jobs/defects/inspection_photos/time_logs');
+    currentVersion = 43;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '43')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1845,24 +1881,42 @@ export function getAssetHistory(assetId: string, excludeJobId: string): AssetHis
        ORDER BY actioned_at DESC`,
       [assetId, excludeJobId],
     );
-    return visits.map((v) => {
-      const defects = db.getAllSync<AssetHistoryDefect>(
-        `SELECT id, description, severity, defect_code, quote_price FROM defects WHERE asset_id = ? AND job_id = ?`,
-        [assetId, v.job_id],
-      );
-      const photos = db.getAllSync<AssetHistoryPhoto>(
-        `SELECT id, photo_url FROM inspection_photos WHERE asset_id = ? AND job_id = ?`,
-        [assetId, v.job_id],
-      );
-      return {
-        jobId: v.job_id,
-        date: v.actioned_at,
-        result: v.result,
-        technicianNotes: v.technician_notes,
-        defects,
-        photos,
-      };
-    });
+    if (visits.length === 0) return [];
+
+    // FIX: this used to run 2 more synchronous SQLite round-trips PER VISIT
+    // (defects, then photos) — an asset serviced quarterly for a few years
+    // easily has 15-20+ prior visits, so opening its detail screen (the
+    // single most common navigation action during an inspection) fired
+    // 30-40+ queries back-to-back before the screen could render. Batched
+    // into 2 queries total across every visit, grouped by job_id in JS.
+    const allDefects = db.getAllSync<AssetHistoryDefect & { job_id: string }>(
+      `SELECT id, description, severity, defect_code, quote_price, job_id FROM defects WHERE asset_id = ? AND job_id != ?`,
+      [assetId, excludeJobId],
+    );
+    const allPhotos = db.getAllSync<AssetHistoryPhoto & { job_id: string }>(
+      `SELECT id, photo_url, job_id FROM inspection_photos WHERE asset_id = ? AND job_id != ?`,
+      [assetId, excludeJobId],
+    );
+
+    const defectsByJob = new Map<string, AssetHistoryDefect[]>();
+    for (const { job_id, ...defect } of allDefects) {
+      if (!defectsByJob.has(job_id)) defectsByJob.set(job_id, []);
+      defectsByJob.get(job_id)!.push(defect);
+    }
+    const photosByJob = new Map<string, AssetHistoryPhoto[]>();
+    for (const { job_id, ...photo } of allPhotos) {
+      if (!photosByJob.has(job_id)) photosByJob.set(job_id, []);
+      photosByJob.get(job_id)!.push(photo);
+    }
+
+    return visits.map((v) => ({
+      jobId: v.job_id,
+      date: v.actioned_at,
+      result: v.result,
+      technicianNotes: v.technician_notes,
+      defects: defectsByJob.get(v.job_id) ?? [],
+      photos: photosByJob.get(v.job_id) ?? [],
+    }));
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getAssetHistory(${assetId}) error:`, err);
     return [];
