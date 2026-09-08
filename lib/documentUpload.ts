@@ -181,6 +181,7 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             job_id: string | null;
             page_count: number | null;
             uploaded_at: string | null;
+            updated_at: string | null;
           }>('site_documents', payload.recordId);
 
           addToSyncQueue('site_documents', payload.recordId, SyncOperation.Insert, {
@@ -196,6 +197,12 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             // of stamping a fresh one at upload-completion time, which
             // could invert real order under concurrent uploads.
             uploaded_at:  localRow?.uploaded_at ?? new Date().toISOString(),
+            // FIX: the server row needs SOME updated_at value from the very
+            // first Insert, or the sync engine's anti-clobber check
+            // (_shouldPreserveLocalRow) can never compare against it at all
+            // — see this table's own migration comment (lib/database.ts's
+            // migration 42) for why that check exists.
+            updated_at:   localRow?.updated_at ?? localRow?.uploaded_at ?? new Date().toISOString(),
             uploaded_by:  currentUserId,
           });
 

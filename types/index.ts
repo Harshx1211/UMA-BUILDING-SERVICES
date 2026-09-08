@@ -201,6 +201,9 @@ export interface SiteDocument {
   page_count: number | null;
   uploaded_at: string;
   uploaded_by: string | null;
+  /** Stamped on every edit (rename) — lets the sync engine tell a fresher
+   * local edit apart from a stale server echo/pull, same as defects/assets. */
+  updated_at: string | null;
 }
 
 /** Client + technician signatures captured at job completion */

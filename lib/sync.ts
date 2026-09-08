@@ -385,6 +385,31 @@ export async function runSync(userId?: string): Promise<boolean> {
 }
 
 /**
+ * Bounded wait (up to 5s, polling every 500ms) for any in-flight runSync()
+ * to actually finish, rather than merely being told to stop.
+ *
+ * FIX: stopSync() only sets a flag (_shouldStop) that a running _pullJobs()
+ * checks at a few outer boundaries — it never aborts a pull already mid-
+ * flight, whose network fetches and the local upsertRecord/upsertRecordBulk
+ * writes they trigger all run to completion regardless. authStore's
+ * signOut() and its SIGNED_OUT listener counterpart both call stopSync()
+ * then, in the COMMON case where nothing is queued to push, went straight
+ * to clearDatabase() with no wait at all — so a background sync tick that
+ * happened to be mid-_pullJobs() when the user tapped Sign Out could still
+ * write rows for the just-logged-out user into local SQLite *after* it had
+ * just been wiped for the next login, a real cross-account data exposure on
+ * a shared device. Both callers now await this before wiping. Bounded, not
+ * indefinite — a stuck sync must never block sign-out forever; the worst
+ * case if the wait times out is the pre-existing race, not a new hang.
+ */
+export async function waitForSyncIdle(maxWaitMs = 5000): Promise<void> {
+  const stepMs = 500;
+  for (let waited = 0; _isSyncing && waited < maxWaitMs; waited += stepMs) {
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+}
+
+/**
  * Pushes photo binaries then the sync queue, guarded by the same
  * `_isProcessingPhotos` mutex runSync() uses internally — plus a bounded wait
  * for any already-in-flight runSync() to finish its own push first.
@@ -570,7 +595,12 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     const rowId = row.id as string;
     if (rowId !== jobId) return;
     const localStatus = getJobStatus(rowId);
-    if (localStatus) {
+    // FIX: same 'cancelled' fix as _pullJobs's own job-upsert loop — it's an
+    // administrative override, not a step on the scheduled/in_progress/
+    // completed progression STATUS_PRIORITY ranks, so it must always apply
+    // immediately rather than being treated as a "stale, lower-priority"
+    // regression of whatever the technician had gotten to locally.
+    if (localStatus && row.status !== 'cancelled') {
       const serverPriority = STATUS_PRIORITY[row.status as string] ?? 1;
       const localPriority  = STATUS_PRIORITY[localStatus.status]   ?? 1;
       if (localPriority > serverPriority) {
@@ -612,6 +642,16 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   const applyDocument = (row: Record<string, unknown>) => {
     const rowId = row.id as string;
     if (getDeletedDocumentIds().has(rowId)) return;
+    // FIX: same anti-clobber protection _pullRelated now applies for this
+    // table — without it, a rename could be silently reverted by a
+    // realtime echo of this row's own upload-completion Insert (or a
+    // reconnect catch-up pull racing right behind it) landing after the
+    // rename but carrying the pre-rename title.
+    const localRow = getRecord<{ updated_at: string | null }>('site_documents', rowId);
+    if (_shouldPreserveLocalRow(row, localRow)) {
+      if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local site_documents row over incoming row for ${rowId}`);
+      return;
+    }
     upsertRecord('site_documents', row as Record<string, string | number | boolean | null>);
     _liveOnChange?.('site_documents');
   };
@@ -769,10 +809,19 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   }
   const assignedJobIds = (assignedRows ?? []).map((r) => r.job_id as string);
 
-  // Always pull all non-cancelled jobs for this technician.
+  // Always pull all of this technician's jobs, cancelled included.
   // Using a simple filter (no lastSynced delta) guarantees we never silently
   // drop jobs due to clock skew, timezone edge-cases, or status transitions.
   // The result set is small (one technician's workload) so this is fine.
+  // FIX: this used to exclude cancelled jobs entirely — meant as "don't
+  // bother pulling jobs there's no more work on," but it meant a job
+  // cancelled by the office AFTER already being synced locally simply
+  // vanished from every future pull's result set, so its cancellation never
+  // reached this device — the job stayed at whatever status it last had
+  // (scheduled/in_progress), fully visible and actionable, indefinitely.
+  // getJobsForTechnician's own WHERE status != 'cancelled' (lib/database.ts)
+  // still keeps a correctly-synced cancelled job out of every list — this
+  // only changes whether the cancellation itself ever arrives.
   const orFilter = assignedJobIds.length > 0
     ? `assigned_to.eq.${userId},id.in.(${assignedJobIds.join(',')})`
     : `assigned_to.eq.${userId}`;
@@ -780,7 +829,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   // jobs and techUser both depend only on userId, not on each other — fetch
   // concurrently instead of sequentially.
   const [jobsResult, techUserResult] = await Promise.all([
-    supabase.from('jobs').select('*').or(orFilter).neq('status', 'cancelled'),
+    supabase.from('jobs').select('*').or(orFilter),
     supabase.from('users').select('*').eq('id', userId).maybeSingle(),
   ]);
   const { data: jobs, error: jobsError } = jobsResult;
@@ -876,7 +925,14 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   let preservedCount = 0;
   for (const job of jobs) {
     const localStatus = getJobStatus(job.id as string);
-    if (localStatus) {
+    // FIX: 'cancelled' used to be ranked lowest on STATUS_PRIORITY (a ladder
+    // meant for "how far along" — scheduled < in_progress < completed), so
+    // an office cancellation of an already in_progress/completed job looked
+    // like "the server regressed this job" and was discarded as stale for up
+    // to 6 hours below. Cancellation isn't part of that progression at all —
+    // it's an administrative override that should always win immediately,
+    // regardless of how far the technician had gotten locally.
+    if (localStatus && job.status !== 'cancelled') {
       const serverPriority = STATUS_PRIORITY[job.status as string] ?? 1;
       const localPriority  = STATUS_PRIORITY[localStatus.status]  ?? 1;
       if (localPriority > serverPriority) {
@@ -1160,9 +1216,14 @@ async function _pullRelated(
       }
 
       // FIX: same anti-clobber protection job_assets already had, applied
-      // to defects/assets — never let a pull overwrite a locally-edited row
-      // with an older server copy.
-      if (table === 'defects' || table === 'assets') {
+      // to defects/assets/site_documents — never let a pull overwrite a
+      // locally-edited row with an older server copy. site_documents added
+      // after a real gap: it was added to this table's own tombstone check
+      // above, but a rename (documentsStore.renameDocument) had nothing
+      // protecting it from being reverted by a stale pull of the
+      // pre-rename row — see this table's migration 42 (lib/database.ts)
+      // for the updated_at column that makes this comparison possible.
+      if (table === 'defects' || table === 'assets' || table === 'site_documents') {
         const serverRow = row as Record<string, unknown>;
         const localRow = getRecord<{ updated_at: string | null }>(table, rowId);
         if (_shouldPreserveLocalRow(serverRow, localRow)) {
@@ -1293,6 +1354,25 @@ export async function _pushQueue(): Promise<void> {
             // exists anywhere once deleted below, and be marked synced
             // without ever actually being applied.
             remapSyncQueueRecordId('job_assets', item.record_id, existing.id);
+            // FIX: remapSyncQueueRecordId only persists the correction to
+            // SQLite — `pending`, the in-memory array this whole _pushQueue
+            // pass is still iterating over, is now stale for that same
+            // follow-up item. Left unpatched, its own turn later in THIS
+            // pass still carries the old record_id/payload.id, matches zero
+            // rows server-side (a no-op success from Supabase's point of
+            // view), and gets marked synced anyway — silently discarding
+            // the technician's follow-up edit with no retry and no alert.
+            for (const p of pending) {
+              if (p.id === item.id || p.table_name !== 'job_assets' || p.record_id !== item.record_id) continue;
+              p.record_id = existing.id;
+              try {
+                const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
+                if (pPayload.id === item.record_id) {
+                  pPayload.id = existing.id;
+                  p.payload = JSON.stringify(pPayload);
+                }
+              } catch { /* leave payload untouched if unparsable */ }
+            }
             // This device's own locally-generated row is now an orphan either
             // way — the canonical row lives at `existing.id`. Drop it locally;
             // the next pull brings the canonical (winning) row down normally.

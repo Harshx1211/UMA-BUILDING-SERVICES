@@ -30,7 +30,7 @@ interface DocumentsState {
 
   /** Loads every document for a property — not job-scoped, matches property.site_note's "shared across every job" model */
   loadDocuments: (propertyId: string) => void;
-  addDocument: (doc: Omit<SiteDocument, 'id' | 'uploaded_at'>) => void;
+  addDocument: (doc: Omit<SiteDocument, 'id' | 'uploaded_at' | 'updated_at'>) => void;
   deleteDocument: (documentId: string) => void;
   renameDocument: (documentId: string, title: string) => void;
   /** Number of documents still stored as local file:// URIs (pending upload) */
@@ -59,10 +59,16 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   addDocument: (docData) => {
     try {
       const id = generateUUID();
+      const now = new Date().toISOString();
       const newDocument: SiteDocument = {
         ...docData,
         id,
-        uploaded_at: new Date().toISOString(),
+        uploaded_at: now,
+        // Stamped at creation, same as uploaded_at — nothing's been edited
+        // yet, but the sync engine's anti-clobber check (_shouldPreserveLocalRow)
+        // needs both local and server copies to have SOME timestamp to
+        // compare, not just an eventual rename.
+        updated_at: now,
         local_uri: (
           docData.document_url.startsWith('file://') ||
           docData.document_url.startsWith('content://')
@@ -125,11 +131,18 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
 
   renameDocument: (documentId, title) => {
     try {
-      updateRecord('site_documents', documentId, { title });
-      addToSyncQueue('site_documents', documentId, SyncOperation.Update, { title });
+      // FIX: stamping updated_at is what lets the sync engine's anti-
+      // clobber check (_shouldPreserveLocalRow, now applied to
+      // site_documents — see lib/sync.ts) tell this rename apart from a
+      // stale server echo/pull of the pre-rename row. Without it, a rename
+      // could be silently reverted by a reconnect catch-up pull or a
+      // realtime echo of the row's own upload-completion Insert.
+      const now = new Date().toISOString();
+      updateRecord('site_documents', documentId, { title, updated_at: now });
+      addToSyncQueue('site_documents', documentId, SyncOperation.Update, { title, updated_at: now });
       set((state) => ({
         documents: state.documents.map((d) =>
-          d.id === documentId ? { ...d, title } : d
+          d.id === documentId ? { ...d, title, updated_at: now } : d
         ),
       }));
     } catch (err: unknown) {

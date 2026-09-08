@@ -281,6 +281,7 @@ export function initializeSchema(): void {
       page_count    INTEGER,
       uploaded_at   TEXT NOT NULL DEFAULT (datetime('now')),
       uploaded_by   TEXT NOT NULL,
+      updated_at    TEXT,
       FOREIGN KEY (property_id) REFERENCES properties(id),
       FOREIGN KEY (job_id)      REFERENCES jobs(id),
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
@@ -1455,6 +1456,22 @@ export function initializeSchema(): void {
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 41: added assets.updated_at');
     currentVersion = 41;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '41')`);
+  }
+
+  // Migration 42: add updated_at to the local `site_documents` table — it
+  // never had one, so the sync engine had no way to tell a fresh local
+  // rename apart from a stale server echo/pull of the pre-rename row (same
+  // reasoning as migration 41's assets.updated_at). Nullable: a document
+  // that's never been renamed simply has no local edit to protect yet.
+  if (currentVersion < 42) {
+    try {
+      db.runSync(`ALTER TABLE site_documents ADD COLUMN updated_at TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 42: site_documents.updated_at already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 42: added site_documents.updated_at');
+    currentVersion = 42;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '42')`);
   }
 
   // Seed inventory from Uptick defect codes on first run

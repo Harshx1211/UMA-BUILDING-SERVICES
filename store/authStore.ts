@@ -215,6 +215,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       stopSync();
 
+      // FIX: stopSync() only signals a running background sync to stop at
+      // its next checkpoint — it doesn't abort one already mid-_pullJobs(),
+      // whose writes land in local SQLite regardless. Without this wait, the
+      // pending-items check just below (and clearDatabase() past it) used to
+      // run immediately whenever nothing was queued to push — the common
+      // case — letting an in-flight pull's writes for this now-signing-out
+      // user land in SQLite after it had just been wiped for the next
+      // login. See waitForSyncIdle's own comment.
+      const { waitForSyncIdle } = await import('@/lib/sync');
+      await waitForSyncIdle();
+
       // FIX: signOut() used to wipe the local database unconditionally, even
       // with unsynced work still queued (offline inspection results, photos,
       // defects) — silently destroying it, despite the sign-out confirmation
@@ -520,6 +531,14 @@ supabase.auth.onAuthStateChange((event, session) => {
     // here, and only wipe local data once nothing is left waiting to sync.
     stopSync();
     void (async () => {
+      // FIX: same wait signOut() now does, and for the same reason — see
+      // waitForSyncIdle's own comment. Without it, this handler's own
+      // pending-items check (and clearDatabase() past it) ran immediately
+      // whenever nothing was queued to push, letting an in-flight pull's
+      // writes land in SQLite after it had just been wiped.
+      const { waitForSyncIdle } = await import('@/lib/sync');
+      await waitForSyncIdle();
+
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
         try {
