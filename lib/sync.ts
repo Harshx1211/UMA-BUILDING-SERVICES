@@ -17,10 +17,11 @@ import {
   deleteRecord,
   remapSyncQueueRecordId,
   updateSyncQueuePayload,
+  applyRemoteDeletion,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
-import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
+import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
 import type { SyncStatus } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
@@ -340,6 +341,8 @@ export async function runSync(userId?: string): Promise<boolean> {
     const lastSynced = await AsyncStorage.getItem(LAST_SYNCED_KEY);
     if (_shouldStop) return false;
     await _pullJobs(resolvedUserId, lastSynced);
+    if (_shouldStop) return false;
+    await _pullDeletions();
     if (_shouldStop) return false;
 
     // ── 4. Timestamp ──────────────────────────────────────────────
@@ -785,14 +788,14 @@ function _teardownLiveChannel(): void {
  * Every handler below (1) writes the incoming row to local SQLite with the
  * same guard the periodic pull already uses for that table where one
  * exists (STATUS_PRIORITY for jobs, _shouldPreserveLocalRow for
- * defects/assets — properties/notifications/users have no local-edit path
- * from the mobile app to protect, so a plain upsert matches what the
- * periodic pull already does for them too), then (2) calls
- * _emitSyncComplete() — the EXACT signal the periodic sync already fires
- * when it finishes. Any screen already reloading on that signal (jobsStore
- * is subscribed globally in app/(app)/_layout.tsx, which is what already
- * keeps Home/Schedule's job lists current; the global Defects screen
- * already listens too) gets this for free. Screens that had no such
+ * defects/assets — properties/notifications/users/catalogue tables have no
+ * local-edit path from the mobile app to protect, so a plain upsert
+ * matches what the periodic pull already does for them too), then (2)
+ * calls _emitSyncComplete() — the EXACT signal the periodic sync already
+ * fires when it finishes. Any screen already reloading on that signal
+ * (jobsStore is subscribed globally in app/(app)/_layout.tsx, which is
+ * what already keeps Home/Schedule's job lists current; the global Defects
+ * screen already listens too) gets this for free. Screens that had no such
  * listener at all — Notifications, single Asset detail, Property Detail,
  * Property Asset Register — each gained one. Profile reads reactively from
  * authStore rather than local SQLite, so applyMyUser patches that store
@@ -801,22 +804,21 @@ function _teardownLiveChannel(): void {
  * whichever fires first does the real work; the other, if it fires later
  * and finds nothing new, is a harmless repeat.
  *
- * Two known, deliberate gaps, not oversights:
- * - `jobs` is filtered by assigned_to=eq.<userId> (the legacy single-
- *   assignee column) — a status change on a job this technician is only a
- *   job_technicians CREW member of (not the primary assignee) isn't caught
- *   live by this filter, since Realtime's filter syntax is a plain column
- *   comparison, not a subquery against job_technicians. Being newly ADDED
- *   to a job's crew is still caught (job_technicians INSERT below), and any
- *   job with its own screen open is still covered by subscribeToJobLive
- *   regardless of crew role — this only affects a crew (non-primary) job
- *   that's both not currently open anywhere and changes status elsewhere;
- *   the 10-minute fallback still catches it.
- * - Broadcast notifications (user_id IS NULL) aren't subscribed — Realtime
- *   postgres_changes filters aren't confirmed to support an IS NULL
- *   comparison the way a plain REST query does, so this is left to the
- *   10-minute fallback rather than shipping a filter that might silently
- *   never match anything.
+ * Covers, beyond the original set: catalogue/reference tables (rarely
+ * change, but the channel already exists so there's no real cost — see
+ * applyCatalogueRow), deletion_log (propagates a deletion made on ANOTHER
+ * device — see supabase/migrations/20260910000000_deletion_log.sql and
+ * _pullDeletions, its offline catch-up counterpart), and — the two gaps
+ * this used to carry as known limitations, now closed:
+ * - `jobs` UPDATE is unfiltered (RLS-scoped to this technician's own
+ *   company) rather than assigned_to=eq.<userId>, specifically to catch a
+ *   status change on a job this technician is only a job_technicians CREW
+ *   member of. See applyJob's own `requireLocal` comment for how this
+ *   avoids leaking every job in the company into a technician's own data.
+ * - Notifications are also subscribed unfiltered, with the "mine or a
+ *   broadcast" check done in JS (applyNotification) instead of relying on
+ *   Realtime's filter grammar to support an IS NULL comparison, which
+ *   isn't confirmed the way a plain REST query's is.
  */
 let _myDataChannel: RealtimeChannel | null = null;
 let _myDataUserId: string | null = null;
@@ -827,9 +829,25 @@ export function subscribeToMyDataLive(userId: string): void {
   if (_myDataChannel) _teardownMyDataChannel();
   _myDataUserId = userId;
 
-  const applyJob = (row: Record<string, unknown>) => {
+  // FIX: the UPDATE binding below is now unfiltered (RLS-scoped to this
+  // technician's own company, not assigned_to=this user) specifically to
+  // catch a status change on a job this technician is a job_technicians
+  // CREW member of but not the primary assignee — Realtime's filter
+  // grammar is a plain column comparison, it can't express "assigned_to =
+  // me OR id IN (my crew job ids)" the way the periodic pull's own query
+  // does. `requireLocal` (true for that unfiltered UPDATE binding) only
+  // applies the update if this job is ALREADY known locally — meaning the
+  // periodic pull's own correct assigned_to/crew check already decided
+  // this technician should have it — otherwise every job in the company
+  // would start appearing, not just this technician's own. The two callers
+  // that pass requireLocal=false (a genuinely new assigned_to=eq.userId
+  // INSERT, and applyMyJobTechnician's catch-up fetch right after being
+  // added to a job's crew) are both cases where relevance is already
+  // established a different way, so there's nothing to gate.
+  const applyJob = (row: Record<string, unknown>, requireLocal: boolean) => {
     const rowId = row.id as string;
     const localStatus = getJobStatus(rowId);
+    if (requireLocal && !localStatus) return;
     // Same 'cancelled' override as subscribeToJobLive's own applyJob — an
     // administrative override, not a step on the priority ladder.
     if (localStatus && row.status !== 'cancelled') {
@@ -852,7 +870,7 @@ export function subscribeToMyDataLive(userId: string): void {
     void (async () => {
       const jobId = row.job_id as string;
       const { data } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
-      if (data) applyJob(data as Record<string, unknown>);
+      if (data) applyJob(data as Record<string, unknown>, false);
       else _emitSyncComplete();
     })();
   };
@@ -881,8 +899,55 @@ export function subscribeToMyDataLive(userId: string): void {
     _emitSyncComplete();
   };
 
+  // FIX: subscribed unfiltered below (RLS-scoped to this technician's own
+  // company) rather than filter: user_id=eq.userId — Realtime's filter
+  // grammar isn't confirmed to support an IS NULL comparison the way a
+  // plain REST query does, so a separate binding for broadcast
+  // (user_id IS NULL) notifications risked silently never matching
+  // anything. Filtering "mine or a broadcast" here in JS instead is correct
+  // either way: if this company's RLS on notifications is itself narrow
+  // (user_id = me OR IS NULL), this is a no-op double-check; if RLS is
+  // broader (company-wide), this is what stops another technician's
+  // personal notifications from polluting this device's own list.
   const applyNotification = (row: Record<string, unknown>) => {
+    if (row.user_id !== userId && row.user_id !== null) return;
     upsertRecord('notifications', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  // Catalogue/reference data (defect codes, asset type definitions,
+  // pricing, tags) — changes rarely, but the channel already exists and
+  // RLS already scopes these to this technician's own company, so there's
+  // no real cost to including them too. Plain upsert, matching
+  // _pullCatalogueTables's own unconditional treatment — nothing on the
+  // mobile side ever edits these.
+  const applyCatalogueRow = (table: string, row: Record<string, unknown>) => {
+    let payload = row;
+    // Same text[] -> JSON string normalisation _pullCatalogueTables already
+    // does for this one column.
+    if (table === 'asset_type_definitions') {
+      const variants = Array.isArray(row.variants) ? JSON.stringify(row.variants) : (row.variants ?? '[]');
+      payload = { ...row, variants };
+    }
+    // FIX: _pullCatalogueTables hardcodes is_active: 1 because its own
+    // query already filters WHERE is_active = true — this subscription has
+    // no such filter (a row being DEACTIVATED live is exactly the kind of
+    // change worth reflecting immediately), so the real current value is
+    // converted from Postgres's boolean to SQLite's 1/0 instead of assumed.
+    if ('is_active' in payload) {
+      payload = { ...payload, is_active: payload.is_active ? 1 : 0 };
+    }
+    upsertRecord(table, payload as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  // See supabase/migrations/20260910000000_deletion_log.sql — the missing
+  // half of the sync engine until now. Only handles what arrives WHILE this
+  // channel is connected; _pullDeletions (called every runSync) is the
+  // catch-up for whatever happened while this device was offline or
+  // backgrounded, since Realtime never replays missed events.
+  const applyDeletion = (row: Record<string, unknown>) => {
+    applyRemoteDeletion(row.table_name as string, row.record_id as string);
     _emitSyncComplete();
   };
 
@@ -900,17 +965,28 @@ export function subscribeToMyDataLive(userId: string): void {
 
   _myDataChannel = supabase
     .channel(`my-data-live:${userId}`)
-    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs', filter: `assigned_to=eq.${userId}` }, (p) => applyJob(p.new))
-    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `assigned_to=eq.${userId}` }, (p) => applyJob(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs', filter: `assigned_to=eq.${userId}` }, (p) => applyJob(p.new, false))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, (p) => applyJob(p.new, true))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_technicians', filter: `user_id=eq.${userId}` }, (p) => applyMyJobTechnician(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'properties' }, (p) => applyProperty(p.new))
-    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (p) => applyNotification(p.new))
-    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (p) => applyNotification(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (p) => applyNotification(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, (p) => applyNotification(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` }, (p) => applyMyUser(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inventory_items' }, (p) => applyCatalogueRow('inventory_items', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'inventory_items' }, (p) => applyCatalogueRow('inventory_items', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'asset_type_definitions' }, (p) => applyCatalogueRow('asset_type_definitions', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'asset_type_definitions' }, (p) => applyCatalogueRow('asset_type_definitions', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'defect_codes' }, (p) => applyCatalogueRow('defect_codes', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defect_codes' }, (p) => applyCatalogueRow('defect_codes', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'asset_tags' }, (p) => applyCatalogueRow('asset_tags', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'asset_tags' }, (p) => applyCatalogueRow('asset_tags', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'asset_tag_assignments' }, (p) => applyCatalogueRow('asset_tag_assignments', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'asset_tag_assignments' }, (p) => applyCatalogueRow('asset_tag_assignments', p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'deletion_log' }, (p) => applyDeletion(p.new))
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] my-data-live subscribed for user ${userId}`);
@@ -986,6 +1062,43 @@ export function syncNow(userId?: string): void {
 // ─────────────────────────────────────────────
 // Private helpers
 // ─────────────────────────────────────────────
+
+/**
+ * Catch-up for deletions made on ANOTHER device while this one was
+ * offline/backgrounded — see supabase/migrations/20260910000000_deletion_log.sql
+ * for why this exists (Realtime never replays events missed while
+ * disconnected, so the my-data-live channel's own deletion_log subscription
+ * only ever covers what happens while it's actually connected). Reads
+ * "everything since my last checkpoint" ordered by id (an IDENTITY column,
+ * so a true insertion-order tiebreaker), applies each one locally, then
+ * advances the checkpoint to the highest id actually seen — never skips
+ * ahead past a batch it hasn't processed yet.
+ */
+async function _pullDeletions(): Promise<void> {
+  try {
+    const lastIdStr = await AsyncStorage.getItem(LAST_DELETION_LOG_ID_KEY);
+    const lastId = lastIdStr ? Number(lastIdStr) : 0;
+    const { data, error } = await supabase
+      .from('deletion_log')
+      .select('id, table_name, record_id')
+      .gt('id', lastId)
+      .order('id', { ascending: true })
+      .limit(500);
+    if (error) {
+      console.error('[SiteTrack Sync] PULL deletion_log error:', error.message);
+      return;
+    }
+    if (!data || data.length === 0) return;
+    for (const row of data) {
+      applyRemoteDeletion(row.table_name as string, row.record_id as string);
+    }
+    const highestId = data[data.length - 1].id as number;
+    await AsyncStorage.setItem(LAST_DELETION_LOG_ID_KEY, String(highestId));
+    if (__DEV__) console.log(`[SiteTrack Sync] Applied ${data.length} remote deletion(s), checkpoint now ${highestId}`);
+  } catch (err) {
+    console.error('[SiteTrack Sync] _pullDeletions unexpected error:', err);
+  }
+}
 
 /** Pulls all jobs assigned to the user and the related properties/assets */
 async function _pullJobs(userId: string, _lastSynced: string | null): Promise<void> {

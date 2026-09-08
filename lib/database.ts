@@ -2321,6 +2321,44 @@ export function getDeletedDocumentIds(): Set<string> {
   }
 }
 
+/**
+ * Tables a remote deletion (public.deletion_log, written by a Postgres
+ * trigger on DELETE — see supabase/migrations/20260910000000_deletion_log.sql)
+ * is allowed to remove locally. Deliberately an explicit allowlist rather
+ * than trusting deletion_log.table_name directly — that value is
+ * server-controlled (Postgres's own TG_TABLE_NAME, not user input) so
+ * injection isn't the concern, but a table this app doesn't mirror locally
+ * at all would otherwise throw inside deleteRecord's own identifier check.
+ */
+const REMOTE_DELETABLE_TABLES = new Set([
+  'job_assets', 'defects', 'inspection_photos', 'site_documents',
+  'signatures', 'quotes', 'quote_items', 'time_logs', 'job_technicians',
+]);
+
+/**
+ * Applies a deletion made on ANOTHER device to this device's local copy —
+ * the missing half of the sync engine until now. Every other write path
+ * (realtime INSERT/UPDATE, the periodic REST pull) already reconciles a
+ * changed row; nothing ever told a device "this row is now gone" unless
+ * THIS device was the one that deleted it. See deletion_log's own migration
+ * comment for the full reasoning.
+ *
+ * inspection_photos/site_documents also get tombstoned exactly like a local
+ * delete already does (recordDeletedPhoto/recordDeletedDocument) — without
+ * that, a slightly-stale INSERT/UPDATE echo of the same row arriving right
+ * after this deletion could resurrect it.
+ */
+export function applyRemoteDeletion(tableName: string, recordId: string): void {
+  if (!REMOTE_DELETABLE_TABLES.has(tableName)) return;
+  try {
+    deleteRecord(tableName, recordId);
+    if (tableName === 'inspection_photos') recordDeletedPhoto(recordId);
+    if (tableName === 'site_documents') recordDeletedDocument(recordId);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] applyRemoteDeletion(${tableName}, ${recordId}) error:`, err);
+  }
+}
+
 /** Returns every scanned document for a property, newest first. Mirrors getPhotosForJob. */
 export function getDocumentsForProperty<T = RecordData>(propertyId: string): T[] {
   try {

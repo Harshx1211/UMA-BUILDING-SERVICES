@@ -30,6 +30,10 @@ export const DB_NAME = 'sitetrack.db';
 /** AsyncStorage key used to persist the last successful sync timestamp */
 export const LAST_SYNCED_KEY = '@sitetrack/last_synced';
 
+/** AsyncStorage key for the highest public.deletion_log.id this device has
+ * already applied — see _pullDeletions in lib/sync.ts. */
+export const LAST_DELETION_LOG_ID_KEY = '@sitetrack/last_deletion_log_id';
+
 /** AsyncStorage key for the authenticated user session */
 export const SESSION_KEY = '@sitetrack/session';
 
