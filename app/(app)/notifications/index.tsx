@@ -13,6 +13,7 @@ import { ScreenHeader, EmptyState, showConfirm } from '@/components/ui';
 import {
   useNotificationsStore, type AppNotification, type NotificationType,
 } from '@/store/notificationsStore';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -104,6 +105,13 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     loadNotifications();
+    // FIX: this only ever loaded once, on mount — a new notification
+    // arriving (or another device marking one read) while this screen was
+    // already open never showed up until you left and came back. Now
+    // reloads on the same signal the "my data" live channel and the
+    // 10-minute fallback sync both fire (see subscribeToMyDataLive).
+    onSyncComplete(loadNotifications);
+    return () => offSyncComplete(loadNotifications);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

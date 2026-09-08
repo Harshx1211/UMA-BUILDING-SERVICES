@@ -28,6 +28,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus, SyncOperation } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { Defect, Signature } from '@/types';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -248,6 +249,12 @@ export default function ReportSummaryScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  // This summary reads job_assets/defects/signature directly (not through a
+  // store), so — unlike the job's own status — none of it refreshes live on
+  // its own. Someone adding a defect while this screen is open, right
+  // before the technician hits Generate, is exactly the case this closes.
+  useJobLiveSync(jobId, useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

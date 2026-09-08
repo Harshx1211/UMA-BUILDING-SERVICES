@@ -1,5 +1,5 @@
 // Property detail screen — professional inspection-officer view inspired by Uptick
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Linking, ScrollView, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
@@ -16,6 +16,7 @@ import type { Property, Asset, Job, SiteDocument } from '@/types';
 import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
 import DocumentCard from '@/components/documents/DocumentCard';
 import { localDateString } from '@/utils/dateHelpers';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -173,7 +174,36 @@ export default function PropertyDetailScreen() {
     }
   }, [id]);
 
+  // Used by the live/fallback sync refresher below — a plain load() would
+  // reset an already-expanded job history (via the "+5"/"+10"/"Show all"
+  // chips) back down to JOB_HISTORY_PAGE_SIZE every time anything synced,
+  // discarding progress the technician already asked for. Re-fetches
+  // however many are currently showing instead of the default page size.
+  const refreshKeepingHistorySize = useCallback(() => {
+    if (!id) return;
+    const p = getRecord<Property>('properties', id);
+    setProperty(p);
+    if (!p) return;
+    setAssets(getAssetsForProperty<Asset>(id));
+    const keep = Math.max(JOB_HISTORY_PAGE_SIZE, jobHistory.length);
+    const { jobs, totalCount, completedCount } = getJobsForProperty<JobHistory>(id, { limit: keep });
+    setJobHistory(jobs);
+    setJobHistoryTotal(totalCount);
+    setJobHistoryCompleted(completedCount);
+    setDocuments(getDocumentsForProperty<SiteDocument>(id));
+  }, [id, jobHistory.length]);
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // FIX: the focus-effect above only refreshes on returning to this screen
+  // — a job/asset/document changing on this property while the screen was
+  // already open (and staying open) never showed up. Now also reloads on
+  // the same signal the "my data" live channel and the 10-minute fallback
+  // sync both fire (see subscribeToMyDataLive in lib/sync.ts).
+  useEffect(() => {
+    onSyncComplete(refreshKeepingHistorySize);
+    return () => offSyncComplete(refreshKeepingHistorySize);
+  }, [refreshKeepingHistorySize]);
 
   // `count` is however many MORE jobs the technician asked for (see the
   // "+5"/"+10"/"Show all" chips below) — always starts reading right after

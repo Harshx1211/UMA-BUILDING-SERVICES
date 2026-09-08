@@ -211,6 +211,7 @@ export function stopSync(): void {
   // guarantee no channel survives into a different user's session on this
   // device, regardless of how many job screens think they still want it open.
   _teardownLiveChannel();
+  _teardownMyDataChannel();
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
   clearSyncFailureListeners();
@@ -463,8 +464,9 @@ export async function pushPendingWork(userId: string): Promise<void> {
  * whether anything changed.
  *
  * Covers job_assets, defects, inspection_photos (see 20260906000000_*),
- * job_technicians, quotes, time_logs, and site_documents (see
- * 20260908020000_*) — matters more now that SYNC_INTERVAL_MS itself has
+ * job_technicians, quotes, time_logs, site_documents (see
+ * 20260908020000_*), and signatures (see 20260909000000_*) — matters more
+ * now that SYNC_INTERVAL_MS itself has
  * been stretched way out (see its own comment in constants/Config.ts):
  * this channel, not the periodic pull, is now the primary way any of these
  * tables reach a device while it's actively looking at the job, not just a
@@ -498,7 +500,8 @@ let _liveRefCount = 0;
 
 export type JobLiveChangeTable =
   | 'job_assets' | 'defects' | 'inspection_photos' | 'jobs'
-  | 'job_technicians' | 'quotes' | 'quote_items' | 'time_logs' | 'site_documents';
+  | 'job_technicians' | 'quotes' | 'quote_items' | 'time_logs' | 'site_documents'
+  | 'signatures';
 
 /**
  * Opens (or re-opens, if jobId differs) a live channel for this job, and
@@ -685,6 +688,14 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     _liveOnChange?.('site_documents');
   };
 
+  // Signature.tsx keeps its own in-progress draft in AsyncStorage, never in
+  // this table, so there's nothing local this could clobber — plain upsert,
+  // same as job_technicians/time_logs above.
+  const applySignature = (row: Record<string, unknown>) => {
+    upsertRecord('signatures', row as Record<string, string | number | boolean | null>);
+    _liveOnChange?.('signatures');
+  };
+
   _liveChannel = supabase
     .channel(`job-live:${jobId}`)
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_assets', filter: `job_id=eq.${jobId}` }, (p) => applyJobAsset(p.new))
@@ -702,6 +713,8 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'time_logs', filter: `job_id=eq.${jobId}` }, (p) => applyTimeLog(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'site_documents', filter: `job_id=eq.${jobId}` }, (p) => applyDocument(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'site_documents', filter: `job_id=eq.${jobId}` }, (p) => applyDocument(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'signatures', filter: `job_id=eq.${jobId}` }, (p) => applySignature(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'signatures', filter: `job_id=eq.${jobId}` }, (p) => applySignature(p.new))
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         if (__DEV__) console.log(`[SiteTrack Sync] Realtime subscribed for job ${jobId}`);
@@ -711,6 +724,7 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
         void _pullRelated('job_technicians', 'job_id', [jobId]).then(() => _liveOnChange?.('job_technicians'));
         void _pullRelated('time_logs', 'job_id', [jobId]).then(() => _liveOnChange?.('time_logs'));
         void _pullRelated('site_documents', 'job_id', [jobId]).then(() => _liveOnChange?.('site_documents'));
+        void _pullRelated('signatures', 'job_id', [jobId]).then(() => _liveOnChange?.('signatures'));
         void (async () => {
           await _pullRelated('quotes', 'job_id', [jobId]);
           _liveOnChange?.('quotes');
@@ -745,6 +759,176 @@ function _teardownLiveChannel(): void {
   _liveJobId = null;
   _liveOnChange = null;
   _liveRefCount = 0;
+}
+
+// ─────────────────────────────────────────────
+// "My data" live channel — everything for this technician, whole-session
+// ─────────────────────────────────────────────
+/**
+ * subscribeToJobLive only ever covers ONE open job's screens — Home, the
+ * Schedule tab, the global Defects list, Property Detail, and the Property
+ * Asset Register all show data across MANY jobs/properties at once, so none
+ * of them has a single job to "tune into." Their only path to fresh data
+ * used to be the periodic SYNC_INTERVAL_MS pull (now 10 minutes — see its
+ * own comment in constants/Config.ts), so a newly-assigned job, a
+ * cancellation, or a new defect anywhere in the company could take up to
+ * 10 minutes to show up there, even though every job-scoped screen already
+ * gets the same kind of change within a second or two.
+ *
+ * Opened once per login (app/(app)/_layout.tsx, alongside startSync) and
+ * stays open for the whole session — unlike subscribeToJobLive this is NOT
+ * screen-focus-scoped, since there's no single screen that "owns" it the
+ * way a job's screens hand a channel off between each other; every screen
+ * that cares just wants to hear about the same events for as long as the
+ * app is open.
+ *
+ * Every handler below (1) writes the incoming row to local SQLite with the
+ * same guard the periodic pull already uses for that table where one
+ * exists (STATUS_PRIORITY for jobs, _shouldPreserveLocalRow for
+ * defects/assets — properties/notifications/users have no local-edit path
+ * from the mobile app to protect, so a plain upsert matches what the
+ * periodic pull already does for them too), then (2) calls
+ * _emitSyncComplete() — the EXACT signal the periodic sync already fires
+ * when it finishes. Any screen already reloading on that signal (jobsStore
+ * is subscribed globally in app/(app)/_layout.tsx, which is what already
+ * keeps Home/Schedule's job lists current; the global Defects screen
+ * already listens too) gets this for free. Screens that had no such
+ * listener at all — Notifications, single Asset detail, Property Detail,
+ * Property Asset Register — each gained one. Profile reads reactively from
+ * authStore rather than local SQLite, so applyMyUser patches that store
+ * directly instead. Because both this channel and the 10-minute fallback
+ * end at that identical reload call, they can't disagree with each other —
+ * whichever fires first does the real work; the other, if it fires later
+ * and finds nothing new, is a harmless repeat.
+ *
+ * Two known, deliberate gaps, not oversights:
+ * - `jobs` is filtered by assigned_to=eq.<userId> (the legacy single-
+ *   assignee column) — a status change on a job this technician is only a
+ *   job_technicians CREW member of (not the primary assignee) isn't caught
+ *   live by this filter, since Realtime's filter syntax is a plain column
+ *   comparison, not a subquery against job_technicians. Being newly ADDED
+ *   to a job's crew is still caught (job_technicians INSERT below), and any
+ *   job with its own screen open is still covered by subscribeToJobLive
+ *   regardless of crew role — this only affects a crew (non-primary) job
+ *   that's both not currently open anywhere and changes status elsewhere;
+ *   the 10-minute fallback still catches it.
+ * - Broadcast notifications (user_id IS NULL) aren't subscribed — Realtime
+ *   postgres_changes filters aren't confirmed to support an IS NULL
+ *   comparison the way a plain REST query does, so this is left to the
+ *   10-minute fallback rather than shipping a filter that might silently
+ *   never match anything.
+ */
+let _myDataChannel: RealtimeChannel | null = null;
+let _myDataUserId: string | null = null;
+
+export function subscribeToMyDataLive(userId: string): void {
+  if (!userId) return;
+  if (_myDataChannel && _myDataUserId === userId) return; // already on for this user
+  if (_myDataChannel) _teardownMyDataChannel();
+  _myDataUserId = userId;
+
+  const applyJob = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    const localStatus = getJobStatus(rowId);
+    // Same 'cancelled' override as subscribeToJobLive's own applyJob — an
+    // administrative override, not a step on the priority ladder.
+    if (localStatus && row.status !== 'cancelled') {
+      const serverPriority = STATUS_PRIORITY[row.status as string] ?? 1;
+      const localPriority  = STATUS_PRIORITY[localStatus.status]   ?? 1;
+      if (localPriority > serverPriority) {
+        const localUpdateMs = new Date(localStatus.updated_at).getTime();
+        if (Date.now() - localUpdateMs <= STALE_THRESHOLD_MS) return;
+      }
+    }
+    upsertRecord('jobs', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  // Being newly ADDED to a job's crew — job_technicians alone doesn't carry
+  // the job's own fields, so fetch that job's row too, same one-time
+  // catch-up shape subscribeToJobLive already uses elsewhere.
+  const applyMyJobTechnician = (row: Record<string, unknown>) => {
+    upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
+    void (async () => {
+      const jobId = row.job_id as string;
+      const { data } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
+      if (data) applyJob(data as Record<string, unknown>);
+      else _emitSyncComplete();
+    })();
+  };
+
+  const applyDefect = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    const localRow = getRecord<{ updated_at: string | null }>('defects', rowId);
+    if (_shouldPreserveLocalRow(row, localRow)) return;
+    // Same text[] -> JSON string normalisation subscribeToJobLive's own
+    // applyDefect already does.
+    const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
+    upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  const applyAsset = (row: Record<string, unknown>) => {
+    const rowId = row.id as string;
+    const localRow = getRecord<{ updated_at: string | null }>('assets', rowId);
+    if (_shouldPreserveLocalRow(row, localRow)) return;
+    upsertRecord('assets', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  const applyProperty = (row: Record<string, unknown>) => {
+    upsertRecord('properties', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  const applyNotification = (row: Record<string, unknown>) => {
+    upsertRecord('notifications', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
+  // Profile screen reads the technician's own record reactively from
+  // authStore (useAuth().user), not local SQLite — patch that store
+  // directly so it updates with no reload wiring of its own needed.
+  const applyMyUser = (row: Record<string, unknown>) => {
+    upsertRecord('users', row as Record<string, string | number | boolean | null>);
+    const current = useAuthStore.getState().user;
+    if (current && current.id === row.id) {
+      useAuthStore.setState({ user: { ...current, ...row } as typeof current });
+    }
+    _emitSyncComplete();
+  };
+
+  _myDataChannel = supabase
+    .channel(`my-data-live:${userId}`)
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs', filter: `assigned_to=eq.${userId}` }, (p) => applyJob(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs', filter: `assigned_to=eq.${userId}` }, (p) => applyJob(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_technicians', filter: `user_id=eq.${userId}` }, (p) => applyMyJobTechnician(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'properties' }, (p) => applyProperty(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (p) => applyNotification(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (p) => applyNotification(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` }, (p) => applyMyUser(p.new))
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        if (__DEV__) console.log(`[SiteTrack Sync] my-data-live subscribed for user ${userId}`);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (__DEV__) console.warn(`[SiteTrack Sync] my-data-live ${status} for user ${userId} — auto-retrying:`, err);
+      }
+    });
+}
+
+/** Call on sign-out / app teardown — mirrors unsubscribeFromJobLive's hard reset. */
+export function unsubscribeFromMyDataLive(): void {
+  _teardownMyDataChannel();
+}
+
+function _teardownMyDataChannel(): void {
+  if (_myDataChannel) void supabase.removeChannel(_myDataChannel);
+  _myDataChannel = null;
+  _myDataUserId = null;
 }
 
 // Own mutex for syncNow's push-only cycle — separate from _isProcessingPhotos/

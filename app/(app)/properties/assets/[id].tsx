@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { AssetStatus } from '@/constants/Enums';
 import type { Property, Asset } from '@/types';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type ColorsType = ReturnType<typeof useColors>;
 
@@ -58,6 +59,16 @@ export default function PropertyAssetsScreen() {
   }, [id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // FIX: the focus-effect above only refreshes on returning to this screen
+  // — another tech/admin adding or editing an asset here while the screen
+  // was already open (and staying open) never showed up. Now also reloads
+  // on the same signal the "my data" live channel and the 10-minute
+  // fallback sync both fire (see subscribeToMyDataLive in lib/sync.ts).
+  useEffect(() => {
+    onSyncComplete(load);
+    return () => offSyncComplete(load);
+  }, [load]);
 
   if (isLoading) {
     return (

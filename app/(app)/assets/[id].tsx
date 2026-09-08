@@ -13,6 +13,7 @@ import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
 import { formatAssetType } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type ColorsType = ReturnType<typeof useColors>;
@@ -90,7 +91,16 @@ export default function AssetDetailScreen() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    // FIX: this only ever loaded once, on mount — an asset edited or a new
+    // defect logged against it by someone else, while this exact screen was
+    // open, never showed up until you left and came back. Now reloads on
+    // the same signal the "my data" live channel and the 10-minute
+    // fallback sync both fire (see subscribeToMyDataLive in lib/sync.ts).
+    onSyncComplete(load);
+    return () => offSyncComplete(load);
+  }, [load]);
 
   if (isLoading) {
     return (

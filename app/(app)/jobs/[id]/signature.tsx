@@ -10,6 +10,7 @@ import SignatureScreenCanvas, { SignatureViewRef } from 'react-native-signature-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { upsertRecord, addToSyncQueue, getSignatureForJob, getJobById } from '@/lib/database';
 import { runSync } from '@/lib/sync';
+import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { generateUUID } from '@/utils/uuid';
 import { useColors } from '@/hooks/useColors';
 import { SyncOperation, JobStatus } from '@/constants/Enums';
@@ -78,6 +79,16 @@ export default function SignatureScreen() {
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     };
   }, [id]);
+
+  // Only reacts to the job locking/unlocking (Completed/Cancelled elsewhere)
+  // while this screen is open — deliberately NOT a full reload on every
+  // table change, since re-pulling `existingSig` while the technician is
+  // mid-signature would be actively disruptive, not helpful.
+  useJobLiveSync(id, useCallback((table) => {
+    if (table !== 'jobs' || !id) return;
+    const job = getJobById<{ status: string }>(id);
+    setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
+  }, [id]));
 
   const CONSENT =
     'By signing below, I confirm that the inspection described in this report was ' +

@@ -1,10 +1,10 @@
 // Main app tab navigator — premium tab bar with active top indicator
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, AppState, AppStateStatus } from 'react-native';
 import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
-import { startSync } from '@/lib/sync';
+import { startSync, subscribeToMyDataLive, unsubscribeFromMyDataLive } from '@/lib/sync';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useJobsStore } from '@/store/jobsStore';
@@ -142,6 +142,34 @@ export default function AppLayout() {
       catUnsub();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // "My data" live channel — Home/Schedule/global-Defects/Property-detail/
+  // Property-Asset-Register/Notifications/Profile/single-Asset-detail all
+  // show data across many jobs/properties at once, so none of them can use
+  // subscribeToJobLive's per-job channel. This one is opened once for the
+  // whole session instead (see subscribeToMyDataLive's own comment).
+  useEffect(() => {
+    if (!user?.id) return;
+    subscribeToMyDataLive(user.id);
+
+    // Same reasoning as useJobLiveSync's own AppState handling: the OS can
+    // freeze JS timers and kill the underlying socket outright while
+    // backgrounded, and the realtime client's own reconnect logic can't run
+    // during that window since it depends on those same frozen timers —
+    // tear down explicitly on background, reopen on foreground.
+    const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'background' || next === 'inactive') {
+        unsubscribeFromMyDataLive();
+      } else if (next === 'active') {
+        subscribeToMyDataLive(user.id);
+      }
+    });
+
+    return () => {
+      appStateSub.remove();
+      unsubscribeFromMyDataLive();
+    };
   }, [user?.id]);
 
   if (!isAuthenticated) {
