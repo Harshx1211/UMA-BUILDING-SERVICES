@@ -1863,6 +1863,13 @@ export interface AssetHistoryEntry {
   photos: AssetHistoryPhoto[];
 }
 
+export interface AssetHistoryPage {
+  entries: AssetHistoryEntry[];
+  /** Total prior visits for this asset, regardless of `opts.limit` — lets
+   * the screen show "3 of 12" and know how many more are left to load. */
+  totalCount: number;
+}
+
 /**
  * Every prior visit's result/note/defects/photos for one asset, newest first —
  * everything needed for the Asset Detail screen's History section. Assets are
@@ -1870,32 +1877,63 @@ export interface AssetHistoryEntry {
  * duplicates an asset, it just adds one job_assets row per visit, so this is a
  * plain local-SQLite read of data that's already synced to the device — no
  * network call, no new sync plumbing.
+ *
+ * FIX: opts.limit/offset paginate the visits themselves — the asset screen
+ * loads only the 3 most recent by default and fetches older ones in
+ * technician-controlled batches only if asked for, rather than always
+ * pulling a potentially years-long history up front. Passing a limit here
+ * would previously have been pointless anyway: the defects/photos queries
+ * below used to filter by "asset_id + not this job" rather than "asset_id +
+ * one of THESE visit job_ids", so they always pulled every historical
+ * defect/photo regardless of how many visits were actually being shown.
+ * Now scoped to exactly the visits in this page.
  */
-export function getAssetHistory(assetId: string, excludeJobId: string): AssetHistoryEntry[] {
+export function getAssetHistory(
+  assetId: string,
+  excludeJobId: string,
+  opts?: { limit?: number; offset?: number },
+): AssetHistoryPage {
   try {
     const db = openDatabase();
+    const totalRow = db.getFirstSync<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM job_assets WHERE asset_id = ? AND job_id != ? AND result IS NOT NULL`,
+      [assetId, excludeJobId],
+    );
+    const totalCount = totalRow?.count ?? 0;
+
+    const params: (string | number)[] = [assetId, excludeJobId];
+    let limitClause = '';
+    if (opts?.limit != null) {
+      limitClause = 'LIMIT ? OFFSET ?';
+      params.push(opts.limit, opts.offset ?? 0);
+    }
     const visits = db.getAllSync<{ job_id: string; result: string; technician_notes: string | null; actioned_at: string | null }>(
       `SELECT job_id, result, technician_notes, actioned_at
        FROM job_assets
        WHERE asset_id = ? AND job_id != ? AND result IS NOT NULL
-       ORDER BY actioned_at DESC`,
-      [assetId, excludeJobId],
+       ORDER BY actioned_at DESC
+       ${limitClause}`,
+      params,
     );
-    if (visits.length === 0) return [];
+    if (visits.length === 0) return { entries: [], totalCount };
 
     // FIX: this used to run 2 more synchronous SQLite round-trips PER VISIT
     // (defects, then photos) — an asset serviced quarterly for a few years
     // easily has 15-20+ prior visits, so opening its detail screen (the
     // single most common navigation action during an inspection) fired
     // 30-40+ queries back-to-back before the screen could render. Batched
-    // into 2 queries total across every visit, grouped by job_id in JS.
+    // into 2 queries total across this page's visits, grouped by job_id in
+    // JS — scoped by job_id IN (...) so a 3-visit page only ever reads
+    // those 3 visits' defects/photos, not the asset's entire history.
+    const visitJobIds = visits.map((v) => v.job_id);
+    const placeholders = visitJobIds.map(() => '?').join(',');
     const allDefects = db.getAllSync<AssetHistoryDefect & { job_id: string }>(
-      `SELECT id, description, severity, defect_code, quote_price, job_id FROM defects WHERE asset_id = ? AND job_id != ?`,
-      [assetId, excludeJobId],
+      `SELECT id, description, severity, defect_code, quote_price, job_id FROM defects WHERE asset_id = ? AND job_id IN (${placeholders})`,
+      [assetId, ...visitJobIds],
     );
     const allPhotos = db.getAllSync<AssetHistoryPhoto & { job_id: string }>(
-      `SELECT id, photo_url, job_id FROM inspection_photos WHERE asset_id = ? AND job_id != ?`,
-      [assetId, excludeJobId],
+      `SELECT id, photo_url, job_id FROM inspection_photos WHERE asset_id = ? AND job_id IN (${placeholders})`,
+      [assetId, ...visitJobIds],
     );
 
     const defectsByJob = new Map<string, AssetHistoryDefect[]>();
@@ -1909,7 +1947,7 @@ export function getAssetHistory(assetId: string, excludeJobId: string): AssetHis
       photosByJob.get(job_id)!.push(photo);
     }
 
-    return visits.map((v) => ({
+    const entries = visits.map((v) => ({
       jobId: v.job_id,
       date: v.actioned_at,
       result: v.result,
@@ -1917,9 +1955,10 @@ export function getAssetHistory(assetId: string, excludeJobId: string): AssetHis
       defects: defectsByJob.get(v.job_id) ?? [],
       photos: photosByJob.get(v.job_id) ?? [],
     }));
+    return { entries, totalCount };
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getAssetHistory(${assetId}) error:`, err);
-    return [];
+    return { entries: [], totalCount: 0 };
   }
 }
 

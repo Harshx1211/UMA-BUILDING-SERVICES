@@ -42,6 +42,10 @@ import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
+// Prior visits shown by default before the technician has to explicitly
+// ask for more — see the History section's own loadMoreHistory().
+const HISTORY_PAGE_SIZE = 3;
+
 // ─── Small bottom sheet: Take Photo / Choose from Gallery ─────────────────
 function PhotoChooserSheet({
   visible, onClose, onTakePhoto, onPickGallery,
@@ -235,6 +239,8 @@ export default function AssetDetailScreen() {
 
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   // `note` backs job_assets.technician_notes for both the Fail and Pass/N-T
   // "Note" cards — same column, same field, whichever card happens to be
@@ -252,12 +258,35 @@ export default function AssetDetailScreen() {
   // protected. Mirrors primaryDraft below.
   const [additionalDraft, setAdditionalDraft] = useState<DefectFieldsValue | null>(null);
 
+  // FIX: this used to load the asset's ENTIRE prior-visit history (however
+  // many years of results/defects/photos that adds up to) every time the
+  // screen opened. Most of the time a technician only cares about the most
+  // recent visits, so only HISTORY_PAGE_SIZE loads up front — the rest is
+  // only ever fetched if they explicitly ask for more (loadMoreHistory
+  // below), in a batch size they pick themselves.
   useEffect(() => {
     if (!assetId || !jobId) return;
     setHistoryLoading(true);
-    setHistory(getAssetHistory(assetId, jobId));
+    const { entries, totalCount } = getAssetHistory(assetId, jobId, { limit: HISTORY_PAGE_SIZE });
+    setHistory(entries);
+    setHistoryTotal(totalCount);
     setHistoryLoading(false);
   }, [assetId, jobId]);
+
+  // `count` is however many MORE visits the technician asked for (see the
+  // "+5"/"+10"/"All remaining" chips in the History section) — always
+  // starts reading right after whatever's already loaded, never refetches
+  // visits already on screen.
+  const loadMoreHistory = useCallback((count: number) => {
+    if (!assetId || !jobId || historyLoadingMore) return;
+    setHistoryLoadingMore(true);
+    try {
+      const { entries } = getAssetHistory(assetId, jobId, { limit: count, offset: history.length });
+      setHistory((prev) => [...prev, ...entries]);
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  }, [assetId, jobId, history.length, historyLoadingMore]);
 
   // Always-current snapshot of the editable fields + asset, read by the
   // flush-on-leave effect below. A plain ref assigned every render (not a
@@ -772,7 +801,7 @@ export default function AssetDetailScreen() {
         )}
 
         {/* ── History — proper pass/fail badge + photos per visit ──────── */}
-        <SectionCard icon="history" title={`History${history.length > 0 ? ` · ${history.length} prior visit${history.length === 1 ? '' : 's'}` : ''}`} C={C}>
+        <SectionCard icon="history" title={`History${historyTotal > 0 ? ` · ${historyTotal} prior visit${historyTotal === 1 ? '' : 's'}` : ''}`} C={C}>
           {historyLoading ? (
             <ActivityIndicator size="small" color={C.textTertiary} />
           ) : history.length === 0 ? (
@@ -816,6 +845,38 @@ export default function AssetDetailScreen() {
                     Failed {failCount} of the last {history.length} visits — recurring issue
                   </Text>
                 </View>
+              )}
+
+              {/* Only ever fetches more when explicitly asked — see
+                  loadMoreHistory's own comment. Remaining count picked by
+                  the technician rather than one all-or-nothing fetch. */}
+              {history.length < historyTotal && (
+                historyLoadingMore ? (
+                  <ActivityIndicator size="small" color={C.textTertiary} style={{ marginTop: 12 }} />
+                ) : (
+                  <View style={s.historyLoadMoreRow}>
+                    <Text style={[s.historyLoadMoreLabel, { color: C.textTertiary }]}>
+                      {historyTotal - history.length} more visit{historyTotal - history.length === 1 ? '' : 's'} available
+                    </Text>
+                    <View style={s.historyLoadMoreChips}>
+                      {[5, 10].filter((n) => n < historyTotal - history.length).map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={[s.historyLoadMoreChip, { borderColor: C.border }]}
+                          onPress={() => loadMoreHistory(n)}
+                        >
+                          <Text style={[s.historyLoadMoreChipTxt, { color: C.text }]}>+{n}</Text>
+                        </TouchableOpacity>
+                      ))}
+                      <TouchableOpacity
+                        style={[s.historyLoadMoreChip, { borderColor: C.border }]}
+                        onPress={() => loadMoreHistory(historyTotal - history.length)}
+                      >
+                        <Text style={[s.historyLoadMoreChipTxt, { color: C.text }]}>Show all</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )
               )}
             </View>
           )}
@@ -903,6 +964,12 @@ const s = StyleSheet.create({
 
   recurringFlag: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 10, borderRadius: 10, marginTop: 4 },
   recurringTxt: { fontSize: 12, fontWeight: '700', flex: 1 },
+
+  historyLoadMoreRow: { marginTop: 12, gap: 8 },
+  historyLoadMoreLabel: { fontSize: 12 },
+  historyLoadMoreChips: { flexDirection: 'row', gap: 8 },
+  historyLoadMoreChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  historyLoadMoreChipTxt: { fontSize: 12.5, fontWeight: '700' },
 
   // Photo chooser sheet
   chooserOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
