@@ -11,29 +11,47 @@ import { AssetTypeDefinition } from '../types';
  * report handed to the client never mentioned it. Hazard gets the most
  * prominent (red) treatment since it's safety-relevant; access and the
  * general site note are informational.
+ *
+ * FIX: jobs.notes — the "Field Notes" a technician types on the job's own
+ * detail screen ("Document site conditions, access details, or follow-up
+ * actions…") — had the exact same bug. fetchReportData.ts's `select('*', ...)`
+ * on jobs always included it in ReportData.job.notes (it's right there in
+ * types.ts's own Job interface), but nothing in any template ever read it —
+ * a technician could type real field notes, regenerate the report, and never
+ * see them anywhere in the PDF, with no error to explain why. Labelled "Field
+ * Notes" here to match the mobile app's own label for this exact field, and
+ * given a distinct (neutral/slate) treatment from the three property-level
+ * notes above it — this one is this specific visit's own note, not a
+ * standing fact about the site.
  */
-function renderSiteNotes(property: Property | null | undefined): string {
-  if (!property) return '';
+function renderSiteNotes(property: Property | null | undefined, jobNotes: string | null): string {
   const rows: string[] = [];
-  if (property.hazard_notes) {
+  if (property?.hazard_notes) {
     rows.push(`
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.RED_BG};border:1px solid ${COLORS.RED_BORDER};border-radius:8px;margin-top:10px">
         <div style="font-weight:800;color:${COLORS.RED_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">&#9888; Site Hazard</div>
         <div style="color:${COLORS.RED_TEXT_DARK};font-size:10.5px">${esc(property.hazard_notes)}</div>
       </div>`);
   }
-  if (property.access_notes) {
+  if (property?.access_notes) {
     rows.push(`
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.AMBER_BG};border:1px solid ${COLORS.AMBER_BORDER};border-radius:8px;margin-top:10px">
         <div style="font-weight:800;color:${COLORS.AMBER_TEXT};font-size:10px;text-transform:uppercase;flex-shrink:0">Access</div>
         <div style="color:${COLORS.AMBER_TEXT};font-size:10.5px">${esc(property.access_notes)}</div>
       </div>`);
   }
-  if (property.site_note) {
+  if (property?.site_note) {
     rows.push(`
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.GREEN_BG};border:1px solid ${COLORS.GREEN_BORDER};border-radius:8px;margin-top:10px">
         <div style="font-weight:800;color:${COLORS.GREEN_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">Site Note</div>
         <div style="color:${COLORS.GREEN_TEXT_DARK};font-size:10.5px">${esc(property.site_note)}</div>
+      </div>`);
+  }
+  if (jobNotes) {
+    rows.push(`
+      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.SURFACE};border:1px solid ${COLORS.BORDER};border-radius:8px;margin-top:10px">
+        <div style="font-weight:800;color:${COLORS.SLATE};font-size:10px;text-transform:uppercase;flex-shrink:0">Field Notes</div>
+        <div style="color:${COLORS.BLACK};font-size:10.5px">${esc(jobNotes)}</div>
       </div>`);
   }
   return rows.join('');
@@ -120,7 +138,7 @@ export function renderCover(
       ${infoCell('Date of Service', fmtDate(dateOfService))}
     </div>
 
-    ${renderSiteNotes(property)}
+    ${renderSiteNotes(property, job.notes)}
 
     <div class="section-bar" style="margin-top:18px">Scope of Works</div>
     <div class="card" style="padding:12px 16px">
