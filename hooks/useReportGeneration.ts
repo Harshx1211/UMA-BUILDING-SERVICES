@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
+import NetInfo from '@react-native-community/netinfo';
 import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
 import { runSync } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 const POLL_MS = 5_000;
 // How often to nudge the sync engine while a generation is in flight — see
@@ -26,7 +26,6 @@ export function useReportGeneration(
   jobId: string | undefined,
   opts?: { hasExistingReport?: boolean; forceOnMount?: boolean },
 ) {
-  const { isOnline } = useNetworkStatus();
   const [status, setStatus] = useState<ReportGenStatus>('idle');
   const [elapsedS, setElapsedS] = useState(0);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -140,6 +139,23 @@ export function useReportGeneration(
     notifiedRef.current = false;
     setError(null);
 
+    // FIX (wrong "Queued — Waiting for Connection" toast while actually
+    // online): this used to read `isOnline` from useNetworkStatus(), which
+    // starts every mount at a hardcoded `false` "fail-safe" default and only
+    // flips to the real value once NetInfo.fetch() resolves — a real native
+    // bridge round trip. generate() is called from an effect that fires
+    // essentially immediately on mount (forceOnMount, used by every
+    // Generate/Regenerate button), which routinely won the race against that
+    // fetch — so this almost always saw the stale `false` default regardless
+    // of actual connectivity, telling a technician who was genuinely online
+    // that their report was "waiting for connection." A fresh, awaited check
+    // right here has no such race — it's the same isConnected/
+    // isInternetReachable logic runSync() itself uses (lib/sync.ts), so this
+    // toast now agrees with what actually determines whether the push goes
+    // through.
+    const netState = await NetInfo.fetch();
+    const isOnline = netState.isConnected === true && netState.isInternetReachable !== false;
+
     // FIX: resume an already in-flight generation instead of always
     // re-queuing a new one. report_url is null both before ANY generation
     // and DURING one, so this hook previously had no way to tell those
@@ -210,7 +226,7 @@ export function useReportGeneration(
       text2: "This will start generating automatically once you're back online.",
     });
     poll(jobId);
-  }, [jobId, poll, isOnline]);
+  }, [jobId, poll]);
 
   // On mount: either always start a fresh generation (forceOnMount — used by
   // "Generate"/"Draft Preview"/"Regenerate", which all mean "make me a
