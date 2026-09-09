@@ -5,6 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import {
   getPendingSyncItems,
+  getUnsyncedItemsIncludingBackoff,
   markSyncItemComplete,
   incrementSyncRetry,
   upsertRecord,
@@ -2000,7 +2001,13 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // a change. The local row's job_id is always current and authoritative
         // regardless of what happens to be in any one queued payload.
         const TABLES_WITH_JOB_ID = ['job_assets', 'defects', 'signatures', 'inspection_photos'];
-        const allPendingNow = getPendingSyncItems();
+        // FIX: was getPendingSyncItems(), which hides anything currently
+        // sitting out a retry backoff (next_retry_at in the future) after a
+        // transient push failure. That let this check see "nothing pending"
+        // and proceed to generate against stale server data even though a
+        // real edit for this job hadn't actually reached Supabase yet — see
+        // getUnsyncedItemsIncludingBackoff's own comment in lib/database.ts.
+        const allPendingNow = getUnsyncedItemsIncludingBackoff();
         const blockers = allPendingNow.filter(p => {
           if (p.id === item.id || !PDF_CRITICAL_TABLES.includes(p.table_name)) return false;
           if (TABLES_WITH_JOB_ID.includes(p.table_name)) {

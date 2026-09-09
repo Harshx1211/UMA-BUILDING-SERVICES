@@ -6,6 +6,9 @@ import { updateRecord } from '@/lib/database';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 const POLL_MS = 5_000;
+// How often to nudge the sync engine while a generation is in flight — see
+// the nudgeRef comment below for why this exists.
+const SYNC_NUDGE_MS = 20_000;
 
 export type ReportGenStatus = 'idle' | 'generating' | 'completed' | 'failed';
 
@@ -32,12 +35,29 @@ export function useReportGeneration(
   const startedAtMs  = useRef<number | null>(null);
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  // FIX (report stuck "generating" far longer than necessary): the server
+  // defers actually calling /generate-report until every one of this
+  // technician's own pending edits for the job has reached Supabase (see
+  // the report_generate blocker check in lib/sync.ts) — correct, since
+  // generating straight from stale server data was the "notes I just typed
+  // aren't in the PDF" bug. But nothing besides that ONE runSync() call
+  // inside generate() below ever retries the push while this screen sits
+  // open watching /report-status — the background sync interval is now a
+  // 10-minute safety net (constants/Config.ts), not a fast loop. If the
+  // edit's first push attempt happened to fail transiently, it can then sit
+  // in its own 1-30min retry backoff with nobody nudging it sooner, so the
+  // PDF a technician is actively watching for could be stuck deferring for
+  // most of that window. Nudging runSync() periodically while a generation
+  // is in flight keeps that catch-up fast for exactly the case where
+  // someone is actually staring at this screen waiting.
+  const nudgeRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const notifiedRef  = useRef(false);
   const isMounted    = useRef(true);
 
   const stop = useCallback(() => {
     if (pollRef.current)    clearInterval(pollRef.current);
     if (elapsedRef.current) clearInterval(elapsedRef.current);
+    if (nudgeRef.current)   clearInterval(nudgeRef.current);
   }, []);
 
   useEffect(() => {
@@ -55,6 +75,9 @@ export function useReportGeneration(
         setElapsedS(Math.max(0, Math.round((Date.now() - startedAtMs.current) / 1000)));
       }
     }, 1000);
+    // Cleared by the same stop() that fires on completed/failed/not_started
+    // — see nudgeRef's own comment above for why this exists.
+    nudgeRef.current = setInterval(() => { void runSync(); }, SYNC_NUDGE_MS);
 
     const check = async () => {
       if (!isMounted.current) return;

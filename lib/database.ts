@@ -2436,6 +2436,40 @@ export function getPendingSyncItems(maxRetries = 5): SyncQueueItem[] {
 }
 
 /**
+ * Same rows as getPendingSyncItems, but WITHOUT the next_retry_at gate —
+ * i.e. every item that hasn't synced yet and hasn't permanently failed,
+ * including one currently sitting out a retry backoff (1-30 min after a
+ * transient push failure).
+ *
+ * FIX (PDF missing a technician's just-made edit): the report_generate
+ * blocker check in lib/sync.ts uses this to decide whether any data for a
+ * job still needs to reach the server before generating its PDF. It used
+ * to call getPendingSyncItems() — which is exactly right for the normal
+ * push loop (no point hammering a failing endpoint every cycle) but wrong
+ * here: an edit whose FIRST push attempt failed (a momentary network blip
+ * is enough) sits invisible to getPendingSyncItems() for up to a minute
+ * (longer on later retries) while its next_retry_at is still in the
+ * future, even though it's very much still unsynced. The blocker check
+ * would see an empty list, conclude nothing was pending, and let
+ * generation proceed straight from Supabase — producing a PDF missing
+ * whatever the technician had just typed, with no error anywhere to
+ * explain why. Only the report_generate handler should use this; the
+ * actual push loop must keep respecting backoff.
+ */
+export function getUnsyncedItemsIncludingBackoff(maxRetries = 5): SyncQueueItem[] {
+  try {
+    const db = openDatabase();
+    return db.getAllSync<SyncQueueItem>(
+      `SELECT * FROM sync_queue WHERE synced = 0 AND retry_count < ? ORDER BY created_at ASC, id ASC`,
+      [maxRetries],
+    );
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getUnsyncedItemsIncludingBackoff error:', err);
+    return [];
+  }
+}
+
+/**
  * Returns sync queue items that have permanently failed (synced = -1).
  * These will never be retried automatically until resetStaleFailedSyncItems()
  * or retryAllFailedSyncItems() runs. Callers can expose them to the user
