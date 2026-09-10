@@ -86,12 +86,14 @@ export function renderAssetLogChunk(
               <td style="width:55%;border-top:none">
                 <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
                 ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
+                ${asset.serial_number ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">S/N: ${esc(asset.serial_number)}</div>` : ''}
               </td>
               <td style="width:30%;border-top:none">${esc(asset.location_on_site) || '—'}</td>
               <td style="width:15%;text-align:right;border-top:none">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
-            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes)}</td></tr>` : ''}
+            ${asset.description ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.description, 'Asset Notes')}</td></tr>` : ''}
+            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Technician Notes')}</td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
@@ -114,13 +116,20 @@ export function renderAssetLogChunk(
  * label above the text (not squeezed alongside it) and a lightly italicised
  * note body to visually mark it as commentary, distinct from the factual
  * rows around it.
+ *
+ * FIX: now also used for assets.description ("Condition, age, notes..." on
+ * EditAssetModal) — a real, technician-entered field about the physical
+ * asset itself that had never been wired into the report at all (same class
+ * of bug as jobs.notes/"Field Notes" — captured, never rendered). Takes an
+ * explicit label so the two stay visually distinct: this asset's standing
+ * condition/age notes vs. this one visit's inspection note.
  */
-function renderTechnicianNote(note: string): string {
+function renderTechnicianNote(note: string, label: string): string {
   return `
     <div class="defect-card" style="background:${COLORS.SURFACE};border:1px solid ${COLORS.BORDER}">
       <div class="defect-bar" style="background:${COLORS.MUTED_LIGHT}"></div>
       <div class="defect-body">
-        <div style="font-weight:800;color:${COLORS.SLATE};font-size:8.5px;text-transform:uppercase;letter-spacing:0.5px">Technician Notes</div>
+        <div style="font-weight:800;color:${COLORS.SLATE};font-size:8.5px;text-transform:uppercase;letter-spacing:0.5px">${esc(label)}</div>
         <div style="margin-top:4px;color:${COLORS.BLACK};font-size:10px;line-height:1.45;font-style:italic">${esc(note)}</div>
       </div>
     </div>`;

@@ -78,6 +78,10 @@ export interface Asset {
   asset_ref: string | null;
   location_on_site: string | null;
   serial_number: string | null;
+  /** Free-text "Condition, age, notes..." field from EditAssetModal — about
+   * the physical asset itself, persists across every visit. Distinct from
+   * job_assets.technician_notes, which is this ONE visit's inspection note. */
+  description: string | null;
 }
 
 /** Asset merged with its job_assets result for this specific job. */
