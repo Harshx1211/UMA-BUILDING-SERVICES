@@ -1988,7 +1988,16 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // retries or the sync cycle started mid-queue, the Edge Function can run
         // with stale Supabase data and produce a PDF that is missing new assets.
         // Guard: if any pending items exist for this job, defer this cycle.
-        const PDF_CRITICAL_TABLES = ['assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
+        // FIX (job-level Field Notes race): 'jobs' was missing from this list
+        // entirely — found while auditing the report pipeline after wiring
+        // jobs.notes into the PDF (see cover.ts). A pending jobs Update (the
+        // Field Notes save, a status change via "Continue Working", etc.)
+        // was never treated as a blocker, so if that specific push failed
+        // transiently, generation could proceed straight from Supabase's
+        // stale jobs row — the exact same "edit didn't make it into the
+        // PDF" bug the getUnsyncedItemsIncludingBackoff fix closed for
+        // job_assets/defects, just left open for the jobs table itself.
+        const PDF_CRITICAL_TABLES = ['jobs', 'assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
         // Tables whose local row carries its own job_id column — look this up
         // fresh from SQLite rather than trusting the queued payload to contain
         // it. Several call sites (e.g. editing an existing defect's
@@ -2010,6 +2019,15 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         const allPendingNow = getUnsyncedItemsIncludingBackoff();
         const blockers = allPendingNow.filter(p => {
           if (p.id === item.id || !PDF_CRITICAL_TABLES.includes(p.table_name)) return false;
+          // A sibling report_generate request (queueReportGeneration already
+          // dedupes these, so this is a narrow edge case, not the normal
+          // path) is itself a 'jobs'-table item now that 'jobs' is in
+          // PDF_CRITICAL_TABLES — it isn't DATA this report needs to wait
+          // for, so it must never count as a blocker.
+          if (p.operation === SyncOperation.ReportGenerate) return false;
+          // A jobs row's own record_id IS the job id — no job_id column to
+          // look up and no payload to search, unlike every other table here.
+          if (p.table_name === 'jobs') return p.record_id === reportJobId;
           if (TABLES_WITH_JOB_ID.includes(p.table_name)) {
             const row = getRecord<{ job_id?: string }>(p.table_name, p.record_id);
             if (row?.job_id) return row.job_id === reportJobId;
