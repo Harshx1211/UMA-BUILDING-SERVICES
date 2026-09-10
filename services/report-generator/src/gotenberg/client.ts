@@ -110,7 +110,18 @@ export async function convertHtmlToPdf(html: string, label: string, opts: Conver
     form.append('paperWidth', '8.27');
     form.append('paperHeight', '11.69');
     form.append('marginTop', opts.headerTemplateHtml ? '0.6' : '0.15');
-    form.append('marginBottom', opts.footerTemplateHtml ? '0.6' : '0.15');
+    // FIX: was 0.6in — stampPageNumbers.ts draws "Page X of Y" at a fixed
+    // 16pt from the absolute bottom edge onto the ALREADY-merged PDF, after
+    // this margin has already determined where each section's own content
+    // was allowed to paginate down to. 0.6in (43.2pt) left the stamp enough
+    // room in isolation, but on a page whose last table row happens to fill
+    // almost the entire reserved margin band before breaking (a long table
+    // like the Yearly Condition Report is the case that actually triggers
+    // this), content could still end up sitting right on top of the
+    // footer/stamp with barely any visual gap. Bumping to 0.75in (54pt)
+    // gives real breathing room between content and the footer band on
+    // every page, not just the ones that happened to have room to spare.
+    form.append('marginBottom', opts.footerTemplateHtml ? '0.75' : '0.15');
     form.append('marginLeft', '0');
     form.append('marginRight', '0');
     form.append('printBackground', 'true');

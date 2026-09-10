@@ -73,9 +73,16 @@ export function renderAssetLogChunk(
     // itself already does that job); every asset after it gets real
     // breathing room plus a clearly visible divider, not just whatever
     // hairline its own first inner row happened to inherit.
+    //
+    // FIX: the divider was 2px in COLORS.BORDER (#E2E8F0) — a very light
+    // gray that all but disappears against the page's white background,
+    // especially with 3+ near-identical assets back to back (e.g. several
+    // "BGA, MCP or Manual Call Point" entries in a row). Darkened to SLATE
+    // and thickened so consecutive assets are unmistakably separated at a
+    // glance, not just technically separated in the markup.
     const wrapperStyle = isFirstRowOfTable
       ? 'padding:0;border-top:none'
-      : `padding-top:16px;border-top:2px solid ${COLORS.BORDER}`;
+      : `padding-top:18px;border-top:3px solid ${COLORS.SLATE}`;
     isFirstRowOfTable = false;
 
     parts.push(`
