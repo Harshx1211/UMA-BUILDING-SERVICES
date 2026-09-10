@@ -1,10 +1,10 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
 import { stopSync, retryAllFailedSyncItems } from '@/lib/sync';
-import { updateRecord, addToSyncQueue, getFailedSyncItems } from '@/lib/database';
+import { updateRecord, addToSyncQueue, getFailedSyncItems, getPendingSyncItems } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
 import { useColors } from '@/hooks/useColors';
@@ -31,9 +31,28 @@ export default function ProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  // FIX ("sign-out takes too long"): authStore's signOut() deliberately
+  // won't wipe local data while real unsynced work (offline inspection
+  // results, and especially photo/document uploads over a slow connection)
+  // is still pending — it retries pushing for up to ~5 rounds rather than
+  // risk losing it, which is correct, but the button above just showed a
+  // bare spinner with zero indication of why, for however long that took.
+  // A silent multi-second-to-minute spinner reads as hung/broken even
+  // though it's working exactly as designed. Polling the real pending count
+  // here so the button can say what it's actually doing.
+  const [pendingSignOutCount, setPendingSignOutCount] = useState(0);
   const [editForm, setEditForm] = useState({
     phone: user?.phone || '',
   });
+
+  useEffect(() => {
+    if (!isSigningOut) return;
+    setPendingSignOutCount(getPendingSyncItems().length);
+    const interval = setInterval(() => {
+      setPendingSignOutCount(getPendingSyncItems().length);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isSigningOut]);
 
   const failedSyncCount = getFailedSyncItems().length;
 
@@ -177,7 +196,14 @@ export default function ProfileScreen() {
           disabled={isSigningOut}
         >
           {isSigningOut ? (
-            <ActivityIndicator color={T.danger} size="small" />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator color={T.danger} size="small" />
+              <Text style={styles.signOutText}>
+                {pendingSignOutCount > 0
+                  ? `Uploading ${pendingSignOutCount} pending item${pendingSignOutCount !== 1 ? 's' : ''}…`
+                  : 'Signing out…'}
+              </Text>
+            </View>
           ) : (
             <Text style={styles.signOutText}>Sign Out</Text>
           )}
