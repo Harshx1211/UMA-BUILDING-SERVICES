@@ -190,10 +190,37 @@ export default function JobDetailScreen() {
     // the sync queue payload and eventually the PDF HTML template.
     const sanitized = sanitizeText(notes, MAX_LENGTHS.longNotes);
     setNotes(sanitized);
-    updateRecord('jobs', job.id, { status: job.status, notes: sanitized, updated_at: now });
-    addToSyncQueue('jobs', job.id, SyncOperation.Update, { notes: sanitized, updated_at: now });
+
+    // FIX ("I edited notes and they're still not in the PDF"): unlike every
+    // asset-level edit (updateAssetResult throws outright against a
+    // Completed job), Field Notes was never gated on job status at all — a
+    // technician could edit it freely on an already-completed job. That's
+    // fine for the data itself (it saves and syncs correctly), but the
+    // "View Report" button's own logic (just above, in the JSX) treats any
+    // completed job with a report_url as "guaranteed current — only
+    // Continue Working invalidates it" and shows the cached PDF without
+    // regenerating. Editing Field Notes never invalidated that report_url,
+    // so the technician kept seeing the exact same stale PDF no matter how
+    // many times they edited notes afterward — the edit was never lost,
+    // the report was just never told it was now out of date. Clearing
+    // report_url here (same effect "Continue Working" already has, without
+    // reopening the job or changing its status) flips that button back to
+    // "Generate Report" so the next tap produces a fresh one.
+    const needsReportInvalidation = job.status === JobStatus.Completed && !!job.report_url;
+    const update: Record<string, string | null> = { status: job.status, notes: sanitized, updated_at: now };
+    if (needsReportInvalidation) update.report_url = null;
+
+    updateRecord('jobs', job.id, update);
+    addToSyncQueue('jobs', job.id, SyncOperation.Update, update);
+    if (needsReportInvalidation) {
+      setJob(p => p ? { ...p, report_url: null } : p);
+    }
     setIsEditingNotes(false);
-    Toast.show({ type: 'success', text1: 'Notes saved' });
+    Toast.show({
+      type: 'success',
+      text1: 'Notes saved',
+      text2: needsReportInvalidation ? 'Report will regenerate to include this change' : undefined,
+    });
   }, [job, notes]);
 
   useEffect(() => { loadJob(); }, [loadJob]);
