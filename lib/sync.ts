@@ -1047,6 +1047,16 @@ export function subscribeToMyDataLive(userId: string): void {
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
+    // FIX: UPDATE-only was the one real structural gap in this channel — a
+    // brand-new property (created by an admin, or by this technician's own
+    // first job there) never arrived live at all, only via the next
+    // periodic pull. applyProperty is already unfiltered/ungated (properties
+    // are company-wide reference data here, not scoped to "your assigned
+    // jobs" the way jobs/defects/assets are — see its own definition above,
+    // which never had a requireLocal-style check to begin with), so adding
+    // INSERT is exactly the same trust boundary as the UPDATE binding
+    // already had, not a new one.
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'properties' }, (p) => applyProperty(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'properties' }, (p) => applyProperty(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (p) => applyNotification(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, (p) => applyNotification(p.new))
