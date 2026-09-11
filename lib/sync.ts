@@ -714,9 +714,34 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   // admin-only, bar the one self-assign Insert in site-inspect.tsx which
   // never races a live echo of itself) or time_logs (not written by the
   // mobile app at all yet) — plain upsert, same as the periodic pull.
+  //
+  // FIX: same FK-violation-silently-swallowed failure mode as
+  // applyMyJobTechnician above, just against the OTHER parent. This
+  // channel is unfiltered by user_id — it fires for ANY crew member added
+  // to whichever job this screen has open, not just this device's own
+  // user (applyMyJobTechnician only ever needs to fetch the PARENT JOB,
+  // never the parent USER, because it's scoped to user_id=eq.me — you
+  // can't be logged in without your own users row already existing
+  // locally). Here, job_technicians.user_id can reference a technician
+  // this device has never synced before (a new hire just added to this
+  // job's crew while someone else already has it open) — inserting
+  // against that unseen user_id threw inside upsertRecord exactly the
+  // same way an unseen job_id did, silently dropping the crew membership
+  // until the next periodic pull happened to catch it.
   const applyJobTechnician = (row: Record<string, unknown>) => {
-    upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
-    _liveOnChange?.('job_technicians');
+    void (async () => {
+      const uid = row.user_id as string | undefined;
+      if (uid && !getRecord('users', uid)) {
+        const { data } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+        if (data) {
+          upsertRecord('users', data as Record<string, string | number | boolean | null>);
+        } else {
+          return; // fetch failed, or the row's gone — periodic pull retries once possible
+        }
+      }
+      upsertRecord('job_technicians', row as Record<string, string | number | boolean | null>);
+      _liveOnChange?.('job_technicians');
+    })();
   };
 
   const applyTimeLog = (row: Record<string, unknown>) => {
@@ -1296,12 +1321,36 @@ async function _pullDeletions(): Promise<void> {
       return;
     }
     if (!data || data.length === 0) return;
+    // FIX: this used to advance the checkpoint unconditionally, regardless
+    // of whether any individual deletion actually applied. applyRemoteDeletion
+    // already catches its own errors (a genuine local failure — lock
+    // contention, an unexpected constraint — shouldn't abort the rest of
+    // the batch), but nothing here ever surfaced that to anyone: the
+    // checkpoint moves past that id either way, and this pull is the ONLY
+    // path that will ever apply it (Realtime never replays a missed event,
+    // and a device that's already past this checkpoint will never re-fetch
+    // it). A silently-failed deletion just left that row as a permanent
+    // local ghost with zero indication anything went wrong. Still advances
+    // the checkpoint the same way (retrying the same row forever would
+    // block every deletion AFTER it too, which is worse) — but now reuses
+    // the existing sync-failure alert bus so a real failure is at least
+    // visible instead of invisible.
+    const failed: { table: string; recordId: string }[] = [];
     for (const row of data) {
-      applyRemoteDeletion(row.table_name as string, row.record_id as string);
+      const ok = applyRemoteDeletion(row.table_name as string, row.record_id as string);
+      if (!ok) failed.push({ table: row.table_name as string, recordId: row.record_id as string });
     }
     const highestId = data[data.length - 1].id as number;
     await AsyncStorage.setItem(LAST_DELETION_LOG_ID_KEY, String(highestId));
-    if (__DEV__) console.log(`[SiteTrack Sync] Applied ${data.length} remote deletion(s), checkpoint now ${highestId}`);
+    if (__DEV__) console.log(`[SiteTrack Sync] Applied ${data.length - failed.length}/${data.length} remote deletion(s), checkpoint now ${highestId}`);
+    if (failed.length > 0) {
+      _emitSyncFailureAlert({
+        failedCount: failed.length,
+        tables: [...new Set(failed.map((f) => f.table))],
+        lastError: `Failed to apply a remote deletion on ${failed[failed.length - 1].table}/${failed[failed.length - 1].recordId} — it may still show locally even though it was deleted elsewhere.`,
+        terminalCount: failed.length,
+      });
+    }
   } catch (err) {
     console.error('[SiteTrack Sync] _pullDeletions unexpected error:', err);
   }
@@ -1834,6 +1883,71 @@ async function _pullRelated(
   }
 }
 
+// A device's own clock running a few seconds behind server time is normal
+// (no NTP sync guarantee on a phone); minutes behind is not. This is
+// deliberately generous toward "trust the edit" — see _guardedUpdate's own
+// comment for why erring toward retrying beats erring toward silent loss.
+const CLOCK_SKEW_TOLERANCE_MS = 10_000;
+
+/**
+ * Runs the "only overwrite if genuinely newer" conflict-resolution update
+ * used for job_assets/defects/assets/jobs — "whoever actually edited later
+ * wins," not "whoever's device happened to sync last" (see its call
+ * sites' own comments for the full policy reasoning).
+ *
+ * FIX (silent, undetectable data loss from device clock skew): the guard
+ * compares THIS DEVICE'S OWN clock-stamped updated_at/actioned_at against
+ * whatever's already on the server via `.lt(guardColumn, guardValue)`. A
+ * phone whose clock runs behind real time — no guaranteed NTP sync, a
+ * manually-set wrong time, a long offline stretch with a drifted RTC, all
+ * real on field devices — stamps every edit with a timestamp that looks
+ * OLDER than it really is, so a genuinely-latest edit can match 0 rows
+ * here for no reason other than that skew. Supabase reports this as
+ * `error: null` (an update that legitimately matched nothing isn't a
+ * database error), so this used to just log at __DEV__ level and move on
+ * — silently discarding a real edit with zero signal to the technician,
+ * no retry, no failure alert. Now: on a 0-row match, re-fetches the
+ * server's CURRENT guard-column value and checks whether it's genuinely
+ * newer, beyond a small clock-skew tolerance. If it isn't, this was very
+ * likely a false rejection, not a real conflict — retries once,
+ * unconditionally, rather than accepting the loss. Worst case (a true,
+ * within-tolerance-window simultaneous edit from two different devices)
+ * this device's edit wins instead of the other one's — no worse than the
+ * plain "whoever pushes last wins" behavior every OTHER table in this app
+ * already has with no guard at all.
+ */
+async function _guardedUpdate(
+  table: string,
+  recordId: string,
+  payload: Record<string, unknown>,
+  guardColumn: 'actioned_at' | 'updated_at',
+): Promise<{ error: { message: string } | null }> {
+  const guardValue = payload[guardColumn] as string;
+  const result = await supabase.from(table).update(payload).eq('id', recordId).lt(guardColumn, guardValue).select('id');
+  if (result.error || (result.data?.length ?? 0) > 0) {
+    return { error: result.error };
+  }
+
+  // 0 rows matched — find out whether that's a real supersede before
+  // accepting the loss.
+  const { data: current } = await supabase.from(table).select(guardColumn).eq('id', recordId).maybeSingle();
+  const currentValue = current ? ((current as Record<string, unknown>)[guardColumn] as string | null) : null;
+  const genuinelyNewer = currentValue != null
+    && new Date(currentValue).getTime() > new Date(guardValue).getTime() + CLOCK_SKEW_TOLERANCE_MS;
+
+  if (genuinelyNewer) {
+    if (__DEV__) console.log(`[SiteTrack Sync] ${table} update for ${recordId} skipped — server already has a genuinely later edit`);
+    return { error: null };
+  }
+
+  console.warn(
+    `[SiteTrack Sync] ${table} update for ${recordId}: conflict guard rejected an edit that wasn't genuinely superseded ` +
+    `(likely this device's clock running behind server time) — retrying unconditionally rather than silently discarding it.`
+  );
+  const retry = await supabase.from(table).update(payload).eq('id', recordId);
+  return { error: retry.error };
+}
+
 /**
  * Pushes all pending sync_queue items to Supabase, marking each complete on success.
  * Items that fail MAX_SYNC_RETRIES times are permanently abandoned to prevent infinite loops.
@@ -1997,17 +2111,11 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // actually submitted later wins", not "whoever's device synced
         // last"). Every job_assets write sets actioned_at, so this only
         // falls back to a plain update in the unexpected case it's missing.
+        // See _guardedUpdate's own comment for why a 0-row match isn't
+        // trusted blindly — a device clock running behind server time can
+        // trigger this exact same shape with no real conflict at all.
         if (item.table_name === 'job_assets' && payload.actioned_at) {
-          const result = await supabase
-            .from('job_assets')
-            .update(payload)
-            .eq('id', item.record_id)
-            .lt('actioned_at', payload.actioned_at as string)
-            .select('id');
-          error = result.error;
-          if (!error && (result.data?.length ?? 0) === 0 && __DEV__) {
-            console.log(`[SiteTrack Sync] job_assets update for ${item.record_id} skipped — server already has an equal-or-later result`);
-          }
+          error = (await _guardedUpdate('job_assets', item.record_id, payload, 'actioned_at')).error;
         } else if (
           (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
           payload.updated_at
@@ -2017,16 +2125,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           // server — "whoever actually edited later wins," not "whoever's
           // device happened to sync last." Matters most for jobs/defects since
           // multiple crew members (job_technicians) can share one job offline.
-          const result = await supabase
-            .from(item.table_name)
-            .update(payload)
-            .eq('id', item.record_id)
-            .lt('updated_at', payload.updated_at as string)
-            .select('id');
-          error = result.error;
-          if (!error && (result.data?.length ?? 0) === 0 && __DEV__) {
-            console.log(`[SiteTrack Sync] ${item.table_name} update for ${item.record_id} skipped — server already has an equal-or-later edit`);
-          }
+          error = (await _guardedUpdate(item.table_name, item.record_id, payload, 'updated_at')).error;
         } else {
           const result = await supabase
             .from(item.table_name)
@@ -2252,14 +2351,12 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
             const retry = await supabase.from(item.table_name).insert(payload);
             error = retry.error;
           } else if (item.table_name === 'job_assets' && payload.actioned_at) {
-            const retry = await supabase.from('job_assets').update(payload).eq('id', item.record_id).lt('actioned_at', payload.actioned_at as string).select('id');
-            error = retry.error;
+            error = (await _guardedUpdate('job_assets', item.record_id, payload, 'actioned_at')).error;
           } else if (
             (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
             payload.updated_at
           ) {
-            const retry = await supabase.from(item.table_name).update(payload).eq('id', item.record_id).lt('updated_at', payload.updated_at as string).select('id');
-            error = retry.error;
+            error = (await _guardedUpdate(item.table_name, item.record_id, payload, 'updated_at')).error;
           } else {
             const retry = await supabase.from(item.table_name).update(payload).eq('id', item.record_id);
             error = retry.error;

@@ -2383,8 +2383,16 @@ const REMOTE_DELETABLE_TABLES = new Set([
  * defectsStore.deleteDefect's own photo-cleanup-before-defect-delete
  * ordering already does for a LOCAL delete.
  */
-export function applyRemoteDeletion(tableName: string, recordId: string): void {
-  if (!REMOTE_DELETABLE_TABLES.has(tableName)) return;
+/**
+ * @returns true if the deletion was applied (or the table isn't one this
+ * device mirrors locally, which is a legitimate no-op, not a failure);
+ * false if it genuinely threw. Callers that track a checkpoint past which
+ * they'll never revisit this specific deletion (see _pullDeletions in
+ * lib/sync.ts) use this to surface a failure loudly instead of it vanishing
+ * into a console.error nobody in production ever sees.
+ */
+export function applyRemoteDeletion(tableName: string, recordId: string): boolean {
+  if (!REMOTE_DELETABLE_TABLES.has(tableName)) return true;
   try {
     if (tableName === 'defects') {
       const orphanedPhotos = queryRecords<{ id: string }>('inspection_photos', { defect_id: recordId });
@@ -2403,8 +2411,10 @@ export function applyRemoteDeletion(tableName: string, recordId: string): void {
     deleteRecord(tableName, recordId);
     if (tableName === 'inspection_photos') recordDeletedPhoto(recordId);
     if (tableName === 'site_documents') recordDeletedDocument(recordId);
+    return true;
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] applyRemoteDeletion(${tableName}, ${recordId}) error:`, err);
+    return false;
   }
 }
 
