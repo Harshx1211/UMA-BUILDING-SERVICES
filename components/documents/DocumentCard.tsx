@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useColors } from '@/hooks/useColors';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { getOrRefreshDocumentUrl } from '@/lib/documentUpload';
 import type { SiteDocument } from '@/types';
 
 /** Resolves document.local_uri to a usable path for THIS session, or null if
@@ -41,7 +42,11 @@ function fmtDate(iso: string) {
 export default function DocumentCard({ document, currentJobId, onLongPress }: Props) {
   const C = useColors();
   const [sharing, setSharing] = useState(false);
-  const isUploaded = document.document_url.startsWith('https://');
+  // FIX: the bucket is now private (document_url stores a raw Storage
+  // path, not a URL) — "uploaded" means "not still a local file:// / content://
+  // URI", not "starts with https://" (that stopped being true the moment
+  // this stopped storing a permanent public URL).
+  const isUploaded = !document.document_url.startsWith('file://') && !document.document_url.startsWith('content://');
   const isThisVisit = !!currentJobId && document.job_id === currentJobId;
 
   const handleShare = async () => {
@@ -54,8 +59,13 @@ export default function DocumentCard({ document, currentJobId, onLongPress }: Pr
           Toast.show({ type: 'info', text1: 'Still uploading', text2: 'Try sharing again in a moment.' });
           return;
         }
+        const signedUrl = await getOrRefreshDocumentUrl(document.id);
+        if (!signedUrl) {
+          Toast.show({ type: 'error', text1: 'Could not access document' });
+          return;
+        }
         const dest = `${FileSystem.cacheDirectory}${document.id}.pdf`;
-        const dl = await FileSystem.downloadAsync(document.document_url, dest);
+        const dl = await FileSystem.downloadAsync(signedUrl, dest);
         uri = dl.uri;
       }
       if (await Sharing.isAvailableAsync()) {
@@ -98,7 +108,12 @@ export default function DocumentCard({ document, currentJobId, onLongPress }: Pr
         Toast.show({ type: 'info', text1: 'Still uploading', text2: 'This document will open once it finishes syncing.' });
         return;
       }
-      Linking.openURL(document.document_url);
+      const signedUrl = await getOrRefreshDocumentUrl(document.id);
+      if (!signedUrl) {
+        Toast.show({ type: 'error', text1: 'Could not access document' });
+        return;
+      }
+      Linking.openURL(signedUrl);
     } catch (e) {
       console.error('[DocumentCard] view error:', e);
       Toast.show({ type: 'error', text1: 'Could not open document' });

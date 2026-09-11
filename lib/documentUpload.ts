@@ -35,7 +35,8 @@ const MAX_DOCUMENT_RETRIES = 5;
  * Uploads a local scanned-document PDF to Supabase Storage under
  * properties/{propertyId}/{filename}.pdf.
  *
- * @returns Public URL string on success, null on failure
+ * @returns The Storage object PATH on success (not a URL — the bucket is
+ *          private; see getOrRefreshDocumentUrl below), null on failure.
  */
 export async function uploadDocument(
   localUri: string,
@@ -78,15 +79,51 @@ export async function uploadDocument(
       );
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from(DOCUMENT_BUCKET)
-      .getPublicUrl(filePath);
-
-    return publicUrl;
+    return filePath;
   } catch (err) {
     console.error('[DocumentUpload] uploadDocument error:', err);
     return null;
   }
+}
+
+// ─── Resolve a stored document_url into a usable, fresh signed URL ───────
+//
+// The site-documents bucket is private (20260916000000_site_documents_bucket_private.sql)
+// — document_url stores a raw Storage object PATH going forward, not a
+// usable URL. Mirrors lib/pdfGenerator.ts's getOrRefreshReportUrl exactly.
+// Also tolerates rows created before this fix, whose document_url still
+// holds a permanent public URL (or, transiently, a previously-cached
+// signed URL) — extracts the path portion from either so old documents
+// keep working without a data migration.
+
+/** Pulls the Storage object path out of a stored document_url, whatever
+ * format it's in (raw path / legacy public URL / cached signed URL). */
+function resolveDocumentPath(stored: string): string | null {
+  const publicMarker = `/object/public/${DOCUMENT_BUCKET}/`;
+  const signMarker    = `/object/sign/${DOCUMENT_BUCKET}/`;
+  if (stored.includes(publicMarker)) return stored.split(publicMarker)[1].split('?')[0];
+  if (stored.includes(signMarker))   return stored.split(signMarker)[1].split('?')[0];
+  if (stored.startsWith('https://')) return null; // unrecognized URL shape — can't safely re-derive a path
+  return stored; // already a raw path
+}
+
+export async function getOrRefreshDocumentUrl(recordId: string): Promise<string | null> {
+  const stored = getRecord<{ document_url: string | null }>('site_documents', recordId)?.document_url ?? null;
+  if (!stored) return null;
+
+  const path = resolveDocumentPath(stored);
+  if (!path) return null;
+
+  const { data, error } = await supabase.storage
+    .from(DOCUMENT_BUCKET)
+    .createSignedUrl(path, 60 * 60); // 1-hour TTL
+
+  if (error || !data?.signedUrl) {
+    console.warn('[DocumentUpload] Failed to sign document URL for', recordId, error?.message);
+    return null;
+  }
+
+  return data.signedUrl;
 }
 
 // ─── Queue a document upload for later processing ───────────────
@@ -156,9 +193,9 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
 
         if (__DEV__) console.log(`[DocumentUpload] Uploading document for property ${payload.propertyId}`);
 
-        const publicUrl = await uploadDocument(payload.localUri, payload.propertyId);
+        const path = await uploadDocument(payload.localUri, payload.propertyId);
 
-        if (publicUrl && payload.recordId) {
+        if (path && payload.recordId) {
           // FIX: mirrors lib/photoUpload.ts's equivalent fix — re-check the
           // local row still exists before queuing anything further.
           // documentsStore.deleteDocument() deletes the local row and
@@ -173,7 +210,7 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             return;
           }
 
-          updateRecord('site_documents', payload.recordId, { document_url: publicUrl });
+          updateRecord('site_documents', payload.recordId, { document_url: path });
 
           const localRow = getRecord<{
             title: string | null;
@@ -189,7 +226,7 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
             property_id:  payload.propertyId,
             job_id:       localRow?.job_id ?? payload.jobId ?? null,
             title:        localRow?.title ?? null,
-            document_url: publicUrl,
+            document_url: path,
             page_count:   localRow?.page_count ?? null,
             company_id:   localRow?.company_id ?? null,
             // FIX: mirrors lib/photoUpload.ts's equivalent fix — preserve
@@ -208,7 +245,7 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
 
           markSyncItemComplete(task.id);
 
-          if (__DEV__) console.log(`[DocumentUpload] Uploaded: ${publicUrl}`);
+          if (__DEV__) console.log(`[DocumentUpload] Uploaded: ${path}`);
         } else {
           if (__DEV__) console.log(`[DocumentUpload] Upload failed for task ${task.id} — will retry next cycle`);
           incrementSyncRetry(task.id, 'Upload failed');

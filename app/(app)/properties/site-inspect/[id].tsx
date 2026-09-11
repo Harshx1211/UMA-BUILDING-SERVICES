@@ -26,7 +26,7 @@ import { ScreenHeader, FilterPills, Button, showConfirm } from '@/components/ui'
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { InspectionResult, SyncOperation, JobStatus, Priority, DefectSeverity, JobType, DefectStatus } from '@/constants/Enums';
 import {
-  getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue,
+  getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue, logFieldAudit,
 } from '@/lib/database';
 import type { RecordData } from '@/lib/database';
 import type { Property, Asset } from '@/types';
@@ -415,6 +415,17 @@ export default function SiteInspectScreen() {
         upsertRecord('job_assets', jaPayload as RecordData);
         addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
 
+        // FIX: this quick on-site flow created job_assets/defects rows with
+        // no audit logging at all — every other write path (inspect tab,
+        // defect edit modals) logs via logFieldAudit, so a job created here
+        // showed a permanently empty Timeline instead of flagging the gap.
+        const jaChanges = [
+          { field: 'result', old: null, new: jaPayload.result },
+          { field: 'is_compliant', old: null, new: jaPayload.is_compliant },
+          { field: 'defect_reason', old: null, new: jaPayload.defect_reason },
+        ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+        logFieldAudit('job_assets', jaId, jobId, user.company_id ?? null, user.id ?? null, jaChanges);
+
         // 3. Auto-create defect if failed with reason
         if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
           const dId = generateUUID();
@@ -431,6 +442,13 @@ export default function SiteInspectScreen() {
           };
           upsertRecord('defects', dPayload as RecordData);
           addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
+
+          // Same synthetic "_created" entry addDefect logs elsewhere — a
+          // defect's Timeline should say when it first appeared, not just
+          // show later edits.
+          logFieldAudit('defects', dId, jobId, user.company_id ?? null, user.id ?? null, [
+            { field: '_created', old: null, new: 'defect created' },
+          ]);
         }
       }
 

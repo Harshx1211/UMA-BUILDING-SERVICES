@@ -1,0 +1,24 @@
+-- ============================================================
+-- Migration: make the site-documents Storage bucket private
+-- ============================================================
+-- A hostile due-diligence pass found site-documents was created as a PUBLIC
+-- bucket (20260901000000_site_documents.sql), with document_url stored as a
+-- permanent public URL. The object path is
+-- properties/{propertyId}/{timestamp}-{random-6-chars}.pdf — {random} comes
+-- from Math.random(), which is not cryptographically secure, and there was
+-- no authorization check at fetch time at all: anyone who ever saw a
+-- document_url (a forwarded email, browser history, an analytics referrer)
+-- had permanent, unrevocable access to a customer's compliance/legal
+-- document, indefinitely.
+--
+-- This flips the bucket private. Reads now go through the storage.objects
+-- RLS policy 20260908010000_site_documents_bucket_policy.sql already added
+-- (site_documents_company_read, company-scoped) via a freshly-generated
+-- signed URL each time — same pattern already used for job-reports
+-- (lib/pdfGenerator.ts's getOrRefreshReportUrl / admin's report-url route).
+-- App-side changes ship in the same commit as this migration.
+--
+-- Run this once in the Supabase SQL Editor.
+-- ============================================================
+
+UPDATE storage.buckets SET public = false WHERE id = 'site-documents';
