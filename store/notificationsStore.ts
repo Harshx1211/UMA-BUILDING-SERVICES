@@ -13,7 +13,17 @@ export type NotificationType =
   | 'urgent_job'
   | 'sync_complete'
   | 'defect_flagged'
-  | 'general';
+  | 'general'
+  // Admin-facing types — created by the 4 Settings -> Notifications toggles
+  // (supabase/migrations/20260914000000_admin_notification_toggles.sql,
+  // 20260914010000_overdue_service_notifications.sql). Only ever sent to
+  // users with role='admin', but an admin CAN log into the mobile app too,
+  // so this type union needs to actually recognize them rather than falling
+  // through to the generic icon/label.
+  | 'critical_defect'
+  | 'job_completed'
+  | 'quote_submitted'
+  | 'overdue_service';
 
 export interface AppNotification {
   id: string;

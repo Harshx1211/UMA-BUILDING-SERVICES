@@ -41,6 +41,10 @@ function NotifCard({ item }: { item: AppNotification }) {
     sync_complete: { icon: 'cloud-check-outline',      color: C.success },
     defect_flagged:{ icon: 'alert-circle-outline',     color: C.accent },
     general:       { icon: 'information-outline',      color: C.textSecondary },
+    critical_defect: { icon: 'alert-decagram-outline', color: C.error },
+    job_completed:   { icon: 'check-decagram-outline', color: C.success },
+    quote_submitted: { icon: 'file-send-outline',      color: C.info },
+    overdue_service: { icon: 'calendar-alert',         color: C.error },
   };
 
   const cfg = TYPE_CONFIG[item.type] ?? TYPE_CONFIG.general;
