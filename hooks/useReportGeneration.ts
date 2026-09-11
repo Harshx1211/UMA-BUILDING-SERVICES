@@ -139,6 +139,25 @@ export function useReportGeneration(
     notifiedRef.current = false;
     setError(null);
 
+    // FIX ("Try Again" looking frozen for 10-15s before anything happens):
+    // this used to flip to 'generating' only after an awaited NetInfo check
+    // AND a resume-check HTTP round trip to the report service (below) both
+    // resolved — harmless when that service answers instantly, but exactly
+    // the case where a technician taps "Try Again" is the case where that
+    // same service was JUST slow or erroring, so the resume-check itself
+    // could take many seconds before resolving (or timing out and falling
+    // through). The screen kept showing the stale "Generation Failed" state
+    // with the tap having produced no visible feedback at all until then.
+    // Flipping to 'generating' and starting the poll loop immediately,
+    // optimistically, means the tap always visibly does something the
+    // instant it happens — the checks below still run in the background and
+    // correct course (e.g. adopting a genuinely-already-in-flight
+    // generation's real start time) but no longer gate the UI update.
+    startedAtMs.current = Date.now();
+    setElapsedS(0);
+    setStatus('generating');
+    poll(jobId);
+
     // FIX (wrong "Queued — Waiting for Connection" toast while actually
     // online): this used to read `isOnline` from useNetworkStatus(), which
     // starts every mount at a hardcoded `false` "fail-safe" default and only
@@ -167,15 +186,16 @@ export function useReportGeneration(
       try {
         const existing = await pollReportStatus(jobId);
         if (existing.status === 'generating') {
-          startedAtMs.current = existing.startedAt ? new Date(existing.startedAt).getTime() : Date.now();
-          setElapsedS(0);
-          setStatus('generating');
+          // Genuinely already running (e.g. a previous attempt from
+          // another screen/device) — correct the elapsed timer to its real
+          // start time. Status/polling were already started optimistically
+          // above, so there's nothing else to flip here.
+          if (existing.startedAt) startedAtMs.current = new Date(existing.startedAt).getTime();
           Toast.show({
             type: 'info',
             text1: 'Already Generating',
             text2: "We'll let you know as soon as it's ready.",
           });
-          poll(jobId);
           return;
         }
         // REVERTED: this used to also adopt an already-'completed' status
@@ -203,9 +223,9 @@ export function useReportGeneration(
       }
     }
 
-    startedAtMs.current = Date.now();
-    setElapsedS(0);
-    setStatus('generating');
+    // Status/elapsed timer/polling were already started optimistically at
+    // the top of this function — this is the genuinely-fresh-generation
+    // path, so there's nothing left to flip, just the actual queue+push.
     queueReportGeneration(jobId);
     runSync();
     // FIX: this always said "processing on our servers," even when offline
@@ -225,7 +245,6 @@ export function useReportGeneration(
       text1: 'Queued — Waiting for Connection',
       text2: "This will start generating automatically once you're back online.",
     });
-    poll(jobId);
   }, [jobId, poll]);
 
   // On mount: either always start a fresh generation (forceOnMount — used by

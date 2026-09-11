@@ -45,7 +45,7 @@ export function renderRepairs(
     return `
       <div class="card" style="margin-top:10px">
         <div style="padding:10px 12px;border-bottom:1px solid ${COLORS.BORDER};display:flex;justify-content:space-between">
-          <span style="font-weight:700">${esc(defect.description)}</span>
+          <span style="font-weight:700;white-space:pre-line">${esc(defect.description)}</span>
           <span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT}">RESOLVED</span>
         </div>
         <div style="padding:10px 12px">

@@ -63,7 +63,7 @@ export function renderYearlyConditionReport(
           <td style="text-align:center;font-weight:800">${t.type}</td>
           <td>${esc(t.label)}</td>
           <td>${section != null ? `Section ${section}` : '&mdash;'}</td>
-          <td>${esc(d.description)}</td>
+          <td style="white-space:pre-line">${esc(d.description)}</td>
         </tr>`;
     })
     .join('');

@@ -137,7 +137,7 @@ function renderTechnicianNote(note: string, label: string): string {
       <div class="defect-bar" style="background:${COLORS.MUTED_LIGHT}"></div>
       <div class="defect-body">
         <div style="font-weight:800;color:${COLORS.SLATE};font-size:8.5px;text-transform:uppercase;letter-spacing:0.5px">${esc(label)}</div>
-        <div style="margin-top:4px;color:${COLORS.BLACK};font-size:10px;line-height:1.45;font-style:italic">${esc(note)}</div>
+        <div style="margin-top:4px;color:${COLORS.BLACK};font-size:10px;line-height:1.45;font-style:italic;white-space:pre-line">${esc(note)}</div>
       </div>
     </div>`;
 }
@@ -177,7 +177,7 @@ export function renderDefectCard(
           <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
           <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)} &middot; ${esc(fmtRelativeDays(defect.created_at))}</span>
         </div>
-        <div style="margin-top:4px">${esc(defect.description)}</div>
+        <div style="margin-top:4px;white-space:pre-line">${esc(defect.description)}</div>
         ${quoteBadge}
         ${photoRow(photos, signedPhotoUrls, 4)}
       </div>
