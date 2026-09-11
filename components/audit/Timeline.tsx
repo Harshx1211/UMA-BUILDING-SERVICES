@@ -92,6 +92,8 @@ export function Timeline({ tableName, recordId }: Props) {
             <Text key={ci} style={[s.change, { color: C.textSecondary }]}>
               {c.field === '_created'
                 ? 'Defect created'
+                : c.field === '_photo_deleted'
+                ? 'A photo was deleted'
                 : `${FIELD_LABELS[c.field] ?? c.field} changed to ${formatValue(c.field, c.new)}`}
             </Text>
           ))}

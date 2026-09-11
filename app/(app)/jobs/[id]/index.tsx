@@ -19,6 +19,7 @@ import {
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
   getSignatureForJob, getDocumentsForProperty, updateRecord, addToSyncQueue,
+  deleteRecord,
 } from '@/lib/database';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
@@ -356,9 +357,25 @@ export default function JobDetailScreen() {
 
   const handleContinueWorking = () => {
     if (!job) return;
+    // FIX (signature integrity): reopening a signed job used to leave the
+    // existing signature completely untouched — the client's "I confirm
+    // this inspection was completed as described" attestation stayed on
+    // file, still shown as valid, while the technician was free to change
+    // results/defects underneath it. Completing the job again never
+    // required a fresh signature either (the completion guard only checks
+    // "does a signature exist at all," not whether it postdates the data
+    // it's attesting to) — so a report could go out signed against data
+    // that's since changed, with nothing anywhere flagging the mismatch.
+    // Deleting the signature here, the same way report_url already gets
+    // cleared, means the existing "signature required to complete" guard
+    // naturally forces a genuine re-sign before this job can be completed
+    // again — no separate staleness check needed anywhere else.
+    const existingSig = getSignatureForJob<{ id: string }>(job.id);
     showConfirm({
       title: 'Continue Working?',
-      message: 'This will re-open the job and unlock the inspection form. All existing data is preserved.',
+      message: existingSig
+        ? 'This will re-open the job and unlock the inspection form. All existing data is preserved, but the existing signature will be cleared — the client will need to sign again before this job can be completed.'
+        : 'This will re-open the job and unlock the inspection form. All existing data is preserved.',
       icon: 'pencil-outline',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
@@ -372,12 +389,17 @@ export default function JobDetailScreen() {
               report_url: null,
               updated_at: now,
             });
+            if (existingSig) {
+              deleteRecord('signatures', existingSig.id);
+              addToSyncQueue('signatures', existingSig.id, SyncOperation.Delete, { id: existingSig.id, job_id: job.id });
+              setHasSig(false);
+            }
             updateJobStatus(job.id, JobStatus.InProgress);
             setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
             Toast.show({
               type: 'success',
               text1: 'Job re-opened',
-              text2: 'Changes will sync to the server automatically',
+              text2: existingSig ? 'Signature cleared — a fresh signature will be required to complete this job' : 'Changes will sync to the server automatically',
             });
           },
         },

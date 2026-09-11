@@ -10,12 +10,14 @@ import {
   addToSyncQueue,
   cancelPendingPhotoUpload,
   recordDeletedPhoto,
+  logFieldAudit,
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { queuePhotoUpload } from '@/lib/photoUpload';
 import { generateUUID } from '@/utils/uuid';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { useAuthStore } from '@/store/authStore';
 
 // ─── Helper — extract a message from an unknown catch value ─
 function errorMessage(err: unknown): string {
@@ -97,10 +99,27 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       // already on Supabase. Using the stale in-memory value caused
       // cancelPendingPhotoUpload() to fire on an already-uploaded photo,
       // leaving an orphaned Supabase row and binary that could never be deleted.
-      const dbPhoto = getRecord<{ photo_url: string | null; local_uri: string | null; job_id: string | null }>('inspection_photos', photoId);
+      const dbPhoto = getRecord<{ photo_url: string | null; local_uri: string | null; job_id: string | null; defect_id: string | null }>('inspection_photos', photoId);
       const photoUrl = dbPhoto?.photo_url ?? get().photos.find(p => p.id === photoId)?.photo_url;
       const localUri = dbPhoto?.local_uri ?? get().photos.find(p => p.id === photoId)?.local_uri;
       const jobId = dbPhoto?.job_id ?? get().photos.find(p => p.id === photoId)?.job_id;
+      const defectId = dbPhoto?.defect_id ?? get().photos.find(p => p.id === photoId)?.defect_id;
+
+      // FIX: deleting a photo of a logged defect left no trace anywhere —
+      // for a compliance product, "evidence of a real defect quietly
+      // disappeared" is exactly the kind of thing that should be
+      // discoverable later. Logs onto the DEFECT's own existing audit
+      // Timeline (same field_audit_log system already used for result/
+      // description/severity changes) rather than inventing a separate
+      // photo-audit surface — a synthetic entry, since this isn't a field
+      // value changing but a whole attachment going away.
+      if (defectId && jobId) {
+        const companyId = useAuthStore.getState().user?.company_id ?? null;
+        const userId = useAuthStore.getState().user?.id ?? null;
+        logFieldAudit('defects', defectId, jobId, companyId, userId, [
+          { field: '_photo_deleted', old: 'photo attached', new: null },
+        ]);
+      }
 
       // 1. Remove from local SQLite immediately
       deleteRecord('inspection_photos', photoId);

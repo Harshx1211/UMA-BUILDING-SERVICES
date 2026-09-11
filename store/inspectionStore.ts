@@ -606,6 +606,13 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           'defects', { id: row.defect_id },
         )[0];
         if (defect) {
+          // FIX: deleting a photo of a logged defect left no trace anywhere
+          // — same fix as photosStore.ts's deletePhoto, applied to this
+          // OTHER standalone photo-removal path (editing a defect's photo
+          // set directly, not the separate Job Photos gallery).
+          logFieldAudit('defects', defect.id, currentJobId, useAuthStore.getState().user?.company_id ?? null, useAuthStore.getState().user?.id ?? null, [
+            { field: '_photo_deleted', old: 'photo attached', new: null },
+          ]);
           let defectPhotos: string[] = [];
           try { defectPhotos = defect.photos ? JSON.parse(defect.photos) : []; }
           catch { defectPhotos = []; }
