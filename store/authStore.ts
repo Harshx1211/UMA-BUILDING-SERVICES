@@ -213,7 +213,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   signOut: async () => {
     set({ isLoading: true });
     try {
-      stopSync();
+      // FIX: stopSync() is now async specifically because it must be
+      // awaited here — it doesn't just signal a running background sync to
+      // stop, it also tears down both realtime channels and waits for their
+      // unsubscribe to actually be confirmed server-side, closing the
+      // window where a postgres_changes message already in flight could
+      // still land in local SQLite after clearDatabase() runs below (see
+      // stopSync's own comment for the full reasoning).
+      await stopSync();
 
       // FIX: stopSync() only signals a running background sync to stop at
       // its next checkpoint — it doesn't abort one already mid-_pullJobs(),
@@ -529,8 +536,15 @@ supabase.auth.onAuthStateChange((event, session) => {
     // via a path that completely bypassed the "Unsynced Work" safeguard
     // signOut() has, just above. Mirror that same bounded flush-then-check
     // here, and only wipe local data once nothing is left waiting to sync.
-    stopSync();
     void (async () => {
+      // FIX: stopSync() must be awaited here too, for the same reason it's
+      // now awaited in signOut() above (see its own comment) — this handler
+      // is the OTHER path that can lead to clearDatabase(), and it needs
+      // the same guarantee that both realtime channels have genuinely
+      // finished unsubscribing before local data is wiped, not just been
+      // told to.
+      await stopSync();
+
       // FIX: same wait signOut() now does, and for the same reason — see
       // waitForSyncIdle's own comment. Without it, this handler's own
       // pending-items check (and clearDatabase() past it) ran immediately

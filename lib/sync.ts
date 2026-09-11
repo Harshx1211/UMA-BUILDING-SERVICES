@@ -200,8 +200,24 @@ export function startSync(userId?: string): void {
   }, SYNC_INTERVAL_MS);
 }
 
-/** Stops the background sync loop — call on app unmount / sign-out */
-export function stopSync(): void {
+/**
+ * Stops the background sync loop — call on app unmount / sign-out.
+ *
+ * FIX (cross-account data exposure race): this used to be synchronous and
+ * fire-and-forget the channel teardowns, returning before either had
+ * actually finished unsubscribing server-side. authStore's signOut() and
+ * its SIGNED_OUT listener counterpart both call this then, after a short
+ * wait for any in-flight runSync() (waitForSyncIdle), wipe local SQLite —
+ * but neither of those ever waited for the REALTIME CHANNELS specifically
+ * to finish closing, so a postgres_changes message already in flight at
+ * that exact moment could still reach a `.on(...)` callback and write into
+ * local SQLite after it had just been cleared for whichever user signs in
+ * next on this device. Now genuinely async — callers that care about this
+ * ordering (sign-out) must await it; callers that don't (there are none
+ * left — this is only ever called on sign-out) get the same behavior they
+ * always had, since not awaiting an async function is always valid JS.
+ */
+export async function stopSync(): Promise<void> {
   _shouldStop = true;
   if (_syncInterval) {
     clearInterval(_syncInterval);
@@ -215,9 +231,10 @@ export function stopSync(): void {
   _cachedUserId = null;
   // Hard reset, not the refcounted unsubscribeFromJobLive() — sign-out must
   // guarantee no channel survives into a different user's session on this
-  // device, regardless of how many job screens think they still want it open.
-  _teardownLiveChannel();
-  _teardownMyDataChannel();
+  // device, regardless of how many job screens think they still want it
+  // open. Awaited (not `void`) specifically here — see this function's own
+  // comment above for why this is the one place that ordering matters.
+  await Promise.all([_teardownLiveChannel(), _teardownMyDataChannel()]);
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
   clearSyncFailureListeners();
@@ -308,24 +325,38 @@ export async function runSync(userId?: string): Promise<boolean> {
     if (__DEV__) console.log('[SiteTrack Sync] Already in progress — skipping');
     return false;
   }
+  // FIX (race condition — two runSync() calls could run fully concurrently):
+  // this used to set _isSyncing = true AFTER the network check below, which
+  // contains an `await`. Two calls arriving close together — a very real
+  // scenario, since app foreground fires both subscribeToMyDataLive's own
+  // reconnect runSync() and useNetworkStatus's reconnect runSync() off the
+  // same OS event — could both pass the `if (_isSyncing)` guard above
+  // before either one actually set the flag, then both proceed to run a
+  // full sync at once, defeating the entire point of this mutex (confirmed:
+  // this let two concurrent _pushQueue() passes both attempt the same
+  // pending rows, and the job_assets unique-constraint-conflict handler
+  // could mistake that for a genuine two-device conflict and delete its own
+  // just-inserted row). Claiming the mutex here, before any `await`, closes
+  // the gap — JS can't interleave anything between this check and this
+  // assignment.
+  _isSyncing = true;
 
   // Reset abort flag at the start of each new run
   _shouldStop = false;
 
-  // ── 1. Network check ─────────────────────────────────────────
-  const netState = await NetInfo.fetch();
-  const isOnline =
-    netState.isConnected === true && netState.isInternetReachable !== false;
-
-  if (!isOnline) {
-    if (__DEV__) console.log('[SiteTrack Sync] Offline — skipping sync');
-    return false;
-  }
-
-  _isSyncing = true;
-  if (__DEV__) console.log('[SiteTrack Sync] Starting sync run...');
-
   try {
+    // ── 1. Network check ─────────────────────────────────────────
+    const netState = await NetInfo.fetch();
+    const isOnline =
+      netState.isConnected === true && netState.isInternetReachable !== false;
+
+    if (!isOnline) {
+      if (__DEV__) console.log('[SiteTrack Sync] Offline — skipping sync');
+      return false;
+    }
+
+    if (__DEV__) console.log('[SiteTrack Sync] Starting sync run...');
+
     let resolvedUserId = userId ?? _cachedUserId;
     if (!resolvedUserId) {
       const user = await getCurrentUser();
@@ -597,7 +628,9 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   if (_liveJobId && _liveJobId !== jobId) {
     // Actually switching jobs, not a same-job screen handoff — the old
     // channel is unconditionally wrong now regardless of its refcount.
-    _teardownLiveChannel();
+    // Fire-and-forget is fine here — ordering only matters for the
+    // sign-out security boundary, which stopSync() awaits explicitly.
+    void _teardownLiveChannel();
   }
 
   _liveJobId = jobId;
@@ -812,15 +845,32 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
  */
 export function unsubscribeFromJobLive(): void {
   if (_liveRefCount > 0) _liveRefCount--;
-  if (_liveRefCount === 0) _teardownLiveChannel();
+  if (_liveRefCount === 0) void _teardownLiveChannel();
 }
 
-function _teardownLiveChannel(): void {
-  if (_liveChannel) void supabase.removeChannel(_liveChannel);
+// FIX (race condition — a stray realtime write could land after sign-out's
+// clearDatabase()): this used to fire-and-forget supabase.removeChannel()
+// (`void supabase.removeChannel(...)`) and null the local variable
+// immediately, without waiting for the unsubscribe to actually take effect
+// server-side. Nulling the variable stops NEW subscribe calls from reusing
+// a stale channel, but does nothing to stop a `postgres_changes` message
+// already in flight over the socket at that exact moment from still
+// reaching its `.on(...)` callback and calling upsertRecord() — those
+// closures aren't gated on the module-level variable at all. On a shared
+// device, a stray write landing between stopSync() and clearDatabase()
+// during sign-out is exactly the cross-account data exposure class this
+// codebase has fixed several times already. Now genuinely async and
+// awaited by stopSync() specifically (the one caller where this ordering
+// is a real security boundary, not just a nice-to-have) — every other
+// caller (job-switch, screen blur, AppState background) stays
+// fire-and-forget via `void`, since ordering doesn't matter there.
+async function _teardownLiveChannel(): Promise<void> {
+  const channel = _liveChannel;
   _liveChannel = null;
   _liveJobId = null;
   _liveOnChange = null;
   _liveRefCount = 0;
+  if (channel) await supabase.removeChannel(channel);
 }
 
 // ─────────────────────────────────────────────
@@ -885,7 +935,7 @@ let _myDataUserId: string | null = null;
 export function subscribeToMyDataLive(userId: string): void {
   if (!userId) return;
   if (_myDataChannel && _myDataUserId === userId) return; // already on for this user
-  if (_myDataChannel) _teardownMyDataChannel();
+  if (_myDataChannel) void _teardownMyDataChannel();
   _myDataUserId = userId;
 
   // FIX: the UPDATE binding below is now unfiltered (RLS-scoped to this
@@ -1150,13 +1200,18 @@ export function subscribeToMyDataLive(userId: string): void {
 
 /** Call on sign-out / app teardown — mirrors unsubscribeFromJobLive's hard reset. */
 export function unsubscribeFromMyDataLive(): void {
-  _teardownMyDataChannel();
+  void _teardownMyDataChannel();
 }
 
-function _teardownMyDataChannel(): void {
-  if (_myDataChannel) void supabase.removeChannel(_myDataChannel);
+// See _teardownLiveChannel's own comment for why this is genuinely async
+// and awaited — same fix, same reasoning, applied to the whole-session
+// channel (which covers far more tables, so the exposure window matters
+// even more here).
+async function _teardownMyDataChannel(): Promise<void> {
+  const channel = _myDataChannel;
   _myDataChannel = null;
   _myDataUserId = null;
+  if (channel) await supabase.removeChannel(channel);
 }
 
 // Own mutex for syncNow's push-only cycle — separate from _isProcessingPhotos/

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
-import { stopSync, retryAllFailedSyncItems } from '@/lib/sync';
+import { retryAllFailedSyncItems } from '@/lib/sync';
 import { updateRecord, addToSyncQueue, getFailedSyncItems, getPendingSyncItems } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
@@ -67,7 +67,12 @@ export default function ProfileScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            stopSync();
+            // signOut() (store/authStore.ts) already calls stopSync() itself,
+            // as its very first action, then awaits it properly before
+            // wiping local data — calling it again here was redundant (now
+            // that stopSync() is async and its ordering matters for a real
+            // security boundary, an un-awaited duplicate call here is worse
+            // than doing nothing, not just redundant).
             setIsSigningOut(true);
             const success = await signOut();
             setIsSigningOut(false);
