@@ -208,6 +208,10 @@ export function stopSync(): void {
     _syncInterval = null;
     if (__DEV__) console.log('[SiteTrack Sync] Sync stopped');
   }
+  if (_pushSoonTimer) {
+    clearTimeout(_pushSoonTimer);
+    _pushSoonTimer = null;
+  }
   _cachedUserId = null;
   // Hard reset, not the refcounted unsubscribeFromJobLive() — sign-out must
   // guarantee no channel survives into a different user's session on this
@@ -217,6 +221,52 @@ export function stopSync(): void {
   // H2: Purge all listeners on sign-out to prevent stale refs from previous session
   clearSyncListeners();
   clearSyncFailureListeners();
+}
+
+let _pushSoonTimer: ReturnType<typeof setTimeout> | null = null;
+const PUSH_SOON_DEBOUNCE_MS = 1500;
+
+/**
+ * Schedules a push-only sync shortly after a local write reaches the sync
+ * queue, so a technician's work (an inspection result, a defect, a photo, a
+ * note — anything written via addToSyncQueue in lib/database.ts) reaches the
+ * server within a couple of seconds instead of sitting until the next
+ * periodic cycle (SYNC_INTERVAL_MS, currently 10 minutes) or some unrelated
+ * screen action that happens to trigger one.
+ *
+ * Debounced, not called-once-per-write: a burst of writes (ticking through a
+ * 50-asset checklist, or several photos taken in a row) coalesces into ONE
+ * push shortly after the burst settles, rather than one push per write —
+ * the whole point of SYNC_INTERVAL_MS being stretched out (see its own
+ * comment in constants/Config.ts) was to stop the app hammering the network
+ * on a fixed timer regardless of activity; this restores immediacy for
+ * actual edits without reintroducing that.
+ *
+ * Uses pushPendingWork (push-only, no full pull of jobs/properties/assets)
+ * rather than runSync() — getting THIS device's own recent edit up quickly
+ * is the entire point; there's no reason to also re-pull everything else on
+ * every debounced tick the way the periodic full sync does. Does its own
+ * offline check first (pushPendingWork has none of its own) so a burst of
+ * writes made offline doesn't repeatedly attempt and fail a network call —
+ * the reconnect listener in useNetworkStatus.ts already handles catching up
+ * once back online.
+ *
+ * Called from addToSyncQueue via a lazy `import('@/lib/sync')` (see its own
+ * comment) rather than a static import, to avoid a circular dependency —
+ * lib/database.ts is a lower-level module this file already imports from.
+ */
+export function schedulePushSoon(): void {
+  if (_pushSoonTimer) clearTimeout(_pushSoonTimer);
+  _pushSoonTimer = setTimeout(() => {
+    _pushSoonTimer = null;
+    void (async () => {
+      if (!_cachedUserId) return; // not logged in (yet), or already signed out
+      const netState = await NetInfo.fetch();
+      const online = netState.isConnected === true && netState.isInternetReachable !== false;
+      if (!online) return;
+      await pushPendingWork(_cachedUserId);
+    })();
+  }, PUSH_SOON_DEBOUNCE_MS);
 }
 
 /** Returns the currently cached user ID — useful for fire-and-forget callers */
@@ -421,18 +471,24 @@ export async function waitForSyncIdle(maxWaitMs = 5000): Promise<void> {
  * `_isProcessingPhotos` mutex runSync() uses internally — plus a bounded wait
  * for any already-in-flight runSync() to finish its own push first.
  *
- * For use ONLY by authStore's signOut()/forceFinalSyncAndSignOut(), which
- * can't just call runSync(): runSync's revocation/subscription check would
- * immediately re-detect the same deactivated/suspended account and re-call
- * forceFinalSyncAndSignOut() (a no-op re-entrancy guard), short-circuiting
- * before the push step ever runs — the whole reason those callers do their
- * own push instead. Previously that bypass called processPhotoQueue()/
- * _pushQueue() directly with no mutex at all: a technician signing out while
- * the background 60s interval was mid-upload could run two concurrent
- * processPhotoQueue() passes, each uploading the same local photo under a
- * different generated filename and racing to insert the same
- * inspection_photos.id, orphaning a Storage object. Screens should still use
- * runSync() for normal sync triggering — this is not a general substitute.
+ * Originally added for ONLY authStore's signOut()/forceFinalSyncAndSignOut(),
+ * which can't just call runSync(): runSync's revocation/subscription check
+ * would immediately re-detect the same deactivated/suspended account and
+ * re-call forceFinalSyncAndSignOut() (a no-op re-entrancy guard),
+ * short-circuiting before the push step ever runs — the whole reason those
+ * callers do their own push instead. Previously that bypass called
+ * processPhotoQueue()/_pushQueue() directly with no mutex at all: a
+ * technician signing out while the background 60s interval was mid-upload
+ * could run two concurrent processPhotoQueue() passes, each uploading the
+ * same local photo under a different generated filename and racing to
+ * insert the same inspection_photos.id, orphaning a Storage object.
+ *
+ * Now also used by schedulePushSoon() below (its own comment explains why),
+ * for the same reason it originally suited sign-out: it's push-only, with no
+ * full pull of jobs/properties/assets — a debounced "get my recent edits up
+ * quickly" trigger has no reason to also re-pull everything else, unlike the
+ * periodic full runSync(). Any OTHER caller wanting normal sync triggering
+ * (pull included, revocation check included) should still use runSync().
  */
 export async function pushPendingWork(userId: string): Promise<void> {
   for (let waited = 0; _isSyncing && waited < 10; waited++) {

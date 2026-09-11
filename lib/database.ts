@@ -2157,6 +2157,20 @@ export function addToSyncQueue(
   operation: SyncOperation | 'photo_upload' | 'document_upload',
   payload: RecordData,
 ): void {
+  // FIX ("why are we delaying this instead of sending it live"): every write
+  // through here used to just sit in the queue until whatever NEXT happened
+  // to trigger a sync — the periodic interval (10 min), a network reconnect,
+  // or a handful of screens that happen to call runSync() themselves
+  // (report generation, signature capture). Everything else — inspection
+  // results, defects, photos, documents, notes — had no immediate push path
+  // at all. Scheduling one HERE, centrally, guarantees every call site gets
+  // it automatically rather than relying on each of the ~15 call sites
+  // across the app to remember to trigger one themselves. Only fires once
+  // the write actually reaches the queue (see `queued` below) — never for a
+  // failed write. Lazy `import()` instead of a static one avoids a circular
+  // dependency: lib/sync.ts already imports several functions from this
+  // file, so a top-level import the other way would create a cycle.
+  let queued = false;
   try {
     const db = openDatabase();
 
@@ -2189,6 +2203,7 @@ export function addToSyncQueue(
           `UPDATE sync_queue SET payload = ?, retry_count = 0, last_error = NULL, next_retry_at = NULL WHERE id = ?`,
           [JSON.stringify(merged), existing.id],
         );
+        queued = true;
         return;
       }
     }
@@ -2198,8 +2213,13 @@ export function addToSyncQueue(
        VALUES (?, ?, ?, ?, 0, 0)`,
       [tableName, recordId, operation, JSON.stringify(payload)],
     );
+    queued = true;
   } catch (err) {
     console.error("[UMA BUILDING SERVICES DB] addToSyncQueue error:", err);
+  } finally {
+    if (queued) {
+      void import('@/lib/sync').then(({ schedulePushSoon }) => schedulePushSoon());
+    }
   }
 }
 
