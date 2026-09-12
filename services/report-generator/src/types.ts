@@ -177,6 +177,11 @@ export interface ReportData {
   // original's Storage URL and let Chromium fetch it directly; that turned
   // out to be the actual generation-time bottleneck in real testing).
   signedPhotoUrls: Map<string, string>;
+  // inspection_photos.id -> long-lived signed URL for the ORIGINAL
+  // full-resolution photo — see photos/prepareFullResUrls.ts. Used only to
+  // make a report photo clickable (opens full-size); the small inline
+  // thumbnail above is what's actually embedded in the page.
+  fullResPhotoUrls: Map<string, string>;
   signature: Signature | null;
   // The assigned crew — a flat list, no primary (see job_technicians
   // migration). Falls back to [job.assigned_user] for a job that predates

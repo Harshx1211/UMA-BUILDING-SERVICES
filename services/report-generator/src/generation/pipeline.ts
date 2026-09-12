@@ -86,8 +86,8 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   const categoryLogs = buildAssetLogChunksByCategory(data.assets, assetTypesByValue, config.maxAssetsPerChunk);
   const footerTemplate = buildFooterTemplate(data.company);
 
-  const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls);
-  const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls);
+  const unlinkedHtml = renderUnlinkedDefects(data.defects, data.photosByDefect, data.signedPhotoUrls, data.fullResPhotoUrls);
+  const repairsHtml = renderRepairs(data.defects, data.approvedQuote, data.photosByDefect, data.signedPhotoUrls, data.fullResPhotoUrls);
   const ycrHtml = renderYearlyConditionReport(data, assetTypesByValue);
   const signoffHtml = renderSignoff(data);
 
@@ -132,7 +132,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
         catIndex,
         chunkIndex,
         label: cat.label,
-        html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.signedPhotoUrls),
+        html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.signedPhotoUrls, data.fullResPhotoUrls),
       })),
     ),
     ...tailDocs.map((doc, tailIndex) => ({ kind: 'tail' as const, tailIndex, key: doc.key, html: doc.html })),

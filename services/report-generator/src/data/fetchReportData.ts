@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAllPaged } from './paginate';
 import { parseCategory } from './categoryGrouping';
 import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
+import { prepareFullResUrls } from '../photos/prepareFullResUrls';
 import { config } from '../config';
 import {
   Asset,
@@ -117,7 +118,13 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     }
   }
 
-  const signedPhotoUrls = await prepareInlinePhotos(db, photos, config.photoBucket);
+  // Independent of each other (one downloads+resizes originals, the other
+  // just signs URLs for them) — run concurrently rather than doubling the
+  // wait by awaiting them one after another.
+  const [signedPhotoUrls, fullResPhotoUrls] = await Promise.all([
+    prepareInlinePhotos(db, photos, config.photoBucket),
+    prepareFullResUrls(db, photos, config.photoBucket),
+  ]);
 
   const { data: signature } = await db
     .from('signatures')
@@ -201,6 +208,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     photosByAsset,
     photosByDefect,
     signedPhotoUrls,
+    fullResPhotoUrls,
     signature: (signature ?? null) as Signature | null,
     assignedUsers,
     timeLogUsers,

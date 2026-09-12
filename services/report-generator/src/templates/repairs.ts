@@ -17,6 +17,7 @@ export function renderRepairs(
   approvedQuote: Quote | null,
   photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
+  fullResPhotoUrls: Map<string, string>,
 ): string | null {
   const repaired = defects.filter((d) => d.status === 'repaired');
   if (repaired.length === 0) return null;
@@ -49,7 +50,7 @@ export function renderRepairs(
           <span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT}">RESOLVED</span>
         </div>
         <div style="padding:10px 12px">
-          ${photoRow(photos, signedPhotoUrls, 6)}
+          ${photoRow(photos, signedPhotoUrls, 6, fullResPhotoUrls)}
           ${itemRows ? `
             <table style="margin-top:8px">
               <thead><tr><th>Parts / Labour</th><th style="text-align:right">Quantity</th></tr></thead>

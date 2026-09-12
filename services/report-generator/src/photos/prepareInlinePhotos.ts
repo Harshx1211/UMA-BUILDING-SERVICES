@@ -63,7 +63,7 @@ export async function prepareInlinePhotos(
   return inline;
 }
 
-function extractObjectPath(photoUrl: string, bucket: string): string | null {
+export function extractObjectPath(photoUrl: string, bucket: string): string | null {
   const marker = `/object/public/${bucket}/`;
   const signMarker = `/object/sign/${bucket}/`;
   for (const m of [marker, signMarker]) {

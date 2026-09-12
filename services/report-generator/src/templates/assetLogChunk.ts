@@ -19,6 +19,7 @@ export function renderAssetLogChunk(
   defectsByAsset: Map<string, Defect[]>,
   photosByAsset: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
+  fullResPhotoUrls: Map<string, string>,
 ): string {
   let lastCategory: string | null = null;
   // FIX: tracks whether the row about to render is the first one under a
@@ -98,10 +99,10 @@ export function renderAssetLogChunk(
               <td style="width:30%;border-top:none">${esc(asset.location_on_site) || '—'}</td>
               <td style="width:15%;text-align:right;border-top:none">${resultPill(asset.result)}</td>
             </tr>
-            ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4)}</td></tr>` : ''}
+            ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}</td></tr>` : ''}
             ${asset.description ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.description, 'Asset Notes')}</td></tr>` : ''}
             ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Technician Notes')}</td></tr>` : ''}
-            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection)).join('')}</td></tr>` : ''}
+            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection, fullResPhotoUrls)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
       </tr>`);
@@ -161,6 +162,7 @@ export function renderDefectCard(
   // never gets a fabricated Section number. Unlinked defects have no asset and
   // so no Section to reference — defaults to null.
   officialSection: number | null = null,
+  fullResPhotoUrls?: Map<string, string>,
 ): string {
   const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
@@ -179,7 +181,7 @@ export function renderDefectCard(
         </div>
         <div style="margin-top:4px;white-space:pre-line">${esc(defect.description)}</div>
         ${quoteBadge}
-        ${photoRow(photos, signedPhotoUrls, 4)}
+        ${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}
       </div>
     </div>`;
 }

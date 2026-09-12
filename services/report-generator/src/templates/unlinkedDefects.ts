@@ -9,6 +9,7 @@ export function renderUnlinkedDefects(
   defects: Defect[],
   photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
+  fullResPhotoUrls: Map<string, string>,
 ): string | null {
   const unlinked = defects.filter((d) => !d.asset_id);
   if (unlinked.length === 0) return null;
@@ -18,7 +19,7 @@ export function renderUnlinkedDefects(
 <body><div class="page">
   <div class="section-bar">General Defects (Not Linked to a Specific Asset)</div>
   <div class="card" style="padding:10px 12px">
-    ${unlinked.map((d) => renderDefectCard(d, photosByDefect, signedPhotoUrls)).join('')}
+    ${unlinked.map((d) => renderDefectCard(d, photosByDefect, signedPhotoUrls, null, fullResPhotoUrls)).join('')}
   </div>
 </div></body></html>`;
 }

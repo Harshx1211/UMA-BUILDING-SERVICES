@@ -63,19 +63,30 @@ export function resultPill(result: 'pass' | 'fail' | 'not_tested' | null): strin
  * with no trace at all, which meant a technician had no way to know their
  * evidence photo never made it into a compliance report they're legally
  * relying on.
+ *
+ * When a full-resolution URL is also available (fullResUrls — see
+ * photos/prepareFullResUrls.ts), the thumbnail is wrapped in a real <a
+ * href> — Chromium's print-to-PDF preserves anchor tags as clickable link
+ * annotations, so tapping the small embedded thumbnail in the PDF opens the
+ * original at full size. Falls back to a plain, unlinked <img> if signing
+ * the original failed for some reason — a missing link is a much smaller
+ * problem than a missing photo, and shouldn't trigger the same "unavailable"
+ * placeholder as the thumbnail itself failing.
  */
-export function photoTag(photo: InspectionPhoto, signedUrls: Map<string, string>): string {
+export function photoTag(photo: InspectionPhoto, signedUrls: Map<string, string>, fullResUrls?: Map<string, string>): string {
   const url = signedUrls.get(photo.id);
   if (!url) {
     return `<div class="thumb-missing">photo<br/>unavailable</div>`;
   }
-  return `<img class="thumb" src="${esc(url)}" alt="" />`;
+  const img = `<img class="thumb" src="${esc(url)}" alt="" />`;
+  const linkUrl = fullResUrls?.get(photo.id);
+  return linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener noreferrer">${img}</a>` : img;
 }
 
-export function photoRow(photos: InspectionPhoto[], signedUrls: Map<string, string>, max = 6): string {
+export function photoRow(photos: InspectionPhoto[], signedUrls: Map<string, string>, max = 6, fullResUrls?: Map<string, string>): string {
   if (photos.length === 0) return '';
   const shown = photos.slice(0, max);
-  const tags = shown.map((p) => photoTag(p, signedUrls)).join('');
+  const tags = shown.map((p) => photoTag(p, signedUrls, fullResUrls)).join('');
   const more = photos.length > max
     ? `<span style="font-size:9px;color:${COLORS.MUTED};align-self:center;margin-left:4px">+${photos.length - max}</span>`
     : '';

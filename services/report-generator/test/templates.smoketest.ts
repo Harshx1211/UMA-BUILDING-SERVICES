@@ -80,6 +80,7 @@ const photosByDefect = new Map<string, InspectionPhoto[]>([
   ['d1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
 ]);
 const signedPhotoUrls = new Map<string, string>([['ph1', 'https://signed.example.com/x.jpg?token=abc']]); // ph2 (if any) intentionally unsigned -> exercises the placeholder path
+const fullResPhotoUrls = new Map<string, string>([['ph1', 'https://signed.example.com/x-fullres.jpg?token=xyz']]);
 
 const data: ReportData = {
   job: {
@@ -95,6 +96,7 @@ const data: ReportData = {
   photosByAsset,
   photosByDefect,
   signedPhotoUrls,
+  fullResPhotoUrls,
   signature: { id: 's1', job_id: 'j1', signature_url: 'https://signed.example.com/sig.png', tech_signature_url: 'https://signed.example.com/techsig.png', signed_by_name: 'Raquel', signed_at: new Date().toISOString() },
   // Single assigned tech in this fixture (job_technicians empty -> falls
   // back to [job.assigned_user], same as fetchReportData.ts) — u2/u3 below
@@ -187,10 +189,10 @@ const docs = [
   ['cover', renderCover(data, byValue)],
   ['tableOfContents', tocHtml],
   ...categoryLogs.flatMap((cat, ci) =>
-    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, signedPhotoUrls)] as const),
+    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, signedPhotoUrls, fullResPhotoUrls)] as const),
   ),
-  ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
-  ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls) ?? '(null — no repairs, unexpected here)'],
+  ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls, fullResPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
+  ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls, fullResPhotoUrls) ?? '(null — no repairs, unexpected here)'],
   ['yearlyConditionReport', renderYearlyConditionReport(data, byValue)],
   ['signoff', renderSignoff(data)],
 ] as const;
