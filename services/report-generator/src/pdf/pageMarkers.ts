@@ -37,10 +37,17 @@ const MARKER_SUFFIX = '__';
  * throw off page breaks relative to each other.
  */
 export function markerHtml(key: string): string {
-  // TEMP DIAGNOSTIC: fully visible, to isolate whether invisibility CSS is
-  // what's preventing this text from being painted, vs. a bug in the
-  // search/extraction logic itself.
-  return `<div style="color:red;font-size:10px">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
+  // White-on-white, not opacity:0 — confirmed by direct testing that
+  // Chromium's print-to-PDF genuinely skips painting (not just visually
+  // hiding) content with opacity:0 or a zero-height clipped box: neither
+  // produced a text-showing operator in the output at all, so pdfjs-dist
+  // correctly found nothing (the marker was never in the file, not a
+  // search bug — verified by making it fully visible, which round-tripped
+  // successfully end to end). White text is a real, fully-opaque paint
+  // operation matching the report's own white page background (theme.ts's
+  // BASE_STYLE sets no background-color, so it's the default), which
+  // Chromium has no reason to optimize away.
+  return `<div style="color:#ffffff;font-size:6px;line-height:6px;margin:0;padding:0">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
 }
 
 export interface MarkerScanResult {

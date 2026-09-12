@@ -180,12 +180,6 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     const scan = await findMarkerPages(draftBuffer, allMarkerKeys);
     draftMarkers = scan.pages;
     draftTotalPages = scan.totalPages;
-    // TEMP DEBUG — remove once marker detection is confirmed reliable.
-    console.log(`[generate-report] DEBUG marker scan: found ${draftMarkers.size}/${allMarkerKeys.length} of [${allMarkerKeys.join(',')}] ->`, JSON.stringify([...draftMarkers.entries()]), `totalPages=${draftTotalPages}`);
-    if (draftMarkers.size < allMarkerKeys.length) {
-      await db.storage.from(config.reportBucket).upload(`debug/${jobId}-draft.pdf`, draftBuffer, { contentType: 'application/pdf', upsert: true });
-      console.log(`[generate-report] DEBUG uploaded failing draft to debug/${jobId}-draft.pdf for inspection`);
-    }
   } catch (err) {
     throw new ReportGenerationError(
       `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
