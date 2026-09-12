@@ -46,11 +46,8 @@ export const COLORS = {
   PHOTO_UNAVAIL_TEXT: '#94A3B8',
 };
 
-// TEMP EXPERIMENT (see conversation) — plain-table styling matching a
-// competitor reference report, to MEASURE the real byte-size difference
-// decoration costs (colored card backgrounds/borders, pill badges, section
-// bars) vs plain text tables. Reverted right after measuring; not a
-// permanent style change.
+/** Shared <style> block — every template (cover/asset-log-chunk/repairs/signoff)
+ * includes this so a single Gotenberg-merged PDF looks visually consistent. */
 export const BASE_STYLE = `
   @page { margin: 0; size: A4; }
   * { box-sizing: border-box; }
@@ -63,27 +60,39 @@ export const BASE_STYLE = `
   }
   .page { padding: 28px 32px; }
   .section-bar {
-    color: ${COLORS.BLACK}; font-weight: 700; font-size: 11px;
-    text-transform: uppercase; padding: 6px 0; border-bottom: 1px solid ${COLORS.BLACK};
+    background: ${COLORS.NAVY}; color: #fff; font-weight: 800; font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px;
+    border-radius: 4px 4px 0 0;
   }
   .card {
-    border: none;
+    border: 1px solid ${COLORS.BORDER}; border-radius: 0 0 6px 6px;
+    border-top: none; overflow: hidden;
   }
   .pill {
-    display: inline; font-size: 10px; font-weight: 800;
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.3px;
   }
   table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 9.5px; font-weight: 700; color: ${COLORS.BLACK}; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid ${COLORS.BLACK}; }
-  td { padding: 6px 8px; border-top: 1px solid ${COLORS.MUTED_LIGHT}; vertical-align: top; }
-  .thumb { width: 110px; height: 110px; object-fit: cover; }
+  th { text-align: left; font-size: 9.5px; font-weight: 700; color: ${COLORS.SLATE}; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 10px; background: ${COLORS.BORDER_LIGHT}; }
+  td { padding: 8px 10px; border-top: 1px solid ${COLORS.BORDER}; vertical-align: top; }
+  /* 44px thumbnails were confirmed too small to make out in a real printed
+     report — bumped to a size where a defect is actually recognizable. */
+  .thumb { width: 110px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.BORDER}; }
   .thumb-missing {
-    width: 110px; height: 110px; display: flex; align-items: center;
-    justify-content: center; color: ${COLORS.MUTED};
+    width: 110px; height: 110px; border-radius: 6px; display: flex; align-items: center;
+    justify-content: center; background: ${COLORS.PHOTO_UNAVAIL_BG};
+    border: 1px dashed ${COLORS.PHOTO_UNAVAIL_BORDER}; color: ${COLORS.PHOTO_UNAVAIL_TEXT};
     font-size: 10px; text-align: center; line-height: 1.3;
   }
-  .defect-card { display: block; margin-top: 6px; }
-  .defect-bar { display: none; }
-  .defect-body { padding: 0; }
+  .defect-card { display: flex; margin-top: 8px; border-radius: 8px; overflow: hidden; }
+  .defect-bar { width: 4px; flex-shrink: 0; }
+  .defect-body { flex: 1; padding: 10px 12px; }
 
+  /* Print pagination: keep one table row or one defect card intact rather
+     than splitting it across a page boundary. Deliberately NOT applied to
+     .card generally — the big multi-row asset-log tables also use that
+     class, and forcing a whole long table to avoid breaking would push it
+     onto a fresh page instead, producing worse blank-space gaps than the
+     row-level split it's meant to prevent. */
   tr, .defect-card { break-inside: avoid; page-break-inside: avoid; }
 `;
