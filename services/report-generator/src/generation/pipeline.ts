@@ -125,6 +125,18 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 
   await gotenbergReady;
 
+  // Marker keys are short, plain alphanumeric tokens (c0, c1, t0, ...) —
+  // deliberately NOT the real category/tail labels, which contain spaces,
+  // punctuation and parentheses. A descriptive label is exactly the kind of
+  // string a PDF text layer can fragment into several separate text-content
+  // items (kerning pairs, word-spacing runs), which broke a naive
+  // concatenate-and-substring-search the first time this was tried — a
+  // short single-run token isn't immune in principle, but is far less
+  // likely to ever get split mid-token.
+  const categoryEntries = categoryLogs.map((cat, i) => ({ key: `c${i}`, label: cat.label }));
+  const tailEntries = tailDocs.map((doc, i) => ({ key: `t${i}`, label: TAIL_LABELS[doc.key] ?? doc.key }));
+  const allMarkerKeys = ['idx', ...categoryEntries.map((e) => e.key), ...tailEntries.map((e) => e.key)];
+
   // A category almost always renders as exactly one chunk — chunking within
   // a category only kicks in on the rare 1000+-assets-of-one-type case (see
   // chunking.ts). Only the FIRST chunk of a category carries a marker: a
@@ -133,22 +145,18 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   // position, just their own page-break to keep chunk boundaries where they
   // were before (each used to be a separately-merged PDF, always starting a
   // fresh page).
-  const categorySections: Section[] = categoryLogs.flatMap((cat) =>
+  const categorySections: Section[] = categoryLogs.flatMap((cat, catIndex) =>
     cat.chunks.map((chunk, chunkIndex): Section => ({
-      key: chunkIndex === 0 ? `category:${cat.label}` : undefined,
+      key: chunkIndex === 0 ? categoryEntries[catIndex].key : undefined,
       html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.signedPhotoUrls, data.fullResPhotoUrls),
       breakBefore: true,
     })),
   );
-  const tailSections: Section[] = tailDocs.map((doc): Section => ({
-    key: `tail:${doc.key}`,
+  const tailSections: Section[] = tailDocs.map((doc, i): Section => ({
+    key: tailEntries[i].key,
     html: doc.html,
     breakBefore: true,
   }));
-
-  const categoryEntries = categoryLogs.map((cat) => ({ key: `category:${cat.label}`, label: cat.label }));
-  const tailEntries = tailDocs.map((doc) => ({ key: `tail:${doc.key}`, label: TAIL_LABELS[doc.key] ?? doc.key }));
-  const allMarkerKeys = ['index', ...categoryEntries.map((e) => e.key), ...tailEntries.map((e) => e.key)];
 
   // ── Pass 1: render with a placeholder Index — same real row labels, dummy
   // page numbers. Its own page count depends on how many rows it has to
@@ -164,7 +172,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   try {
     const draftDoc = buildDocument([
       { html: renderCover(data, assetTypesByValue), breakBefore: false },
-      { key: 'index', html: renderTableOfContents(placeholderCategoryEntries, placeholderTailEntries), breakBefore: true },
+      { key: 'idx', html: renderTableOfContents(placeholderCategoryEntries, placeholderTailEntries), breakBefore: true },
       ...categorySections,
       ...tailSections,
     ]);
@@ -190,7 +198,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   try {
     const finalDoc = buildDocument([
       { html: renderCover(data, assetTypesByValue), breakBefore: false },
-      { key: 'index', html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
+      { key: 'idx', html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
       ...categorySections,
       ...tailSections,
     ]);
