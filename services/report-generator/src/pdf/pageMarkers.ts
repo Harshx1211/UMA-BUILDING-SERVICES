@@ -22,17 +22,22 @@ const MARKER_SUFFIX = '__';
 
 /**
  * The invisible marker element to place as the very first thing inside a
- * section's wrapper. Deliberately opacity:0 (not display:none/
- * visibility:hidden, which some renderers can omit from the page's actual
- * content entirely) and kept in NORMAL FLOW (not position:absolute) so its
- * page placement is exactly wherever normal pagination puts the first
- * thing in this section — no risk of an out-of-flow element getting
- * assigned to a different page than the content right after it.
- * height:0/overflow:hidden keeps it from taking any visible vertical space
- * despite being real, present text.
+ * section's wrapper. opacity:0 (not display:none/visibility:hidden, which
+ * some renderers can omit from the page's actual content entirely) and kept
+ * in NORMAL FLOW (not position:absolute) so its page placement is exactly
+ * wherever normal pagination puts the first thing in this section.
+ *
+ * Confirmed by direct inspection: height:0 + overflow:hidden (an earlier
+ * version of this) made Chromium skip painting the text altogether — a
+ * clipped-to-zero-height box gets no layout area, so print-to-PDF never
+ * emits a text-showing operator for it at all, and pdfjs-dist correctly
+ * finds nothing (the marker was never actually IN the file, not a search
+ * bug). A tiny but non-zero line-height keeps it genuinely painted — the
+ * ~1px vertical footprint is identical on every section, so it doesn't
+ * throw off page breaks relative to each other.
  */
 export function markerHtml(key: string): string {
-  return `<div style="opacity:0;height:0;overflow:hidden;font-size:1px;line-height:0" aria-hidden="true">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
+  return `<div style="opacity:0;font-size:1px;line-height:1px;margin:0;padding:0" aria-hidden="true">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
 }
 
 export interface MarkerScanResult {
