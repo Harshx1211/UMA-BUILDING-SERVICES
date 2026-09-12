@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, StyleSheet, Modal, TouchableOpacity, TextInput,
   ScrollView, Platform,
@@ -7,12 +7,13 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, showConfirm } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { updateRecord, addToSyncQueue, queryRecords, deleteRecord, upsertRecord } from '@/lib/database';
+import { updateRecord, addToSyncQueue, queryRecords, deleteRecord, upsertRecord, getAssetHistory } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
+import { useCatalogueStore } from '@/store/catalogueStore';
 import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
 
@@ -29,6 +30,7 @@ interface EditAssetModalProps {
 export default function EditAssetModal({ visible, asset, onClose, onAssetEdited }: EditAssetModalProps) {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  const { assetTypes } = useCatalogueStore();
 
   const [location, setLocation] = useState('');
   const [assetRef, setAssetRef] = useState('');
@@ -36,6 +38,15 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ location?: string }>({});
+
+  // ── Asset Type / Variant — fixes a mis-added asset (e.g. wrong extinguisher
+  // type) without forcing a delete-and-recreate. Collapsed by default, showing
+  // the current type; tapping it expands the same type/variant picker used by
+  // AddAssetModal so re-selection stays a one-tap affair. ──
+  const [selectedType, setSelectedType] = useState('');
+  const [selectedVariant, setSelectedVariant] = useState('');
+  const [typeEditing, setTypeEditing] = useState(false);
+  const [variantSearch, setVariantSearch] = useState('');
 
   const [allTags, setAllTags] = useState<AssetTag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -53,6 +64,17 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
     : '';
   const effectiveLocation = addingNewLocation ? generatedLocation : location;
 
+  const typeDef = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
+  const variants = useMemo(() => typeDef?.variants ?? [], [typeDef]);
+  const filteredVariants = useMemo(() => {
+    let arr = variants;
+    if (variantSearch.trim()) {
+      const q = variantSearch.toLowerCase();
+      arr = arr.filter(v => v.toLowerCase().includes(q));
+    }
+    return Array.from(new Set(arr));
+  }, [variants, variantSearch]);
+
   useEffect(() => {
     if (visible && asset) {
       const currentLocation = asset.location_on_site || '';
@@ -64,6 +86,10 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       setTower('');
       setFloorNo('');
       setUnitNo('');
+      setSelectedType(asset.asset_type);
+      setSelectedVariant(asset.variant || '');
+      setTypeEditing(false);
+      setVariantSearch('');
 
       // FIX: asset_tags is per-company (never global) — an unfiltered query
       // could surface another company's tag vocabulary if this device ever
@@ -93,6 +119,23 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
     onClose();
   };
 
+  // Tapping a type re-selects it immediately; a type with no variants closes
+  // the picker right away, one with variants stays open for that pick.
+  const handleTypeSelect = (value: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedType(value);
+    setSelectedVariant('');
+    setVariantSearch('');
+    const def = assetTypes.find(t => t.value === value);
+    if (!def || def.variants.length === 0) setTypeEditing(false);
+  };
+
+  const handleVariantSelect = (v: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedVariant(v);
+    setTypeEditing(false);
+  };
+
   const handleSave = () => {
     if (!asset) return;
 
@@ -102,9 +145,36 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       return;
     }
 
+    // Changing the type/variant only affects future jobs' checklists and
+    // reports — anything already actioned keeps the wording it was recorded
+    // with. Only worth flagging when there's actual history to reassure
+    // about; a same-day fix on a freshly-added asset needs no ceremony.
+    const typeChanged = selectedType !== asset.asset_type || (selectedVariant || null) !== (asset.variant || null);
+    if (typeChanged) {
+      const { totalCount } = getAssetHistory(asset.id, '__none__');
+      if (totalCount > 0) {
+        showConfirm({
+          title: 'Change Asset Type?',
+          message: `This asset already has ${totalCount} completed inspection${totalCount === 1 ? '' : 's'} on record. Past history and reports won't change, but future jobs will use the ${typeDef?.label ?? selectedType}${selectedVariant ? ' — ' + selectedVariant : ''} checklist instead.`,
+          icon: 'swap-horizontal-circle-outline',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Change Type', style: 'destructive', onPress: () => doSave(asset) },
+          ],
+        });
+        return;
+      }
+    }
+
+    doSave(asset);
+  };
+
+  const doSave = (asset: Asset) => {
     setIsSaving(true);
     try {
       const payload = {
+        asset_type: selectedType,
+        variant: selectedVariant || null,
         location_on_site: effectiveLocation.trim(),
         asset_ref: assetRef.trim() || null,
         serial_number: serialNumber.trim() || null,
@@ -156,7 +226,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[s.headerTitle, { color: C.text }]}>Edit Asset</Text>
             <Text style={[s.headerSub, { color: C.textTertiary }]} numberOfLines={1}>
-              {asset.asset_type} {asset.variant ? `— ${asset.variant}` : ''}
+              {typeDef?.label ?? selectedType} {selectedVariant ? `— ${selectedVariant}` : ''}
             </Text>
           </View>
           <View style={{ width: 40 }} />
@@ -165,6 +235,91 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
         <ScrollView contentContainerStyle={s.detailsScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <Card style={s.formCard} noPadding>
             <View style={{ padding: 16 }}>
+              {/* Asset Type — fixes a mis-added type without delete + recreate */}
+              <View style={s.field}>
+                <Text style={[s.fieldLabel, { color: C.text }]}>Asset Type</Text>
+                {!typeEditing ? (
+                  <TouchableOpacity
+                    onPress={() => setTypeEditing(true)}
+                    style={[s.typeSummaryRow, { backgroundColor: C.backgroundTertiary }]}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[s.typeSummaryIcon, { backgroundColor: typeDef?.color ?? C.primary }]}>
+                      <MaterialCommunityIcons name={(typeDef?.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']) ?? 'help-circle-outline'} size={20} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.typeSummaryLabel, { color: C.text }]} numberOfLines={1}>{typeDef?.label ?? selectedType}</Text>
+                      {selectedVariant ? (
+                        <Text style={[s.typeSummarySub, { color: C.textTertiary }]} numberOfLines={1}>{selectedVariant}</Text>
+                      ) : null}
+                    </View>
+                    <MaterialCommunityIcons name="pencil-outline" size={16} color={C.textTertiary} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[s.typeEditWrap, { borderColor: C.border, backgroundColor: C.background }]}>
+                    <Text style={[s.fieldHint, { color: C.textTertiary, marginTop: 0 }]}>
+                      Fixing a mistake? Pick the correct type — past inspection history keeps the wording it was recorded with.
+                    </Text>
+                    <View style={s.typeChipWrap}>
+                      {assetTypes.map(t => {
+                        const selected = selectedType === t.value;
+                        return (
+                          <TouchableOpacity
+                            key={t.value}
+                            onPress={() => handleTypeSelect(t.value)}
+                            style={[s.typeChip, { borderColor: selected ? t.color : C.border, backgroundColor: selected ? t.color + '18' : C.backgroundTertiary }]}
+                          >
+                            <MaterialCommunityIcons name={t.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']} size={14} color={selected ? t.color : C.textSecondary} style={{ marginRight: 5 }} />
+                            <Text style={[s.typeChipTxt, { color: selected ? t.color : C.textSecondary }]} numberOfLines={1}>{t.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {variants.length > 0 && (
+                      <View style={{ marginTop: 12 }}>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary, marginBottom: 8 }]}>Variant</Text>
+                        {variants.length > 6 && (
+                          <View style={[s.variantSearchBar, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
+                            <MaterialCommunityIcons name="magnify" size={16} color={C.textTertiary} />
+                            <TextInput
+                              style={[s.variantSearchInput, { color: C.text }]}
+                              placeholder="Filter variants…"
+                              placeholderTextColor={C.textTertiary}
+                              value={variantSearch}
+                              onChangeText={setVariantSearch}
+                            />
+                            {variantSearch.length > 0 && (
+                              <TouchableOpacity onPress={() => setVariantSearch('')} hitSlop={8}>
+                                <MaterialCommunityIcons name="close-circle" size={15} color={C.textTertiary} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                        <View style={s.typeChipWrap}>
+                          {filteredVariants.map(v => {
+                            const selected = selectedVariant === v;
+                            return (
+                              <TouchableOpacity
+                                key={v}
+                                onPress={() => handleVariantSelect(v)}
+                                style={[s.typeChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary + '18' : C.backgroundTertiary }]}
+                              >
+                                <Text style={[s.typeChipTxt, { color: selected ? C.primary : C.textSecondary }]} numberOfLines={1}>{v}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+
+                    <TouchableOpacity onPress={() => setTypeEditing(false)} style={{ marginTop: 12, alignSelf: 'flex-start' }}>
+                      <Text style={[s.locationBackLink, { color: C.primary }]}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
               {/* Location */}
               <View style={s.field}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Location on Site <Text style={{color: C.primary}}>*</Text></Text>
@@ -356,6 +511,21 @@ const s = StyleSheet.create({
   input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
   fieldHint: { fontSize: 12, lineHeight: 17, marginTop: 6, fontWeight: '500' },
+  typeSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: 12 },
+  typeSummaryIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  typeSummaryLabel: { fontSize: 14, fontWeight: '800', letterSpacing: -0.1 },
+  typeSummarySub: { fontSize: 12, fontWeight: '600', marginTop: 1 },
+  typeEditWrap: { borderWidth: 1, borderRadius: 12, padding: 12 },
+  typeChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  typeChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
+  typeChipTxt: { fontSize: 12, fontWeight: '700' },
+  variantSearchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 8,
+  },
+  variantSearchInput: { flex: 1, fontSize: 14, fontWeight: '600', padding: 0 },
   locationSuggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   locationChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
   locationChipTxt: { fontSize: 12, fontWeight: '600' },
