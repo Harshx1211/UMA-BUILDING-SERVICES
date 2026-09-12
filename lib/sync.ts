@@ -2156,12 +2156,18 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
         if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
           const url = payload.photo_url;
-          if (url.includes(`/object/public/${PHOTO_BUCKET}/`)) {
-            const filePath = url.split(`/object/public/${PHOTO_BUCKET}/`)[1];
+          // FIX: job-photos is now a private bucket (was public) — new uploads
+          // store a long-lived SIGNED url (/object/sign/...), not a public one.
+          // Still checking the old /object/public/ marker too so deletion
+          // cleanup keeps working for any row uploaded before this change.
+          const marker = [`/object/public/${PHOTO_BUCKET}/`, `/object/sign/${PHOTO_BUCKET}/`]
+            .find((m) => url.includes(m));
+          if (marker) {
+            const filePath = url.split(marker)[1]?.split('?')[0];
             if (filePath) {
               const { error: storageErr } = await supabase.storage.from(PHOTO_BUCKET).remove([filePath]);
               if (storageErr && __DEV__) {
-                console.warn(`[UMA BUILDING SERVICES Sync] Failed to delete photo binary from storage:`, storageErr.message);
+                console.warn(`[SiteTrack Sync] Failed to delete photo binary from storage:`, storageErr.message);
               }
             }
           }

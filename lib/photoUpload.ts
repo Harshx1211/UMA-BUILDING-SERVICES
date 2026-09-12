@@ -35,6 +35,21 @@ const UPLOAD_CONCURRENCY = 3;
 /** M3: Max retries before a photo task is permanently abandoned (mirrors sync engine limit) */
 const MAX_PHOTO_RETRIES = 5;
 
+// job-photos is a private bucket (fixed from public — a leaked photo_url
+// used to mean permanent, unauthenticated access to that photo forever).
+// Signed with a long expiry rather than the usual 1-hour convention: these
+// URLs get displayed directly in grids/thumbnails all over the app and in
+// admin-generated PDFs, some of which (job reports, quotes) are kept as
+// long-term records — the same reasoning already applied to report photo
+// links (services/report-generator/src/photos/prepareFullResUrls.ts).
+const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years
+
+/** True if this is a real Storage URL (uploaded) rather than a local
+ * file:// or content:// URI (still pending upload). */
+export function isRemotePhotoUrl(url: string): boolean {
+  return !url.startsWith('file://') && !url.startsWith('content://');
+}
+
 // ─── Upload a single photo to Supabase Storage ───────────────
 
 /**
@@ -43,7 +58,7 @@ const MAX_PHOTO_RETRIES = 5;
  * Uses expo-file-system's uploadAsync with PUT (not POST) — Supabase Storage's
  * upsert endpoint requires PUT for binary uploads. Using POST returns a 405.
  *
- * @returns Public URL string on success, null on failure
+ * @returns A long-lived signed URL on success, null on failure
  */
 export async function uploadPhoto(
   localUri: string,
@@ -88,11 +103,15 @@ export async function uploadPhoto(
       );
     }
 
-    const { data: { publicUrl } } = supabase.storage
+    const { data, error: signErr } = await supabase.storage
       .from(PHOTO_BUCKET)
-      .getPublicUrl(filePath);
+      .createSignedUrl(filePath, PHOTO_URL_EXPIRY_SECONDS);
 
-    return publicUrl;
+    if (signErr || !data?.signedUrl) {
+      throw new Error(`[PhotoUpload] Upload succeeded but signing failed: ${signErr?.message}`);
+    }
+
+    return data.signedUrl;
   } catch (err) {
     console.error('[PhotoUpload] uploadPhoto error:', err);
     return null;
@@ -185,9 +204,9 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
 
         if (__DEV__) console.log(`[PhotoUpload] Uploading photo for job ${payload.jobId}`);
 
-        const publicUrl = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
+        const signedUrl = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
 
-        if (publicUrl && payload.recordId) {
+        if (signedUrl && payload.recordId) {
           // FIX: re-check the local row still exists before doing anything
           // else — photosStore.deletePhoto() deletes the local row and
           // tombstones the id SYNCHRONOUSLY, with no awareness of (or wait
@@ -205,8 +224,8 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             return;
           }
 
-          // Update local SQLite row with the now-public URL
-          updateRecord('inspection_photos', payload.recordId, { photo_url: publicUrl });
+          // Update local SQLite row with the now-signed URL
+          updateRecord('inspection_photos', payload.recordId, { photo_url: signedUrl });
 
           // Read caption/asset_id/defect_id fresh from the local SQLite row rather
           // than trusting this task's queued payload — the payload's assetId/defectId
@@ -238,7 +257,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             job_id:      payload.jobId,
             asset_id:    localRow?.asset_id ?? payload.assetId ?? null,
             defect_id:   localRow?.defect_id ?? payload.defectId ?? null,
-            photo_url:   publicUrl,
+            photo_url:   signedUrl,
             caption:     localRow?.caption ?? null,
             company_id:  localRow?.company_id ?? null,
             // FIX: this used to stamp a FRESH timestamp at upload-completion
@@ -255,7 +274,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
 
           markSyncItemComplete(task.id);
 
-          if (__DEV__) console.log(`[PhotoUpload] Uploaded: ${publicUrl}`);
+          if (__DEV__) console.log(`[PhotoUpload] Uploaded: ${signedUrl}`);
         } else {
           if (__DEV__) console.log(`[PhotoUpload] Upload failed for task ${task.id} — will retry next cycle`);
           incrementSyncRetry(task.id, 'Upload failed');
