@@ -7,6 +7,7 @@ import { mapWithConcurrency } from '../concurrency';
 import { convertHtmlToPdf, mergePdfs, waitForGotenbergReady } from '../gotenberg/client';
 import { getPdfPageCount } from '../pdf/pageCount';
 import { stampPageNumbers } from '../pdf/stampPageNumbers';
+import { optimizePdf } from '../pdf/optimizePdf';
 import { renderCover } from '../templates/cover';
 import { renderAssetLogChunk } from '../templates/assetLogChunk';
 import { renderTableOfContents } from '../templates/tableOfContents';
@@ -233,6 +234,13 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     // entirely — see headerFooter.ts) couldn't know the report's real page
     // count. Stamp the correct "Page X of Y" now that it's known.
     merged = await stampPageNumbers(merged);
+    // Each of those separately-rendered sections also independently embeds
+    // its own font subset (see optimizePdf.ts for the full why) — this pass
+    // rebuilds the finished PDF to deduplicate that, measured to cut a real
+    // test report's size by well over half. Fails open to the unoptimized
+    // buffer if ghostscript isn't available, so this can never break
+    // generation itself.
+    merged = await optimizePdf(merged);
   } catch (err) {
     throw new ReportGenerationError(
       `Merging rendered sections failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
