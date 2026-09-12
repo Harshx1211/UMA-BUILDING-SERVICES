@@ -1,4 +1,3 @@
-import { BASE_STYLE } from './theme';
 import { renderDefectCard } from './assetLogChunk';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -14,12 +13,10 @@ export function renderUnlinkedDefects(
   const unlinked = defects.filter((d) => !d.asset_id);
   if (unlinked.length === 0) return null;
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body><div class="page">
+  return `<div class="page">
   <div class="section-bar">General Defects (Not Linked to a Specific Asset)</div>
   <div class="card" style="padding:10px 12px">
     ${unlinked.map((d) => renderDefectCard(d, photosByDefect, signedPhotoUrls, null, fullResPhotoUrls)).join('')}
   </div>
-</div></body></html>`;
+</div>`;
 }

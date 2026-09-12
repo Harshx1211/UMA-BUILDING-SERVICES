@@ -5,23 +5,31 @@ export interface TocSectionEntry {
 }
 
 /**
- * Turns a sequence of already-measured page counts into consecutive page
- * ranges, given the page number the sequence starts on. Pure arithmetic —
- * no Gotenberg or pdf-lib involved here — so this is fully unit-testable
- * without ever rendering a page (see test/templates.smoketest.ts).
+ * Turns a sequence of sections into consecutive, non-overlapping page ranges
+ * from their MEASURED start-page positions (see pdf/pageMarkers.ts — the
+ * whole report renders as one combined document now, with an invisible
+ * marker at the start of each section, rather than each section being a
+ * separately-rendered PDF whose own page count could be read directly).
+ * `nextStartPage` is where the section right after this whole sequence
+ * begins (or the final page + 1, for the very last sequence in the
+ * document). Pure arithmetic — no Gotenberg or pdf-lib involved here — so
+ * this is fully unit-testable without ever rendering a page (see
+ * test/templates.smoketest.ts).
  */
-export function computeSequentialRanges(
-  sections: Array<{ label: string; pageCount: number }>,
-  firstPage: number,
+export function rangesFromMarkers(
+  entries: Array<{ key: string; label: string }>,
+  markerPages: Map<string, number>,
+  nextStartPage: number,
 ): TocSectionEntry[] {
-  let cursor = firstPage;
-  return sections.map(({ label, pageCount }) => {
-    const startPage = cursor;
-    // A section should never legitimately render as 0 pages, but guard
-    // against it anyway so a bad measurement can't collapse the whole
-    // downstream page range onto a single number.
-    const endPage = cursor + Math.max(pageCount, 1) - 1;
-    cursor = endPage + 1;
-    return { label, startPage, endPage };
+  return entries.map((entry, i) => {
+    const startPage = markerPages.get(entry.key);
+    if (startPage == null) {
+      throw new Error(`Internal error: no measured page position for section "${entry.key}"`);
+    }
+    const followingStart = i + 1 < entries.length ? markerPages.get(entries[i + 1].key) : nextStartPage;
+    if (followingStart == null) {
+      throw new Error(`Internal error: no measured page position for section "${entries[i + 1].key}"`);
+    }
+    return { label: entry.label, startPage, endPage: followingStart - 1 };
   });
 }

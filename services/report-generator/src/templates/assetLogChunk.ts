@@ -1,4 +1,4 @@
-import { BASE_STYLE, COLORS } from './theme';
+import { COLORS } from './theme';
 import { esc, fmtDateTime, fmtRelativeDays, photoRow, resultPill } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
@@ -109,9 +109,7 @@ export function renderAssetLogChunk(
   }
   if (lastCategory !== null) parts.push(`</tbody></table>`);
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body><div class="page">${parts.join('')}</div></body></html>`;
+  return `<div class="page">${parts.join('')}</div>`;
 }
 
 /**

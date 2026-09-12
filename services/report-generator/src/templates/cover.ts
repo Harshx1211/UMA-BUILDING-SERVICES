@@ -1,4 +1,4 @@
-import { BASE_STYLE, COLORS } from './theme';
+import { COLORS } from './theme';
 import { esc, fmtDate, infoCell } from './helpers';
 import { groupByCategory } from '../data/categoryGrouping';
 import { ReportData, Property } from '../types';
@@ -111,9 +111,7 @@ export function renderCover(
     { label: 'Non-conformances', count: severityCounts.non_conformance, color: COLORS.SEVERITY.non_conformance.text, bg: COLORS.SEVERITY.non_conformance.bg },
   ];
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body>
+  return `
   <div class="page">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -158,6 +156,5 @@ export function renderCover(
       <thead><tr><th>Service</th><th>Asset</th><th style="text-align:right">Quantity</th></tr></thead>
       <tbody>${servicingRows || '<tr><td colspan="3">No assets recorded</td></tr>'}</tbody>
     </table>
-  </div>
-</body></html>`;
+  </div>`;
 }

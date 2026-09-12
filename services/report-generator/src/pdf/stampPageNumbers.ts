@@ -5,12 +5,11 @@ const FONT_SIZE = 8;
 const BASELINE_Y = 16;
 
 /**
- * Draws the correct "Page X of Y" onto every page of the already-merged
- * report — see headerFooter.ts for why Gotenberg's own per-section page
- * counter can't be trusted here (each section is rendered as its own PDF
- * before merging, so it has no idea what its real position in the final
- * document is). This runs after mergePdfs(), where the true total page
- * count is finally knowable.
+ * Draws the correct "Page X of Y" onto every page of the rendered report —
+ * see headerFooter.ts for why Gotenberg's own native page-number templating
+ * isn't used directly (the report needs two full render passes to get the
+ * Index right — see generation/pipeline.ts — so the true total page count
+ * isn't knowable until after the final pass finishes).
  */
 export async function stampPageNumbers(merged: Buffer): Promise<Buffer> {
   const doc = await PDFDocument.load(merged);

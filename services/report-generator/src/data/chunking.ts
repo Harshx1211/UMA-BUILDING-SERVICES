@@ -32,10 +32,11 @@ export interface CategoryAssetLog {
 /**
  * Orders every asset by category (numbered categories first, ascending; unnumbered
  * types under "Other"), then by asset type and reference, and groups them one
- * category at a time. Each category is rendered as its own PDF document in the
- * pipeline (see generation/pipeline.ts) so its exact page count can be measured
- * afterward — the only reliable way to build a page-accurate report index, since
- * a category is never split across an artificial fixed-size chunk boundary here.
+ * category at a time. Each category's first chunk gets an invisible page marker in
+ * the combined report document (see generation/pipeline.ts / pdf/pageMarkers.ts) so
+ * its exact page position can be measured afterward — the only reliable way to
+ * build a page-accurate report index, since a category is never split across an
+ * artificial fixed-size chunk boundary here.
  *
  * A category only produces more than one chunk in the rare case that it alone
  * exceeds maxPerChunk assets — the original scale fix for 1000+ asset sites

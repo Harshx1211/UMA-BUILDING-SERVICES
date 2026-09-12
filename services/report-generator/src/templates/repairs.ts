@@ -1,4 +1,4 @@
-import { BASE_STYLE, COLORS } from './theme';
+import { COLORS } from './theme';
 import { esc, photoRow } from './helpers';
 import { Defect, InspectionPhoto, Quote } from '../types';
 
@@ -60,10 +60,8 @@ export function renderRepairs(
       </div>`;
   });
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body><div class="page">
+  return `<div class="page">
   <div class="section-bar">Repairs</div>
   ${cards.join('')}
-</div></body></html>`;
+</div>`;
 }

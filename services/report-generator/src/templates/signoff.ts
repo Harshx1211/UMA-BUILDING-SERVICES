@@ -1,4 +1,4 @@
-import { BASE_STYLE, COLORS } from './theme';
+import { COLORS } from './theme';
 import { esc, fmtDate, fmtDateTime } from './helpers';
 import { ReportData } from '../types';
 
@@ -91,9 +91,7 @@ export function renderSignoff(data: ReportData): string {
     </div>`
     : '';
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body><div class="page">
+  return `<div class="page">
   <div class="section-bar">Signoff</div>
   <div class="card" style="padding:10px 12px;font-size:9.5px;color:${COLORS.SLATE}">
     Maintenance has been carried out in accordance with applicable fire safety compliance
@@ -106,5 +104,5 @@ export function renderSignoff(data: ReportData): string {
   </table>
   ${techSignoff}
   ${clientSignoff}
-</div></body></html>`;
+</div>`;
 }

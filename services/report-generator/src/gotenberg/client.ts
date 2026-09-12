@@ -128,22 +128,3 @@ export async function convertHtmlToPdf(html: string, label: string, opts: Conver
     return postForm('/forms/chromium/convert/html', form);
   });
 }
-
-/**
- * Merges an ordered list of PDF buffers into one file via Gotenberg's PDF
- * Engines module. Gotenberg merges files in the lexical order of their
- * filenames, so callers must pass already-zero-padded, correctly-ordered names
- * (e.g. "00_cover.pdf", "01_chunk.pdf", ...).
- */
-export async function mergePdfs(files: Array<{ name: string; buffer: Buffer }>): Promise<Buffer> {
-  return withRetries('merge', config.chunkRetryAttempts, async () => {
-    const form = new FormData();
-    for (const f of files) {
-      // Buffer's ArrayBufferLike type includes SharedArrayBuffer, which BlobPart
-      // rejects — copy into a plain Uint8Array (backed by a real ArrayBuffer) first.
-      const bytes = Uint8Array.from(f.buffer);
-      form.append('files', new Blob([bytes], { type: 'application/pdf' }), f.name);
-    }
-    return postForm('/forms/pdfengines/merge', form);
-  });
-}

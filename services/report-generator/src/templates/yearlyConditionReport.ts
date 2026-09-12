@@ -1,4 +1,4 @@
-import { BASE_STYLE, COLORS } from './theme';
+import { COLORS } from './theme';
 import { esc, fmtDate, infoCell } from './helpers';
 import { groupByCategory, AS1851_SECTIONS } from '../data/categoryGrouping';
 import { AssetTypeDefinition, ReportData } from '../types';
@@ -68,9 +68,7 @@ export function renderYearlyConditionReport(
     })
     .join('');
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body><div class="page">
+  return `<div class="page">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
     <div style="font-size:16px;font-weight:900;color:${COLORS.NAVY}">Yearly Condition Report</div>
     <div style="font-size:9.5px;color:${COLORS.MUTED}">AS 1851-2012 Appendix E</div>
@@ -109,5 +107,5 @@ export function renderYearlyConditionReport(
     ${infoCell('Phone', company.phone)}
     ${infoCell('Technician' + (assignedUsers.length !== 1 ? 's' : ''), assignedUsers.map((u) => u.full_name).join(', ') || null)}
   </div>
-</div></body></html>`;
+</div>`;
 }

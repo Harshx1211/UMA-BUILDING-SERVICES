@@ -16,7 +16,7 @@ import { renderYearlyConditionReport } from '../src/templates/yearlyConditionRep
 import { renderSignoff } from '../src/templates/signoff';
 import { buildAssetLogChunksByCategory } from '../src/data/chunking';
 import { parseCategory } from '../src/data/categoryGrouping';
-import { computeSequentialRanges } from '../src/data/tableOfContents';
+import { rangesFromMarkers } from '../src/data/tableOfContents';
 import { getPdfPageCount } from '../src/pdf/pageCount';
 import { stampPageNumbers } from '../src/pdf/stampPageNumbers';
 import { AssetTypeDefinition, AssetWithResult, Defect, InspectionPhoto, ReportData } from '../src/types';
@@ -142,11 +142,14 @@ if (exitRow?.officialSection !== null) {
 }
 console.log('OK: buildAssetLogChunksByCategory officialSection threaded correctly per row');
 
-// computeSequentialRanges is pure arithmetic (no rendering involved) — verify
-// it turns measured page counts into correct, non-overlapping page ranges.
-const ranges = computeSequentialRanges(
-  [{ label: 'A', pageCount: 2 }, { label: 'B', pageCount: 1 }, { label: 'C', pageCount: 3 }],
-  5,
+// rangesFromMarkers is pure arithmetic (no rendering involved) — verify it
+// turns measured marker page positions into correct, non-overlapping page
+// ranges, using the last entry's "next section" start page as its end.
+const markerPages = new Map([['a', 5], ['b', 7], ['c', 8]]);
+const ranges = rangesFromMarkers(
+  [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }, { key: 'c', label: 'C' }],
+  markerPages,
+  11,
 );
 const expected = [
   { label: 'A', startPage: 5, endPage: 6 },
@@ -154,9 +157,22 @@ const expected = [
   { label: 'C', startPage: 8, endPage: 10 },
 ];
 if (JSON.stringify(ranges) !== JSON.stringify(expected)) {
-  throw new Error(`FAIL: computeSequentialRanges — expected ${JSON.stringify(expected)}, got ${JSON.stringify(ranges)}`);
+  throw new Error(`FAIL: rangesFromMarkers — expected ${JSON.stringify(expected)}, got ${JSON.stringify(ranges)}`);
 }
-console.log('OK: computeSequentialRanges produces correct, non-overlapping page ranges');
+console.log('OK: rangesFromMarkers produces correct, non-overlapping page ranges from marker positions');
+
+// A missing marker (a section that should have been measured but wasn't) is
+// an internal-invariant violation, not a recoverable case — must throw
+// rather than silently producing a bogus range.
+try {
+  rangesFromMarkers([{ key: 'missing', label: 'Missing' }], new Map(), 1);
+  throw new Error('FAIL: rangesFromMarkers — expected a missing marker to throw, it did not');
+} catch (err) {
+  if (!(err instanceof Error) || !err.message.includes('missing')) {
+    throw new Error(`FAIL: rangesFromMarkers — expected an error mentioning the missing key, got: ${err}`);
+  }
+}
+console.log('OK: rangesFromMarkers throws on a missing marker instead of guessing');
 
 const tocHtml = renderTableOfContents(ranges, [
   { label: 'Sign-off', startPage: 11, endPage: 12 },
@@ -266,7 +282,6 @@ if (!signoffHtml.includes('Anup Patel') || !signoffHtml.includes('Rutvi Patel') 
 console.log('OK: signoff lists every technician once each, signature shown exactly once (not per-row)');
 
 for (const [name, html] of docs) {
-  assertBalanced(html, name, 'html');
   assertBalanced(html, name, 'table');
   assertBalanced(html, name, 'tbody');
   assertBalanced(html, name, 'tr');

@@ -1,12 +1,12 @@
-import { BASE_STYLE } from './theme';
 import { esc } from './helpers';
 import { TocSectionEntry } from '../data/tableOfContents';
 
 /**
- * "Report Index" page. Category page ranges come from computeSequentialRanges()
- * in data/tableOfContents.ts, already measured against real rendered PDF page
- * counts (see generation/pipeline.ts) — never estimated, so a range shown here
- * always matches where that section actually starts/ends in the final file.
+ * "Report Index" page. Category page ranges come from rangesFromMarkers()
+ * in data/tableOfContents.ts, derived from real measured marker positions in
+ * the rendered PDF (see generation/pipeline.ts / pdf/pageMarkers.ts) — never
+ * estimated, so a range shown here always matches where that section
+ * actually starts/ends in the final file.
  */
 export function renderTableOfContents(
   categoryEntries: TocSectionEntry[],
@@ -24,9 +24,7 @@ export function renderTableOfContents(
   const categoryRows = categoryEntries.map(row).join('');
   const tailRows = tailEntries.map(row).join('');
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><style>${BASE_STYLE}</style></head>
-<body>
+  return `
   <div class="page">
     <div class="section-bar">Report Index</div>
     <table class="card">
@@ -39,6 +37,5 @@ export function renderTableOfContents(
     <table class="card">
       <tbody>${tailRows}</tbody>
     </table>` : ''}
-  </div>
-</body></html>`;
+  </div>`;
 }

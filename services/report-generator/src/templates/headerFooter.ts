@@ -5,15 +5,14 @@ import { Company } from '../types';
  * Gotenberg passes `headerTemplate`/`footerTemplate` straight through to
  * Chromium's native PDF header/footer support, which recognizes special
  * classes like `pageNumber`/`totalPages` and fills them in automatically —
- * but only relative to that ONE conversion call. This pipeline renders every
- * section (cover, each asset category, each tail section) as its own
- * separate PDF and merges them afterward, so Chromium's own page-number
- * would read "Page 1 of 1" (or "1 of 2"/"2 of 2") on every section instead
- * of the report's true page position. The page-number text is deliberately
- * left out here — pdf/stampPageNumbers.ts draws the correct global "Page X
- * of Y" onto every page after merging, once the real total is known. Font
- * size must be set explicitly here — the browser default for header/footer
- * content is tiny.
+ * but the report renders in two full passes (a placeholder Index, then the
+ * real one, once its true page range is known — see generation/pipeline.ts),
+ * and Chromium's own page-number in the FIRST pass would reflect that
+ * draft's page count, not the final one. The page-number text is
+ * deliberately left out here — pdf/stampPageNumbers.ts draws the correct
+ * "Page X of Y" onto every page after the final pass, once the real total is
+ * known. Font size must be set explicitly here — the browser default for
+ * header/footer content is tiny.
  */
 export function buildFooterTemplate(company: Company): string {
   return `
