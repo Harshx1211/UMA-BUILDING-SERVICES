@@ -5,8 +5,20 @@ import { InspectionPhoto } from '../types';
 
 // Small enough to embed inline without meaningfully bloating the HTML, large
 // enough to actually make out a defect — the printed thumbnail is 110px.
-const TARGET_DIMENSION = 320;
-const JPEG_QUALITY = 72;
+//
+// Tightened from 320px/quality-72 to 200px/quality-58 once every thumbnail
+// became a real clickable link to the full-resolution original
+// (prepareFullResUrls.ts) — the embedded copy no longer has to carry the
+// full visual burden on its own, since anyone who needs to actually inspect
+// a photo closely can just tap it. 200px is still ~1.8x the printed size,
+// comfortably sharp for scanning a photo grid at a glance. A 12-asset/
+// 10-15-photo report measured at 700KB before this change; expect roughly
+// a 60-70% cut to the image portion of that (pixel count alone drops to
+// ~39% of its previous value, quality-58 vs 72 trims a further ~20-25% on
+// top) — worth regenerating a real report after this change and comparing
+// the actual new size rather than trusting this estimate blindly.
+const TARGET_DIMENSION = 200;
+const JPEG_QUALITY = 58;
 const DOWNLOAD_CONCURRENCY = 6;
 
 /**
