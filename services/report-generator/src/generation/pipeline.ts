@@ -193,14 +193,19 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   // ── Pass 2: same document, real Index in place of the placeholder. The
   // asset-log/tail section HTML is byte-for-byte identical to pass 1, so
   // their internal pagination is unaffected — only the Index's own content
-  // changes.
+  // changes. Markers are dropped entirely here — this is the document that
+  // actually gets delivered, and it never needs to re-measure itself, so
+  // there's no reason for the (invisible-but-copy/paste-visible) marker
+  // text to exist in what a client could select or run through a text
+  // extractor.
+  const stripMarkers = (sections: Section[]): Section[] => sections.map((s) => ({ ...s, key: undefined }));
   let finalBuffer: Buffer;
   try {
     const finalDoc = buildDocument([
       { html: renderCover(data, assetTypesByValue), breakBefore: false },
-      { key: 'idx', html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
-      ...categorySections,
-      ...tailSections,
+      { html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
+      ...stripMarkers(categorySections),
+      ...stripMarkers(tailSections),
     ]);
     finalBuffer = await convertCombined(finalDoc, footerTemplate);
   } catch (err) {
