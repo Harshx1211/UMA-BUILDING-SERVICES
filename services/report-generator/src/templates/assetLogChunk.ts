@@ -101,7 +101,7 @@ export function renderAssetLogChunk(
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}</td></tr>` : ''}
             ${asset.description ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.description, 'Asset Notes')}</td></tr>` : ''}
-            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Technician Notes')}</td></tr>` : ''}
+            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Remarks')}</td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection, fullResPhotoUrls)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
@@ -115,7 +115,7 @@ export function renderAssetLogChunk(
 /**
  * FIX: was a plain gray flex row labeled just "Note" — inconsistent with
  * the mobile app, which calls this same field (job_assets.technician_notes)
- * "Technician Notes" everywhere (the asset screen's card title, the audit
+ * "Remarks" everywhere (the asset screen's card title, the audit
  * Timeline's field label). Restyled to match the report's own defect-card
  * visual language (left accent bar + padded body) instead of a bare box, so
  * it reads as a considered part of the report rather than a debug dump —

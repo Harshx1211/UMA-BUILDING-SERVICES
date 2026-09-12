@@ -800,13 +800,14 @@ export default function AssetDetailScreen() {
           </Animated.View>
         )}
 
-        {/* ── Technician Notes — one field, one place, for all three results.
-            Auto-saves on blur once there's an actual saved result to attach
-            it to; a first-ever Fail (nothing saved yet) instead bundles
-            whatever's typed here into that same Save Defect / Replace call,
-            and the leave-without-saving safety net below covers the rest. */}
+        {/* ── Remarks (job_assets.technician_notes) — one field, one place,
+            for all three results. Auto-saves on blur once there's an actual
+            saved result to attach it to; a first-ever Fail (nothing saved
+            yet) instead bundles whatever's typed here into that same Save
+            Defect / Replace call, and the leave-without-saving safety net
+            below covers the rest. */}
         {(result !== null || pendingFail) && (
-          <SectionCard icon="note-text-outline" title="Technician Notes" C={C}>
+          <SectionCard icon="note-text-outline" title="Remarks" C={C}>
             <TextInput
               placeholder={isFailed
                 ? 'Recommended actions, parts required, or follow-up details…'

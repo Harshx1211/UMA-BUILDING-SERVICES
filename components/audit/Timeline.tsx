@@ -21,7 +21,7 @@ const FIELD_LABELS: Record<string, string> = {
   checklist_data: 'Checklist',
   is_compliant: 'Compliant',
   defect_reason: 'Defect Reason',
-  technician_notes: 'Technician Notes',
+  technician_notes: 'Remarks',
   status: 'Status',
   description: 'Description',
   severity: 'Severity',

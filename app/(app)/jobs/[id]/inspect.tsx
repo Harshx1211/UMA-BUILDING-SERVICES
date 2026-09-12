@@ -239,7 +239,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
                   <MaterialCommunityIcons name="note-text-outline" size={12} color={C.textSecondary} />
                 </View>
               )}
-              <Text style={[s.openDetailTxt, { color: C.textSecondary }]}>Photos &amp; notes</Text>
+              <Text style={[s.openDetailTxt, { color: C.textSecondary }]}>Photos &amp; remarks</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={16} color={C.textTertiary} />
           </View>
