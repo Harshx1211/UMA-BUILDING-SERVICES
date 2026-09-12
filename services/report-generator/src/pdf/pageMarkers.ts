@@ -37,10 +37,10 @@ const MARKER_SUFFIX = '__';
  * throw off page breaks relative to each other.
  */
 export function markerHtml(key: string): string {
-  // No aria-hidden: Chromium's tagged-PDF export may exclude
-  // accessibility-hidden content from the actual text layer, not just the
-  // structure tree — exactly the failure mode this marker needs to avoid.
-  return `<div style="opacity:0;font-size:1px;line-height:1px;margin:0;padding:0">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
+  // TEMP DIAGNOSTIC: fully visible, to isolate whether invisibility CSS is
+  // what's preventing this text from being painted, vs. a bug in the
+  // search/extraction logic itself.
+  return `<div style="color:red;font-size:10px">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
 }
 
 export interface MarkerScanResult {
