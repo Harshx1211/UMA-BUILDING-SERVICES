@@ -57,6 +57,7 @@ export type AssetWithResult = Asset & {
   is_compliant: boolean;
   defect_reason: string | null;
   technician_notes: string | null;
+  internal_notes: string | null;
   job_asset_id: string | null;
   photos: string[];
   previousResult: InspectionResult | null;
@@ -88,6 +89,12 @@ interface InspectionState {
     // merging into whatever unrelated defect might already exist on this
     // asset — see the "Defect auto-create / update" block's own comment.
     forceNewDefect?: boolean,
+    // job_assets.internal_notes — team-internal communication only, never
+    // read by the report-generator (see its fetchReportData.ts/types.ts).
+    // Appended at the end (not inserted alongside `notes`) so every
+    // existing positional call site keeps working unchanged; only a call
+    // site that actually cares about internal notes needs to reach this far.
+    internalNotes?: string,
   ) => void;
   addPhotoToAsset: (assetId: string, photoUri: string) => void;
   removePhotoFromAsset: (assetId: string, photoUri: string) => void;
@@ -152,6 +159,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           is_compliant: Boolean(ja?.is_compliant),
           defect_reason: ja?.defect_reason ?? null,
           technician_notes: ja?.technician_notes ?? null,
+          internal_notes: ja?.internal_notes ?? null,
           job_asset_id: ja?.id ?? null,
           photos: photosForAsset,
           previousResult: prev ? (prev.result as InspectionResult) : null,
@@ -168,7 +176,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
   updateAssetResult: (
     assetId, result, checklistData, isCompliant,
     defectReason, notes, photos, severity, defectCode, quotePrice,
-    forceNewDefect,
+    forceNewDefect, internalNotes,
   ) => {
     try {
       set({ isSaving: true, error: null });
@@ -242,6 +250,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         is_compliant: isCompliant ? 1 : 0,
         defect_reason: defectReason ?? null,
         technician_notes: notes ?? null,
+        internal_notes: internalNotes ?? null,
         actioned_at: new Date().toISOString(),
         actioned_by: userId || null,
       };
@@ -249,7 +258,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // Field-level audit Timeline — one row per SAVE (not per changed
       // field). `asset` still holds the OLD values here, right up until
       // upsertRecord below writes the new ones.
-      const AUDITED_JOB_ASSET_FIELDS = ['result', 'checklist_data', 'is_compliant', 'defect_reason', 'technician_notes'] as const;
+      const AUDITED_JOB_ASSET_FIELDS = ['result', 'checklist_data', 'is_compliant', 'defect_reason', 'technician_notes', 'internal_notes'] as const;
       const jobAssetChanges = AUDITED_JOB_ASSET_FIELDS
         .map((field) => ({ field, old: (asset as unknown as Record<string, unknown>)[field] ?? null, new: jobAssetPayload[field] ?? null }))
         .filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
@@ -526,6 +535,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         is_compliant: isCompliant ?? false,
         defect_reason: defectReason ?? null,
         technician_notes: notes ?? null,
+        internal_notes: internalNotes ?? null,
         job_asset_id: jobAssetId,
         photos: finalPhotoUris,
       };

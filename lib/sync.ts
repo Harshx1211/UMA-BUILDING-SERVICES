@@ -13,6 +13,7 @@ import {
   getJobStatus,
   getDeletedPhotoIds,
   getDeletedDocumentIds,
+  getDeletedNotebookItemIds,
   getFailedSyncItems,
   getRecord,
   deleteRecord,
@@ -1647,6 +1648,7 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   }
   if (propertyIds.length > 0) {
     relatedPulls.push(_pullRelated('site_documents', 'property_id', propertyIds));
+    relatedPulls.push(_pullRelated('property_notebook_items', 'property_id', propertyIds));
   }
   await Promise.all(relatedPulls);
 
@@ -1800,6 +1802,8 @@ async function _pullRelated(
       tombstoneIds = getDeletedPhotoIds();
     } else if (table === 'site_documents') {
       tombstoneIds = getDeletedDocumentIds();
+    } else if (table === 'property_notebook_items') {
+      tombstoneIds = getDeletedNotebookItemIds();
     }
 
     // Collect rows to upsert after applying all local-override logic.

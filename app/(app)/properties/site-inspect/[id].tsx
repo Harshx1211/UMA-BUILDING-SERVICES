@@ -34,6 +34,7 @@ import AddAssetModal from '@/components/inspections/AddAssetModal';
 
 import { generateUUID } from '@/utils/uuid';  // BUG 28 FIX
 import { localDateString } from '@/utils/dateHelpers';
+import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { useFocusEffect } from '@react-navigation/native';
 
 // ─── Defect quick-suggestion chips per asset type ────────────
@@ -315,6 +316,7 @@ export default function SiteInspectScreen() {
   // beforeRemove listener knows to skip the guard (avoids infinite loop where
   // 'Discard & Exit' → router.back() → beforeRemove fires again → alert again).
   const skipGuardRef = useRef(false);
+  const notebookSheetRef = useRef<PropertyNotebookSheetRef>(null);
 
   const navigateAway = useCallback((action: () => void) => {
     skipGuardRef.current = true;
@@ -653,14 +655,22 @@ export default function SiteInspectScreen() {
 
   // Progress badge in header
   const progressBadge = (
-    <View style={[s.progressBadge, {
-      backgroundColor: allDone ? C.success + '30' : C.backgroundTertiary,
-      borderColor: allDone ? C.success : 'transparent',
-      borderWidth: allDone ? 1 : 0,
-    }]}>
-      <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textOnPrimary }]}>
-        {allDone ? 'All Done ' : ''}{counts.inspected}/{counts.total}
-      </Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <TouchableOpacity
+        onPress={() => notebookSheetRef.current?.open()}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <MaterialCommunityIcons name="notebook-outline" size={22} color={C.textOnPrimary} />
+      </TouchableOpacity>
+      <View style={[s.progressBadge, {
+        backgroundColor: allDone ? C.success + '30' : C.backgroundTertiary,
+        borderColor: allDone ? C.success : 'transparent',
+        borderWidth: allDone ? 1 : 0,
+      }]}>
+        <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textOnPrimary }]}>
+          {allDone ? 'All Done ' : ''}{counts.inspected}/{counts.total}
+        </Text>
+      </View>
     </View>
   );
 
@@ -675,6 +685,7 @@ export default function SiteInspectScreen() {
         showBack
         rightComponent={progressBadge}
       />
+      <PropertyNotebookSheet ref={notebookSheetRef} propertyId={property.id} editable />
 
       {/* ── PROGRESS BAR ────────────────────────────────── */}
       <View style={[s.progressTrack, { backgroundColor: C.primary + '40' }]}>

@@ -128,6 +128,10 @@ export interface JobAsset {
   is_compliant: boolean;
   defect_reason: string | null;
   technician_notes: string | null;
+  /** Team-internal communication only — deliberately never read by the
+   * report-generator service, so it can never reach a client-facing PDF.
+   * Same per-visit scope as technician_notes: resets blank every new job. */
+  internal_notes: string | null;
   actioned_at: string | null;
   actioned_by: string | null;
 
@@ -204,6 +208,27 @@ export interface SiteDocument {
   /** Stamped on every edit (rename) — lets the sync engine tell a fresher
    * local edit apart from a stale server echo/pull, same as defects/assets. */
   updated_at: string | null;
+}
+
+/**
+ * A shared, per-property running list of things to remember about a site —
+ * equipment to bring, access quirks, anything worth flagging to whoever
+ * visits next. Add/delete only, no in-place edit: fixing a typo means
+ * delete and re-add. Deliberately distinct from properties.hazard_notes/
+ * access_notes/site_note (those are single admin-configured fields) — this
+ * is technician-authored and grows over time, shared across the whole
+ * company so the next visit benefits from what a previous one left behind.
+ */
+export interface PropertyNotebookItem {
+  id: string;
+  company_id: string | null;
+  property_id: string;
+  text: string;
+  created_by: string | null;
+  created_at: string;
+
+  // Joined relation (populated when the caller needs an attributed name)
+  created_by_user?: User;
 }
 
 /** Client + technician signatures captured at job completion */

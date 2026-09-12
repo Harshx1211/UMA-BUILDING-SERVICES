@@ -270,6 +270,15 @@ export default function AssetDetailScreen() {
   // showing for the current result.
   const [note, setNote] = useState(asset?.technician_notes || '');
 
+  // `internalNote` backs job_assets.internal_notes — a second per-visit
+  // field alongside Remarks, available regardless of PASS/FAIL/N-T, but
+  // team-internal only: never read by the report-generator service (see
+  // its fetchReportData.ts/types.ts), so it can never reach a client-facing
+  // PDF. Same auto-save-on-blur + leave-without-saving safety net as
+  // Remarks, kept as a genuinely separate field/card so the two are never
+  // visually confused for each other.
+  const [internalNote, setInternalNote] = useState(asset?.internal_notes || '');
+
   // Live draft of whichever defect card is currently expanded for editing —
   // reported up via DefectFieldsCard's onDraftChange.
   const [primaryDraft, setPrimaryDraft] = useState<DefectFieldsValue | null>(null);
@@ -317,12 +326,12 @@ export default function AssetDetailScreen() {
   // time this screen gained focus — never sees stale values no matter how
   // long the screen's been open or how many keystrokes happened since.
   const latestRef = useRef({
-    note, primaryDraft, additionalDraft, editingDefectId,
+    note, internalNote, primaryDraft, additionalDraft, editingDefectId,
     isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
     primaryDefectId: primaryDefect?.id ?? null,
   });
   latestRef.current = {
-    note, primaryDraft, additionalDraft, editingDefectId,
+    note, internalNote, primaryDraft, additionalDraft, editingDefectId,
     isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
     primaryDefectId: primaryDefect?.id ?? null,
   };
@@ -337,7 +346,7 @@ export default function AssetDetailScreen() {
     useCallback(() => {
       return () => {
         const {
-          note: n, primaryDraft: pd, additionalDraft: ad, editingDefectId: eid,
+          note: n, internalNote: inNote, primaryDraft: pd, additionalDraft: ad, editingDefectId: eid,
           isFailed: failed, asset: a, primaryDefectId,
         } = latestRef.current;
         if (!a) return;
@@ -356,14 +365,16 @@ export default function AssetDetailScreen() {
         };
 
         const descTrim = pd?.description.trim() ?? '';
+        const internalNoteTrim = inNote.trim();
+        const internalNoteChanged = internalNoteTrim !== (a.internal_notes || '');
         if (failed && descTrim) {
           const noteTrim = n.trim();
-          if (descTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '')) {
-            updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice);
+          if (descTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '') || internalNoteChanged) {
+            updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice, undefined, internalNoteTrim);
             notifyIfRejected(() => useInspectionStore.getState().error);
           }
-        } else if (!failed && n.trim() !== (a.technician_notes || '')) {
-          updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim());
+        } else if (!failed && (n.trim() !== (a.technician_notes || '') || internalNoteChanged)) {
+          updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim(), undefined, undefined, undefined, undefined, undefined, internalNoteTrim);
           notifyIfRejected(() => useInspectionStore.getState().error);
         }
 
@@ -490,7 +501,7 @@ export default function AssetDetailScreen() {
     if (res === InspectionResult.Pass) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPendingFail(false);
-      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, asset.is_compliant ?? true, undefined, asset.technician_notes || '');
+      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, asset.is_compliant ?? true, undefined, asset.technician_notes || '', undefined, undefined, undefined, undefined, undefined, asset.internal_notes || '');
     } else if (res === InspectionResult.Fail) {
       // Reveal the Defect Details card, don't save yet — Save Defect below is
       // the one real write (see pendingFail's own comment). Re-tapping Fail
@@ -501,7 +512,7 @@ export default function AssetDetailScreen() {
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setPendingFail(false);
-      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '');
+      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '', undefined, undefined, undefined, undefined, undefined, asset.internal_notes || '');
     }
   };
 
@@ -515,7 +526,7 @@ export default function AssetDetailScreen() {
     // on this asset (see updateAssetResult's own comment on this param).
     // Re-editing an already-Fail asset's existing defect (pendingFail is
     // false by then) still merges into it exactly as before.
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail);
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
     setPendingFail(false);
     setPrimaryDraft(null);
     setEditingDefectId(null);
@@ -524,7 +535,7 @@ export default function AssetDetailScreen() {
   };
 
   const handleReplaceNow = (value: DefectFieldsValue) => {
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice);
+    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice, undefined, internalNote.trim());
     setPendingFail(false);
     setPrimaryDraft(null);
     setEditingDefectId(null);
@@ -601,11 +612,17 @@ export default function AssetDetailScreen() {
   // price through here too. Omitting them isn't "leave them alone" — that
   // block defaults a missing severity to Non-critical, which would have
   // silently downgraded a Critical defect on every single notes edit.
+  // Shared by BOTH the Remarks and Internal Notes cards' onBlur — always
+  // writes both fields together (each card only calls this when its OWN
+  // value actually changed, but writing both here every time means
+  // whichever card fires this can never clobber the other's already-saved
+  // value with a stale re-send of its own unrelated field).
   const handleSaveNote = () => {
     updateAssetResult(
       asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant,
       asset.defect_reason ?? undefined, note.trim(), undefined,
       primaryDefect?.severity, primaryDefect?.defect_code ?? null, primaryDefect?.quote_price ?? null,
+      undefined, internalNote.trim(),
     );
   };
 
@@ -824,6 +841,32 @@ export default function AssetDetailScreen() {
           </SectionCard>
         )}
 
+        {/* ── Internal Notes (job_assets.internal_notes) — a second,
+            deliberately separate field from Remarks above. Same
+            availability/auto-save/leave-without-saving shape, but this one
+            is never read by the report-generator service (see its
+            fetchReportData.ts/types.ts) — team-internal communication only,
+            never client-facing. Distinct icon + caption so it's never
+            mistaken for Remarks. */}
+        {(result !== null || pendingFail) && (
+          <SectionCard icon="shield-lock-outline" title="Internal Notes" C={C}>
+            <Text style={[s.internalNotesCaption, { color: C.textTertiary }]}>
+              Visible to your team only — never included in the report.
+            </Text>
+            <TextInput
+              placeholder="e.g. Client mentioned this keeps tripping, worth a follow-up call…"
+              placeholderTextColor={C.textTertiary}
+              value={internalNote}
+              onChangeText={setInternalNote}
+              onBlur={() => { if (!jobLocked && result !== null && internalNote !== (asset.internal_notes || '')) handleSaveNote(); }}
+              multiline
+              textAlignVertical="top"
+              editable={!jobLocked}
+              style={[s.input, s.textArea, { backgroundColor: C.background, borderColor: C.border, color: C.text, opacity: jobLocked ? 0.6 : 1 }]}
+            />
+          </SectionCard>
+        )}
+
         {/* ── History — proper pass/fail badge + photos per visit ──────── */}
         <SectionCard icon="history" title={`History${historyTotal > 0 ? ` · ${historyTotal} prior visit${historyTotal === 1 ? '' : 's'}` : ''}`} C={C}>
           {historyLoading ? (
@@ -844,6 +887,12 @@ export default function AssetDetailScreen() {
                         </View>
                       </View>
                       {h.technicianNotes ? <Text style={[s.historyNote, { color: C.textSecondary }]}>{h.technicianNotes}</Text> : null}
+                      {h.internalNotes ? (
+                        <View style={s.historyInternalNoteRow}>
+                          <MaterialCommunityIcons name="shield-lock-outline" size={11} color={C.textTertiary} />
+                          <Text style={[s.historyNote, { color: C.textTertiary, fontStyle: 'italic', flex: 1 }]}>{h.internalNotes}</Text>
+                        </View>
+                      ) : null}
                       {h.defects.map((d) => (
                         <Text key={d.id} style={[s.historyNote, { color: C.textSecondary }]}>
                           {SEVERITY_LABEL[d.severity] ?? d.severity}: {d.description}
@@ -983,6 +1032,8 @@ const s = StyleSheet.create({
   historyResultPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   historyResultPillTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
   historyNote: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  historyInternalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 4 },
+  internalNotesCaption: { fontSize: 11, fontStyle: 'italic', marginBottom: 8 },
   historyPhotoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   historyPhotoThumb: { width: 56, height: 56, borderRadius: 10 },
 

@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 41;
+const CURRENT_SCHEMA_VERSION = 45;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -176,6 +176,7 @@ export function initializeSchema(): void {
       is_compliant     INTEGER NOT NULL DEFAULT 0,
       defect_reason    TEXT,
       technician_notes TEXT,
+      internal_notes   TEXT,
       actioned_at      TEXT,
       actioned_by      TEXT,
       FOREIGN KEY (job_id)   REFERENCES jobs(id),
@@ -289,6 +290,28 @@ export function initializeSchema(): void {
 
     -- Tombstone table for site_documents, mirroring deleted_photo_ids above.
     CREATE TABLE IF NOT EXISTS deleted_document_ids (
+      id         TEXT PRIMARY KEY NOT NULL,
+      deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Shared per-property notebook — see
+    -- supabase/migrations/20260919000000_property_notebook_items.sql.
+    -- Add/delete only (no in-place edit): fixing a typo means delete and
+    -- re-add, deliberately, to keep this simple.
+    CREATE TABLE IF NOT EXISTS property_notebook_items (
+      id           TEXT PRIMARY KEY NOT NULL,
+      company_id   TEXT,
+      property_id  TEXT NOT NULL,
+      text         TEXT NOT NULL,
+      created_by   TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (property_id) REFERENCES properties(id),
+      FOREIGN KEY (created_by)  REFERENCES users(id)
+    );
+
+    -- Tombstone table for property_notebook_items, mirroring
+    -- deleted_document_ids above.
+    CREATE TABLE IF NOT EXISTS deleted_notebook_item_ids (
       id         TEXT PRIMARY KEY NOT NULL,
       deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -1510,6 +1533,52 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '43')`);
   }
 
+  // Migration 44: property_notebook_items + deleted_notebook_item_ids — a
+  // shared per-property notebook (see
+  // supabase/migrations/20260919000000_property_notebook_items.sql). Fresh
+  // installs already get both tables via the CREATE TABLE IF NOT EXISTS
+  // block above; this covers existing installs upgrading in place.
+  if (currentVersion < 44) {
+    try {
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS property_notebook_items (
+          id           TEXT PRIMARY KEY NOT NULL,
+          company_id   TEXT,
+          property_id  TEXT NOT NULL,
+          text         TEXT NOT NULL,
+          created_by   TEXT,
+          created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (property_id) REFERENCES properties(id),
+          FOREIGN KEY (created_by)  REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS deleted_notebook_item_ids (
+          id         TEXT PRIMARY KEY NOT NULL,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 44: added property_notebook_items + deleted_notebook_item_ids');
+    } catch (err: unknown) {
+      console.error('[UMA BUILDING SERVICES DB] Migration 44 failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 44;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '44')`);
+  }
+
+  // Migration 45: job_assets.internal_notes — a second per-visit note field
+  // alongside technician_notes/Remarks, but never read by the
+  // report-generator service (see its fetchReportData.ts/types.ts) so it
+  // can never reach a client-facing PDF. Team-internal communication only.
+  if (currentVersion < 45) {
+    try {
+      db.runSync(`ALTER TABLE job_assets ADD COLUMN internal_notes TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 45: job_assets.internal_notes already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 45: added job_assets.internal_notes');
+    currentVersion = 45;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '45')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1859,6 +1928,7 @@ export interface AssetHistoryEntry {
   date: string | null;
   result: string;
   technicianNotes: string | null;
+  internalNotes: string | null;
   defects: AssetHistoryDefect[];
   photos: AssetHistoryPhoto[];
 }
@@ -1907,8 +1977,8 @@ export function getAssetHistory(
       limitClause = 'LIMIT ? OFFSET ?';
       params.push(opts.limit, opts.offset ?? 0);
     }
-    const visits = db.getAllSync<{ job_id: string; result: string; technician_notes: string | null; actioned_at: string | null }>(
-      `SELECT job_id, result, technician_notes, actioned_at
+    const visits = db.getAllSync<{ job_id: string; result: string; technician_notes: string | null; internal_notes: string | null; actioned_at: string | null }>(
+      `SELECT job_id, result, technician_notes, internal_notes, actioned_at
        FROM job_assets
        WHERE asset_id = ? AND job_id != ? AND result IS NOT NULL
        ORDER BY actioned_at DESC
@@ -1952,6 +2022,7 @@ export function getAssetHistory(
       date: v.actioned_at,
       result: v.result,
       technicianNotes: v.technician_notes,
+      internalNotes: v.internal_notes,
       defects: defectsByJob.get(v.job_id) ?? [],
       photos: photosByJob.get(v.job_id) ?? [],
     }));
@@ -2342,6 +2413,61 @@ export function getDeletedDocumentIds(): Set<string> {
 }
 
 /**
+ * Records a property_notebook_items ID in the permanent tombstone so it is
+ * never re-pulled from Supabase — mirrors recordDeletedDocument. Needed
+ * because this table has no local-edit path to protect (add/delete only),
+ * but a locally-queued Delete that hasn't reached Supabase yet would
+ * otherwise get resurrected by the very next periodic pull, which still
+ * sees the row server-side and upserts it right back.
+ */
+export function recordDeletedNotebookItem(itemId: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(
+      `INSERT OR IGNORE INTO deleted_notebook_item_ids (id) VALUES (?)`,
+      [itemId],
+    );
+    if (__DEV__)
+      console.log(`[UMA BUILDING SERVICES DB] Tombstoned deleted notebook item ${itemId}`);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] recordDeletedNotebookItem(${itemId}) error:`, err);
+  }
+}
+
+/**
+ * Returns the set of property_notebook_items IDs that have been locally
+ * deleted. Mirrors getDeletedDocumentIds.
+ */
+export function getDeletedNotebookItemIds(): Set<string> {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ id: string }>(
+      `SELECT id FROM deleted_notebook_item_ids`,
+    );
+    return new Set(rows.map(r => r.id));
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getDeletedNotebookItemIds error:`, err);
+    return new Set();
+  }
+}
+
+/**
+ * Returns every notebook item for a property, newest first.
+ */
+export function getNotebookItemsForProperty<T = RecordData>(propertyId: string): T[] {
+  try {
+    const db = openDatabase();
+    return db.getAllSync<T>(
+      `SELECT * FROM property_notebook_items WHERE property_id = ? ORDER BY created_at DESC`,
+      [propertyId],
+    );
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getNotebookItemsForProperty(${propertyId}) error:`, err);
+    return [];
+  }
+}
+
+/**
  * Tables a remote deletion (public.deletion_log, written by a Postgres
  * trigger on DELETE — see supabase/migrations/20260910000000_deletion_log.sql)
  * is allowed to remove locally. Deliberately an explicit allowlist rather
@@ -2353,6 +2479,7 @@ export function getDeletedDocumentIds(): Set<string> {
 const REMOTE_DELETABLE_TABLES = new Set([
   'job_assets', 'defects', 'inspection_photos', 'site_documents',
   'signatures', 'quotes', 'quote_items', 'time_logs', 'job_technicians',
+  'property_notebook_items',
 ]);
 
 /**
@@ -2411,6 +2538,7 @@ export function applyRemoteDeletion(tableName: string, recordId: string): boolea
     deleteRecord(tableName, recordId);
     if (tableName === 'inspection_photos') recordDeletedPhoto(recordId);
     if (tableName === 'site_documents') recordDeletedDocument(recordId);
+    if (tableName === 'property_notebook_items') recordDeletedNotebookItem(recordId);
     return true;
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] applyRemoteDeletion(${tableName}, ${recordId}) error:`, err);
@@ -3154,7 +3282,7 @@ export function clearDatabase(): void {
       'users', 'properties', 'assets', 'jobs', 'job_assets',
       'defects', 'inspection_photos', 'signatures', 'time_logs',
       'quotes', 'quote_items', 'notifications', 'sync_queue',
-      'site_documents', 'field_audit_log',
+      'site_documents', 'field_audit_log', 'property_notebook_items',
       // FIX: these four are per-company catalogue/tagging data, not a
       // global dictionary — leaving them un-wiped let one company's custom
       // defect codes, asset types, pricing, and tags persist locally and
@@ -3180,9 +3308,10 @@ export function clearDatabase(): void {
       }
     }
 
-    // `deleted_photo_ids`/`deleted_document_ids` are left intact — they're
-    // pure tombstone id lists (no company-identifying content) that the
-    // pull-side dedup logic still needs to consult correctly.
+    // `deleted_photo_ids`/`deleted_document_ids`/`deleted_notebook_item_ids`
+    // are left intact — they're pure tombstone id lists (no
+    // company-identifying content) that the pull-side dedup logic still
+    // needs to consult correctly.
 
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Database wiped successfully for sign-out');
   } catch (err) {

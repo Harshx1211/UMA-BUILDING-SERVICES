@@ -10,11 +10,12 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ComplianceStatus, AssetStatus, JobStatus } from '@/constants/Enums';
-import { getRecord, getAssetsForProperty, getJobsForProperty, getDocumentsForProperty } from '@/lib/database';
+import { getRecord, getAssetsForProperty, getJobsForProperty, getDocumentsForProperty, getNotebookItemsForProperty } from '@/lib/database';
 import { openJob } from '@/utils/navigation';
 import type { Property, Asset, Job, SiteDocument } from '@/types';
 import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
 import DocumentCard from '@/components/documents/DocumentCard';
+import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
@@ -143,7 +144,9 @@ export default function PropertyDetailScreen() {
   const [jobHistoryCompleted, setJobHistoryCompleted] = useState(0);
   const [jobHistoryLoadingMore, setJobHistoryLoadingMore] = useState(false);
   const [documents, setDocuments]   = useState<SiteDocument[]>([]);
+  const [notebookCount, setNotebookCount] = useState(0);
   const [isLoading, setIsLoading]   = useState(true);
+  const notebookSheetRef = useRef<PropertyNotebookSheetRef>(null);
 
   // Tracks how many job-history rows are currently on screen, kept in sync
   // SYNCHRONOUSLY at every point jobHistory itself is set (load,
@@ -177,6 +180,7 @@ export default function PropertyDetailScreen() {
         setJobHistoryTotal(totalCount);
         setJobHistoryCompleted(completedCount);
         setDocuments(getDocumentsForProperty<SiteDocument>(id));
+        setNotebookCount(getNotebookItemsForProperty(id).length);
       }
     } catch (err) {
       console.error('[PropertyDetail] load error:', err);
@@ -207,6 +211,7 @@ export default function PropertyDetailScreen() {
     setJobHistoryTotal(totalCount);
     setJobHistoryCompleted(completedCount);
     setDocuments(getDocumentsForProperty<SiteDocument>(id));
+    setNotebookCount(getNotebookItemsForProperty(id).length);
   }, [id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -611,7 +616,34 @@ export default function PropertyDetailScreen() {
           </View>
         </Animated.View>
 
+        {/* ── SITE NOTEBOOK — view-only here. Items can only be added or
+            deleted from within an actual inspection ("Photos & remarks"
+            flow on jobs/[id]/inspect.tsx and the quick site-inspect
+            screen) — this section is for browsing what's already there. */}
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(360).duration(400)}>
+          <SectionHeader
+            icon="notebook-outline"
+            title="Site Notebook"
+            count={notebookCount}
+            actionLabel="View →"
+            onAction={() => notebookSheetRef.current?.open()}
+          />
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => notebookSheetRef.current?.open()}
+            style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16, padding: 14 }]}
+          >
+            <Text style={{ fontSize: 13, color: C.textSecondary }}>
+              {notebookCount === 0
+                ? 'No notes yet for this site.'
+                : `${notebookCount} thing${notebookCount === 1 ? '' : 's'} to remember about this site.`}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+
       </ScrollView>
+
+      <PropertyNotebookSheet ref={notebookSheetRef} propertyId={id ?? ''} editable={false} />
 
       {/* Add Asset Modal has been moved to the dedicated assets sub-page */}
     </View>

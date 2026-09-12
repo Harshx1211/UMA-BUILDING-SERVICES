@@ -30,6 +30,7 @@ import { useCatalogueStore } from '@/store/catalogueStore';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 
 const ALL = 'All';
 const RESULT_OPTIONS = ['All', 'Remaining', 'Passed', 'Failed', 'N/T'];
@@ -86,7 +87,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const handleResult = (res: InspectionResult) => {
     if (res === InspectionResult.Pass) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, asset.is_compliant ?? true, undefined, asset.technician_notes || '');
+      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, asset.is_compliant ?? true, undefined, asset.technician_notes || '', undefined, undefined, undefined, undefined, undefined, asset.internal_notes || '');
       router.push(`/jobs/${jobId}/asset/${asset.id}` as never);
     } else if (res === InspectionResult.Fail) {
       // Unlike Pass/N-T, Fail isn't a complete result by itself — it needs a
@@ -106,7 +107,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       // Storing true caused the PDF to count N/T assets as compliant,
       // directly corrupting AS1851 compliance data.
       // The site-inspect path correctly uses false — this now matches it.
-      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '');
+      updateAssetResult(asset.id, res, asset.checklist_data ?? undefined, false, undefined, asset.technician_notes || '', undefined, undefined, undefined, undefined, undefined, asset.internal_notes || '');
       router.push(`/jobs/${jobId}/asset/${asset.id}` as never);
     }
   };
@@ -264,6 +265,7 @@ export default function AssetInspectionScreen() {
   const [jobTitle, setJobTitle]    = useState<string>('');
   const [jobDate, setJobDate]     = useState<string>('');
   const [isCompleting, setIsCompleting] = useState(false);
+  const notebookSheetRef = useRef<PropertyNotebookSheetRef>(null);
 
   // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -779,13 +781,24 @@ export default function AssetInspectionScreen() {
         title="Inspection Form"
         showBack={true}
         rightComponent={
-          <View style={[s.progressBadge, { backgroundColor: allDone ? C.successLight : C.backgroundTertiary, borderColor: allDone ? C.success : C.border, borderWidth: 1 }]}>
-            <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textSecondary }]}>
-              {allDone ? 'All Done ' : ''}{store.progress.inspected}/{store.progress.total}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {propertyId ? (
+              <TouchableOpacity
+                onPress={() => notebookSheetRef.current?.open()}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons name="notebook-outline" size={22} color={C.text} />
+              </TouchableOpacity>
+            ) : null}
+            <View style={[s.progressBadge, { backgroundColor: allDone ? C.successLight : C.backgroundTertiary, borderColor: allDone ? C.success : C.border, borderWidth: 1 }]}>
+              <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textSecondary }]}>
+                {allDone ? 'All Done ' : ''}{store.progress.inspected}/{store.progress.total}
+              </Text>
+            </View>
           </View>
         }
       />
+      {propertyId ? <PropertyNotebookSheet ref={notebookSheetRef} propertyId={propertyId} editable /> : null}
 
       <FlatList
         ref={listRef}
