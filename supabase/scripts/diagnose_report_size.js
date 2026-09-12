@@ -43,11 +43,44 @@ const adminEnvPath = path.join(__dirname, '..', '..', '..', 'admin', '.env.local
 const env = loadEnvFile(adminEnvPath);
 const supabaseAdmin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-function classify(dict) {
-  const subtype = dict.get(PDFName.of('Subtype'));
-  if (subtype && subtype.toString() === '/Image') return 'image';
-  if (dict.get(PDFName.of('Length1'))) return 'font';
-  return 'other';
+// Spec-correct font detection: walk every /Type /Font object to its
+// /FontDescriptor, then to whichever of /FontFile, /FontFile2, /FontFile3 it
+// actually has — this is the only reliable way to find embedded font
+// programs regardless of how they're encoded (Type1, TrueType, or the CFF/
+// Type1C format Ghostscript sometimes re-encodes into), since the stream
+// object itself doesn't reliably carry a consistent marker across encoders.
+function findEmbeddedFontStreamRefs(context) {
+  const refs = new Set();
+  for (const [, obj] of context.enumerateIndirectObjects()) {
+    const dict = obj?.dict;
+    if (!dict) continue;
+    const type = dict.get?.(PDFName.of('Type'));
+    if (!type || type.toString() !== '/Font') continue;
+
+    const descriptorRef = dict.get(PDFName.of('FontDescriptor'));
+    const descriptor = descriptorRef ? context.lookup(descriptorRef) : null;
+    // Type0 (composite) fonts nest the real font under /DescendantFonts
+    const descendantsRef = dict.get(PDFName.of('DescendantFonts'));
+    const descendantDescriptors = [];
+    if (descendantsRef) {
+      const descendants = context.lookup(descendantsRef);
+      const list = descendants?.array ?? [];
+      for (const dRef of list) {
+        const dFont = context.lookup(dRef);
+        const dDescRef = dFont?.dict?.get(PDFName.of('FontDescriptor'));
+        if (dDescRef) descendantDescriptors.push(context.lookup(dDescRef));
+      }
+    }
+
+    for (const desc of [descriptor, ...descendantDescriptors]) {
+      if (!desc?.dict) continue;
+      for (const key of ['FontFile', 'FontFile2', 'FontFile3']) {
+        const fileRef = desc.dict.get(PDFName.of(key));
+        if (fileRef) refs.add(fileRef.toString());
+      }
+    }
+  }
+  return refs;
 }
 
 async function main() {
@@ -102,10 +135,16 @@ async function main() {
 
     console.log(`  Total size: ${(buffer.length / 1024).toFixed(1)} KB across ${pdfDoc.getPageCount()} pages`);
 
+    const fontStreamRefs = findEmbeddedFontStreamRefs(context);
     const totals = { image: { count: 0, bytes: 0 }, font: { count: 0, bytes: 0 }, other: { count: 0, bytes: 0 } };
-    for (const [, obj] of context.enumerateIndirectObjects()) {
+    for (const [ref, obj] of context.enumerateIndirectObjects()) {
       if (obj instanceof PDFRawStream) {
-        const kind = classify(obj.dict);
+        const subtype = obj.dict.get(PDFName.of('Subtype'));
+        const kind = fontStreamRefs.has(ref.toString())
+          ? 'font'
+          : subtype && subtype.toString() === '/Image'
+            ? 'image'
+            : 'other';
         totals[kind].count++;
         totals[kind].bytes += obj.contents.length;
       }
