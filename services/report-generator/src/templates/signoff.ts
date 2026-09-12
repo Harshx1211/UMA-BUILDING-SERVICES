@@ -55,9 +55,18 @@ export function renderSignoff(data: ReportData): string {
   // as <img src="UNAVAILABLE"> produces a broken-image icon; show the actual
   // reason instead, same as the legacy on-device template did.
   const clientUnavailable = signature?.signature_url === 'UNAVAILABLE';
-  const clientSigCell = clientUnavailable
-    ? `<span style="font-style:italic;color:${COLORS.MUTED}">Client unavailable to sign</span>`
-    : `<img src="${esc(signature!.signature_url)}" style="max-height:44px" alt="signature" />`;
+  // FIX: this used to force-unwrap `signature!` unconditionally — harmless
+  // when a signature exists (the only case this value is actually rendered,
+  // inside clientSignoff's `signature ? ... : ''` below), but a genuinely
+  // null signature (a report generated before the job was signed off — see
+  // JobDetailClient.tsx's own "Draft Inspection Report" case) crashed the
+  // ENTIRE report generation here before ever reaching that correct
+  // omit-the-card logic.
+  const clientSigCell = !signature
+    ? ''
+    : clientUnavailable
+      ? `<span style="font-style:italic;color:${COLORS.MUTED}">Client unavailable to sign</span>`
+      : `<img src="${esc(signature.signature_url)}" style="max-height:44px" alt="signature" />`;
 
   const hasRealTechSignature = signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE';
   const techSignoff = hasRealTechSignature
