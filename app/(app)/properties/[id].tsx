@@ -43,10 +43,11 @@ type JobHistory = Job & {
 // more — see loadMoreJobHistory's own comment.
 const JOB_HISTORY_PAGE_SIZE = 5;
 
-// FIX: Job History rows used to show the raw "YYYY-MM-DD" string — every
-// other screen that shows a date a technician actually reads closely
-// (a defect's own record, its report card) formats it like "13 Sep 2026".
-function fmtHistoryDate(dateStr: string | null | undefined): string {
+// FIX: dates on this screen (Job History rows, Next Inspection, the overdue
+// banner) used to show the raw "YYYY-MM-DD" string — every other screen that
+// shows a date a technician actually reads closely (a defect's own record,
+// its report card) formats it like "13 Sep 2026".
+function fmtDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
@@ -326,7 +327,7 @@ export default function PropertyDetailScreen() {
                 {property.compliance_status === ComplianceStatus.Compliant
                   ? 'All assets are within service schedule.'
                   : property.compliance_status === ComplianceStatus.Overdue
-                  ? `Inspection is overdue. Next inspection was due ${property.next_inspection_date}.`
+                  ? `Inspection is overdue. Next inspection was due ${fmtDate(property.next_inspection_date)}.`
                   : property.compliance_status === ComplianceStatus.NonCompliant
                   ? 'Outstanding defects or failed inspections on file.'
                   : 'Awaiting initial inspection or compliance review.'}
@@ -468,7 +469,7 @@ export default function PropertyDetailScreen() {
                 <InfoRow
                   icon="calendar-clock-outline"
                   label="Next Inspection"
-                  value={property.next_inspection_date}
+                  value={fmtDate(property.next_inspection_date)}
                   valueColor={isOverdue ? C.error : C.text}
                 />
               </>
@@ -514,9 +515,9 @@ export default function PropertyDetailScreen() {
                         nothing to scan by. */}
                     <View style={{ flex: 1 }}>
                       <Text style={[s.historyDate, { color: C.text }]}>
-                        {fmtHistoryDate(job.scheduled_date)}
+                        {fmtDate(job.scheduled_date)}
                         {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at
-                          ? ` → ${fmtHistoryDate(job.updated_at)}`
+                          ? ` → ${fmtDate(job.updated_at)}`
                           : ''}
                       </Text>
                       <Badge status={job.job_type} />

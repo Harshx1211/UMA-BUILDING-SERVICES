@@ -20,6 +20,19 @@ type FilterTab = 'today' | 'week' | 'all';
 
 type JobWithJoins = Job & { property_name?: string; address?: string; suburb?: string; state?: string };
 
+// FIX: every card on this screen showed raw "YYYY-MM-DD" strings — the one
+// place in the app still doing that; Home's own JobCard already formats the
+// same fields as "Mon, 13 Sep". Matches that exactly for consistency.
+// Appending 'T00:00:00' to a bare date (no time component) forces it to
+// parse as local midnight rather than UTC midnight — same defensive parse
+// Home's metaDate already uses, avoiding a timezone-driven day rollover.
+function fmtJobDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.length <= 10 ? `${dateStr}T00:00:00` : dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 const PRIORITY_COLOR: Record<string, string> = {
   urgent: T.danger,
   high:   T.warning,
@@ -332,27 +345,27 @@ function ScheduleJobCard({ job }: { job: Job }) {
           {job.status === 'completed' ? (
             <>
               <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
               <MaterialCommunityIcons name="arrow-right" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
               <MaterialCommunityIcons name="check-circle-outline" size={12} color={T.success} style={{ marginLeft: 4 }} />
               <Text style={[styles.metaText, { color: T.success }]}>
-                {job.updated_at?.substring(0, 10) || job.scheduled_date}
+                {fmtJobDate(job.updated_at || job.scheduled_date)}
               </Text>
             </>
           ) : job.status === 'in_progress' ? (
             <>
               <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
               <MaterialCommunityIcons name="arrow-right" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
               <MaterialCommunityIcons name="play-circle-outline" size={12} color={T.primary} style={{ marginLeft: 4 }} />
               <Text style={[styles.metaText, { color: T.primary }]}>
-                Started {job.updated_at?.substring(0, 10)}
+                Started {fmtJobDate(job.updated_at)}
               </Text>
             </>
           ) : (
             <>
               <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{job.scheduled_date}</Text>
+              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
               {job.scheduled_time && (
                 <>
                   <MaterialCommunityIcons name="clock-outline" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
