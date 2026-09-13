@@ -297,16 +297,18 @@ export default function HomeScreen() {
         {/* ── KPI Stat Tiles ── */}
         <View style={styles.kpiRow}>
           {isLoading
-            ? (['Today', 'Done today', 'Open jobs'] as const).map((label) => (
+            ? (["Today's Jobs", 'Open Jobs', 'Completed Today'] as const).map((label) => (
                 <View key={label} style={styles.kpiCard}>
                   <SkeletonBlock width={32} height={26} borderRadius={6} />
                   <SkeletonBlock width={48} height={10} borderRadius={4} style={{ marginTop: 6 }} />
                 </View>
               ))
             : [
-                { value: todayJobs.length, label: 'Today'     },
-                { value: doneToday,        label: 'Done today' },
-                { value: openCount,        label: 'Open jobs'  },
+                // Overview → what's still outstanding → what's done — reads
+                // left to right as the state of today's work, completed last.
+                { value: todayJobs.length, label: "Today's Jobs"   },
+                { value: openCount,        label: 'Open Jobs'      },
+                { value: doneToday,        label: 'Completed Today' },
               ].map(({ value, label }) => (
                 <View key={label} style={styles.kpiCard}>
                   <Text style={styles.kpiValue}>{value}</Text>
