@@ -43,6 +43,16 @@ type JobHistory = Job & {
 // more — see loadMoreJobHistory's own comment.
 const JOB_HISTORY_PAGE_SIZE = 5;
 
+// FIX: Job History rows used to show the raw "YYYY-MM-DD" string — every
+// other screen that shows a date a technician actually reads closely
+// (a defect's own record, its report card) formats it like "13 Sep 2026".
+function fmtHistoryDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // ─── Section header ──────────────────────────────────────────
 // FIX: used to render an icon-in-a-box before every title — every section
 // on the screen (Site Details, Asset Register, Job History, Documents) had
@@ -59,7 +69,9 @@ function SectionHeader({ title, count, actionLabel, onAction }: {
       <View style={sh.left}>
         <Text style={[sh.title, { color: C.text }]}>{title}</Text>
         {count !== undefined && (
-          <Text style={[sh.badgeTxt, { color: C.textTertiary }]}>{count}</Text>
+          <View style={[sh.badge, { backgroundColor: C.backgroundTertiary }]}>
+            <Text style={[sh.badgeTxt, { color: C.textSecondary }]}>{count}</Text>
+          </View>
         )}
       </View>
       {actionLabel && onAction && (
@@ -80,7 +92,8 @@ const sh = StyleSheet.create({
   row:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   left:     { flexDirection: 'row', alignItems: 'center', gap: 7 },
   title:    { fontSize: 15, fontWeight: '800', letterSpacing: -0.1 },
-  badgeTxt: { fontSize: 12, fontWeight: '700' },
+  badge:    { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
+  badgeTxt: { fontSize: 10.5, fontWeight: '800' },
   action:   { fontSize: 13, fontWeight: '700' },
 });
 
@@ -293,9 +306,15 @@ export default function PropertyDetailScreen() {
           showBack={true}
         />
 
-        {/* ── COMPLIANCE BANNER ──────────────────────────── */}
-        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(400)}>
-          <View style={[s.complianceBanner, { backgroundColor: compliance.bg, borderColor: compliance.border, marginHorizontal: 16, marginTop: 16 }]}>
+        {/* ── COMPLIANCE HERO ──────────────────────────────
+            FIX: the banner and the 3 stats used to be two separate floating
+            cards with a 14px gap — read as two unrelated facts rather than
+            one status. Merged into one block: stats sit directly below the
+            banner, sharing its border/background and separated only by a
+            tinted divider, so they read as supporting detail for the
+            headline compliance state instead of competing with it. */}
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(400)} style={[s.hero, { backgroundColor: compliance.bg, borderColor: compliance.border, marginHorizontal: 16, marginTop: 16 }]}>
+          <View style={s.heroTop}>
             <View style={[s.complianceBannerIcon, { backgroundColor: compliance.border + '25' }]}>
               <MaterialCommunityIcons name={compliance.icon} size={26} color={compliance.text} />
             </View>
@@ -314,25 +333,19 @@ export default function PropertyDetailScreen() {
               </Text>
             </View>
           </View>
-        </Animated.View>
-
-        {/* ── QUICK STATS ────────────────────────────────── */}
-        {/* FIX: was 3 separately shaded/boxed pills — every icon on the
-            screen used the exact same treatment, so nothing stood out.
-            One plain card, typographic columns; colour only where it's
-            actually meaningful (overdue in red, jobs done in green). */}
-        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(80).duration(400)} style={[s.statsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-          <View style={s.statCol}>
-            <Text style={[s.statNum, { color: C.text }]}>{activeAssets}</Text>
-            <Text style={[s.statLbl, { color: C.textTertiary }]}>ACTIVE</Text>
-          </View>
-          <View style={[s.statCol, s.statColDivider, { borderLeftColor: C.border }]}>
-            <Text style={[s.statNum, { color: isOverdue ? C.error : C.text }]}>{isOverdue ? 'Yes' : 'No'}</Text>
-            <Text style={[s.statLbl, { color: C.textTertiary }]}>OVERDUE</Text>
-          </View>
-          <View style={[s.statCol, s.statColDivider, { borderLeftColor: C.border }]}>
-            <Text style={[s.statNum, { color: C.success }]}>{passedJobs}</Text>
-            <Text style={[s.statLbl, { color: C.textTertiary }]}>JOBS DONE</Text>
+          <View style={[s.heroStats, { borderTopColor: compliance.border }]}>
+            <View style={s.statCol}>
+              <Text style={[s.statNum, { color: C.text }]}>{activeAssets}</Text>
+              <Text style={[s.statLbl, { color: C.textSecondary }]}>ACTIVE</Text>
+            </View>
+            <View style={[s.statCol, s.statColDivider, { borderLeftColor: compliance.border }]}>
+              <Text style={[s.statNum, { color: isOverdue ? C.error : C.text }]}>{isOverdue ? 'Yes' : 'No'}</Text>
+              <Text style={[s.statLbl, { color: C.textSecondary }]}>OVERDUE</Text>
+            </View>
+            <View style={[s.statCol, s.statColDivider, { borderLeftColor: compliance.border }]}>
+              <Text style={[s.statNum, { color: C.success }]}>{passedJobs}</Text>
+              <Text style={[s.statLbl, { color: C.textSecondary }]}>JOBS DONE</Text>
+            </View>
           </View>
         </Animated.View>
 
@@ -369,7 +382,11 @@ export default function PropertyDetailScreen() {
         </Animated.View>
 
         {/* ── SAFETY ALERTS ──────────────────────────────── */}
-        {(property.hazard_notes || property.access_notes || property.site_note) && (
+        {/* FIX: Access Instructions used to sit here too, styled identically
+            to a hazard warning — logistics ("where's the fire panel key")
+            isn't a safety alert the way a hazard is, and giving it the same
+            urgent card treatment overstated it. Dropped from this section. */}
+        {(property.hazard_notes || property.site_note) && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(400)} style={{ marginHorizontal: 16, gap: 10, marginTop: 8 }}>
             {property.hazard_notes && (
               <View style={[s.alertCard, { backgroundColor: C.errorLight, borderColor: C.error }]}>
@@ -379,17 +396,6 @@ export default function PropertyDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[s.alertTitle, { color: C.errorDark }]}>Site Hazard Warning</Text>
                   <Text style={[s.alertBody, { color: C.error }]}>{property.hazard_notes}</Text>
-                </View>
-              </View>
-            )}
-            {property.access_notes && (
-              <View style={[s.alertCard, { backgroundColor: C.infoLight, borderColor: C.infoDark }]}>
-                <View style={[s.alertIconWrap, { backgroundColor: C.infoDark }]}>
-                  <MaterialCommunityIcons name="key-variant" size={16} color={C.textOnPrimary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.infoDark }]}>Access Instructions</Text>
-                  <Text style={[s.alertBody, { color: C.infoDark }]}>{property.access_notes}</Text>
                 </View>
               </View>
             )}
@@ -508,9 +514,9 @@ export default function PropertyDetailScreen() {
                         nothing to scan by. */}
                     <View style={{ flex: 1 }}>
                       <Text style={[s.historyDate, { color: C.text }]}>
-                        {job.scheduled_date}
+                        {fmtHistoryDate(job.scheduled_date)}
                         {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at
-                          ? ` → ${job.updated_at.substring(0, 10)}`
+                          ? ` → ${fmtHistoryDate(job.updated_at)}`
                           : ''}
                       </Text>
                       <Badge status={job.job_type} />
@@ -591,16 +597,19 @@ const s = StyleSheet.create({
   screen:   { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Compliance banner — the one place compliance status is shown now
-  complianceBanner:     { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 16, borderWidth: 1, padding: 16 },
+  // Compliance hero — banner + stats merged into one bordered block, the
+  // one place compliance status is shown now.
+  hero:                 { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  heroTop:              { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
   complianceBannerIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   complianceBannerTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
   complianceBannerSub:   { fontSize: 12, lineHeight: 17 },
 
-  // Stats — one plain card, typographic columns (replaces 3 separately
-  // shaded/boxed pills that all used the identical treatment)
-  statsCard:      { flexDirection: 'row', marginHorizontal: 16, marginTop: 14, borderRadius: 16, borderWidth: 1 },
-  statCol:        { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  // Stats — a typographic row inside the hero (replaces 3 separately
+  // shaded/boxed pills, and later a whole separate floating card, that all
+  // used an identical treatment with nothing standing out)
+  heroStats:      { flexDirection: 'row', borderTopWidth: 1 },
+  statCol:        { flex: 1, alignItems: 'center', paddingVertical: 14 },
   statColDivider: { borderLeftWidth: 1 },
   statNum:        { fontSize: 22, fontWeight: '800' },
   statLbl:        { fontSize: 10, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 3 },

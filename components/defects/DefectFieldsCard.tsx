@@ -26,6 +26,7 @@ import type { DefectCode } from '@/constants/DefectCodes';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { cardShadow } from '@/components/ui/Card';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -108,7 +109,6 @@ export function DefectFieldsCard({
 }: Props) {
   const C = useColors();
   const [severity, setSeverity] = useState<DefectSeverity>(initial?.severity ?? DefectSeverity.NonConformance);
-  const [severityExpanded, setSeverityExpanded] = useState(false);
   const [codePickerVisible, setCodePickerVisible] = useState(false);
   const [selectedCode, setSelectedCode] = useState<DefectCode | null>(
     () => (initial?.defect_code ? findDefectCode(initial.defect_code) ?? null : null)
@@ -121,11 +121,6 @@ export function DefectFieldsCard({
   const photosEnabled = photos !== undefined;
   const [beforePhotos, setBeforePhotos] = useState<string[]>(photos?.before ?? []);
   const [afterPhotos, setAfterPhotos] = useState<string[]>(photos?.after ?? []);
-  // One common photo area, not two separate sections — `photoTab` picks
-  // which bucket is currently shown/added-to, matching the toggle-driven
-  // pattern the rest of this screen already uses (e.g. the Pass/Fail/N-T
-  // segmented track) rather than inventing a stacked-strips layout.
-  const [photoTab, setPhotoTab] = useState<'before' | 'after'>('before');
   const [chooserTarget, setChooserTarget] = useState<'before' | 'after' | null>(null);
   const [isAddingPhoto, setIsAddingPhoto] = useState(false);
 
@@ -153,7 +148,6 @@ export function DefectFieldsCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     severityTouchedRef.current = true;
     setSeverity(v);
-    setSeverityExpanded(false);
   };
 
   const handleCodeSelect = (code: DefectCode | null) => {
@@ -274,47 +268,30 @@ export function DefectFieldsCard({
   return (
     <View style={[s.card, { backgroundColor: cardTint.bg, borderColor: cardTint.border }]}>
       <Text style={[s.label, { color: C.textTertiary }]}>Severity</Text>
-      <TouchableOpacity
-        style={[s.dropdown, { backgroundColor: C.surface, borderColor: C.border }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityExpanded((v) => !v); }}
-        activeOpacity={0.75}
-        disabled={saving}
-      >
-        <View style={[s.dropdownIconWrap, { backgroundColor: currentColor + '18' }]}>
-          <MaterialCommunityIcons name={current.icon} size={18} color={currentColor} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.dropdownLabel, { color: C.text }]}>{current.label}</Text>
-          <Text style={[s.dropdownDesc, { color: C.textTertiary }]}>{current.desc}</Text>
-        </View>
-        <MaterialCommunityIcons name={severityExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={C.textTertiary} />
-      </TouchableOpacity>
-
-      {severityExpanded && (
-        <View style={[s.options, { backgroundColor: C.surface, borderColor: C.border }]}>
-          {SEVERITIES.map((sev, i) => {
-            const active = severity === sev.value;
-            const color = severityColor(sev.value, C);
-            return (
-              <TouchableOpacity
-                key={sev.value}
-                style={[s.optionRow, i > 0 && { borderTopColor: C.border, borderTopWidth: StyleSheet.hairlineWidth }]}
-                onPress={() => handleSelectSeverity(sev.value)}
-                activeOpacity={0.7}
-              >
-                <View style={[s.dropdownIconWrap, { backgroundColor: color + '18' }]}>
-                  <MaterialCommunityIcons name={sev.icon} size={18} color={color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.dropdownLabel, { color: C.text }]}>{sev.label}</Text>
-                  <Text style={[s.dropdownDesc, { color: C.textTertiary }]}>{sev.desc}</Text>
-                </View>
-                {active && <MaterialCommunityIcons name="check" size={20} color={color} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
+      {/* FIX: was a tap-to-expand dropdown (3 full rows, icon+label+desc
+          each) — an extra tap, and pushed the whole form down whenever
+          open. Replaced with the same 3-way segmented control already used
+          for Pass/Fail/N-T on the asset screen above this form — one tap,
+          always visible, a third of the height. */}
+      <View style={[s.sevTrack, { backgroundColor: C.backgroundTertiary, opacity: saving ? 0.5 : 1 }]}>
+        {SEVERITIES.map((sev) => {
+          const active = severity === sev.value;
+          const color = severityColor(sev.value, C);
+          return (
+            <TouchableOpacity
+              key={sev.value}
+              style={[s.sevSeg, active && { backgroundColor: C.surface, ...cardShadow }]}
+              onPress={() => handleSelectSeverity(sev.value)}
+              activeOpacity={0.8}
+              disabled={saving}
+            >
+              <MaterialCommunityIcons name={sev.icon} size={15} color={active ? color : C.textSecondary} />
+              <Text style={[s.sevSegTxt, { color: active ? color : C.textSecondary }]}>{sev.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Text style={[s.sevDesc, { color: C.textSecondary }]}>{current.desc}</Text>
 
       {error && (
         <View style={[s.errorBanner, { backgroundColor: C.surface, borderColor: C.error }]}>
@@ -373,50 +350,26 @@ export function DefectFieldsCard({
 
       {photosEnabled && (
         <>
-          <View style={s.photoSectionHeader}>
-            <Text style={[s.label, { color: C.textTertiary, marginBottom: 0 }]}>Photos</Text>
-            <View style={[s.photoToggle, { borderColor: C.border }]}>
-              {(['before', 'after'] as const).map((tab) => {
-                const active = photoTab === tab;
-                const count = (tab === 'before' ? beforePhotos : afterPhotos).length;
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[s.photoToggleBtn, active && { backgroundColor: C.accent }]}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPhotoTab(tab); }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[s.photoToggleTxt, { color: active ? C.textOnPrimary : C.textSecondary }]}>
-                      {tab === 'before' ? 'Before' : 'After'}{count > 0 ? ` (${count})` : ''}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-          <Text style={[s.photoHint, { color: C.textTertiary }]}>
-            {photoTab === 'before' ? 'What you found' : 'Already fixed? Add photos of the resolved issue.'}
-          </Text>
-          <View style={s.photoGrid}>
-            {(photoTab === 'before' ? beforePhotos : afterPhotos).map((uri) => (
-              <TouchableOpacity key={uri} onLongPress={() => removePhoto(photoTab, uri)} activeOpacity={0.85} style={s.thumbWrap}>
-                <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
-                <TouchableOpacity style={[s.thumbDel, { backgroundColor: C.text }]} onPress={() => removePhoto(photoTab, uri)} hitSlop={6}>
-                  <MaterialCommunityIcons name="close" size={12} color={C.textOnPrimary} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={[s.photoAddTile, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() => setChooserTarget(photoTab)}
-              activeOpacity={0.8}
-              disabled={saving || isAddingPhoto}
-            >
-              {isAddingPhoto
-                ? <ActivityIndicator size="small" color={C.textSecondary} />
-                : <MaterialCommunityIcons name="camera-plus-outline" size={20} color={C.textSecondary} />}
-            </TouchableOpacity>
-          </View>
+          <PhotoStageSection
+            label="Before Photos"
+            hint="What you found"
+            photos={beforePhotos}
+            onAdd={() => setChooserTarget('before')}
+            onRemove={(uri) => removePhoto('before', uri)}
+            disabled={saving || isAddingPhoto}
+            loading={isAddingPhoto}
+            C={C}
+          />
+          <PhotoStageSection
+            label="After Photos"
+            hint="Already fixed? Add photos of the resolved issue."
+            photos={afterPhotos}
+            onAdd={() => setChooserTarget('after')}
+            onRemove={(uri) => removePhoto('after', uri)}
+            disabled={saving || isAddingPhoto}
+            loading={isAddingPhoto}
+            C={C}
+          />
 
           <TouchableOpacity
             style={s.resolvedRow}
@@ -489,17 +442,54 @@ export function DefectFieldsCard({
   );
 }
 
+// ─── One Before/After photo section — a labelled grid + dashed add-tile,
+// sized to match asset/[assetId].tsx's own top-level Photos section exactly
+// (same 72×72 thumbs, same add-tile). Two of these stack, always both
+// visible — no toggle/tab hiding one behind the other, so a reviewer can
+// see the whole before-and-after story on a defect at a glance. ──────────
+function PhotoStageSection({ label, hint, photos, onAdd, onRemove, disabled, loading, C }: {
+  label: string; hint: string; photos: string[];
+  onAdd: () => void; onRemove: (uri: string) => void;
+  disabled?: boolean; loading?: boolean; C: ColorsType;
+}) {
+  return (
+    <View style={s.photoSectionBlock}>
+      <Text style={[s.label, { color: C.textTertiary }]}>{label}{photos.length > 0 ? ` · ${photos.length}` : ''}</Text>
+      <Text style={[s.photoHint, { color: C.textTertiary }]}>{hint}</Text>
+      <View style={s.photoGrid}>
+        {photos.map((uri) => (
+          <TouchableOpacity key={uri} onLongPress={() => onRemove(uri)} activeOpacity={0.85} style={s.thumbWrap}>
+            <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
+            <TouchableOpacity style={[s.thumbDel, { backgroundColor: C.text }]} onPress={() => onRemove(uri)} hitSlop={6}>
+              <MaterialCommunityIcons name="close" size={12} color={C.textOnPrimary} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity
+          style={[s.photoAddTile, { backgroundColor: C.surface, borderColor: C.border }]}
+          onPress={onAdd}
+          activeOpacity={0.8}
+          disabled={disabled}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color={C.textSecondary} />
+            : <MaterialCommunityIcons name="camera-plus-outline" size={20} color={C.textSecondary} />}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 const s = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 8 },
 
-  dropdown: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 14 },
-  dropdownIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  dropdownLabel: { fontSize: 14, fontWeight: '700' },
-  dropdownDesc: { fontSize: 12, marginTop: 1 },
-  options: { borderRadius: 12, borderWidth: 1, marginTop: -6, marginBottom: 14, overflow: 'hidden' },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
+  // Severity — a 3-way segmented control (matches the Pass/Fail/N-T track
+  // on the asset screen exactly: same track/segment radii and padding).
+  sevTrack: { flexDirection: 'row', borderRadius: 12, padding: 4, gap: 4 },
+  sevSeg: { flex: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 2, gap: 3 },
+  sevSegTxt: { fontSize: 10.5, fontWeight: '700', textAlign: 'center' },
+  sevDesc: { fontSize: 11.5, marginTop: 6, marginBottom: 14 },
 
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 4 },
   errorTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
@@ -520,16 +510,13 @@ const s = StyleSheet.create({
   saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14 },
   saveTxt: { fontSize: 14, fontWeight: '700' },
 
-  // One common photo area (not two separate sections) with a Before/After
-  // toggle picking which bucket is shown — grid sizing (72×72, 12 radius,
-  // dashed add-tile) matches asset/[assetId].tsx's own top-level Photos
-  // section exactly (s.photoRow/photoThumbWrap/photoAddTile there), so this
-  // reads as the same established pattern, not a new one.
-  photoSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
-  photoToggle: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
-  photoToggleBtn: { paddingHorizontal: 12, paddingVertical: 6 },
-  photoToggleTxt: { fontSize: 12, fontWeight: '700' },
-  photoHint: { fontSize: 11, marginTop: 2, marginBottom: 8 },
+  // Two stacked photo sections (Before, then After — always both visible,
+  // no toggle) — grid sizing (72×72, 12 radius, dashed add-tile) matches
+  // asset/[assetId].tsx's own top-level Photos section exactly
+  // (s.photoRow/photoThumbWrap/photoAddTile there), so this reads as the
+  // same established pattern, not a new one.
+  photoSectionBlock: { marginTop: 14 },
+  photoHint: { fontSize: 11, marginTop: 1, marginBottom: 8 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoAddTile: { width: 72, height: 72, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   thumbWrap: { width: 72, height: 72, borderRadius: 12, position: 'relative' },
