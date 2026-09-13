@@ -279,6 +279,33 @@ export default function AssetDetailScreen() {
   // visually confused for each other.
   const [internalNote, setInternalNote] = useState(asset?.internal_notes || '');
 
+  // Remarks/Internal Notes are per-visit crew communication — a teammate on
+  // the same job can write to either field (job_assets rides the live
+  // per-job Realtime channel, see useJobLiveSync below) while this screen
+  // is already open. Without this, `note`/`internalNote` only ever reflect
+  // whatever was here at mount: a teammate's update would silently not
+  // show up, AND blurring this screen's own (now-stale) field would fire
+  // Save and clobber it right back with the old value. Only adopts the
+  // incoming value when the technician hasn't started a divergent local
+  // edit of their own — an in-progress draft is never overwritten.
+  const lastKnownNoteRef = useRef(asset?.technician_notes || '');
+  useEffect(() => {
+    const incoming = asset?.technician_notes || '';
+    if (incoming !== lastKnownNoteRef.current) {
+      setNote((current) => (current === lastKnownNoteRef.current ? incoming : current));
+      lastKnownNoteRef.current = incoming;
+    }
+  }, [asset?.technician_notes]);
+
+  const lastKnownInternalNoteRef = useRef(asset?.internal_notes || '');
+  useEffect(() => {
+    const incoming = asset?.internal_notes || '';
+    if (incoming !== lastKnownInternalNoteRef.current) {
+      setInternalNote((current) => (current === lastKnownInternalNoteRef.current ? incoming : current));
+      lastKnownInternalNoteRef.current = incoming;
+    }
+  }, [asset?.internal_notes]);
+
   // Live draft of whichever defect card is currently expanded for editing —
   // reported up via DefectFieldsCard's onDraftChange.
   const [primaryDraft, setPrimaryDraft] = useState<DefectFieldsValue | null>(null);

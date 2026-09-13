@@ -65,7 +65,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
 
   return (
     <TouchableOpacity
-      style={[s.card, { borderLeftColor: borderColor, backgroundColor: C.surface }, cardShadow, style]}
+      style={[s.card, { borderColor: C.border, borderLeftColor: borderColor, backgroundColor: C.surface }, cardShadow, style]}
       onPress={onPress}
       activeOpacity={onPress ? 0.78 : 1}
     >
@@ -163,6 +163,7 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
+    borderWidth: 1,
     borderLeftWidth: 4,
   },
   headerRow: {

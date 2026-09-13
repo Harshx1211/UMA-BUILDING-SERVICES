@@ -1101,6 +1101,17 @@ export function subscribeToMyDataLive(userId: string): void {
     _emitSyncComplete();
   };
 
+  // Add/delete only (no edit), so unlike applyAsset/applyDefect there's no
+  // "preserve a newer local edit" case to guard — a fresh id just gets
+  // inserted. Same leak-prevention gate: only apply to a property this
+  // device already knows about.
+  const applyNotebookItem = (row: Record<string, unknown>) => {
+    const propertyId = row.property_id as string | null;
+    if (!propertyId || !getRecord('properties', propertyId)) return;
+    upsertRecord('property_notebook_items', row as Record<string, string | number | boolean | null>);
+    _emitSyncComplete();
+  };
+
   const applyProperty = (row: Record<string, unknown>) => {
     upsertRecord('properties', row as Record<string, string | number | boolean | null>);
     _emitSyncComplete();
@@ -1179,6 +1190,7 @@ export function subscribeToMyDataLive(userId: string): void {
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'defects' }, (p) => applyDefect(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
     .on<Record<string, unknown>>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assets' }, (p) => applyAsset(p.new))
+    .on<Record<string, unknown>>('postgres_changes', { event: 'INSERT', schema: 'public', table: 'property_notebook_items' }, (p) => applyNotebookItem(p.new))
     // FIX: UPDATE-only was the one real structural gap in this channel — a
     // brand-new property (created by an admin, or by this technician's own
     // first job there) never arrived live at all, only via the next

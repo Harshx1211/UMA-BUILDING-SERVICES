@@ -1,5 +1,5 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import React, { forwardRef, useImperativeHandle, useRef, useState, useCallback, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, TextInput, Keyboard } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { useNotebookStore } from '@/store/notebookStore';
 import { useAuthStore } from '@/store/authStore';
 import { getRecord } from '@/lib/database';
+import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 
 interface Props {
@@ -45,11 +46,27 @@ export const PropertyNotebookSheet = forwardRef<PropertyNotebookSheetRef, Props>
     const snapPoints = ['60%'];
     const { items, isLoading, loadItems, addItem, deleteItem } = useNotebookStore();
     const [text, setText] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Now that property_notebook_items rides the live "my data" channel
+    // (see lib/sync.ts's subscribeToMyDataLive), a teammate's newly-added
+    // note lands in local SQLite while this sheet may already be sitting
+    // open — without this, `items` would only ever refresh on the next
+    // explicit open() call, well after the live insert already arrived.
+    // Gated on isOpen so a background sync tick doesn't reload a closed,
+    // unmounted-in-spirit sheet for no visible benefit.
+    useEffect(() => {
+      if (!isOpen) return;
+      const reload = () => loadItems(propertyId);
+      onSyncComplete(reload);
+      return () => offSyncComplete(reload);
+    }, [isOpen, propertyId, loadItems]);
 
     useImperativeHandle(ref, () => ({
       open: () => {
         loadItems(propertyId);
         setText('');
+        setIsOpen(true);
         bottomSheetRef.current?.expand();
       },
       close: () => {
@@ -69,6 +86,9 @@ export const PropertyNotebookSheet = forwardRef<PropertyNotebookSheetRef, Props>
       const user = useAuthStore.getState().user;
       addItem(propertyId, trimmed, user?.id ?? null, user?.company_id ?? null);
       setText('');
+      // Tapping the + button next to the input doesn't blur it — the field
+      // stays focused and the keyboard just sits there after adding.
+      Keyboard.dismiss();
     };
 
     const handleDelete = (id: string) => {
@@ -82,6 +102,7 @@ export const PropertyNotebookSheet = forwardRef<PropertyNotebookSheetRef, Props>
         index={-1}
         snapPoints={snapPoints}
         enablePanDownToClose
+        onChange={(index) => setIsOpen(index >= 0)}
         backdropComponent={(props) => (
           <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
         )}
