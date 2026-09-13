@@ -685,7 +685,6 @@ export default function SiteInspectScreen() {
         showBack
         rightComponent={progressBadge}
       />
-      <PropertyNotebookSheet ref={notebookSheetRef} propertyId={property.id} editable />
 
       {/* ── PROGRESS BAR ────────────────────────────────── */}
       <View style={[s.progressTrack, { backgroundColor: C.primary + '40' }]}>
@@ -854,6 +853,11 @@ export default function SiteInspectScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Mounted last so it paints above the FlatList — @gorhom/bottom-sheet's
+          plain BottomSheet doesn't portal itself, so an earlier sibling in
+          the tree renders BEHIND later ones on Android. */}
+      <PropertyNotebookSheet ref={notebookSheetRef} propertyId={property.id} editable />
     </View>
   );
 }

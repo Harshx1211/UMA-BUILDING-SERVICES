@@ -23,7 +23,6 @@ import type { Asset, JobAsset } from '@/types';
 import {
   getAssetsForProperty,
   queryRecords,
-  queryRecordsIn,
   upsertRecord,
   addToSyncQueue,
   insertRecord,
@@ -60,8 +59,6 @@ export type AssetWithResult = Asset & {
   internal_notes: string | null;
   job_asset_id: string | null;
   photos: string[];
-  previousResult: InspectionResult | null;
-  previousDate: string | null;
 };
 
 interface InspectionState {
@@ -135,22 +132,11 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         'inspection_photos', { job_id: jobId }
       );
 
-      // Load previous results only for assets in this property (avoids full table scan)
-      const assetIds = dbAssets.map(a => a.id);
-      const allPreviousJobAssets = queryRecordsIn<{
-        asset_id: string; result: string; actioned_at: string; job_id: string;
-      }>('job_assets', 'asset_id', assetIds);
-
       const merged: AssetWithResult[] = dbAssets.map(asset => {
         const ja = jobAssets.find(j => j.asset_id === asset.id);
         const photosForAsset = inspectionPhotos
           .filter(p => p.asset_id === asset.id)
           .map(p => p.photo_url);
-
-        const prevRecords = allPreviousJobAssets
-          .filter(r => r.asset_id === asset.id && r.job_id !== jobId && r.result != null)
-          .sort((a, b) => (b.actioned_at ?? '').localeCompare(a.actioned_at ?? ''));
-        const prev = prevRecords[0] ?? null;
 
         return {
           ...asset,
@@ -162,8 +148,6 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           internal_notes: ja?.internal_notes ?? null,
           job_asset_id: ja?.id ?? null,
           photos: photosForAsset,
-          previousResult: prev ? (prev.result as InspectionResult) : null,
-          previousDate: prev?.actioned_at ? prev.actioned_at.slice(0, 10) : null,
         };
       });
 

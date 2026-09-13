@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Platform, TextInput,
+  Platform, TextInput, Modal,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -78,6 +78,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 }) => {
   const C = useColors();
   const { updateAssetResult, isSaving } = useInspectionStore();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Every result — Pass, Fail, N/T — saves instantly, then opens the asset
   // detail screen, exactly the same shape for all three. Fail needs it to
@@ -117,12 +118,10 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
   const isFailed  = result === InspectionResult.Fail;
   const isNT      = result === InspectionResult.NotTested;
 
-  const cardAccentColor = isPassed ? C.success : isFailed ? C.error : isNT ? C.textTertiary : C.borderStrong;
-
   return (
     <Animated.View entering={index < 12 ? FadeInDown.delay(index * 40).duration(300) : undefined} style={s.cardWrapper}>
       <TouchableOpacity
-        style={[s.assetCard, { backgroundColor: C.surface, borderColor: C.border, borderLeftColor: cardAccentColor }, cardShadow]}
+        style={[s.assetCard, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}
         activeOpacity={0.85}
         onPress={() => router.push(`/jobs/${jobId}/asset/${asset.id}` as never)}
         accessibilityRole="button"
@@ -130,13 +129,10 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       >
         <View style={s.cardInner}>
           <View style={s.cardHeader}>
-            <View style={[s.assetIconWrap, {
-              backgroundColor: isPassed ? C.success + '20' : isFailed ? C.error + '20' : C.backgroundTertiary,
-            }]}>
-              <MaterialCommunityIcons
-                name={assetIconName(asset.asset_type)} size={22}
-                color={isPassed ? C.success : isFailed ? C.error : C.primary}
-              />
+            {/* Icon is always neutral — status is read from the result row
+                below, never duplicated up here (one signal, not three). */}
+            <View style={[s.assetIconWrap, { backgroundColor: C.backgroundTertiary }]}>
+              <MaterialCommunityIcons name={assetIconName(asset.asset_type)} size={22} color={C.textSecondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
@@ -149,46 +145,18 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               </View>
               {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
-              {asset.previousResult && (
-                <Text style={[s.assetPrevResult, { color: C.textTertiary }]} numberOfLines={1}>
-                  Last:{' '}
-                  <Text style={{
-                    fontWeight: '700',
-                    color: asset.previousResult === InspectionResult.Pass ? C.success
-                         : asset.previousResult === InspectionResult.Fail ? C.error : C.textTertiary,
-                  }}>
-                    {asset.previousResult === InspectionResult.Pass ? 'Pass' : asset.previousResult === InspectionResult.Fail ? 'Fail' : 'Not Tested'}
-                  </Text>
-                  {asset.previousDate ? ` · ${asset.previousDate}` : ''}
-                </Text>
-              )}
             </View>
-            <View style={[s.cardHeaderRight, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-              <TouchableOpacity
-                onPress={() => onClone(asset)}
-                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
-                accessibilityRole="button"
-                accessibilityLabel="Clone asset"
-              >
-                <MaterialCommunityIcons name="content-copy" size={18} color={C.textTertiary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => onEdit(asset)}
-                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
-                accessibilityRole="button"
-                accessibilityLabel="Edit asset"
-              >
-                <MaterialCommunityIcons name="pencil" size={18} color={C.textTertiary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => onDelete(asset)}
-                hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
-                accessibilityRole="button"
-                accessibilityLabel="Delete asset"
-              >
-                <MaterialCommunityIcons name="trash-can-outline" size={18} color={C.error} />
-              </TouchableOpacity>
-            </View>
+            {/* Clone/Edit/Delete collapse into one overflow menu — keeps the
+                header about what the asset IS, not what you can do to it. */}
+            <TouchableOpacity
+              onPress={() => setMenuOpen(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={[s.overflowBtn, { backgroundColor: C.backgroundTertiary }]}
+              accessibilityRole="button"
+              accessibilityLabel="Asset actions"
+            >
+              <MaterialCommunityIcons name="dots-vertical" size={18} color={C.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {/* Defect description/details live only on the Asset Detail screen
@@ -199,31 +167,31 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
           <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
             <TouchableOpacity
-              style={[s.resultBtn, isPassed ? { backgroundColor: C.success, borderColor: C.success } : { backgroundColor: C.successLight, borderColor: C.success }]}
+              style={[s.resultBtn, isPassed ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => !isSaving && handleResult(InspectionResult.Pass)}
               activeOpacity={0.8}
               disabled={isSaving}
             >
-              <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.success} />
-              <Text style={[s.resultBtnTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
+              <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.success : C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: isPassed ? C.success : C.textSecondary }]}>Pass</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.resultBtn, isFailed ? { backgroundColor: C.error, borderColor: C.error } : { backgroundColor: C.errorLight, borderColor: C.error }]}
+              style={[s.resultBtn, isFailed ? { backgroundColor: C.errorLight, borderColor: C.error } : { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => !isSaving && handleResult(InspectionResult.Fail)}
               activeOpacity={0.8}
               disabled={isSaving}
             >
-              <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.error} />
-              <Text style={[s.resultBtnTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
+              <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.error : C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: isFailed ? C.error : C.textSecondary }]}>Fail</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.resultBtn, isNT ? { backgroundColor: C.textSecondary, borderColor: C.textSecondary } : { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}
+              style={[s.resultBtn, isNT ? { backgroundColor: C.backgroundTertiary, borderColor: C.textSecondary } : { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => !isSaving && handleResult(InspectionResult.NotTested)}
               activeOpacity={0.8}
               disabled={isSaving}
             >
-              <MaterialCommunityIcons name="minus-circle-outline" size={16} color={isNT ? C.textOnPrimary : C.textSecondary} />
-              <Text style={[s.resultBtnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
+              <MaterialCommunityIcons name="minus-circle-outline" size={16} color={C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: C.textSecondary }]}>N/T</Text>
             </TouchableOpacity>
           </View>
 
@@ -240,12 +208,35 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
                   <MaterialCommunityIcons name="note-text-outline" size={12} color={C.textSecondary} />
                 </View>
               )}
-              <Text style={[s.openDetailTxt, { color: C.textSecondary }]}>Photos &amp; remarks</Text>
+              <Text style={[s.openDetailTxt, { color: C.text }]}>Photos &amp; remarks</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={16} color={C.textTertiary} />
           </View>
         </View>
       </TouchableOpacity>
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableOpacity style={s.menuBackdrop} activeOpacity={1} onPress={() => setMenuOpen(false)}>
+          <View style={[s.menuSheet, { backgroundColor: C.surface }]}>
+            <Text style={[s.menuTitle, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
+            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onClone(asset); }}>
+              <MaterialCommunityIcons name="content-copy" size={19} color={C.textSecondary} />
+              <Text style={[s.menuRowTxt, { color: C.text }]}>Clone Asset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onEdit(asset); }}>
+              <MaterialCommunityIcons name="pencil-outline" size={19} color={C.textSecondary} />
+              <Text style={[s.menuRowTxt, { color: C.text }]}>Edit Asset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onDelete(asset); }}>
+              <MaterialCommunityIcons name="trash-can-outline" size={19} color={C.error} />
+              <Text style={[s.menuRowTxt, { color: C.error }]}>Delete Asset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.menuCancel, { backgroundColor: C.backgroundTertiary }]} onPress={() => setMenuOpen(false)}>
+              <Text style={[s.menuCancelTxt, { color: C.text }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Animated.View>
   );
 });
@@ -798,7 +789,6 @@ export default function AssetInspectionScreen() {
           </View>
         }
       />
-      {propertyId ? <PropertyNotebookSheet ref={notebookSheetRef} propertyId={propertyId} editable /> : null}
 
       <FlatList
         ref={listRef}
@@ -1005,6 +995,12 @@ export default function AssetInspectionScreen() {
         activeCount={activeFilterCount}
         onReset={resetFilters}
       />
+      {/* Mounted last so it paints above the FlatList — @gorhom/bottom-sheet's
+          plain BottomSheet (unlike BottomSheetModal) doesn't portal itself,
+          so an earlier sibling in the tree renders BEHIND later ones on
+          Android. Same placement convention as DocumentScanSheet in
+          documents.tsx (mounted after its own FlatList). */}
+      {propertyId ? <PropertyNotebookSheet ref={notebookSheetRef} propertyId={propertyId} editable /> : null}
     </View>
   );
 }
@@ -1049,7 +1045,16 @@ const s = StyleSheet.create({
   routineHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
   routineHeaderActionTxt: { fontSize: 11, fontWeight: '700' },
   cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
-  assetCard:   { borderRadius: 16, borderWidth: 1, borderLeftWidth: 4 },
+  // FIX: cardShadow sets elevation: 0 deliberately (Card.tsx's own comment —
+  // avoids Android's Material "elevation overlay" tint), which means its
+  // shadowColor/shadowOffset/etc. are iOS-only and Android gets NO visual
+  // separation from the page background at all unless a border does that
+  // job — exactly what the base Card component always pairs it with. This
+  // card had briefly dropped the border for a "borderless" look, which left
+  // it invisible against the page on Android. Kept the bigger radius, no
+  // more coloured left accent (status lives in the result row now), but a
+  // plain hairline border stays — same as every other card in the app.
+  assetCard:   { borderRadius: 20, borderWidth: 1 },
   cardInner:   { padding: 16 },
   cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   assetIconWrap:   { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -1058,10 +1063,9 @@ const s = StyleSheet.create({
   assetLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   assetLocation:   { fontSize: 13, fontWeight: '700' },
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
-  cardHeaderRight: { alignItems: 'flex-end', gap: 6 },
-  assetPrevResult: { fontSize: 12, marginTop: 4 },
+  overflowBtn:  { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  resultBtn:    { flex: 1, height: 42, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1 },
+  resultBtn:    { flex: 1, height: 42, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
 
   // Tap-through row — photos/note/defect detail all live on the Asset Detail
@@ -1070,7 +1074,17 @@ const s = StyleSheet.create({
   openDetailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1 },
   openDetailBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   openDetailBadgeTxt: { fontSize: 11, fontWeight: '700' },
-  openDetailTxt: { fontSize: 12, fontWeight: '600' },
+  openDetailTxt: { fontSize: 12, fontWeight: '700' },
+
+  // Overflow action menu (Clone/Edit/Delete) — bottom sheet, opened from the
+  // card header's single ⋮ button.
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(17, 29, 63, 0.45)', justifyContent: 'flex-end' },
+  menuSheet:    { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 8 },
+  menuTitle:    { fontSize: 11, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase', paddingHorizontal: 12, paddingBottom: 8 },
+  menuRow:      { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 14 },
+  menuRowTxt:   { fontSize: 15, fontWeight: '700' },
+  menuCancel:   { marginTop: 8, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  menuCancelTxt:{ fontSize: 15, fontWeight: '800' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },
