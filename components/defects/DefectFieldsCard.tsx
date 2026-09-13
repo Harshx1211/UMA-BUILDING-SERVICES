@@ -13,13 +13,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
+import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useColors } from '@/hooks/useColors';
 import { DefectSeverity } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import type { DefectCode } from '@/constants/DefectCodes';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
+import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
+import { getValidLocalUri } from '@/utils/fileHelpers';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -38,32 +44,67 @@ function severityColor(severity: DefectSeverity, C: ColorsType): string {
   }
 }
 
+// FIX: the card's own background/border used to be hard-coded red
+// (C.errorLight/C.error) regardless of severity — reasonable back when
+// this only ever appeared on an already-Failed asset, but this component
+// now also renders for a Remark logged on a Pass/N-T asset (see
+// asset/[assetId].tsx), where a solid red card would visually contradict
+// the green Pass state right above it. Deriving the tint from the
+// defect's OWN severity instead is both more correct (an actually-Critical
+// Remark still reads as urgent) and consistent with severityColor's own
+// existing mapping — Info/Warning/Error already exist as paired
+// bg+border tokens for exactly these three severities.
+function severityBg(severity: DefectSeverity, C: ColorsType): { bg: string; border: string } {
+  switch (severity) {
+    case DefectSeverity.NonConformance: return { bg: C.infoLight, border: C.info + '40' };
+    case DefectSeverity.NonCritical:    return { bg: C.warningLight, border: C.warning + '40' };
+    case DefectSeverity.Critical:       return { bg: C.errorLight, border: C.error + '40' };
+  }
+}
+
 export interface DefectFieldsValue {
   severity: DefectSeverity;
   description: string;
   defectCode: string | null;
   quotePrice: number | null;
+  resolvedOnSite: boolean;
 }
+
+export interface DefectPhotosDraft { before: string[]; after: string[]; }
 
 interface Props {
   /** null/undefined = a brand-new, not-yet-saved defect. */
-  initial?: { severity: DefectSeverity; description: string; defect_code: string | null; quote_price: number | null } | null;
-  onSave: (value: DefectFieldsValue) => void;
+  initial?: { severity: DefectSeverity; description: string; defect_code: string | null; quote_price: number | null; resolved_on_site?: boolean } | null;
+  onSave: (value: DefectFieldsValue, photos?: DefectPhotosDraft) => void;
   /** Only offered for an already-saved defect. */
   onDelete?: () => void;
-  /** Only offered on the asset's primary defect. */
+  /** Only offered on the asset's primary defect — a fast path to Fail +
+   * quote with a preset Critical severity. Doesn't receive photos directly
+   * (its own signature has no second param, matching onSave's), but this
+   * form's photos/resolved-on-site fields are shared with Save Defect —
+   * the caller reads them back via onPhotosDraftChange/onDraftChange and
+   * reconciles them against whatever defect this call touches. */
   onReplace?: (value: DefectFieldsValue) => void;
   /** Only offered while creating/editing — discards the draft, nothing saved. */
   onCancel?: () => void;
   /** Fires on every field change — lets the asset screen keep its
    * leave-without-saving safety net working for the primary defect. */
   onDraftChange?: (value: DefectFieldsValue) => void;
+  /** Omit entirely for a card that should never capture photos. Passing
+   * this — even {before:[],after:[]} for a brand-new defect — turns on the
+   * Before/After photo area below (now used for every defect, primary or
+   * additional — see asset/[assetId].tsx). */
+  photos?: DefectPhotosDraft;
+  /** Fires on every photo add/remove — same leave-without-saving purpose
+   * as onDraftChange, for the photos half of the draft. */
+  onPhotosDraftChange?: (photos: DefectPhotosDraft) => void;
   saving?: boolean;
   saveLabel?: string;
 }
 
 export function DefectFieldsCard({
-  initial, onSave, onDelete, onReplace, onCancel, onDraftChange, saving, saveLabel = 'Save Defect',
+  initial, onSave, onDelete, onReplace, onCancel, onDraftChange,
+  photos, onPhotosDraftChange, saving, saveLabel = 'Save Defect',
 }: Props) {
   const C = useColors();
   const [severity, setSeverity] = useState<DefectSeverity>(initial?.severity ?? DefectSeverity.NonConformance);
@@ -75,14 +116,32 @@ export function DefectFieldsCard({
   const [suggestedPrice, setSuggestedPrice] = useState<number | null>(initial?.quote_price ?? null);
   const [description, setDescription] = useState(initial?.description ?? '');
   const [error, setError] = useState(false);
+  const [resolvedOnSite, setResolvedOnSite] = useState(initial?.resolved_on_site ?? false);
+
+  const photosEnabled = photos !== undefined;
+  const [beforePhotos, setBeforePhotos] = useState<string[]>(photos?.before ?? []);
+  const [afterPhotos, setAfterPhotos] = useState<string[]>(photos?.after ?? []);
+  // One common photo area, not two separate sections — `photoTab` picks
+  // which bucket is currently shown/added-to, matching the toggle-driven
+  // pattern the rest of this screen already uses (e.g. the Pass/Fail/N-T
+  // segmented track) rather than inventing a stacked-strips layout.
+  const [photoTab, setPhotoTab] = useState<'before' | 'after'>('before');
+  const [chooserTarget, setChooserTarget] = useState<'before' | 'after' | null>(null);
+  const [isAddingPhoto, setIsAddingPhoto] = useState(false);
 
   // Reports the live draft up on every change, without the parent needing to
   // own this state itself — used only by the primary defect's blur-flush.
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
   useEffect(() => {
-    onDraftChangeRef.current?.({ severity, description, defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice });
-  }, [severity, description, selectedCode, suggestedPrice]);
+    onDraftChangeRef.current?.({ severity, description, defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice, resolvedOnSite });
+  }, [severity, description, selectedCode, suggestedPrice, resolvedOnSite]);
+
+  const onPhotosDraftChangeRef = useRef(onPhotosDraftChange);
+  onPhotosDraftChangeRef.current = onPhotosDraftChange;
+  useEffect(() => {
+    if (photosEnabled) onPhotosDraftChangeRef.current?.({ before: beforePhotos, after: afterPhotos });
+  }, [photosEnabled, beforePhotos, afterPhotos]);
 
   // FIX: tracks whether the severity reflects an explicit choice — either
   // an existing defect's already-saved severity (a real prior decision, not
@@ -127,8 +186,9 @@ export function DefectFieldsCard({
   };
 
   const currentValue = (): DefectFieldsValue => ({
-    severity, description: description.trim(), defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice,
+    severity, description: description.trim(), defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice, resolvedOnSite,
   });
+  const currentPhotos = (): DefectPhotosDraft => ({ before: beforePhotos, after: afterPhotos });
 
   const validate = (): boolean => {
     if (!description.trim()) {
@@ -140,11 +200,79 @@ export function DefectFieldsCard({
     return true;
   };
 
+  // Same resize/compress recipe already used everywhere else a photo gets
+  // captured in this app (AddDefectSheet.tsx, asset/[assetId].tsx's own
+  // top-level Photos section) — kept identical rather than inventing a
+  // fourth copy of it.
+  const addPhotoTo = (target: 'before' | 'after') => (setPhotos: React.Dispatch<React.SetStateAction<string[]>>) => async (sourceUri: string) => {
+    let resizedUri = sourceUri;
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        sourceUri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      resizedUri = manipResult.uri;
+    } catch (e) {
+      console.warn(`Failed to resize/compress ${target} photo, using original`, e);
+    }
+    const dest = `${FileSystem.documentDirectory}defect_${target}_${Date.now()}.jpg`;
+    try {
+      await FileSystem.copyAsync({ from: resizedUri, to: dest });
+      setPhotos((p) => [...p, dest]);
+    } catch {
+      setPhotos((p) => [...p, resizedUri]);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const target = chooserTarget;
+    setChooserTarget(null);
+    if (!target) return;
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return;
+    setIsAddingPhoto(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: false });
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await addPhotoTo(target)(target === 'before' ? setBeforePhotos : setAfterPhotos)(result.assets[0].uri);
+      }
+    } finally {
+      setIsAddingPhoto(false);
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    const target = chooserTarget;
+    setChooserTarget(null);
+    if (!target) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    setIsAddingPhoto(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsMultipleSelection: true, selectionLimit: 5 });
+      if (!result.canceled && result.assets.length > 0) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const setter = target === 'before' ? setBeforePhotos : setAfterPhotos;
+        for (const a of result.assets) await addPhotoTo(target)(setter)(a.uri);
+      }
+    } finally {
+      setIsAddingPhoto(false);
+    }
+  };
+
+  const removePhoto = (target: 'before' | 'after', uri: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    (target === 'before' ? setBeforePhotos : setAfterPhotos)((p) => p.filter((x) => x !== uri));
+  };
+
   const current = SEVERITIES.find((sv) => sv.value === severity) ?? SEVERITIES[0];
   const currentColor = severityColor(current.value, C);
+  const cardTint = severityBg(current.value, C);
 
   return (
-    <View style={[s.card, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
+    <View style={[s.card, { backgroundColor: cardTint.bg, borderColor: cardTint.border }]}>
       <Text style={[s.label, { color: C.textTertiary }]}>Severity</Text>
       <TouchableOpacity
         style={[s.dropdown, { backgroundColor: C.surface, borderColor: C.border }]}
@@ -243,6 +371,67 @@ export function DefectFieldsCard({
         style={[s.input, { backgroundColor: C.surface, borderColor: error ? C.error : C.border, color: C.text, marginTop: 10 }]}
       />
 
+      {photosEnabled && (
+        <>
+          <View style={s.photoSectionHeader}>
+            <Text style={[s.label, { color: C.textTertiary, marginBottom: 0 }]}>Photos</Text>
+            <View style={[s.photoToggle, { borderColor: C.border }]}>
+              {(['before', 'after'] as const).map((tab) => {
+                const active = photoTab === tab;
+                const count = (tab === 'before' ? beforePhotos : afterPhotos).length;
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[s.photoToggleBtn, active && { backgroundColor: C.accent }]}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPhotoTab(tab); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.photoToggleTxt, { color: active ? C.textOnPrimary : C.textSecondary }]}>
+                      {tab === 'before' ? 'Before' : 'After'}{count > 0 ? ` (${count})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <Text style={[s.photoHint, { color: C.textTertiary }]}>
+            {photoTab === 'before' ? 'What you found' : 'Already fixed? Add photos of the resolved issue.'}
+          </Text>
+          <View style={s.photoGrid}>
+            {(photoTab === 'before' ? beforePhotos : afterPhotos).map((uri) => (
+              <TouchableOpacity key={uri} onLongPress={() => removePhoto(photoTab, uri)} activeOpacity={0.85} style={s.thumbWrap}>
+                <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
+                <TouchableOpacity style={[s.thumbDel, { backgroundColor: C.text }]} onPress={() => removePhoto(photoTab, uri)} hitSlop={6}>
+                  <MaterialCommunityIcons name="close" size={12} color={C.textOnPrimary} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[s.photoAddTile, { backgroundColor: C.surface, borderColor: C.border }]}
+              onPress={() => setChooserTarget(photoTab)}
+              activeOpacity={0.8}
+              disabled={saving || isAddingPhoto}
+            >
+              {isAddingPhoto
+                ? <ActivityIndicator size="small" color={C.textSecondary} />
+                : <MaterialCommunityIcons name="camera-plus-outline" size={20} color={C.textSecondary} />}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={s.resolvedRow}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setResolvedOnSite((v) => !v); }}
+            activeOpacity={0.75}
+            disabled={saving}
+          >
+            <View style={[s.checkbox, { borderColor: resolvedOnSite ? C.success : C.border, backgroundColor: resolvedOnSite ? C.success : C.surface }]}>
+              {resolvedOnSite && <MaterialCommunityIcons name="check" size={14} color={C.textOnPrimary} />}
+            </View>
+            <Text style={[s.resolvedTxt, { color: C.text }]}>Mark as resolved on site (no quote needed)</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
       <View style={s.actionsRow}>
         {onDelete && (
           <TouchableOpacity style={[s.iconBtn, { borderColor: C.border }]} onPress={onDelete} activeOpacity={0.8} disabled={saving} hitSlop={8}>
@@ -273,8 +462,8 @@ export function DefectFieldsCard({
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[s.saveBtn, { backgroundColor: C.error }]}
-          onPress={() => { if (validate()) onSave(currentValue()); }}
+          style={[s.saveBtn, { backgroundColor: currentColor }]}
+          onPress={() => { if (validate()) onSave(currentValue(), photosEnabled ? currentPhotos() : undefined); }}
           activeOpacity={0.85}
           disabled={saving}
         >
@@ -288,9 +477,18 @@ export function DefectFieldsCard({
       </View>
 
       <DefectCodePicker visible={codePickerVisible} onSelect={handleCodeSelect} onClose={() => setCodePickerVisible(false)} />
+      {photosEnabled && (
+        <PhotoChooserSheet
+          visible={chooserTarget !== null}
+          onClose={() => setChooserTarget(null)}
+          onTakePhoto={handleTakePhoto}
+          onPickGallery={handlePickPhoto}
+        />
+      )}
     </View>
   );
 }
+
 
 const s = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
@@ -321,4 +519,24 @@ const s = StyleSheet.create({
   cancelTxt: { fontSize: 13.5, fontWeight: '700' },
   saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14 },
   saveTxt: { fontSize: 14, fontWeight: '700' },
+
+  // One common photo area (not two separate sections) with a Before/After
+  // toggle picking which bucket is shown — grid sizing (72×72, 12 radius,
+  // dashed add-tile) matches asset/[assetId].tsx's own top-level Photos
+  // section exactly (s.photoRow/photoThumbWrap/photoAddTile there), so this
+  // reads as the same established pattern, not a new one.
+  photoSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
+  photoToggle: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
+  photoToggleBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  photoToggleTxt: { fontSize: 12, fontWeight: '700' },
+  photoHint: { fontSize: 11, marginTop: 2, marginBottom: 8 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  photoAddTile: { width: 72, height: 72, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  thumbWrap: { width: 72, height: 72, borderRadius: 12, position: 'relative' },
+  thumb: { width: '100%', height: '100%', borderRadius: 12 },
+  thumbDel: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+
+  resolvedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  resolvedTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
 });

@@ -93,6 +93,48 @@ export function photoRow(photos: InspectionPhoto[], signedUrls: Map<string, stri
   return `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">${tags}${more}</div>`;
 }
 
+/** One labelled Before/After photo row — same thumbnails as photoRow, with
+ * a small uppercase caption above so a defect card's fix evidence reads as
+ * "this is what it looked like before / after", not an undifferentiated
+ * photo dump. Used only by stagedPhotoSection below. */
+function labeledPhotoRow(label: string, photos: InspectionPhoto[], signedUrls: Map<string, string>, fullResUrls?: Map<string, string>): string {
+  return `
+    <div style="margin-top:6px">
+      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.4px">${label} Photos</div>
+      ${photoRow(photos, signedUrls, 6, fullResUrls)}
+    </div>`;
+}
+
+/**
+ * Renders a defect's photos split by stage: labelled "Before"/"After" rows
+ * for anything tagged that way, plus a plain untagged row (identical to the
+ * old bare photoRow output) for every photo with no stage — i.e. every
+ * photo captured before this feature existed, or via the standalone
+ * "Log New Defect" flow, which still doesn't ask for before/after.
+ *
+ * `includeUntagged` defaults to true (renderRepairs/renderUnlinkedDefects'
+ * defects have no sibling asset-level row anywhere, so this is the only
+ * place their untagged photos can ever render) — assetLogChunk.ts passes
+ * false explicitly for its own per-asset defect cards, since a defect
+ * rendered there ALWAYS has an asset row directly above it that already
+ * shows every untagged photo (a defect's photo carries both asset_id and
+ * defect_id, so photosByAsset/photosByDefect are not mutually exclusive —
+ * see assetLogChunk.ts's own comment). Without this, every legacy/untagged
+ * defect photo rendered twice — once at the asset level, once again here —
+ * caught by test/templates.smoketest.ts's photo-appears-once assertion.
+ */
+export function stagedPhotoSection(photos: InspectionPhoto[], signedUrls: Map<string, string>, fullResUrls?: Map<string, string>, includeUntagged = true): string {
+  if (photos.length === 0) return '';
+  const before = photos.filter((p) => p.stage === 'before');
+  const after = photos.filter((p) => p.stage === 'after');
+  const untagged = includeUntagged ? photos.filter((p) => p.stage == null) : [];
+  return [
+    before.length ? labeledPhotoRow('Before', before, signedUrls, fullResUrls) : '',
+    after.length ? labeledPhotoRow('After', after, signedUrls, fullResUrls) : '',
+    untagged.length ? photoRow(untagged, signedUrls, 6, fullResUrls) : '',
+  ].join('');
+}
+
 /** A labelled value cell for the info-strip rows used on cover.ts and
  * yearlyConditionReport.ts (Report Details / Service Provider Details etc). */
 export function infoCell(label: string, value: string | null | undefined): string {

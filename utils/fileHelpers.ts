@@ -68,6 +68,31 @@ export function getValidLocalUri(uri: string | null | undefined): string {
 }
 
 /**
+ * Checks whether a stored local_uri still points to a real file on disk in
+ * THIS session — reconstructs it via getValidLocalUri first (the
+ * documentDirectory can change between sessions), then confirms the file
+ * is actually still there (it may have been purged by cleanupLocalPhotos'
+ * retention policy, or never existed). Returns null if there's nothing
+ * usable, so the caller can fall back to the remote URL rather than
+ * rendering a dead local path.
+ *
+ * Mirrors DocumentCard.tsx's own private resolveLocalUri (same reasoning,
+ * kept local to that file); exported here so other local-first display
+ * code can share it instead of re-implementing the same check.
+ */
+export async function resolveExistingLocalUri(uri: string | null | undefined): Promise<string | null> {
+  if (!uri) return null;
+  const resolved = getValidLocalUri(uri);
+  if (!resolved) return null;
+  try {
+    const info = await FileSystem.getInfoAsync(resolved);
+    return info.exists ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generates a collision-resistant filename for a captured photo.
  * Uses timestamp + random suffix to prevent overwrites when multiple
  * photos are taken in quick succession.

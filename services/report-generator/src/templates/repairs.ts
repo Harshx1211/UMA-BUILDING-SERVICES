@@ -1,11 +1,13 @@
 import { COLORS } from './theme';
-import { esc, photoRow } from './helpers';
+import { esc, stagedPhotoSection } from './helpers';
 import { Defect, InspectionPhoto, Quote } from '../types';
 
 /**
  * "Repairs" section — resolved defects with any linked parts/labour line items.
- * Per the user's decision, this shows whatever photos exist on the defect
- * without a before/after distinction (the data model doesn't capture that split).
+ * Photos render with the same Before/After split as the defect's own card in
+ * the Asset Log (see stagedPhotoSection) — a repaired defect is exactly the
+ * case this split matters most for, showing the original issue next to its
+ * resolution.
  *
  * "Parts/Labour" comes from quote_items linked to the defect via defect_id on
  * the job's approved quote — there's no separate parts/labour table, and only an
@@ -50,7 +52,7 @@ export function renderRepairs(
           <span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT}">RESOLVED</span>
         </div>
         <div style="padding:10px 12px">
-          ${photoRow(photos, signedPhotoUrls, 6, fullResPhotoUrls)}
+          ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls)}
           ${itemRows ? `
             <table style="margin-top:8px">
               <thead><tr><th>Parts / Labour</th><th style="text-align:right">Quantity</th></tr></thead>

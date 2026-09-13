@@ -16,7 +16,7 @@ import {
   logFieldAudit,
   reconcileJobAssetOnDefectDelete,
 } from '@/lib/database';
-import { DefectStatus, SyncOperation, JobStatus } from '@/constants/Enums';
+import { DefectStatus, SyncOperation, JobStatus, PhotoStage } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
 import { queuePhotoUpload } from '@/lib/photoUpload';
 import { useAuthStore } from '@/store/authStore';
@@ -31,10 +31,21 @@ interface DefectsState {
 
   loadDefects: (jobId: string) => void;
   loadAllDefects: (statusFilter?: string, severityFilter?: string) => void;
-  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'updated_at' | 'status' | 'company_id'>) => string | null;
+  addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'updated_at' | 'status' | 'company_id'> & {
+    /** Photos documenting the issue found — tagged 'before' on insert. */
+    beforePhotos?: string[];
+    /** Photos documenting the fix — tagged 'after' on insert. */
+    afterPhotos?: string[];
+  }) => string | null;
   updateDefect: (defectId: string, updates: Partial<Defect>) => void;
   updateDefectStatus: (defectId: string, status: DefectStatus) => void;
   deleteDefect: (defectId: string) => void;
+  /** Adds a photo to an ALREADY-EXISTING defect — the one gap `addDefect`'s
+   * own photo handling doesn't cover (it only ever attaches photos at
+   * creation time). Needed because an "after" photo is typically added in
+   * a later save than the defect's own "before" photos/description. */
+  addPhotoToDefect: (defectId: string, photoUri: string, stage: PhotoStage) => boolean;
+  removePhotoFromDefect: (defectId: string, photoUri: string) => void;
   clearError: () => void;
   reset: () => void;
 }
@@ -73,6 +84,11 @@ function normaliseDefects(records: Defect[]): Defect[] {
     photos: typeof d.photos === 'string'
       ? (() => { try { return JSON.parse(d.photos as unknown as string) as string[]; } catch { return []; } })()
       : (d.photos ?? []),
+    // SQLite has no boolean type — this comes back as a raw 0/1 integer,
+    // same as every other boolean field read from it (e.g. job_assets.
+    // is_compliant elsewhere already goes through Boolean(...) for this
+    // exact reason).
+    resolved_on_site: Boolean(d.resolved_on_site),
   }));
 }
 
@@ -117,15 +133,20 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       const id = generateUUID();
 
-      const { photos, ...defectWithoutPhotos } = defectData;
+      const { photos, beforePhotos, afterPhotos, ...defectWithoutPhotos } = defectData;
 
       // FIX: inject company_id so the sync-queue INSERT satisfies Supabase RLS.
       const companyId = useAuthStore.getState().user?.company_id ?? null;
 
       const nowIso = new Date().toISOString();
+      // `defects.photos` stays "every photo on this defect" — the flat
+      // mirror DefectCard/the defect detail screen already read — now the
+      // union of all three groups. Before/after tagging lives only on the
+      // underlying inspection_photos rows (see the insert loop below).
+      const allPhotos = [...(photos ?? []), ...(beforePhotos ?? []), ...(afterPhotos ?? [])];
       const payload: Defect = {
         ...defectWithoutPhotos,
-        photos: photos || [], // keep for memory
+        photos: allPhotos, // keep for memory
         id,
         company_id: companyId,
         status: DefectStatus.Open,
@@ -135,9 +156,10 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       const dbPayload = {
         ...payload,
-        photos: JSON.stringify(photos || []), // save actual photos to SQLite
+        photos: JSON.stringify(allPhotos), // save actual photos to SQLite
         defect_code: payload.defect_code ?? null,
         quote_price: payload.quote_price ?? null,
+        resolved_on_site: payload.resolved_on_site ? 1 : 0,
       };
 
       insertRecord('defects', dbPayload as Record<string, string | number | boolean | null>);
@@ -151,15 +173,24 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         { field: '_created', old: null, new: 'defect created' },
       ]);
 
-      // Insert photos into inspection_photos and queue them
-      if (photos && photos.length > 0) {
-        for (const uri of photos) {
+      // Insert photos into inspection_photos and queue them — each group
+      // tagged with its own stage (or null for the plain, untagged `photos`
+      // group AddDefectSheet's own creation-time capture still uses).
+      const photoGroups: [string[] | undefined, PhotoStage | null][] = [
+        [photos, null],
+        [beforePhotos, PhotoStage.Before],
+        [afterPhotos, PhotoStage.After],
+      ];
+      for (const [uris, stage] of photoGroups) {
+        if (!uris || uris.length === 0) continue;
+        for (const uri of uris) {
           const photoId = generateUUID();
           const photoObj = {
             id: photoId,
             job_id: payload.job_id,
             asset_id: payload.asset_id === 'unlinked' ? null : payload.asset_id,
             defect_id: id,
+            stage,
             photo_url: uri,
             local_uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : null,
             caption: null,
@@ -210,6 +241,12 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         ...(updates as Record<string, string | number | boolean | null>),
         ...(updates.photos !== undefined
           ? { photos: JSON.stringify(updates.photos) }
+          : {}),
+        // SQLite has no boolean type — every other boolean field in this
+        // app (e.g. job_assets.is_compliant) is explicitly written as 0/1,
+        // never a raw JS boolean.
+        ...(updates.resolved_on_site !== undefined
+          ? { resolved_on_site: updates.resolved_on_site ? 1 : 0 }
           : {}),
         company_id: companyId,
         updated_at: new Date().toISOString(),
@@ -335,6 +372,78 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     } catch (err: unknown) {
       console.error('[DefectsStore] deleteDefect error:', err);
       set({ error: errorMessage(err), isSaving: false });
+    }
+  },
+
+  // The one gap addDefect's own photo handling doesn't cover: attaching a
+  // photo to a defect that already exists. Needed because "after" photos
+  // typically get added once a fix is actually done — a later save than
+  // when the defect (and its "before" photos) was first logged.
+  addPhotoToDefect: (defectId, photoUri, stage) => {
+    try {
+      const defectRow = getRecord<{ job_id: string; asset_id: string | null }>('defects', defectId);
+      if (!defectRow) {
+        set({ error: 'Defect not found.' });
+        return false;
+      }
+      assertJobEditable(defectRow.job_id);
+
+      const userId = useAuthStore.getState().user?.id ?? '';
+      const photoId = generateUUID();
+      const photoObj = {
+        id: photoId,
+        job_id: defectRow.job_id,
+        asset_id: defectRow.asset_id,
+        defect_id: defectId,
+        stage,
+        photo_url: photoUri,
+        local_uri: photoUri.startsWith('file://') || photoUri.startsWith('content://') ? photoUri : null,
+        caption: null,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: userId,
+      };
+      insertRecord('inspection_photos', photoObj as unknown as Record<string, string | number | boolean | null>);
+      queuePhotoUpload(photoUri, defectRow.job_id, defectRow.asset_id ?? undefined, photoId, defectId);
+
+      // Keep the flat `defects.photos` mirror (DefectCard/the defect detail
+      // screen already read it) in sync — reuses updateDefect's own lock
+      // check, sync-queue write, and in-memory update rather than
+      // duplicating them.
+      const current = get().defects.find((d) => d.id === defectId);
+      get().updateDefect(defectId, { photos: [...(current?.photos ?? []), photoUri] });
+      return true;
+    } catch (err: unknown) {
+      console.error('[DefectsStore] addPhotoToDefect error:', err);
+      set({ error: errorMessage(err) });
+      return false;
+    }
+  },
+
+  removePhotoFromDefect: (defectId, photoUri) => {
+    try {
+      const defectRow = getRecord<{ job_id: string }>('defects', defectId);
+      assertJobEditable(defectRow?.job_id);
+
+      const photoRows = queryRecords<{ id: string; photo_url: string; job_id: string }>(
+        'inspection_photos', { defect_id: defectId, photo_url: photoUri }
+      );
+      for (const p of photoRows) {
+        deleteRecord('inspection_photos', p.id);
+        recordDeletedPhoto(p.id);
+        if (p.photo_url.startsWith('https://')) {
+          addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+            id: p.id, photo_url: p.photo_url, job_id: p.job_id,
+          });
+        } else {
+          cancelPendingPhotoUpload(p.id);
+        }
+      }
+
+      const current = get().defects.find((d) => d.id === defectId);
+      get().updateDefect(defectId, { photos: (current?.photos ?? []).filter((p) => p !== photoUri) });
+    } catch (err: unknown) {
+      console.error('[DefectsStore] removePhotoFromDefect error:', err);
+      set({ error: errorMessage(err) });
     }
   },
 

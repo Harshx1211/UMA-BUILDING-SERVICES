@@ -151,6 +151,10 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
       photos: photos,
       defect_code: selectedCode?.code ?? null,
       quote_price: selectedCode?.quote_price ?? null,
+      // This standalone "Log New Defect" flow doesn't offer the on-site-fix
+      // checkbox — that's specific to the asset screen's Remarks/Defects
+      // area (DefectFieldsCard). Always false here.
+      resolved_on_site: false,
     });
     // FIX: addDefect's return value was previously ignored — the sheet closed
     // and showed "Defect logged" unconditionally, even on failure (e.g. the

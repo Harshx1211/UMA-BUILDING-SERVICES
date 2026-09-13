@@ -248,6 +248,7 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             asset_id: string | null;
             defect_id: string | null;
             uploaded_at: string | null;
+            stage: string | null;
           }>('inspection_photos', payload.recordId);
 
           // Insert the row into Supabase via sync queue.
@@ -260,6 +261,15 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
             photo_url:   signedUrl,
             caption:     localRow?.caption ?? null,
             company_id:  localRow?.company_id ?? null,
+            // FIX: this hand-built payload predates PhotoStage (Before/After
+            // defect photos) and simply never carried it through — the local
+            // SQLite row always had the correct stage (set at capture time),
+            // but every photo synced to Supabase landed with stage NULL
+            // regardless, since THIS insert (once the binary upload
+            // completes) is the only path that ever creates the row
+            // server-side. Read fresh from the local row for the same
+            // reason asset_id/defect_id are above.
+            stage:       localRow?.stage ?? null,
             // FIX: this used to stamp a FRESH timestamp at upload-completion
             // time instead of preserving the true capture-time value
             // photosStore.addPhoto already recorded locally — under

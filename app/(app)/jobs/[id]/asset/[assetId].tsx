@@ -21,7 +21,7 @@ import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
-import { InspectionResult, DefectSeverity, JobStatus } from '@/constants/Enums';
+import { InspectionResult, DefectSeverity, JobStatus, PhotoStage } from '@/constants/Enums';
 import { useInspectionStore } from '@/store/inspectionStore';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -30,11 +30,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import Toast from 'react-native-toast-message';
 
-import { DefectFieldsCard, DefectFieldsValue } from '@/components/defects/DefectFieldsCard';
+import { DefectFieldsCard, DefectFieldsValue, DefectPhotosDraft } from '@/components/defects/DefectFieldsCard';
 import DefectCard from '@/components/defects/DefectCard';
+import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
-import { getValidLocalUri } from '@/utils/fileHelpers';
-import { getAssetHistory, AssetHistoryEntry, getJobById } from '@/lib/database';
+import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
+import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -47,42 +48,6 @@ type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 // ask for more — see the History section's own loadMoreHistory().
 const HISTORY_PAGE_SIZE = 3;
 
-// ─── Small bottom sheet: Take Photo / Choose from Gallery ─────────────────
-function PhotoChooserSheet({
-  visible, onClose, onTakePhoto, onPickGallery,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onTakePhoto: () => void;
-  onPickGallery: () => void;
-}) {
-  const C = useColors();
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={s.chooserOverlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
-          <Text style={[s.chooserTitle, { color: C.text }]}>Add Photo</Text>
-          <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
-              <MaterialCommunityIcons name="camera-outline" size={20} color={C.primary} />
-            </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Take Photo</Text>
-          </TouchableOpacity>
-          <View style={[s.chooserDivider, { backgroundColor: C.border }]} />
-          <TouchableOpacity style={s.chooserRow} onPress={onPickGallery} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
-              <MaterialCommunityIcons name="image-multiple-outline" size={20} color={C.primary} />
-            </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from Gallery</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.chooserCancel, { backgroundColor: C.surface }]} onPress={onClose} activeOpacity={0.7}>
-          <Text style={[s.chooserCancelTxt, { color: C.text }]}>Cancel</Text>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
 
 // ─── Full-screen photo viewer ───────────────────────────────────────────
 function PhotoViewer({
@@ -157,12 +122,43 @@ function resultLabel(r: string | null): string {
   return r === 'pass' ? 'Pass' : r === 'fail' ? 'Fail' : 'N/T';
 }
 
+// Diffs an already-saved defect's Before/After photo draft against what's
+// actually in the DB (defectPhotosMap's entry for it) and issues only the
+// add/remove calls needed to reconcile the two — mirrors the diff-and-
+// reconcile approach updateAssetResult's own asset-photo block already
+// uses, applied per-defect instead of per-asset. A no-op call for any URI
+// already present, so this is safe to call even when nothing changed.
+function reconcileDefectPhotos(defectId: string, existing: DefectPhotosDraft, next: DefectPhotosDraft) {
+  const store = useDefectsStore.getState();
+  next.before.filter((u) => !existing.before.includes(u)).forEach((u) => store.addPhotoToDefect(defectId, u, PhotoStage.Before));
+  next.after.filter((u) => !existing.after.includes(u)).forEach((u) => store.addPhotoToDefect(defectId, u, PhotoStage.After));
+  existing.before.filter((u) => !next.before.includes(u)).forEach((u) => store.removePhotoFromDefect(defectId, u));
+  existing.after.filter((u) => !next.after.includes(u)).forEach((u) => store.removePhotoFromDefect(defectId, u));
+}
+
 export default function AssetDetailScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
   const { id: jobId, assetId, pendingFail: pendingFailParam } = useLocalSearchParams<{ id: string; assetId: string; pendingFail?: string }>();
   const { assets, updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
   const asset = assets.find((a) => a.id === assetId);
+
+  // Fail is selected but not yet saved — set when arriving here straight off
+  // a Fail tap (see inspect.tsx's AssetCard) or by tapping Fail below on an
+  // asset that wasn't already failed. Nothing is written to job_assets until
+  // Save Defect actually commits it — same one-tap-one-save shape Pass/N-T
+  // already have, just with a required field in between instead of an
+  // instant, possibly-incomplete write.
+  //
+  // Declared up here (rather than alongside the rest of this screen's state
+  // further down) purely so primaryDefect below can tell a genuine Fail
+  // apart from a Pass/N-T asset that merely HAS defects (Remarks) —
+  // `failedNow` is recomputed as `isFailed` further down, identically, once
+  // `asset` is guaranteed non-null past the early-return guard. Two names
+  // for one formula, not two sources of truth; keep them in sync if this
+  // ever changes.
+  const [pendingFail, setPendingFail] = useState(() => pendingFailParam === '1');
+  const failedNow = asset?.result === InspectionResult.Fail || pendingFail;
 
   // An asset can have more than one defect (e.g. "past service life" AND
   // "bracket damaged"). The oldest one (by created_at) is the "primary" —
@@ -174,8 +170,27 @@ export default function AssetDetailScreen() {
   const assetDefects = jobDefects
     .filter((d) => d.asset_id === assetId)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const primaryDefect = assetDefects[0] ?? null;
-  const additionalDefects = assetDefects.slice(1);
+  // FIX: "primary" (the Fail-reason defect) used to be picked positionally
+  // (oldest by created_at) — safe only while a defect could never predate a
+  // Fail. Now that Remarks lets a Pass/N-T asset carry its own defect(s),
+  // that assumption breaks in TWO ways: (1) log a Remark on Pass, then later
+  // fail the same asset for something else — the Remark is older, so
+  // matching positionally would land it in the "primary" slot and editing it
+  // would overwrite job_assets.defect_reason with the Remark's text; fixed by
+  // matching on content against defect_reason instead, the same relationship
+  // reconcileJobAssetOnDefectDelete (lib/database.ts) already relies on.
+  // (2) an asset that's never been Failed at all (Pass/N-T) has NO primary
+  // defect by definition — every one of its defects is a Remark. Without the
+  // `failedNow` guard, `?? assetDefects[0]` still picked ONE of them as
+  // "primary" purely because defect_reason (null on a non-Fail asset) never
+  // matches anything — and the primary slot only renders `{isFailed && ...}`
+  // below, so that defect vanished from this screen entirely the moment it
+  // was saved (still in the DB, just invisible here — additionalDefects had
+  // filtered it out too, having wrongly ceded it to "primary").
+  const primaryDefect = failedNow
+    ? (assetDefects.find((d) => d.description === asset?.defect_reason) ?? assetDefects[0] ?? null)
+    : null;
+  const additionalDefects = assetDefects.filter((d) => d.id !== primaryDefect?.id);
   // A real defect's id = editing that one; 'new' = composing an additional
   // defect that doesn't exist yet; null = everything collapsed to summaries.
   const [editingDefectId, setEditingDefectId] = useState<string | 'new' | null>(null);
@@ -247,18 +262,36 @@ export default function AssetDetailScreen() {
     return () => offSyncComplete(reload);
   }, [jobId, loadJobDefects]);
 
-  // Fail is selected but not yet saved — set when arriving here straight off
-  // a Fail tap (see inspect.tsx's AssetCard) or by tapping Fail below on an
-  // asset that wasn't already failed. Nothing is written to job_assets until
-  // Save Defect actually commits it — same one-tap-one-save shape Pass/N-T
-  // already have, just with a required field in between instead of an
-  // instant, possibly-incomplete write.
-  const [pendingFail, setPendingFail] = useState(() => pendingFailParam === '1');
-
   const [showPhotoChooser, setShowPhotoChooser] = useState(false);
   const [isAddingPhoto, setIsAddingPhoto] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [viewingHistoryPhoto, setViewingHistoryPhoto] = useState<string | null>(null);
+
+  // Maps each photo_url in asset.photos to the fastest URI actually worth
+  // rendering it from — the original on-device file when this device still
+  // has it (skips the network entirely), otherwise the remote URL
+  // unchanged. Resolved once per photo list change, not per render/tap, so
+  // opening this screen or tapping a thumbnail never waits on a fresh
+  // filesystem check. resolveExistingLocalUri is a local filesystem stat,
+  // not a network call, so this resolves well before any Image below could
+  // have started a real fetch — no visible flash from remote to local.
+  // Rebuilt from scratch (not merged onto the previous map) each time, so a
+  // deleted photo's entry is naturally dropped rather than accumulating.
+  const [displayUris, setDisplayUris] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const photoUrls = asset?.photos ?? [];
+    const localMap = asset?.photoLocalUris ?? {};
+    if (photoUrls.length === 0) { setDisplayUris({}); return; }
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(photoUrls.map(async (url): Promise<[string, string]> => {
+        const local = await resolveExistingLocalUri(localMap[url]);
+        return [url, local ?? getValidLocalUri(url)];
+      }));
+      if (!cancelled) setDisplayUris(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+  }, [asset?.photos, asset?.photoLocalUris]);
 
   const [history, setHistory] = useState<AssetHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -309,6 +342,10 @@ export default function AssetDetailScreen() {
   // Live draft of whichever defect card is currently expanded for editing —
   // reported up via DefectFieldsCard's onDraftChange.
   const [primaryDraft, setPrimaryDraft] = useState<DefectFieldsValue | null>(null);
+  // Mirrors primaryDraft one level down — the in-progress Before/After photo
+  // picks for the primary (Fail-reason) defect card. Same leave-without-
+  // saving purpose as additionalPhotosDraft below.
+  const [primaryPhotosDraft, setPrimaryPhotosDraft] = useState<DefectPhotosDraft | null>(null);
   // FIX: an in-progress ADDITIONAL defect (new, or editing an existing one)
   // previously had no equivalent leave-without-saving protection — a
   // technician who started a second defect, typed a description, then left
@@ -316,6 +353,36 @@ export default function AssetDetailScreen() {
   // while the exact same interruption on the primary defect was already
   // protected. Mirrors primaryDraft below.
   const [additionalDraft, setAdditionalDraft] = useState<DefectFieldsValue | null>(null);
+  // Mirrors additionalDraft one level down — the in-progress Before/After
+  // photo picks for whichever additional-defect card is currently expanded.
+  // Same leave-without-saving purpose: a tech who photographs a fix and
+  // then just navigates away must not silently lose it.
+  const [additionalPhotosDraft, setAdditionalPhotosDraft] = useState<DefectPhotosDraft | null>(null);
+
+  // Existing Before/After photos per additional defect, loaded from
+  // inspection_photos and grouped by defect_id/stage — feeds each
+  // additional-defect DefectFieldsCard's `photos` prop so reopening one for
+  // edit shows what's already there instead of starting blank. Untagged
+  // (stage === null) rows are deliberately excluded — those are the primary
+  // defect's own asset-level photos, never shown inside this per-defect UI.
+  const [defectPhotosMap, setDefectPhotosMap] = useState<Record<string, DefectPhotosDraft>>({});
+  useEffect(() => {
+    if (!jobId || !assetId) { setDefectPhotosMap({}); return; }
+    const rows = queryRecords<{ defect_id: string | null; photo_url: string; stage: string | null }>(
+      'inspection_photos', { job_id: jobId, asset_id: assetId }
+    );
+    const map: Record<string, DefectPhotosDraft> = {};
+    for (const row of rows) {
+      if (!row.defect_id || !row.stage) continue;
+      const entry = map[row.defect_id] ?? (map[row.defect_id] = { before: [], after: [] });
+      if (row.stage === PhotoStage.Before) entry.before.push(row.photo_url);
+      else if (row.stage === PhotoStage.After) entry.after.push(row.photo_url);
+    }
+    setDefectPhotosMap(map);
+    // Re-runs whenever the job's defects reload (new photo saved, teammate's
+    // live-synced change, or this asset's own save) — jobDefects is the raw
+    // store array, which only gets a new reference on an actual change.
+  }, [jobId, assetId, jobDefects]);
 
   // FIX: this used to load the asset's ENTIRE prior-visit history (however
   // many years of results/defects/photos that adds up to) every time the
@@ -353,14 +420,14 @@ export default function AssetDetailScreen() {
   // time this screen gained focus — never sees stale values no matter how
   // long the screen's been open or how many keystrokes happened since.
   const latestRef = useRef({
-    note, internalNote, primaryDraft, additionalDraft, editingDefectId,
+    note, internalNote, primaryDraft, primaryPhotosDraft, additionalDraft, additionalPhotosDraft, editingDefectId,
     isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
-    primaryDefectId: primaryDefect?.id ?? null,
+    primaryDefect, pendingFail, defectPhotosMap,
   });
   latestRef.current = {
-    note, internalNote, primaryDraft, additionalDraft, editingDefectId,
+    note, internalNote, primaryDraft, primaryPhotosDraft, additionalDraft, additionalPhotosDraft, editingDefectId,
     isFailed: asset?.result === InspectionResult.Fail || pendingFail, asset,
-    primaryDefectId: primaryDefect?.id ?? null,
+    primaryDefect, pendingFail, defectPhotosMap,
   };
 
   // Persist whatever's unsaved the moment this screen loses focus — back
@@ -373,9 +440,10 @@ export default function AssetDetailScreen() {
     useCallback(() => {
       return () => {
         const {
-          note: n, internalNote: inNote, primaryDraft: pd, additionalDraft: ad, editingDefectId: eid,
-          isFailed: failed, asset: a, primaryDefectId,
+          note: n, internalNote: inNote, primaryDraft: pd, primaryPhotosDraft: pdPhotos, additionalDraft: ad, additionalPhotosDraft: adPhotos, editingDefectId: eid,
+          isFailed: failed, asset: a, primaryDefect: pDefect, pendingFail: wasPendingFail, defectPhotosMap: dpMap,
         } = latestRef.current;
+        const primaryDefectId = pDefect?.id ?? null;
         if (!a) return;
         // FIX: both stores reject a write against a locked (Completed/
         // Cancelled) job by catching their own thrown error internally and
@@ -394,11 +462,39 @@ export default function AssetDetailScreen() {
         const descTrim = pd?.description.trim() ?? '';
         const internalNoteTrim = inNote.trim();
         const internalNoteChanged = internalNoteTrim !== (a.internal_notes || '');
+        // FIX: resolved_on_site/before-after-photos live on the DEFECT row,
+        // not job_assets, so a change to only one of those never showed up
+        // in descTrim/noteTrim/internalNoteChanged above — a tech who ticks
+        // "resolved on site" or adds an after-photo and leaves without an
+        // explicit Save (no text edit) used to lose it silently, same bug
+        // class as additionalPhotosDraft's own fix just above.
+        const resolvedOnSiteChanged = pd ? pd.resolvedOnSite !== (pDefect?.resolved_on_site ?? false) : false;
+        const pdPhotosChanged = !!pdPhotos && primaryDefectId !== null
+          && JSON.stringify(pdPhotos) !== JSON.stringify(dpMap[primaryDefectId] ?? { before: [], after: [] });
         if (failed && descTrim) {
           const noteTrim = n.trim();
           if (descTrim !== (a.defect_reason || '') || noteTrim !== (a.technician_notes || '') || internalNoteChanged) {
-            updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice, undefined, internalNoteTrim);
+            // FIX: forceNewDefect was never passed here at all, unlike
+            // handleSaveDefect's own identical call — a fresh Pass/N-T->Fail
+            // transition (wasPendingFail) that got left via back/swipe
+            // instead of an explicit Save Defect tap would silently MERGE
+            // into whatever unrelated defect already existed on this asset
+            // (e.g. an earlier Remark), exactly the bug forceNewDefect
+            // exists to prevent — see updateAssetResult's own comment on it.
+            const touchedId = updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice, wasPendingFail, internalNoteTrim);
             notifyIfRejected(() => useInspectionStore.getState().error);
+            if (touchedId) {
+              useDefectsStore.getState().updateDefect(touchedId, { resolved_on_site: pd!.resolvedOnSite });
+              if (pdPhotos) reconcileDefectPhotos(touchedId, dpMap[touchedId] ?? { before: [], after: [] }, pdPhotos);
+            }
+          } else if (primaryDefectId && (resolvedOnSiteChanged || pdPhotosChanged)) {
+            // Description/notes unchanged (so no reason to touch job_assets/
+            // updateAssetResult at all) but resolved-on-site or photos
+            // drifted on an ALREADY-SAVED primary defect — reconcile
+            // directly against its existing id.
+            if (resolvedOnSiteChanged) useDefectsStore.getState().updateDefect(primaryDefectId, { resolved_on_site: pd!.resolvedOnSite });
+            if (pdPhotosChanged) reconcileDefectPhotos(primaryDefectId, dpMap[primaryDefectId] ?? { before: [], after: [] }, pdPhotos!);
+            notifyIfRejected(() => useDefectsStore.getState().error);
           }
         } else if (!failed && (n.trim() !== (a.technician_notes || '') || internalNoteChanged)) {
           updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim(), undefined, undefined, undefined, undefined, undefined, internalNoteTrim);
@@ -411,25 +507,45 @@ export default function AssetDetailScreen() {
         // clear it immediately, so this can't double-fire against an
         // already-handled save.
         const adDescTrim = ad?.description.trim() ?? '';
-        if (adDescTrim && eid && eid !== primaryDefectId) {
+        // FIX: a tech who photographs a fix (or checks "resolved on site")
+        // and then just navigates away — without a description edit — used
+        // to lose the photos silently, since this whole branch was gated on
+        // adDescTrim alone. A photo-only change on an ALREADY-SAVED defect
+        // (eid !== 'new') is worth flushing even with no text changed; a
+        // brand-new defect still requires a description (nothing to attach
+        // photos to otherwise — addDefect always needs one).
+        const adPhotosChanged = !!adPhotos && eid !== 'new' && eid
+          && JSON.stringify(adPhotos) !== JSON.stringify(dpMap[eid] ?? { before: [], after: [] });
+        if (eid && eid !== primaryDefectId && (adDescTrim || adPhotosChanged)) {
           if (eid === 'new') {
-            useDefectsStore.getState().addDefect({
-              job_id: jobId as string,
-              property_id: a.property_id,
-              asset_id: a.id,
-              description: ad!.description,
-              severity: ad!.severity,
-              photos: [],
-              defect_code: ad!.defectCode,
-              quote_price: ad!.quotePrice,
-            });
+            if (adDescTrim) {
+              useDefectsStore.getState().addDefect({
+                job_id: jobId as string,
+                property_id: a.property_id,
+                asset_id: a.id,
+                description: ad!.description,
+                severity: ad!.severity,
+                photos: [],
+                defect_code: ad!.defectCode,
+                quote_price: ad!.quotePrice,
+                resolved_on_site: ad!.resolvedOnSite,
+                beforePhotos: adPhotos?.before,
+                afterPhotos: adPhotos?.after,
+              });
+            }
           } else {
-            useDefectsStore.getState().updateDefect(eid, {
-              description: ad!.description,
-              severity: ad!.severity,
-              defect_code: ad!.defectCode,
-              quote_price: ad!.quotePrice,
-            });
+            if (adDescTrim) {
+              useDefectsStore.getState().updateDefect(eid, {
+                description: ad!.description,
+                severity: ad!.severity,
+                defect_code: ad!.defectCode,
+                quote_price: ad!.quotePrice,
+                resolved_on_site: ad!.resolvedOnSite,
+              });
+            }
+            if (adPhotosChanged) {
+              reconcileDefectPhotos(eid, dpMap[eid] ?? { before: [], after: [] }, adPhotos!);
+            }
           }
           notifyIfRejected(() => useDefectsStore.getState().error);
         }
@@ -547,24 +663,56 @@ export default function AssetDetailScreen() {
   // write that actually commits result: 'fail' via updateAssetResult.
   // Validation now happens inside DefectFieldsCard itself, so onSave only
   // ever fires with a non-empty description.
-  const handleSaveDefect = (value: DefectFieldsValue) => {
+  const handleSaveDefect = (value: DefectFieldsValue, photos?: DefectPhotosDraft) => {
     // FIX: forceNewDefect=pendingFail — a fresh Pass/N-T -> Fail transition
     // must never merge into whatever unrelated defect might already exist
     // on this asset (see updateAssetResult's own comment on this param).
     // Re-editing an already-Fail asset's existing defect (pendingFail is
     // false by then) still merges into it exactly as before.
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
+    // updateAssetResult only creates/updates the defect ROW itself — it has
+    // no concept of before/after photos or resolved_on_site, so those go
+    // through defectsStore directly against the id it just handed back,
+    // exactly the same mechanism the "additional defect" flow already uses.
+    // Works identically whether touchedId is a brand-new defect (existing
+    // photos default to empty, so reconcileDefectPhotos just adds
+    // everything) or an already-saved one being re-edited.
+    if (touchedId) {
+      useDefectsStore.getState().updateDefect(touchedId, { resolved_on_site: value.resolvedOnSite });
+      if (photos) {
+        reconcileDefectPhotos(touchedId, defectPhotosMap[touchedId] ?? { before: [], after: [] }, photos);
+      }
+    }
     setPendingFail(false);
     setPrimaryDraft(null);
+    setPrimaryPhotosDraft(null);
     setEditingDefectId(null);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Toast.show({ type: 'success', text1: 'Defect saved' });
   };
 
   const handleReplaceNow = (value: DefectFieldsValue) => {
-    updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice, undefined, internalNote.trim());
+    // FIX: forceNewDefect was never passed here (unlike handleSaveDefect's
+    // identical call) — Replace Now is offered on the exact same fresh-Fail
+    // form as Save Defect, so a Pass/N-T asset that already carries an
+    // unrelated Remark defect had this fast path silently MERGE into it
+    // instead of creating an independent record. See updateAssetResult's
+    // own comment on forceNewDefect for why that's wrong.
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
+    // FIX: this form now offers the same Before/After photos + resolved-on-
+    // site fields as Save Defect (see handleSaveDefect's own comment) — a
+    // tech who filled those in and then tapped Replace Now instead used to
+    // have them silently discarded, since this handler never looked at
+    // primaryPhotosDraft/value.resolvedOnSite at all.
+    if (touchedId) {
+      useDefectsStore.getState().updateDefect(touchedId, { resolved_on_site: value.resolvedOnSite });
+      if (primaryPhotosDraft) {
+        reconcileDefectPhotos(touchedId, defectPhotosMap[touchedId] ?? { before: [], after: [] }, primaryPhotosDraft);
+      }
+    }
     setPendingFail(false);
     setPrimaryDraft(null);
+    setPrimaryPhotosDraft(null);
     setEditingDefectId(null);
     setTimeout(() => router.push(`/jobs/${jobId}/quote` as never), 400);
   };
@@ -572,14 +720,18 @@ export default function AssetDetailScreen() {
   // Any defect beyond the first is a genuinely independent record, saved
   // directly through defectsStore — the same store the standalone Defects
   // screen already uses, not routed through updateAssetResult at all.
-  const handleSaveAdditionalDefect = (defectId: string | null, value: DefectFieldsValue) => {
+  const handleSaveAdditionalDefect = (defectId: string | null, value: DefectFieldsValue, photos?: DefectPhotosDraft) => {
     if (defectId) {
       useDefectsStore.getState().updateDefect(defectId, {
         description: value.description,
         severity: value.severity,
         defect_code: value.defectCode,
         quote_price: value.quotePrice,
+        resolved_on_site: value.resolvedOnSite,
       });
+      if (photos) {
+        reconcileDefectPhotos(defectId, defectPhotosMap[defectId] ?? { before: [], after: [] }, photos);
+      }
       Toast.show({ type: 'success', text1: 'Defect updated' });
     } else {
       const newId = useDefectsStore.getState().addDefect({
@@ -591,6 +743,9 @@ export default function AssetDetailScreen() {
         photos: [],
         defect_code: value.defectCode,
         quote_price: value.quotePrice,
+        resolved_on_site: value.resolvedOnSite,
+        beforePhotos: photos?.before,
+        afterPhotos: photos?.after,
       });
       if (!newId) {
         Toast.show({ type: 'error', text1: 'Could not save defect', text2: useDefectsStore.getState().error ?? 'Please try again.' });
@@ -601,6 +756,7 @@ export default function AssetDetailScreen() {
     }
     loadJobDefects(jobId as string);
     setAdditionalDraft(null);
+    setAdditionalPhotosDraft(null);
     setEditingDefectId(null);
   };
 
@@ -733,7 +889,7 @@ export default function AssetDetailScreen() {
           <View style={s.photoRow}>
             {(asset.photos ?? []).map((uri) => (
               <TouchableOpacity key={uri} style={s.photoThumbWrap} onPress={() => setViewingPhoto(uri)} activeOpacity={0.8}>
-                <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
+                <Image source={{ uri: displayUris[uri] ?? getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
               </TouchableOpacity>
             ))}
             {!jobLocked && (
@@ -756,14 +912,32 @@ export default function AssetDetailScreen() {
             component the standalone Defects screen uses), so a fresh Fail's
             form, a re-opened existing defect, and a second/third defect
             added later all look and behave like the same feature instead of
-            three different ones. ─────────────────────────────────────── */}
-        {isFailed && (
+            three different ones.
+            FIX: this used to be gated on `isFailed` alone, so logging a
+            defect/remark was only possible once the asset had already been
+            marked Fail — a technician who found and fixed something minor
+            (e.g. replaced a dead smoke-alarm battery) had no way to note it
+            without incorrectly failing an asset that otherwise passed. The
+            "Additional Defects" mechanism below (addDefect/updateDefect,
+            never touching job_assets.result) was already exactly this
+            result-independent pattern — it just needed the same
+            `result !== null || pendingFail` gate the Remarks card below
+            already uses, so Defects and Remarks appear together for any
+            result. Only the PRIMARY (Fail-reason) card stays Fail-specific;
+            everything inside its own `isFailed &&` block is unchanged. ── */}
+        {(result !== null || pendingFail) && (
           <Animated.View entering={noMotion ? undefined : FadeIn.duration(300)}>
             <Text style={[s.sectionLabel, { color: C.textTertiary }]}>
               Defects{assetDefects.length > 0 ? ` · ${assetDefects.length}` : ''}
             </Text>
+            {!isFailed && (
+              <Text style={[s.defectsHint, { color: C.textTertiary }]}>
+                Log something you noticed on this asset, even if you already
+                fixed it — this is separate from the Pass/Fail result above.
+              </Text>
+            )}
 
-            {primaryDefect === null || pendingFail ? (
+            {isFailed && (primaryDefect === null || pendingFail ? (
               // Nothing saved yet — this IS the Fail commit (see
               // handleSaveDefect), so there's no summary state to collapse to.
               // FIX: `pendingFail` (a fresh Pass/N-T -> Fail transition) is
@@ -780,6 +954,8 @@ export default function AssetDetailScreen() {
                 onSave={handleSaveDefect}
                 onReplace={handleReplaceNow}
                 onDraftChange={setPrimaryDraft}
+                photos={{ before: [], after: [] }}
+                onPhotosDraftChange={setPrimaryPhotosDraft}
                 saving={isSaving || jobLocked}
                 saveLabel="Save Defect"
               />
@@ -788,8 +964,10 @@ export default function AssetDetailScreen() {
                 initial={primaryDefect}
                 onSave={handleSaveDefect}
                 onReplace={handleReplaceNow}
-                onCancel={() => { setPrimaryDraft(null); setEditingDefectId(null); }}
+                onCancel={() => { setPrimaryDraft(null); setPrimaryPhotosDraft(null); setEditingDefectId(null); }}
                 onDraftChange={setPrimaryDraft}
+                photos={defectPhotosMap[primaryDefect.id] ?? { before: [], after: [] }}
+                onPhotosDraftChange={setPrimaryPhotosDraft}
                 saving={isSaving}
                 saveLabel="Save Changes"
               />
@@ -800,17 +978,19 @@ export default function AssetDetailScreen() {
                 onPress={() => router.push(`/jobs/${jobId}/defects/${primaryDefect.id}` as never)}
                 onEdit={jobLocked ? undefined : () => setEditingDefectId(primaryDefect.id)}
               />
-            )}
+            ))}
 
             {additionalDefects.map((d) => (
               editingDefectId === d.id && !jobLocked ? (
                 <DefectFieldsCard
                   key={d.id}
                   initial={d}
-                  onSave={(v) => handleSaveAdditionalDefect(d.id, v)}
+                  onSave={(v, p) => handleSaveAdditionalDefect(d.id, v, p)}
                   onDelete={() => handleDeleteAdditionalDefect(d.id)}
-                  onCancel={() => { setAdditionalDraft(null); setEditingDefectId(null); }}
+                  onCancel={() => { setAdditionalDraft(null); setAdditionalPhotosDraft(null); setEditingDefectId(null); }}
                   onDraftChange={setAdditionalDraft}
+                  photos={defectPhotosMap[d.id] ?? { before: [], after: [] }}
+                  onPhotosDraftChange={setAdditionalPhotosDraft}
                   saveLabel="Save Changes"
                 />
               ) : (
@@ -826,12 +1006,20 @@ export default function AssetDetailScreen() {
 
             {editingDefectId === 'new' && !jobLocked ? (
               <DefectFieldsCard
-                onSave={(v) => handleSaveAdditionalDefect(null, v)}
-                onCancel={() => { setAdditionalDraft(null); setEditingDefectId(null); }}
+                onSave={(v, p) => handleSaveAdditionalDefect(null, v, p)}
+                onCancel={() => { setAdditionalDraft(null); setAdditionalPhotosDraft(null); setEditingDefectId(null); }}
                 onDraftChange={setAdditionalDraft}
+                photos={{ before: [], after: [] }}
+                onPhotosDraftChange={setAdditionalPhotosDraft}
                 saveLabel="Add Defect"
               />
-            ) : primaryDefect !== null && !jobLocked && (
+            ) : (!isFailed || primaryDefect !== null) && !jobLocked && (
+              // FIX: was gated on `primaryDefect !== null` alone, which made
+              // sense when this button only ever appeared post-Fail (a fresh
+              // Fail always has a form on screen already, never a bare
+              // button with zero defects). Now that this section renders for
+              // Pass/N-T too, a defect-free Pass/N-T asset needs this button
+              // visible from the start — `!isFailed` covers that case.
               <TouchableOpacity
                 style={[s.addDefectBtn, { borderColor: C.borderStrong }]}
                 onPress={() => setEditingDefectId('new')}
@@ -999,7 +1187,7 @@ export default function AssetDetailScreen() {
         onPickGallery={handlePickPhoto}
       />
       <PhotoViewer
-        uri={viewingPhoto}
+        uri={viewingPhoto ? (displayUris[viewingPhoto] ?? viewingPhoto) : null}
         onClose={() => setViewingPhoto(null)}
         onDelete={jobLocked ? undefined : () => viewingPhoto && handleRemovePhoto(viewingPhoto)}
       />
@@ -1024,6 +1212,7 @@ const s = StyleSheet.create({
     fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',
     marginTop: 22, marginBottom: 10,
   },
+  defectsHint: { fontSize: 12, lineHeight: 17, marginTop: -4, marginBottom: 10 },
 
   // Result — single segmented track
   resultTrack: { flexDirection: 'row', borderRadius: 14, padding: 4, gap: 4, marginBottom: 20 },
@@ -1072,17 +1261,6 @@ const s = StyleSheet.create({
   historyLoadMoreChips: { flexDirection: 'row', gap: 8 },
   historyLoadMoreChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
   historyLoadMoreChipTxt: { fontSize: 12.5, fontWeight: '700' },
-
-  // Photo chooser sheet
-  chooserOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
-  chooserSheet: { borderRadius: 18, overflow: 'hidden', paddingTop: 14, paddingBottom: 6 },
-  chooserTitle: { fontSize: 12, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, paddingBottom: 10 },
-  chooserRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
-  chooserIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  chooserRowTxt: { fontSize: 15, fontWeight: '700' },
-  chooserDivider: { height: StyleSheet.hairlineWidth, marginLeft: 18 },
-  chooserCancel: { borderRadius: 18, paddingVertical: 15, alignItems: 'center' },
-  chooserCancelTxt: { fontSize: 16, fontWeight: '700' },
 
   // Photo viewer
   viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },

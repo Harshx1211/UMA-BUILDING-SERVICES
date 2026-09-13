@@ -61,9 +61,14 @@ const assets: AssetWithResult[] = [
 ];
 
 const defects: Defect[] = [
-  { id: 'd1', job_id: 'j1', asset_id: 'a1', description: 'Asset has reached or past the last year of its service life.', severity: 'non_conformance', status: 'open', defect_code: 'sl', quote_price: 45, created_at: new Date().toISOString(), updated_at: null },
-  { id: 'd2', job_id: 'j1', asset_id: null, description: 'Unlinked general observation', severity: 'non_critical', status: 'repaired', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
-  { id: 'd3', job_id: 'j1', asset_id: 'a4', description: 'Lamp not illuminating', severity: 'critical', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null },
+  { id: 'd1', job_id: 'j1', asset_id: 'a1', description: 'Asset has reached or past the last year of its service life.', severity: 'non_conformance', status: 'open', defect_code: 'sl', quote_price: 45, created_at: new Date().toISOString(), updated_at: null, resolved_on_site: false },
+  { id: 'd2', job_id: 'j1', asset_id: null, description: 'Unlinked general observation', severity: 'non_critical', status: 'repaired', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null, resolved_on_site: false },
+  { id: 'd3', job_id: 'j1', asset_id: 'a4', description: 'Lamp not illuminating', severity: 'critical', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null, resolved_on_site: false },
+  // A Remark on a PASS asset (a2) — the exact "battery replaced" scenario —
+  // with staged Before/After photos and resolved_on_site set. Exercises the
+  // whole point of the before/after feature: a defect independent of any
+  // Fail result, with its own before/after evidence and no-quote-needed flag.
+  { id: 'd4', job_id: 'j1', asset_id: 'a2', description: 'Replaced dead 9V battery', severity: 'non_conformance', status: 'open', defect_code: null, quote_price: null, created_at: new Date().toISOString(), updated_at: null, resolved_on_site: true },
 ];
 
 // ph1 carries both asset_id and defect_id here to exercise a legacy row (photos
@@ -73,13 +78,47 @@ const defects: Defect[] = [
 // card even though ph1's defect_id would still resolve via photosByDefect.
 // photosByDefect itself remains real/populated here only because
 // renderUnlinkedDefects/renderRepairs below still key defect photos off it.
+// ph2/ph3 are d4's staged Before/After photos — deliberately ALSO present in
+// photosByAsset (exactly like a real defect photo, which always carries both
+// asset_id and defect_id) specifically to prove assetLogChunk's own filter
+// excludes STAGED photos from the asset-level row, leaving only truly
+// untagged photos (like ph1) there.
+// d1 is the "primary" case in mobile-app terms — the Fail-reason defect
+// updateAssetResult creates, as opposed to d4's "additional" Remark — but
+// the report-generator has no such concept at all, only defects on an
+// asset. ph6/ph7 give d1 its OWN staged Before/After pair (on top of its
+// existing untagged legacy photo ph1) specifically to prove the "first
+// defect in a Fail" case renders identically to a Remark's, with zero
+// special-casing anywhere in this service.
 const photosByAsset = new Map<string, InspectionPhoto[]>([
-  ['a1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
+  ['a1', [
+    { id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null, stage: null },
+    { id: 'ph6', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/d1-before.jpg', caption: null, stage: 'before' },
+    { id: 'ph7', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/d1-after.jpg', caption: null, stage: 'after' },
+  ]],
+  ['a2', [
+    { id: 'ph2', job_id: 'j1', asset_id: 'a2', defect_id: 'd4', photo_url: 'https://example.com/before.jpg', caption: null, stage: 'before' },
+    { id: 'ph3', job_id: 'j1', asset_id: 'a2', defect_id: 'd4', photo_url: 'https://example.com/after.jpg', caption: null, stage: 'after' },
+  ]],
 ]);
 const photosByDefect = new Map<string, InspectionPhoto[]>([
-  ['d1', [{ id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null }]],
+  ['d1', [
+    { id: 'ph1', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/x.jpg', caption: null, stage: null },
+    { id: 'ph6', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/d1-before.jpg', caption: null, stage: 'before' },
+    { id: 'ph7', job_id: 'j1', asset_id: 'a1', defect_id: 'd1', photo_url: 'https://example.com/d1-after.jpg', caption: null, stage: 'after' },
+  ]],
+  ['d4', [
+    { id: 'ph2', job_id: 'j1', asset_id: 'a2', defect_id: 'd4', photo_url: 'https://example.com/before.jpg', caption: null, stage: 'before' },
+    { id: 'ph3', job_id: 'j1', asset_id: 'a2', defect_id: 'd4', photo_url: 'https://example.com/after.jpg', caption: null, stage: 'after' },
+  ]],
 ]);
-const signedPhotoUrls = new Map<string, string>([['ph1', 'https://signed.example.com/x.jpg?token=abc']]); // ph2 (if any) intentionally unsigned -> exercises the placeholder path
+const signedPhotoUrls = new Map<string, string>([
+  ['ph1', 'https://signed.example.com/x.jpg?token=abc'],
+  ['ph2', 'https://signed.example.com/before.jpg?token=abc'],
+  ['ph3', 'https://signed.example.com/after.jpg?token=abc'],
+  ['ph6', 'https://signed.example.com/d1-before.jpg?token=abc'],
+  ['ph7', 'https://signed.example.com/d1-after.jpg?token=abc'],
+]);
 const fullResPhotoUrls = new Map<string, string>([['ph1', 'https://signed.example.com/x-fullres.jpg?token=xyz']]);
 
 const data: ReportData = {
@@ -112,7 +151,7 @@ const data: ReportData = {
   dateOfService: '2026-08-01',
 };
 
-const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]], ['a4', [defects[2]]]]);
+const defectsByAsset = new Map<string, Defect[]>([['a1', [defects[0]]], ['a4', [defects[2]]], ['a2', [defects[3]]]]);
 const categoryLogs = buildAssetLogChunksByCategory(assets, byValue, 200);
 
 // Four assets in four different categories (Sections 6, 9, 10, plus the fake
@@ -205,7 +244,7 @@ const docs = [
   ['cover', renderCover(data, byValue)],
   ['tableOfContents', tocHtml],
   ...categoryLogs.flatMap((cat, ci) =>
-    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, signedPhotoUrls, fullResPhotoUrls)] as const),
+    cat.chunks.map((chunk, bi) => [`category${ci}_chunk${bi}`, renderAssetLogChunk(chunk, defectsByAsset, photosByAsset, photosByDefect, signedPhotoUrls, fullResPhotoUrls)] as const),
   ),
   ['unlinked', renderUnlinkedDefects(defects, photosByDefect, signedPhotoUrls, fullResPhotoUrls) ?? '(null — no unlinked defects, unexpected here)'],
   ['repairs', renderRepairs(defects, data.approvedQuote, photosByDefect, signedPhotoUrls, fullResPhotoUrls) ?? '(null — no repairs, unexpected here)'],
@@ -246,6 +285,56 @@ if (d1CardMatch && d1CardMatch[0].includes('signed.example.com/x.jpg')) {
   throw new Error('FAIL: assetLogChunk — the photo rendered inside its defect card, not just at the asset level');
 }
 console.log('OK: assetLogChunk renders the photo once, at the asset level, never inside its defect card');
+
+// Before/After: d4's staged photos (ph2/ph3) must render exactly once each,
+// inside d4's OWN defect card under labelled "Before Photos"/"After Photos"
+// headings — and NEVER at the asset level for a2, even though they also
+// appear in photosByAsset (see the fixture's own comment on ph2/ph3).
+if (!chunkHtml.includes('Before Photos') || !chunkHtml.includes('After Photos')) {
+  throw new Error('FAIL: assetLogChunk — expected "Before Photos"/"After Photos" labels for d4\'s staged photos, found neither');
+}
+const beforeJpgCount = (chunkHtml.match(/signed\.example\.com\/before\.jpg/g) ?? []).length;
+const afterJpgCount = (chunkHtml.match(/signed\.example\.com\/after\.jpg/g) ?? []).length;
+if (beforeJpgCount !== 1 || afterJpgCount !== 1) {
+  throw new Error(`FAIL: assetLogChunk — expected before.jpg and after.jpg to each appear exactly once, found before=${beforeJpgCount} after=${afterJpgCount}`);
+}
+// The "Before Photos" label must actually precede the before.jpg URL in the
+// markup (and "After Photos" precede after.jpg) — proves the two aren't just
+// both present somewhere, but genuinely paired with the right heading.
+const beforeLabelIdx = chunkHtml.indexOf('Before Photos');
+const beforeJpgIdx = chunkHtml.indexOf('signed.example.com/before.jpg');
+const afterLabelIdx = chunkHtml.indexOf('After Photos');
+const afterJpgIdx = chunkHtml.indexOf('signed.example.com/after.jpg');
+if (!(beforeLabelIdx < beforeJpgIdx && beforeJpgIdx < afterLabelIdx && afterLabelIdx < afterJpgIdx)) {
+  throw new Error('FAIL: assetLogChunk — "Before Photos"/before.jpg/"After Photos"/after.jpg are not in the expected order in the markup');
+}
+console.log('OK: assetLogChunk segregates a defect\'s staged photos into labelled Before/After sections, each exactly once');
+
+// Same proof, but for d1 — the "primary" (Fail-reason) defect in mobile-app
+// terms, as opposed to d4's "additional" Remark. The report-generator has no
+// such distinction at all (both are just "a defect on an asset"), so this
+// must work identically: d1's own before/after pair (ph6/ph7) segregated
+// under labelled headings, each exactly once, alongside its PRE-EXISTING
+// untagged legacy photo (ph1) which keeps rendering at the asset level only
+// — proving one defect can mix an old untagged photo with new staged ones
+// without any cross-contamination.
+const d1BeforeCount = (chunkHtml.match(/signed\.example\.com\/d1-before\.jpg/g) ?? []).length;
+const d1AfterCount = (chunkHtml.match(/signed\.example\.com\/d1-after\.jpg/g) ?? []).length;
+if (d1BeforeCount !== 1 || d1AfterCount !== 1) {
+  throw new Error(`FAIL: assetLogChunk — expected d1's before/after photos to each appear exactly once, found before=${d1BeforeCount} after=${d1AfterCount}`);
+}
+console.log('OK: assetLogChunk segregates the PRIMARY (Fail-reason) defect\'s photos identically to an additional Remark\'s — no special-casing');
+
+// d4's card should also show a "Resolved on site" pill (resolved_on_site:
+// true), and NOT appear on d1 (resolved_on_site: false).
+if (!chunkHtml.includes('Resolved on site')) {
+  throw new Error('FAIL: assetLogChunk — expected "Resolved on site" pill for d4, not found');
+}
+const resolvedPillCount = (chunkHtml.match(/Resolved on site/g) ?? []).length;
+if (resolvedPillCount !== 1) {
+  throw new Error(`FAIL: assetLogChunk — expected exactly 1 "Resolved on site" pill (only d4 has resolved_on_site:true), found ${resolvedPillCount}`);
+}
+console.log('OK: assetLogChunk shows the "Resolved on site" pill only for the defect that has it set');
 
 // The fixture's assets cover Sections 6, 9, 10 (real) plus "15" (the fake
 // emergency-lighting convention) — the checklist lists all 13 real Sections

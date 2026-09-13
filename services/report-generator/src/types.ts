@@ -111,6 +111,10 @@ export interface Defect {
   quote_price: number | null;
   created_at: string;
   updated_at: string | null;
+  /** True when a technician fixed this on the spot (mobile-side, purely
+   * informational) — no quote required. Orthogonal to `status`/pricing;
+   * an admin can still action the defect exactly as before. */
+  resolved_on_site: boolean;
 }
 
 export interface InspectionPhoto {
@@ -120,6 +124,10 @@ export interface InspectionPhoto {
   defect_id: string | null;
   photo_url: string;
   caption: string | null;
+  /** When this photo was captured relative to a fix — 'before'/'after' for
+   * a defect's staged photos, null for every asset-level or legacy photo
+   * (no before/after concept). See templates/helpers.ts's stagedPhotoSection. */
+  stage: 'before' | 'after' | null;
 }
 
 export interface Signature {

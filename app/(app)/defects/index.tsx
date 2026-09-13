@@ -271,6 +271,16 @@ export default function GlobalDefectsScreen() {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                     return;
                   }
+                  // FIX: this is the global Defects list — a hidden tab
+                  // reached from outside the Jobs tab's own stack, same
+                  // shape openJob()'s own doc comment warns about (Home
+                  // dashboard cards, notifications, a property's job
+                  // history row). Pushing straight to a job-scoped screen
+                  // here put it on top of an otherwise-empty Jobs-tab
+                  // stack, so back navigation (and switching to the
+                  // Schedule tab afterwards) never landed on the jobs list.
+                  // Seed it first, same as openJob() does.
+                  router.push('/jobs' as never);
                   router.push(`/jobs/${item.job_id}/defects/${item.id}` as never);
                 }}
                 C={C}

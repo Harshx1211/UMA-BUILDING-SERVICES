@@ -305,7 +305,16 @@ function ScheduleJobCard({ job }: { job: Job }) {
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => router.push(`/(app)/jobs/${job.id}/`)}
+      // FIX: this was the only job-navigation call in the whole app using the
+      // fully-qualified /(app)/... group prefix AND a trailing slash — every
+      // other push into a job screen (including openJob(), used from every
+      // other entry point) uses the bare /jobs/{id} form. That prefix is only
+      // needed to jump INTO a different tab's stack (see openJob's own
+      // comment, and Home's notifications bell) — using it here, already
+      // inside the Jobs tab's own stack, risked resolving as a fresh
+      // navigation to the tab root instead of a normal push, which is
+      // exactly the shape of "back doesn't return to Schedule" bugs.
+      onPress={() => router.push(`/jobs/${job.id}` as never)}
       activeOpacity={0.85}
     >
       <View style={[styles.priorityBar, { backgroundColor: PRIORITY_COLOR[job.priority] ?? T.border }]} />

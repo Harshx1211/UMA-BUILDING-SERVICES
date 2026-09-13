@@ -22,6 +22,7 @@ import {
   SyncOperation,
   Priority,
   QuoteStatus,
+  PhotoStage,
 } from '@/constants/Enums';
 
 // ─────────────────────────────────────────────
@@ -158,6 +159,10 @@ export interface Defect {
   defect_code: string | null;
   /** Reference quote price in AUD from the Uptick code library */
   quote_price: number | null;
+  /** Technician-set: already fixed on the spot, no quote/approval needed.
+   * Purely informational — orthogonal to `status`/`quote_price`, which
+   * stay admin-only exactly as before. */
+  resolved_on_site: boolean;
 }
 
 /** A photo taken during a job inspection */
@@ -183,6 +188,10 @@ export interface InspectionPhoto {
   uploaded_at: string;
   /** user id — null when captured offline before session is confirmed */
   uploaded_by: string | null;
+  /** Before/after tagging for a defect's own photo. Null = not staged —
+   * every photo that predates this feature, and every general (non-defect)
+   * asset photo, which has no before/after concept at all. */
+  stage: PhotoStage | null;
 }
 
 /**

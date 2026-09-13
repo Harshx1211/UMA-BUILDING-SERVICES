@@ -127,6 +127,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           company_id: useAuthStore.getState().user?.company_id ?? null,
           asset_id: assetId === '' ? null : assetId,
           defect_id: null,
+          stage: null,
           photo_url: destUri,
           // local_uri preserves the device file path so offline PDF generation
           // can encode the photo directly without downloading from Supabase.

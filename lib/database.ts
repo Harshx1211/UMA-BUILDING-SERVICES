@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 45;
+const CURRENT_SCHEMA_VERSION = 47;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1577,6 +1577,39 @@ export function initializeSchema(): void {
     if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 45: added job_assets.internal_notes');
     currentVersion = 45;
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '45')`);
+  }
+
+  // Migration 46: inspection_photos.stage — tags a defect's own photo as
+  // 'before' or 'after' the fix, so a Remark that got fixed on the spot can
+  // show what was found vs what was done. Null (the default for every
+  // existing row, and every general asset photo, which has no before/after
+  // concept) means "not staged" — see
+  // supabase/migrations/20260920000000_inspection_photos_stage.sql.
+  if (currentVersion < 46) {
+    try {
+      db.runSync(`ALTER TABLE inspection_photos ADD COLUMN stage TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 46: inspection_photos.stage already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 46: added inspection_photos.stage');
+    currentVersion = 46;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '46')`);
+  }
+
+  // Migration 47: defects.resolved_on_site — a small informational flag a
+  // technician can set when they've already fixed something themselves
+  // (no quote/approval needed) — deliberately orthogonal to `status`/
+  // pricing, which stay admin-only exactly as before. See
+  // supabase/migrations/20260920010000_defects_resolved_on_site.sql.
+  if (currentVersion < 47) {
+    try {
+      db.runSync(`ALTER TABLE defects ADD COLUMN resolved_on_site INTEGER NOT NULL DEFAULT 0;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 47: defects.resolved_on_site already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 47: added defects.resolved_on_site');
+    currentVersion = 47;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '47')`);
   }
 
   // Seed inventory from Uptick defect codes on first run

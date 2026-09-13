@@ -21,13 +21,13 @@ import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
-import { getDefectById, getJobById } from '@/lib/database';
+import { getDefectById, getJobById, queryRecords } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useInspectionStore } from '@/store/inspectionStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
-import { DefectSeverity, DefectStatus, JobStatus } from '@/constants/Enums';
+import { DefectSeverity, DefectStatus, JobStatus, PhotoStage } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -47,6 +47,10 @@ type FullDefect = {
   created_at: string;
   defect_code?: string | null;
   quote_price?: number | null;
+  /** Raw SQLite 0/1 — same "wrap in Boolean() at the use site" convention as
+   * every other boolean column read from this DB (see defectsStore's own
+   * normaliseDefects). Purely informational — never gates status/pricing. */
+  resolved_on_site?: number;
   asset_type?: string;
   location_on_site?: string;
   serial_number?: string;
@@ -79,11 +83,25 @@ export default function DefectDetailScreen() {
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const [jobLocked,   setJobLocked]   = useState(false); // true when job is completed or cancelled
 
+  // Grouped straight from inspection_photos (the authoritative source of
+  // stage tagging — see PhotoStage) rather than the defect's own flat
+  // `photos` mirror, which is deliberately just "every photo, no stage
+  // info" (see defectsStore.addDefect's own comment on that column).
+  // Matches the same Before/After split the PDF and admin dashboard show.
+  const [photoGroups, setPhotoGroups] = useState<{ before: string[]; after: string[]; untagged: string[] }>({ before: [], after: [], untagged: [] });
+
   const loadDefect = useCallback(() => {
     if (!defectId) return;
     setIsLoading(true);
     const d = getDefectById<FullDefect>(defectId);
     setDefect(d);
+
+    const photoRows = queryRecords<{ photo_url: string; stage: string | null }>('inspection_photos', { defect_id: defectId });
+    setPhotoGroups({
+      before: photoRows.filter((r) => r.stage === PhotoStage.Before).map((r) => r.photo_url),
+      after: photoRows.filter((r) => r.stage === PhotoStage.After).map((r) => r.photo_url),
+      untagged: photoRows.filter((r) => !r.stage).map((r) => r.photo_url),
+    });
 
     // Determine lock state from the job record. FIX: Cancelled was never
     // checked here, only Completed — a defect on a cancelled job showed as
@@ -104,8 +122,10 @@ export default function DefectDetailScreen() {
   useJobLiveSync(defect?.job_id, useCallback((table) => {
     // 'jobs' too — loadDefect() also recomputes jobLocked from the job's
     // current status, so a completion/cancellation elsewhere reflects here
-    // immediately instead of only on next focus.
-    if (table === 'defects' || table === 'jobs') loadDefect();
+    // immediately instead of only on next focus. 'inspection_photos' too —
+    // a teammate adding an after-photo to this exact defect from their own
+    // device should show up here without needing to back out and re-open.
+    if (table === 'defects' || table === 'jobs' || table === 'inspection_photos') loadDefect();
   }, [loadDefect]));
 
   // FIX: subscribeToJobLive never subscribes to DELETE events for any
@@ -172,11 +192,16 @@ export default function DefectDetailScreen() {
   const sev        = SEVERITY_CONFIG[defect.severity] ?? SEVERITY_CONFIG[DefectSeverity.NonConformance];
   const statusColor = STATUS_COLORS[defect.status as DefectStatus] ?? C.textSecondary;
   const codeInfo   = defect.defect_code ? findDefectCode(defect.defect_code) : null;
+  const totalPhotoCount = photoGroups.before.length + photoGroups.after.length + photoGroups.untagged.length;
 
-  let photosArr: string[] = [];
-  try {
-    photosArr = typeof defect.photos === 'string' ? JSON.parse(defect.photos) : (defect.photos || []);
-  } catch { /* ignore */ }
+  const renderPhotoThumb = (uri: string) => (
+    <TouchableOpacity key={uri} onPress={() => setLightboxUri(uri)} activeOpacity={0.85} style={s.photoThumbWrap}>
+      <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} resizeMode="cover" />
+      <View style={[s.photoOverlay, { backgroundColor: C.shadow + '26' }]}>
+        <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={C.textOnPrimary} />
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
@@ -235,6 +260,16 @@ export default function DefectDetailScreen() {
           </View>
         </Animated.View>
 
+        {/* Resolved on site — informational only, independent of status/quote above */}
+        {Boolean(defect.resolved_on_site) && (
+          <Animated.View entering={noMotion ? undefined : FadeInDown.delay(55).duration(380)}>
+            <View style={[s.resolvedBanner, { backgroundColor: C.success + '14', borderColor: C.success + '40' }]}>
+              <MaterialCommunityIcons name="check-decagram-outline" size={15} color={C.success} />
+              <Text style={[s.resolvedTxt, { color: C.success }]}>Resolved on site — no quote needed</Text>
+            </View>
+          </Animated.View>
+        )}
+
         {/* Defect Code */}
         {codeInfo && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(70).duration(380)}>
@@ -289,26 +324,28 @@ export default function DefectDetailScreen() {
           </Animated.View>
         )}
 
-        {/* Photos */}
-        {photosArr.length > 0 && (
+        {/* Photos — split Before/After (this defect's staged fix evidence)
+            with a plain untagged group for everything else, same split the
+            PDF report and admin dashboard use (see PhotoStage). */}
+        {totalPhotoCount > 0 && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(380)}>
             <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
-              <Text style={[s.cardLabel, { color: C.textTertiary }]}>PHOTOS ({photosArr.length})</Text>
-              <View style={s.photoGrid}>
-                {photosArr.map((uri) => (
-                  <TouchableOpacity
-                    key={uri}
-                    onPress={() => setLightboxUri(uri)}
-                    activeOpacity={0.85}
-                    style={s.photoThumbWrap}
-                  >
-                    <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} resizeMode="cover" />
-                    <View style={[s.photoOverlay, { backgroundColor: C.shadow + '26' }]}>
-                      <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={C.textOnPrimary} />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={[s.cardLabel, { color: C.textTertiary }]}>PHOTOS ({totalPhotoCount})</Text>
+              {photoGroups.before.length > 0 && (
+                <View style={s.photoGroupBlock}>
+                  <Text style={[s.photoGroupLabel, { color: C.textSecondary }]}>Before</Text>
+                  <View style={s.photoGrid}>{photoGroups.before.map(renderPhotoThumb)}</View>
+                </View>
+              )}
+              {photoGroups.after.length > 0 && (
+                <View style={s.photoGroupBlock}>
+                  <Text style={[s.photoGroupLabel, { color: C.textSecondary }]}>After</Text>
+                  <View style={s.photoGrid}>{photoGroups.after.map(renderPhotoThumb)}</View>
+                </View>
+              )}
+              {photoGroups.untagged.length > 0 && (
+                <View style={s.photoGrid}>{photoGroups.untagged.map(renderPhotoThumb)}</View>
+              )}
             </View>
           </Animated.View>
         )}
@@ -389,6 +426,14 @@ const s = StyleSheet.create({
   },
   lockedTxt: { fontSize: 12, fontStyle: 'italic', flex: 1 },
 
+  resolvedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 10, borderWidth: 1, marginBottom: 12,
+    ...cardShadow,
+  },
+  resolvedTxt: { fontSize: 12, fontWeight: '700', flex: 1 },
+
   sevBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 14, borderRadius: 16, borderWidth: 1,
@@ -424,6 +469,8 @@ const s = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   infoTxt: { fontSize: 14, flex: 1 },
 
+  photoGroupBlock: { marginBottom: 12 },
+  photoGroupLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
   photoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoThumbWrap: { width: 88, height: 88, borderRadius: 12, overflow: 'hidden', position: 'relative' },
   photoThumb:    { width: '100%', height: '100%' },

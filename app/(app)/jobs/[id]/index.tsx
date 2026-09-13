@@ -18,11 +18,12 @@ import {
 } from '@/constants/Enums';
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
-  getSignatureForJob, getDocumentsForProperty, updateRecord, addToSyncQueue,
+  getSignatureForJob, getDocumentsForProperty, getNotebookItemsForProperty, updateRecord, addToSyncQueue,
   deleteRecord,
 } from '@/lib/database';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
+import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
@@ -147,6 +148,8 @@ export default function JobDetailScreen() {
   const [defects, setDefects] = useState<Defect[]>([]);
   const [photos,  setPhotos]  = useState<InspectionPhoto[]>([]);
   const [documentCount, setDocumentCount] = useState(0);
+  const [notebookCount, setNotebookCount] = useState(0);
+  const notebookSheetRef = useRef<PropertyNotebookSheetRef>(null);
   const [notes,   setNotes]   = useState('');
   const [isEditingNotes,   setIsEditingNotes]   = useState(false);
   const [isLoading,        setIsLoading]        = useState(true);
@@ -176,6 +179,7 @@ export default function JobDetailScreen() {
       // Property-wide count (not job-scoped) — matches how the Documents
       // screen itself lists every document for the site, not just this visit.
       setDocumentCount(getDocumentsForProperty(j.property_id).length);
+      setNotebookCount(getNotebookItemsForProperty(j.property_id).length);
       setHasSig(!!getSignatureForJob(id));
     } catch (err) {
       console.error('[JobDetail] load error:', err);
@@ -461,11 +465,34 @@ export default function JobDetailScreen() {
   // never happened. Documents/Navigate/Checklist-guide/Call stay visible —
   // none of them assert the inspection itself was performed.
   const actionRows: (Omit<React.ComponentProps<typeof ActionRow>, 'isLast' | 'C'> & { key: string })[] = [
+    // FIX: properties/[id].tsx (job history, documents, notebook, asset
+    // register for the whole site) had no way to be reached from anywhere
+    // in the app's actual navigation — nothing linked into it, only its own
+    // "View Assets" links pointed out. This is the first real entry point.
+    {
+      key: 'property', icon: 'home-city-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+      title: 'Property Details',
+      subtitle: job.property_name || 'Site history, documents & notebook',
+      // Full (app) group prefix, matching this codebase's own established
+      // pattern for jumping into another hidden tab-group's screen from a
+      // different tab's stack (see Home's own bell icon -> /(app)/notifications).
+      onPress: () => router.push(`/(app)/properties/${job.property_id}` as never),
+    },
     {
       key: 'documents', icon: 'file-document-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: 'Documents',
       subtitle: documentCount === 0 ? 'Scan a site document' : `${documentCount} document${documentCount !== 1 ? 's' : ''} on file`,
       onPress: () => router.push(`/jobs/${id}/documents` as never),
+    },
+    {
+      key: 'notebook', icon: 'notebook-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
+      title: 'Site Notebook',
+      subtitle: notebookCount === 0 ? 'No notes yet for this site' : `${notebookCount} thing${notebookCount !== 1 ? 's' : ''} to remember`,
+      // View-only here, same as Property Detail's — items can only be added
+      // or deleted from inside an actual inspection (inspect.tsx / the
+      // quick site-inspect screen), so this opens the sheet directly
+      // rather than navigating to a separate page.
+      onPress: () => notebookSheetRef.current?.open(),
     },
     ...(!isCancelled ? [{
       key: 'defects', icon: 'alert-circle-outline' as MCIconName,
@@ -954,6 +981,12 @@ export default function JobDetailScreen() {
         </View>
       </Modal>
 
+      {/* Mounted last so it paints above the ScrollView — same reasoning as
+          inspect.tsx/site-inspect's own notebook mount (@gorhom/bottom-sheet's
+          plain BottomSheet doesn't portal itself). View-only here; propertyId
+          comes from the job's own property, same value the inspection
+          screens' notebook sheets use for this same site. */}
+      {job ? <PropertyNotebookSheet ref={notebookSheetRef} propertyId={job.property_id} editable={false} /> : null}
     </View>
   );
 }

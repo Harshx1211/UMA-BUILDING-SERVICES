@@ -148,7 +148,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   const categorySections: Section[] = categoryLogs.flatMap((cat, catIndex) =>
     cat.chunks.map((chunk, chunkIndex): Section => ({
       key: chunkIndex === 0 ? categoryEntries[catIndex].key : undefined,
-      html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.signedPhotoUrls, data.fullResPhotoUrls),
+      html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls, data.fullResPhotoUrls),
       breakBefore: true,
     })),
   );

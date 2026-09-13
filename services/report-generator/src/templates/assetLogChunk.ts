@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, fmtDateTime, fmtRelativeDays, photoRow, resultPill } from './helpers';
+import { esc, fmtDateTime, fmtRelativeDays, photoRow, resultPill, stagedPhotoSection } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -9,15 +9,11 @@ import { Defect, InspectionPhoto } from '../types';
  * row expands inline into a colored defect card for any defects linked to that
  * asset, matching the reference report's per-asset defect layout.
  */
-// Passed to renderDefectCard for defects rendered inside this chunk — see
-// the comment at its call site below for why photos never render per-defect
-// here (only renderUnlinkedDefects/renderRepairs still use a real map).
-const EMPTY_PHOTOS = new Map<string, InspectionPhoto[]>();
-
 export function renderAssetLogChunk(
   chunk: AssetLogChunk,
   defectsByAsset: Map<string, Defect[]>,
   photosByAsset: Map<string, InspectionPhoto[]>,
+  photosByDefect: Map<string, InspectionPhoto[]>,
   signedPhotoUrls: Map<string, string>,
   fullResPhotoUrls: Map<string, string>,
 ): string {
@@ -50,16 +46,14 @@ export function renderAssetLogChunk(
     const { asset } = row;
     const assetDefects = defectsByAsset.get(asset.id) ?? [];
 
-    // FIX: photos are no longer associated with a specific defect at all —
-    // every photo for this asset (regardless of any defect_id a photo might
-    // still carry from before this change) renders once, here, at the
-    // asset level. Defect cards below get an empty photo map (see the
-    // `new Map()` passed to renderDefectCard) so a defect never shows its
-    // own separate photo row within this Asset Log section — that's still
-    // the right behavior for a genuinely unlinked defect (no asset row to
-    // attach to at all), which is why renderDefectCard itself still
-    // supports it and unlinkedDefects.ts/repairs.ts still pass the real map.
-    const photos = photosByAsset.get(asset.id) ?? [];
+    // A defect's photo carries BOTH asset_id and defect_id, so
+    // photosByAsset/photosByDefect are NOT mutually exclusive — the same
+    // row can appear in both maps. Untagged (stage === null) photos still
+    // render once here at the asset level, exactly as before this feature
+    // existed. A STAGED (before/after) photo belongs to its own defect's
+    // card instead (see renderDefectCard below) — excluded here so it
+    // doesn't also render a second time, undifferentiated, on the asset row.
+    const photos = (photosByAsset.get(asset.id) ?? []).filter((p) => !(p.defect_id && p.stage));
 
     // An asset's info, photos, and defect cards used to be 3 sibling <tr>
     // elements — theme.ts's `tr { break-inside: avoid }` protects each ONE
@@ -102,7 +96,7 @@ export function renderAssetLogChunk(
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}</td></tr>` : ''}
             ${asset.description ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.description, 'Asset Notes')}</td></tr>` : ''}
             ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Remarks')}</td></tr>` : ''}
-            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, EMPTY_PHOTOS, signedPhotoUrls, row.officialSection, fullResPhotoUrls)).join('')}</td></tr>` : ''}
+            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection, fullResPhotoUrls, false)).join('')}</td></tr>` : ''}
           </tbody></table>
         </td>
       </tr>`);
@@ -161,12 +155,26 @@ export function renderDefectCard(
   // so no Section to reference — defaults to null.
   officialSection: number | null = null,
   fullResPhotoUrls?: Map<string, string>,
+  // True (default) for renderUnlinkedDefects, whose defects have no asset
+  // and so no sibling asset-level photo row anywhere — their untagged
+  // photos must render here or nowhere. assetLogChunk's OWN call below
+  // passes false: every defect it renders always has an asset row directly
+  // above it that already shows untagged photos (see stagedPhotoSection's
+  // own comment on why photosByAsset/photosByDefect overlap).
+  includeUntaggedPhotos = true,
 ): string {
   const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
   const photos = photosByDefect.get(defect.id) ?? [];
   const quoteBadge = defect.quote_price != null
     ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Quote: $${Number(defect.quote_price).toFixed(2)}</span>`
+    : '';
+  // Purely informational — a technician's on-the-spot fix, independent of
+  // status/quote (mobile never gets to touch either of those). Renders
+  // alongside the quote pill rather than replacing it: a defect can be
+  // resolved on site AND still have an earlier quote on record.
+  const resolvedBadge = defect.resolved_on_site
+    ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Resolved on site</span>`
     : '';
 
   return `
@@ -178,8 +186,8 @@ export function renderDefectCard(
           <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)} &middot; ${esc(fmtRelativeDays(defect.created_at))}</span>
         </div>
         <div style="margin-top:4px;white-space:pre-line">${esc(defect.description)}</div>
-        ${quoteBadge}
-        ${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}
+        ${quoteBadge}${resolvedBadge}
+        ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls, includeUntaggedPhotos)}
       </div>
     </div>`;
 }

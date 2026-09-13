@@ -75,6 +75,15 @@ export enum DefectStatus {
   Monitoring = 'monitoring',
 }
 
+/** When a defect photo was captured relative to the fix. Null (not a
+ * member of this enum — the column is just nullable) means "not staged":
+ * every photo that predates this feature, plus every general asset photo,
+ * which has no before/after concept at all. */
+export enum PhotoStage {
+  Before = 'before',
+  After = 'after',
+}
+
 /** Overall fire-safety compliance standing of a property */
 export enum ComplianceStatus {
   Compliant = 'compliant',

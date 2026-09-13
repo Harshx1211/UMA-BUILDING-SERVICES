@@ -93,6 +93,17 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
         </View>
       </View>
 
+      {/* Resolved on site — informational only, independent of status above
+          (see defectsStore's resolved_on_site comment). Data's already on
+          this object; the full Before/After photo split lives one tap away
+          on the detail screen (defects/[defectId].tsx). */}
+      {defect.resolved_on_site && (
+        <View style={s.resolvedRow}>
+          <MaterialCommunityIcons name="check-decagram-outline" size={12} color={C.success} />
+          <Text style={[s.resolvedText, { color: C.success }]}>Resolved on site</Text>
+        </View>
+      )}
+
       {/* Asset pill */}
       {defect.asset_type && (
         <View style={s.assetRow}>
@@ -183,6 +194,9 @@ const s = StyleSheet.create({
 
   statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statusText:  { fontWeight: '800', fontSize: 11, letterSpacing: 0.2 },
+
+  resolvedRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+  resolvedText: { fontSize: 11.5, fontWeight: '700' },
 
   assetRow: { marginBottom: 8, flexDirection: 'row' },
   assetPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },

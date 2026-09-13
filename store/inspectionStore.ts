@@ -59,6 +59,14 @@ export type AssetWithResult = Asset & {
   internal_notes: string | null;
   job_asset_id: string | null;
   photos: string[];
+  // Maps each entry in `photos` (a photo_url) to the on-device file path it
+  // was originally captured from, if this device still has it — populated
+  // once from SQLite at load time, purely for display: preferring the local
+  // file (when it still exists) over re-downloading an already-uploaded
+  // photo lets the Asset Detail screen show it instantly instead of waiting
+  // on a network fetch. Never used for matching/removal — those still key
+  // off the photo_url strings in `photos` itself, untouched by this.
+  photoLocalUris: Record<string, string | null>;
 };
 
 interface InspectionState {
@@ -92,7 +100,16 @@ interface InspectionState {
     // existing positional call site keeps working unchanged; only a call
     // site that actually cares about internal notes needs to reach this far.
     internalNotes?: string,
-  ) => void;
+    // Returns the id of the defect this call just created or updated (the
+    // asset's "primary" one — see asset/[assetId].tsx), or null when this
+    // call didn't touch a defect at all (Pass/N-T, or a Fail with no
+    // defectReason). Purely additive — every existing call site already
+    // ignores the return value, since `void` and an ignored return are both
+    // fine in JS. Lets a caller attach before/after photos or resolved_on_site
+    // to the primary defect afterward via defectsStore, the same way an
+    // "additional" defect already does — without this function needing to
+    // know anything about photos-by-stage itself.
+  ) => string | null;
   addPhotoToAsset: (assetId: string, photoUri: string) => void;
   removePhotoFromAsset: (assetId: string, photoUri: string) => void;
   isInspectionComplete: () => boolean;
@@ -128,15 +145,15 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       const dbAssets         = getAssetsForProperty<Asset>(job.property_id);
       const jobAssets        = queryRecords<JobAsset>('job_assets', { job_id: jobId })
         .sort((a, b) => (b.actioned_at ?? '').localeCompare(a.actioned_at ?? ''));
-      const inspectionPhotos = queryRecords<{ asset_id: string; photo_url: string }>(
+      const inspectionPhotos = queryRecords<{ asset_id: string; photo_url: string; local_uri: string | null }>(
         'inspection_photos', { job_id: jobId }
       );
 
       const merged: AssetWithResult[] = dbAssets.map(asset => {
         const ja = jobAssets.find(j => j.asset_id === asset.id);
-        const photosForAsset = inspectionPhotos
-          .filter(p => p.asset_id === asset.id)
-          .map(p => p.photo_url);
+        const photoRowsForAsset = inspectionPhotos.filter(p => p.asset_id === asset.id);
+        const photosForAsset = photoRowsForAsset.map(p => p.photo_url);
+        const photoLocalUris = Object.fromEntries(photoRowsForAsset.map(p => [p.photo_url, p.local_uri]));
 
         return {
           ...asset,
@@ -148,6 +165,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           internal_notes: ja?.internal_notes ?? null,
           job_asset_id: ja?.id ?? null,
           photos: photosForAsset,
+          photoLocalUris,
         };
       });
 
@@ -381,6 +399,9 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       }
 
       // ── Defect auto-create / update ───────────────────────
+      // Tracks whichever defect this call touches, so it can be returned to
+      // the caller — see the interface's own comment on why.
+      let touchedDefectId: string | null = null;
       if (result === InspectionResult.Fail && defectReason) {
         // FIX: this used to unconditionally look up "any defect already on
         // this asset" and merge into it — so failing an asset that already
@@ -403,6 +424,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
 
         if (existingDefects.length === 0) {
           const defectId = generateUUID();
+          touchedDefectId = defectId;
           const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
 
           // FIX: photos are deliberately NOT linked to a specific defect —
@@ -448,6 +470,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           // Update existing defect description/severity/code/price and reconcile photos
           const existing = existingDefects[0];
           const existingId = existing.id;
+          touchedDefectId = existingId;
           // FIX: a defect already moved past Open (Quoted/Monitoring/Repaired
           // — e.g. an admin actioned it from the web dashboard while the
           // technician was still on site) kept that status forever even when
@@ -536,8 +559,10 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // and lib/sync.ts's subscribeToJobLive() Realtime channel pushes it
       // straight to other devices' screens.
       syncNow();
+      return touchedDefectId;
     } catch (err: unknown) {
       set({ error: errorMessage(err), isSaving: false });
+      return null;
     }
   },
 
@@ -561,6 +586,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       company_id: useAuthStore.getState().user?.company_id ?? null,
       asset_id: assetId,
       defect_id: null,
+      stage: null,
       photo_url: photoUri,
       local_uri: (photoUri.startsWith('file://') || photoUri.startsWith('content://')) ? photoUri : null,
       caption: null,
