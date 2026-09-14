@@ -69,6 +69,14 @@ export interface DefectFieldsValue {
   defectCode: string | null;
   quotePrice: number | null;
   resolvedOnSite: boolean;
+  /** True only if the technician actually picked/cleared a code (or edited
+   * the description enough to auto-clear one) THIS session — false for an
+   * existing defect whose code/price simply haven't been touched. Lets a
+   * caller skip re-sending defectCode/quotePrice on a save that never
+   * touched them, instead of unconditionally overwriting whatever's
+   * currently saved (which risks clobbering a price set elsewhere, e.g. by
+   * an admin, with a stale value this form loaded earlier). */
+  codeOrPriceChanged: boolean;
 }
 
 export interface DefectPhotosDraft { before: string[]; after: string[]; }
@@ -129,7 +137,7 @@ export function DefectFieldsCard({
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
   useEffect(() => {
-    onDraftChangeRef.current?.({ severity, description, defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice, resolvedOnSite });
+    onDraftChangeRef.current?.({ severity, description, defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice, resolvedOnSite, codeOrPriceChanged: codeTouchedRef.current });
   }, [severity, description, selectedCode, suggestedPrice, resolvedOnSite]);
 
   const onPhotosDraftChangeRef = useRef(onPhotosDraftChange);
@@ -144,6 +152,14 @@ export function DefectFieldsCard({
   // handleCodeSelect below must never silently override either.
   const severityTouchedRef = useRef(!!initial);
 
+  // Tracks whether the technician has actually interacted with the code/
+  // price fields this session — deliberately starts false even when editing
+  // an existing defect (unlike severityTouchedRef above), since the value
+  // here needs to distinguish "still whatever was loaded" from "the
+  // technician just changed it," not just "is there a real value." See
+  // DefectFieldsValue's own comment on codeOrPriceChanged for why.
+  const codeTouchedRef = useRef(false);
+
   const handleSelectSeverity = (v: DefectSeverity) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     severityTouchedRef.current = true;
@@ -152,6 +168,7 @@ export function DefectFieldsCard({
 
   const handleCodeSelect = (code: DefectCode | null) => {
     setCodePickerVisible(false);
+    codeTouchedRef.current = true;
     if (code === null) {
       setSelectedCode(null);
       setSuggestedPrice(null);
@@ -181,6 +198,7 @@ export function DefectFieldsCard({
 
   const currentValue = (): DefectFieldsValue => ({
     severity, description: description.trim(), defectCode: selectedCode?.code ?? null, quotePrice: suggestedPrice, resolvedOnSite,
+    codeOrPriceChanged: codeTouchedRef.current,
   });
   const currentPhotos = (): DefectPhotosDraft => ({ before: beforePhotos, after: afterPhotos });
 
@@ -325,7 +343,7 @@ export function DefectFieldsCard({
           <View style={s.priceBadge}><Text style={s.priceBadgeTxt}>${suggestedPrice}</Text></View>
         )}
         {selectedCode ? (
-          <TouchableOpacity onPress={() => { setSelectedCode(null); setSuggestedPrice(null); }} hitSlop={8} style={{ padding: 4 }}>
+          <TouchableOpacity onPress={() => { codeTouchedRef.current = true; setSelectedCode(null); setSuggestedPrice(null); }} hitSlop={8} style={{ padding: 4 }}>
             <MaterialCommunityIcons name="close-circle" size={18} color={C.textTertiary} />
           </TouchableOpacity>
         ) : (
@@ -340,7 +358,7 @@ export function DefectFieldsCard({
         onChangeText={(v) => {
           setDescription(v);
           if (v.trim()) setError(false);
-          if (selectedCode && v !== selectedCode.description) { setSelectedCode(null); setSuggestedPrice(null); }
+          if (selectedCode && v !== selectedCode.description) { codeTouchedRef.current = true; setSelectedCode(null); setSuggestedPrice(null); }
         }}
         multiline
         textAlignVertical="top"

@@ -374,15 +374,27 @@ export async function runSync(userId?: string): Promise<boolean> {
     if (__DEV__) console.log(`[SiteTrack Sync] Syncing for user: ${resolvedUserId}`);
 
     // --- REALTIME REVOCATION CHECK ---
-    const { data: profile } = await supabase.from('users').select('is_active, company_id').eq('id', resolvedUserId).single();
-    if (profile?.is_active === false) {
+    // FIX: this used to discard `error` entirely — on a transient fetch
+    // failure `profile` came back undefined, and `profile?.is_active ===
+    // false` silently evaluates to false (not true), so a deactivated
+    // user's device looked "confirmed still active" on any sync tick where
+    // this one query happened to fail, instead of triggering
+    // forceFinalSyncAndSignOut(). Logging the failure (rather than treating
+    // it identically to "checked, still active") means a flaky-but-
+    // connected network can't be silently mistaken for a real all-clear —
+    // the very next successful tick still catches a real revocation.
+    const { data: profile, error: profileCheckError } = await supabase.from('users').select('is_active, company_id').eq('id', resolvedUserId).single();
+    if (profileCheckError) {
+      console.warn('[SiteTrack Sync] Could not verify account is still active this cycle:', profileCheckError.message);
+    } else if (profile?.is_active === false) {
       console.warn('[SiteTrack Sync] Access revoked (User inactive). Forcing sign out.');
       useAuthStore.getState().forceFinalSyncAndSignOut();
       return false;
-    }
-    if (profile?.company_id) {
-      const { data: company } = await supabase.from('companies').select('subscription_status').eq('id', profile.company_id).single();
-      if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
+    } else if (profile?.company_id) {
+      const { data: company, error: companyCheckError } = await supabase.from('companies').select('subscription_status').eq('id', profile.company_id).single();
+      if (companyCheckError) {
+        console.warn('[SiteTrack Sync] Could not verify company subscription this cycle:', companyCheckError.message);
+      } else if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
         console.warn('[SiteTrack Sync] Access revoked (Company suspended/cancelled). Forcing sign out.');
         useAuthStore.getState().forceFinalSyncAndSignOut();
         return false;

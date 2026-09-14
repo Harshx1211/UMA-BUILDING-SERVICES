@@ -23,6 +23,7 @@ import { SyncOperation } from '@/constants/Enums';
 import { DOCUMENT_BUCKET } from '@/constants/Config';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
+import { generateUUID } from '@/utils/uuid';
 
 /** Max concurrent document binary uploads per sync cycle */
 const UPLOAD_CONCURRENCY = 3;
@@ -45,9 +46,9 @@ export async function uploadDocument(
   try {
     const resolvedUri = getValidLocalUri(localUri);
 
-    const timestamp = Date.now();
-    const random    = Math.random().toString(36).substring(7);
-    const fileName  = `${timestamp}-${random}.pdf`;
+    // FIX: was Date.now() + a few Math.random() chars — see the identical
+    // fix and comment in lib/photoUpload.ts's uploadPhoto().
+    const fileName  = `${generateUUID()}.pdf`;
     const filePath  = `properties/${propertyId}/${fileName}`;
 
     const session  = await supabase.auth.getSession();

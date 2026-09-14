@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, fmtDateTime, fmtRelativeDays, photoRow, resultPill, stagedPhotoSection } from './helpers';
+import { esc, fmtCurrency, fmtDateTime, fmtRelativeDays, photoRow, resultPill, stagedPhotoSection } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -167,7 +167,7 @@ export function renderDefectCard(
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
   const photos = photosByDefect.get(defect.id) ?? [];
   const quoteBadge = defect.quote_price != null
-    ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Quote: $${Number(defect.quote_price).toFixed(2)}</span>`
+    ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Quote: ${fmtCurrency(defect.quote_price)}</span>`
     : '';
   // Purely informational — a technician's on-the-spot fix, independent of
   // status/quote (mobile never gets to touch either of those). Renders

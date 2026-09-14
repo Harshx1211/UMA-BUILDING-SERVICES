@@ -485,17 +485,24 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           const updates: Record<string, string | number | null> = {
             description: defectReason,
             severity: severity ?? DefectSeverity.NonCritical,
-            // FIX: defect_code/quote_price were never included in this
-            // update payload, so re-picking a Defect Code (or its price) on
-            // an asset's primary defect appeared to save — the form showed
-            // the new value — but updateRecord's partial SET left the
-            // column at its old value forever. Same bug class as the
-            // already-fixed Notes/severity-reset issue, on two other
-            // fields of this same update path.
-            defect_code: defectCode ?? null,
-            quote_price: quotePrice ?? null,
             updated_at: new Date().toISOString(),
             ...(descriptionChanged ? { status: DefectStatus.Open } : {}),
+            // FIX: defect_code/quote_price used to be unconditionally
+            // included (defectCode ?? null / quotePrice ?? null) — that
+            // fixed an earlier bug where re-picking a code appeared to save
+            // but silently didn't persist, but it introduced a new one: a
+            // technician re-saving this defect for an unrelated reason
+            // (editing severity, fixing a typo) unconditionally re-sent
+            // whatever code/price their form loaded when it opened,
+            // clobbering a price an admin may have set in the meantime.
+            // `undefined` here (vs. a real value or explicit `null`) means
+            // "the caller never touched this field" — DefectFieldsCard's
+            // codeOrPriceChanged flag is what makes that distinction, see
+            // its own comment. Only include the key at all when the caller
+            // actually passed something, so an omitted field is left alone
+            // by updateRecord's partial SET instead of being overwritten.
+            ...(defectCode !== undefined ? { defect_code: defectCode } : {}),
+            ...(quotePrice !== undefined ? { quote_price: quotePrice } : {}),
           };
 
           // FIX: photos are deliberately NOT copied onto defect.photos or

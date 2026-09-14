@@ -28,25 +28,25 @@ export interface GenerationStatus {
  * fragile on mobile networks for anything but the smallest jobs.
  */
 export async function tryAcquireLock(db: SupabaseClient, jobId: string): Promise<LockResult> {
-  const { data: existing } = await db
-    .from('report_generation_status')
-    .select('status, updated_at')
-    .eq('job_id', jobId)
-    .maybeSingle();
-
-  if (existing?.status === 'generating') {
-    const age = Date.now() - new Date(existing.updated_at).getTime();
-    if (age < STALE_LOCK_MS) {
-      return { acquired: false, reason: 'A report is already being generated for this job.' };
-    }
-    // Stale lock from a crashed/timed-out run — safe to reclaim.
-  }
-
-  const { error } = await db
-    .from('report_generation_status')
-    .upsert({ job_id: jobId, status: 'generating', last_error: null, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+  // FIX: this used to be a separate SELECT (check the current status) then
+  // a separate UPSERT (set it to 'generating') — two round trips with a
+  // real window between them. Two near-simultaneous requests for the same
+  // job could both pass the SELECT's "not already generating" check before
+  // either UPSERT landed, both proceed, and run duplicate Gotenberg
+  // pipelines for the same job. try_acquire_report_lock (see its own
+  // migration) does the check-and-set as one atomic
+  // `INSERT ... ON CONFLICT DO UPDATE ... WHERE` statement — it returns
+  // true only for whichever caller's own invocation actually flipped the
+  // row to 'generating', with no window for a second caller to slip
+  // through in between.
+  const staleBefore = new Date(Date.now() - STALE_LOCK_MS).toISOString();
+  const { data: acquired, error } = await db.rpc('try_acquire_report_lock', {
+    p_job_id: jobId,
+    p_stale_before: staleBefore,
+  });
 
   if (error) return { acquired: false, reason: `Failed to acquire generation lock: ${error.message}` };
+  if (!acquired) return { acquired: false, reason: 'A report is already being generated for this job.' };
   return { acquired: true };
 }
 

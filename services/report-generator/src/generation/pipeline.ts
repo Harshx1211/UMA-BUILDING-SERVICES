@@ -92,10 +92,21 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 
   const data = await fetchReportData(db, jobId);
 
-  const { data: assetTypeDefRows } = await db
+  // FIX: this used to destructure only `data`, discarding `error` — a
+  // transient failure on this one query (unrelated to fetchReportData just
+  // above, which already succeeded) silently produced an EMPTY lookup map
+  // instead of aborting generation. Every category/asset label across the
+  // cover page's Scope of Works, every asset-log category header, and the
+  // Yearly Condition Report's compliance checklist all key off this map —
+  // a materially wrong AS1851 compliance PDF would have been generated and
+  // delivered with no failure surfaced anywhere in the pipeline.
+  const { data: assetTypeDefRows, error: assetTypeDefError } = await db
     .from('asset_type_definitions')
     .select('value, label, full_label, inspection_routine')
     .or(`company_id.eq.${data.job.company_id},company_id.is.null`);
+  if (assetTypeDefError) {
+    throw new ReportGenerationError(`Failed to load asset type definitions: ${assetTypeDefError.message}`);
+  }
   const assetTypesByValue = new Map<string, AssetTypeDefinition>(
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
   );

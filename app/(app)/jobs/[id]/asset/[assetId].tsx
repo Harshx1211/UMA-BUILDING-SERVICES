@@ -481,7 +481,7 @@ export default function AssetDetailScreen() {
             // into whatever unrelated defect already existed on this asset
             // (e.g. an earlier Remark), exactly the bug forceNewDefect
             // exists to prevent — see updateAssetResult's own comment on it.
-            const touchedId = updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.defectCode, pd!.quotePrice, wasPendingFail, internalNoteTrim);
+            const touchedId = updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.codeOrPriceChanged ? pd!.defectCode : undefined, pd!.codeOrPriceChanged ? pd!.quotePrice : undefined, wasPendingFail, internalNoteTrim);
             notifyIfRejected(() => useInspectionStore.getState().error);
             if (touchedId) {
               useDefectsStore.getState().updateDefect(touchedId, { resolved_on_site: pd!.resolvedOnSite });
@@ -538,8 +538,12 @@ export default function AssetDetailScreen() {
               useDefectsStore.getState().updateDefect(eid, {
                 description: ad!.description,
                 severity: ad!.severity,
-                defect_code: ad!.defectCode,
-                quote_price: ad!.quotePrice,
+                // FIX: same clobber risk as inspectionStore.ts's primary-
+                // defect update — only touch defect_code/quote_price when
+                // the technician actually interacted with them this
+                // session, so an unrelated re-save (severity, a typo fix)
+                // can't overwrite a price set elsewhere in the meantime.
+                ...(ad!.codeOrPriceChanged ? { defect_code: ad!.defectCode, quote_price: ad!.quotePrice } : {}),
                 resolved_on_site: ad!.resolvedOnSite,
               });
             }
@@ -669,7 +673,7 @@ export default function AssetDetailScreen() {
     // on this asset (see updateAssetResult's own comment on this param).
     // Re-editing an already-Fail asset's existing defect (pendingFail is
     // false by then) still merges into it exactly as before.
-    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim());
     // updateAssetResult only creates/updates the defect ROW itself — it has
     // no concept of before/after photos or resolved_on_site, so those go
     // through defectsStore directly against the id it just handed back,
@@ -698,7 +702,7 @@ export default function AssetDetailScreen() {
     // unrelated Remark defect had this fast path silently MERGE into it
     // instead of creating an independent record. See updateAssetResult's
     // own comment on forceNewDefect for why that's wrong.
-    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.defectCode, value.quotePrice, pendingFail, internalNote.trim());
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim());
     // FIX: this form now offers the same Before/After photos + resolved-on-
     // site fields as Save Defect (see handleSaveDefect's own comment) — a
     // tech who filled those in and then tapped Replace Now instead used to
@@ -725,8 +729,11 @@ export default function AssetDetailScreen() {
       useDefectsStore.getState().updateDefect(defectId, {
         description: value.description,
         severity: value.severity,
-        defect_code: value.defectCode,
-        quote_price: value.quotePrice,
+        // FIX: only touch defect_code/quote_price when actually changed
+        // this session — see the leave-effect's identical fix just above
+        // for why (an unrelated re-save must not clobber a price set
+        // elsewhere in the meantime).
+        ...(value.codeOrPriceChanged ? { defect_code: value.defectCode, quote_price: value.quotePrice } : {}),
         resolved_on_site: value.resolvedOnSite,
       });
       if (photos) {

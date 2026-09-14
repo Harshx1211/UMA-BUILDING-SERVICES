@@ -15,6 +15,7 @@ import { generateUUID } from '@/utils/uuid';
 import { useColors } from '@/hooks/useColors';
 import { SyncOperation, JobStatus } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
+import { useJobsStore } from '@/store/jobsStore';
 import type { Signature } from '@/types';
 import { ScreenHeader, Button, Card, showConfirm } from '@/components/ui';
 import { T } from '@/constants/Colors';
@@ -22,7 +23,14 @@ import { MAX_LENGTHS } from '@/utils/sanitize';
 
 export default function SignatureScreen() {
   const C = useColors();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // FIX (signature bypass): site-inspect/[id].tsx's quick on-site flow now
+  // routes here with ?autoComplete=1 instead of inserting a job that's
+  // already status='completed' with no signature step at all — see that
+  // screen's own comment. When set, a successful save here also flips the
+  // job to Completed (the same updateJobStatus() the main per-job flow
+  // uses) and continues on to the report, instead of just going back.
+  const { id, autoComplete: autoCompleteParam } = useLocalSearchParams<{ id: string; autoComplete?: string }>();
+  const autoComplete = autoCompleteParam === '1';
   const insets = useSafeAreaInsets();
 
   // Two SEPARATE refs, one per step — react-native-signature-canvas has a
@@ -162,6 +170,17 @@ export default function SignatureScreen() {
     }
   }
 
+  // Shared "what happens after a signature is successfully saved" action —
+  // see the autoComplete comment near the top of this component.
+  function finishAfterSignature() {
+    if (autoComplete && id) {
+      useJobsStore.getState().updateJobStatus(id, JobStatus.Completed);
+      router.replace(`/jobs/${id}/report` as never);
+    } else {
+      router.back();
+    }
+  }
+
   // ── onOK from canvas ──────────────────────────────────────────────────
   async function handleOK(signature: string) {
     if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null; }
@@ -211,7 +230,7 @@ export default function SignatureScreen() {
         title: 'Signature Saved',
         message: 'All signatures have been recorded.',
         icon: 'check-circle-outline',
-        buttons: [{ text: 'OK', onPress: () => router.back() }],
+        buttons: [{ text: 'OK', onPress: finishAfterSignature }],
       });
     } catch {
       setSaving(false);
@@ -253,7 +272,7 @@ export default function SignatureScreen() {
         title: 'Recorded',
         message: 'Technician signature captured. Client was unavailable.',
         icon: 'check-circle-outline',
-        buttons: [{ text: 'OK', onPress: () => router.back() }],
+        buttons: [{ text: 'OK', onPress: finishAfterSignature }],
       });
     } catch {
       setSaving(false);

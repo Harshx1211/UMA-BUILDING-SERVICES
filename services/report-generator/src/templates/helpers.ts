@@ -43,9 +43,13 @@ export function fmtRelativeDays(iso: string | null | undefined): string {
   return `${days} days ago`;
 }
 
+// FIX: was `$${Number(v).toFixed(2)}` — no thousands separator, so a
+// $1,234 quote rendered as "$1234.00" here while the admin dashboard's
+// Quotes page (which uses Intl.NumberFormat) showed "$1,234.00" for the
+// exact same value.
 export function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '$0.00';
-  return `$${Number(v).toFixed(2)}`;
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(Number(v));
 }
 
 export function resultPill(result: 'pass' | 'fail' | 'not_tested' | null): string {

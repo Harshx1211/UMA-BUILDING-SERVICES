@@ -127,8 +127,24 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         .eq('id', data.user.id)
         .maybeSingle();
 
-      if (profileError || !profile) {
-        // No profile row — could be an admin account (no technician row).
+      // FIX: a real fetch error (network/DB issue) used to be treated
+      // identically to "confirmed no profile row exists" — both fell into
+      // the fallback branch below, which grants a full-access, Admin-
+      // labelled local session with none of the is_active/subscription
+      // checks further down ever running. .maybeSingle() returns
+      // {data: null, error: null} for a genuine zero-row result, so a
+      // truthy profileError here specifically means the query itself
+      // failed — that must never grant access, only a confirmed empty
+      // result should.
+      if (profileError) {
+        console.error('[AuthStore] signIn: profile fetch failed:', profileError.message);
+        await supabase.auth.signOut();
+        set({ error: 'Could not verify your account — check your connection and try again.', isLoading: false });
+        return;
+      }
+
+      if (!profile) {
+        // Confirmed no profile row — could be an admin account (no technician row).
         // Build a minimal fallback from the auth session so they can still log in.
         const fallback: User = {
           id: data.user.id,
@@ -381,37 +397,48 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           // Also verify the company hasn't been suspended while the app was closed
           void Promise.resolve().then(async () => {
             const { data: profile } = await supabase.from('users').select('*').eq('id', session.user.id).maybeSingle();
+
+            // FIX: this closure captures `session` from when restoreSession
+            // was first called — it has no check that it's still the
+            // active session by the time this fetch resolves. A sign-out
+            // completing while this was in flight used to have this still
+            // unconditionally write the fetched profile/company back into
+            // AsyncStorage and the live store afterward, re-seeding this
+            // user's data right after they'd just signed out (a data-bleed
+            // risk on a shared device). Bail out before writing anything if
+            // the store no longer reflects this same session.
+            if (useAuthStore.getState().session?.user.id !== session.user.id) return;
+
             if (profile) {
               await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile)).catch(() => null);
-              
-              if (profile.company_id) {
+
+              // FIX (simplification): is_active used to be checked
+              // separately in three different branches below (companyRes
+              // truthy, companyRes falsy, no company_id at all) — three
+              // copies of the same two-line "force logout" block, one edit
+              // away from silently missing a branch again the way this
+              // exact check already once did (see the git history this
+              // replaced). Checked once, unconditionally, first.
+              if (profile.is_active === false) {
+                console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
+                get().forceFinalSyncAndSignOut();
+              } else if (profile.company_id) {
                 const { data: companyRes } = await supabase
                   .from('companies')
                   .select('*')
                   .eq('id', profile.company_id)
                   .maybeSingle();
-                
+
+                if (useAuthStore.getState().session?.user.id !== session.user.id) return;
+
                 if (companyRes) {
                   await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(companyRes)).catch(() => null);
                   useAuthStore.setState({ company: companyRes });
-                  // FIX: Check is_active FIRST, inside the companyRes branch.
-                  // Previously, is_active was only checked in the `else if` branch
-                  // that only ran when companyRes was null. A deactivated user with
-                  // a valid company row was never logged out.
-                  if (profile.is_active === false) {
-                    console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
-                    get().forceFinalSyncAndSignOut();
-                  } else if (companyRes.subscription_status !== 'active') {
+                  if (companyRes.subscription_status !== 'active') {
                     console.warn('[AuthStore] Company suspended during background check. Forcing graceful logout.');
                     get().forceFinalSyncAndSignOut();
                   }
-                } else if (profile.is_active === false) {
-                  console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
-                  get().forceFinalSyncAndSignOut();
                 }
-              } else if (profile.is_active === false) {
-                console.warn('[AuthStore] User deactivated during background check. Forcing graceful logout.');
-                get().forceFinalSyncAndSignOut();
               }
             }
           });
@@ -419,19 +446,37 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         } catch { /* corrupt cache — fall through to network fetch */ }
       }
 
-      // No cache: fetch profile from Supabase (with safety timeout)
+      // No cache: fetch profile from Supabase (with safety timeout).
+      // maybeSingle() (not single()) so a genuine zero-row result comes
+      // back as {data: null, error: null} — distinguishable from a real
+      // fetch error, which single() would otherwise conflate into the same
+      // error shape as "no such user."
       type ProfileResult = { data: User | null; error: { message: string } | null };
       const profileResult = await withTimeout<ProfileResult>(
         (supabase
           .from('users')
           .select('*')
           .eq('id', session.user.id)
-          .single() as unknown) as Promise<ProfileResult>,
+          .maybeSingle() as unknown) as Promise<ProfileResult>,
         5000
       );
 
-      if (!profileResult || profileResult.error || !profileResult.data) {
-        // Profile fetch failed — build minimal fallback from session
+      // FIX: a timeout or a real fetch error used to be treated identically
+      // to "confirmed this user has no profile row" — all three fell into
+      // the same fallback, granting a full-access local session with none
+      // of the is_active/subscription checks below ever running. There's no
+      // cache to fall back on at this point either (that's the branch
+      // above) — the honest answer when the network genuinely can't verify
+      // this session is "not authenticated," not a fabricated grant.
+      if (!profileResult || profileResult.error) {
+        console.warn('[AuthStore] restoreSession: profile fetch failed or timed out — cannot verify this session offline with no cache.', profileResult?.error?.message);
+        set({ isLoading: false, isAuthenticated: false });
+        return;
+      }
+
+      if (!profileResult.data) {
+        // Confirmed zero rows — an admin account with no technician row.
+        // Build a minimal fallback from the auth session so they can still log in.
         const su = session.user;
         const fallback: User = {
           id: su.id,
@@ -583,12 +628,24 @@ supabase.auth.onAuthStateChange((event, session) => {
 
       await resetAllFeatureStores();
       AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY]).catch(() => null);
+      // FIX: this used to leave error/isForceSyncing untouched, while
+      // signOut()'s own final set() (above) explicitly resets both — two
+      // independent teardown pipelines that can run concurrently (a manual
+      // sign-out fires this same SIGNED_OUT event), so whichever one's
+      // write landed last silently decided the terminal state. If this one
+      // landed last, a stale error string could linger on the freshly-
+      // shown login screen, or isForceSyncing could stay stuck true,
+      // tripping forceFinalSyncAndSignOut's re-entrancy guard on the next
+      // attempt. Match signOut()'s terminal state exactly so it doesn't
+      // matter which of the two finishes last.
       useAuthStore.setState({
         user: null,
         company: null,
         session: null,
         isAuthenticated: false,
         isLoading: false,
+        isForceSyncing: false,
+        error: null,
       });
     })();
   } else if (event === 'TOKEN_REFRESHED' && session) {

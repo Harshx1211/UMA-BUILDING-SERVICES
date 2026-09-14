@@ -14,6 +14,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { generateUUID } from '@/utils/uuid';
 import {
   addToSyncQueue,
   getPendingSyncItems,
@@ -37,12 +38,23 @@ const MAX_PHOTO_RETRIES = 5;
 
 // job-photos is a private bucket (fixed from public — a leaked photo_url
 // used to mean permanent, unauthenticated access to that photo forever).
-// Signed with a long expiry rather than the usual 1-hour convention: these
-// URLs get displayed directly in grids/thumbnails all over the app and in
-// admin-generated PDFs, some of which (job reports, quotes) are kept as
-// long-term records — the same reasoning already applied to report photo
-// links (services/report-generator/src/photos/prepareFullResUrls.ts).
-const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years
+// Signed with a longer expiry than the usual 1-hour convention since this
+// URL gets displayed directly in grids/thumbnails all over the mobile app
+// (a colleague's photo with no local copy on this device, an older job
+// being reviewed) — but NOT 10 years, as this was before.
+//
+// FIX: the original reasoning for 10 years ("admin-generated PDFs... kept
+// as long-term records") doesn't actually apply to this value — the
+// report-generator's compliance PDF signs the original photo itself,
+// completely independently, with its own deliberately-long TTL (see
+// prepareFullResUrls.ts's own comment for why that one genuinely is
+// long-lived on purpose); and the admin dashboard's quote/gallery views
+// now re-sign every photo_url fresh on every read (signPhotoUrls.ts in the
+// admin repo), regardless of what's stored here. Nothing left actually
+// needs this specific value to survive a decade — 90 days comfortably
+// covers realistic in-app review of recent-to-older jobs while cutting a
+// leaked link's exposure window by two orders of magnitude.
+const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 90; // 90 days
 
 /** True if this is a real Storage URL (uploaded) rather than a local
  * file:// or content:// URI (still pending upload). */
@@ -69,9 +81,13 @@ export async function uploadPhoto(
     // Normalise path for the current Expo Go session — stale absolute paths fail silently
     const resolvedUri = getValidLocalUri(localUri);
 
-    const timestamp = Date.now();
-    const random    = Math.random().toString(36).substring(7);
-    const fileName  = `${timestamp}-${random}.jpg`;
+    // FIX: was Date.now() + a few Math.random() chars — a narrow, guessable
+    // keyspace (the same pattern a prior migration flagged as a real
+    // vulnerability for a different bucket, since currently mitigated only
+    // by RLS/signed-URL requirements, not by the name itself being hard to
+    // guess). generateUUID() is the app's own CSPRNG-backed generator,
+    // already used everywhere an unguessable id actually matters.
+    const fileName  = `${generateUUID()}.jpg`;
     const filePath  = `jobs/${jobId}/${fileName}`;
 
     const session  = await supabase.auth.getSession();

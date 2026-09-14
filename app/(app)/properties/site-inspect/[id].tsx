@@ -367,7 +367,17 @@ export default function SiteInspectScreen() {
       const today = localDateString();
       const jobId = generateUUID();
 
-      // 1. Create completed job
+      // 1. Create the job — NOT completed yet.
+      // FIX (signature bypass): this used to insert the job as already
+      // status='completed' in this one step, with no signature captured
+      // anywhere in this screen — the DB's own "can't complete without a
+      // signature" trigger (server_side_business_rules.sql) only fires on
+      // UPDATE, so an INSERT straight to 'completed' has always structurally
+      // skipped it. Now this screen inserts the job as in_progress and
+      // routes the technician to the existing signature screen; that screen
+      // is the one that flips it to Completed (via updateJobStatus, an
+      // UPDATE), so the exact same trigger the main per-job flow already
+      // respects now covers this flow too, with no new DB trigger needed.
       // FIX: job_type must be one of the real Supabase CHECK-constraint values
       // (routine_service_monthly/_3_monthly/_6_monthly/_annual/_5_yearly,
       // defect_repair_quote, defect_repair, quote, installation, emergency) —
@@ -384,7 +394,7 @@ export default function SiteInspectScreen() {
         // FIX: was a bare string literal — the exact anti-pattern that
         // caused the JobType.RoutineService bug above. Importing the real
         // enum member gives compiler protection against this recurring.
-        job_type: JobType.RoutineServiceAnnual, status: JobStatus.Completed,
+        job_type: JobType.RoutineServiceAnnual, status: JobStatus.InProgress,
         scheduled_date: today, scheduled_time: null, priority: Priority.Normal,
         notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
@@ -463,10 +473,14 @@ export default function SiteInspectScreen() {
       Toast.show({
         type: 'success',
         text1: 'Inspection Saved',
-        text2: 'Generating your report…',
+        text2: 'Capture a signature to complete',
       });
-      // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace
-      navigateAway(() => router.replace(`/jobs/${jobId}/report` as never));
+      // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace.
+      // Routes to the signature screen instead of straight to the report —
+      // ?autoComplete=1 tells that screen to flip this job to Completed and
+      // continue on to the report itself once a signature is captured,
+      // keeping this feel like one continuous flow.
+      navigateAway(() => router.replace(`/jobs/${jobId}/signature?autoComplete=1` as never));
     } catch (err) {
       console.error('[SiteInspect] save error:', err);
       Toast.show({ type: 'error', text1: 'Save failed', text2: 'Please try again.' });

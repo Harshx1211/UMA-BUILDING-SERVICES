@@ -18,6 +18,7 @@ import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity } from '@/constants/Enums';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
+import { formatCurrency } from '@/utils/currency';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -46,7 +47,7 @@ const DefectRow = React.memo(function DefectRow({ defect, color, C }: { defect: 
       </View>
       {hasPrice ? (
         <View style={[dr.pricePill, { backgroundColor: C.successLight }]}>
-          <Text style={[dr.priceTxt, { color: C.success }]}>${Number(defect.quote_price).toFixed(2)}</Text>
+          <Text style={[dr.priceTxt, { color: C.success }]}>{formatCurrency(Number(defect.quote_price))}</Text>
         </View>
       ) : (
         <View style={[dr.pricePill, { backgroundColor: C.backgroundTertiary }]}>
@@ -158,7 +159,7 @@ export default function QuoteScreen() {
         rightComponent={
           hasDefects && total > 0 ? (
             <View style={[s.totalBadge, { backgroundColor: C.successLight, borderColor: C.success + '50' }]}>
-              <Text style={[s.totalBadgeTxt, { color: C.success }]}>${total.toFixed(2)}</Text>
+              <Text style={[s.totalBadgeTxt, { color: C.success }]}>{formatCurrency(total)}</Text>
             </View>
           ) : undefined
         }
@@ -203,7 +204,7 @@ export default function QuoteScreen() {
               <View style={s.totalRow}>
                 <Text style={[s.totalLabel, { color: C.textSecondary }]}>Subtotal (ex-GST)</Text>
                 <Text style={[s.totalValue, { color: total > 0 ? C.success : C.textTertiary }]}>
-                  {total > 0 ? `$${total.toFixed(2)}` : 'Pending pricing'}
+                  {total > 0 ? formatCurrency(total) : 'Pending pricing'}
                 </Text>
               </View>
               {total === 0 && (
