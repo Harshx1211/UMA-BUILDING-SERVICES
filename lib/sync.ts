@@ -25,7 +25,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
 import { SyncOperation } from '@/constants/Enums';
-import type { SyncStatus } from '@/types';
+import type { SyncStatus, SyncQueueItem } from '@/types';
 import { processPhotoQueue, cleanupLocalPhotos } from '@/lib/photoUpload';
 import { processDocumentQueue } from '@/lib/documentUpload';
 import { classifySyncError } from '@/lib/syncErrors';
@@ -555,6 +555,35 @@ export async function pushPendingWork(userId: string): Promise<void> {
     }
   }
   await _pushQueue(userId);
+}
+
+/**
+ * Retries pushPendingWork up to `maxAttempts` times (1s/2s/3s/4s/5s
+ * backoff between attempts), stopping early once nothing is pending.
+ * Returns whatever is still pending when it stops — the caller decides
+ * what that means (abort with a warning, in every current caller).
+ *
+ * FIX: this exact retry loop was copy-pasted 3 times in authStore.ts
+ * (signOut, forceFinalSyncAndSignOut, and the SIGNED_OUT auth listener)
+ * and had already started drifting — the SIGNED_OUT copy wraps its call
+ * in its own try/catch (it also fires on a background token-refresh
+ * failure, where a throw must not skip the "is it safe to wipe local
+ * data" check that follows), the other two don't need to since they're
+ * already inside an outer try/catch. That difference is still each
+ * caller's responsibility — this helper doesn't swallow errors, a throw
+ * from pushPendingWork here propagates out exactly like the inlined
+ * version did.
+ */
+export async function flushPendingSyncWithRetry(userId: string, maxAttempts = 5): Promise<SyncQueueItem[]> {
+  let pending = getPendingSyncItems();
+  if (pending.length === 0) return pending;
+  for (let i = 0; i < maxAttempts; i++) {
+    await pushPendingWork(userId);
+    pending = getPendingSyncItems();
+    if (pending.length === 0) break;
+    await new Promise((r) => setTimeout(r, (i + 1) * 1000));
+  }
+  return pending;
 }
 
 /**

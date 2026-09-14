@@ -51,10 +51,26 @@ const MAX_PHOTO_RETRIES = 5;
 // long-lived on purpose); and the admin dashboard's quote/gallery views
 // now re-sign every photo_url fresh on every read (signPhotoUrls.ts in the
 // admin repo), regardless of what's stored here. Nothing left actually
-// needs this specific value to survive a decade — 90 days comfortably
-// covers realistic in-app review of recent-to-older jobs while cutting a
-// leaked link's exposure window by two orders of magnitude.
-const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 90; // 90 days
+// needs this specific value to survive a decade.
+//
+// FIX 2: first cut this down to 90 days, which turned out to be too
+// short — nothing in the mobile app re-signs this value or refreshes it
+// on a timer (no equivalent of pdfGenerator.ts's getOrRefreshReportUrl
+// exists for photos), and the on-device local copy is deleted 15 days
+// after a job completes (cleanupLocalPhotos, this file), so past that
+// point the signed URL is the ONLY remaining copy, with no fallback and
+// no broken-image handling in any of the screens that show it. Two
+// completely routine (not edge-case) usage patterns need longer than 90
+// days: the Asset History section is explicitly built around "a few
+// years" of prior visits on a quarterly/annual-serviced asset
+// (getAssetHistory's own comment), and an open/unresolved defect can sit
+// for months before anyone revisits its photos. 1.5 years comfortably
+// covers a full annual inspection cycle plus review time the following
+// year, while still cutting a leaked link's exposure window by ~85%
+// versus the original 10-year value. The fully-correct fix would be
+// sign-on-read for these screens, matching admin's own pattern — not
+// done here, flagged as a real follow-up if this keeps mattering.
+const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 1.5; // 1.5 years
 
 /** True if this is a real Storage URL (uploaded) rather than a local
  * file:// or content:// URI (still pending upload). */

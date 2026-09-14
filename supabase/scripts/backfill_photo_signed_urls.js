@@ -50,7 +50,7 @@ const supabaseAdmin = createClient(
 );
 
 const PHOTO_BUCKET = 'job-photos';
-const EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years — matches lib/photoUpload.ts
+const EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 1.5; // 1.5 years — matches lib/photoUpload.ts's current PHOTO_URL_EXPIRY_SECONDS
 const PAGE_SIZE = 500;
 
 function extractPath(url) {

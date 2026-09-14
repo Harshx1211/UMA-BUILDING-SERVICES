@@ -256,17 +256,10 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // Attempt a bounded final flush first, same retry shape as
       // forceFinalSyncAndSignOut, and abort the sign-out (keep the session)
       // if it still can't get everything up.
-      let pending = getPendingSyncItems();
-      if (pending.length > 0) {
-        const { pushPendingWork } = await import('@/lib/sync');
+      {
+        const { flushPendingSyncWithRetry } = await import('@/lib/sync');
         const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
-
-        for (let i = 0; i < 5; i++) {
-          await pushPendingWork(currentUserId);
-          pending = getPendingSyncItems();
-          if (pending.length === 0) break;
-          await new Promise(r => setTimeout(r, (i + 1) * 1000));
-        }
+        const pending = await flushPendingSyncWithRetry(currentUserId);
 
         if (pending.length > 0) {
           console.warn(`[AuthStore] signOut: ${pending.length} item(s) still unsynced — aborting to prevent data loss.`);
@@ -316,24 +309,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
     set({ isForceSyncing: true });
     try {
-      let pending = getPendingSyncItems();
-      if (pending.length > 0) {
-        if (__DEV__) console.log(`[AuthStore] Deactivated user has ${pending.length} pending items. Attempting final sync...`);
+      const initialPending = getPendingSyncItems();
+      if (initialPending.length > 0) {
+        if (__DEV__) console.log(`[AuthStore] Deactivated user has ${initialPending.length} pending items. Attempting final sync...`);
 
         // FIX S2: Run processPhotoQueue FIRST so offline photo binaries upload.
         // _pushQueue only handles data records (Insert/Update/Delete/ReportGenerate).
         // Photo binaries live in a separate binary upload queue (photoUpload.ts).
         // Previously, offline photos were permanently lost on forced logout.
-        const { pushPendingWork } = await import('@/lib/sync');
+        const { flushPendingSyncWithRetry } = await import('@/lib/sync');
         const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
-
-        for (let i = 0; i < 5; i++) {
-          await pushPendingWork(currentUserId);
-          pending = getPendingSyncItems();
-          if (pending.length === 0) break;
-          // Exponential backoff: 1s, 2s, 3s, 4s, 5s
-          await new Promise(r => setTimeout(r, (i + 1) * 1000));
-        }
+        const pending = await flushPendingSyncWithRetry(currentUserId);
 
         // Critical Data Loss Prevention:
         // If we still have pending items (poor connection), DO NOT wipe the DB.
@@ -601,14 +587,9 @@ supabase.auth.onAuthStateChange((event, session) => {
       let pending = getPendingSyncItems();
       if (pending.length > 0) {
         try {
-          const { pushPendingWork } = await import('@/lib/sync');
+          const { flushPendingSyncWithRetry } = await import('@/lib/sync');
           const currentUserId = useAuthStore.getState().user?.id ?? useAuthStore.getState().session?.user.id ?? '';
-          for (let i = 0; i < 5; i++) {
-            await pushPendingWork(currentUserId);
-            pending = getPendingSyncItems();
-            if (pending.length === 0) break;
-            await new Promise((r) => setTimeout(r, (i + 1) * 1000));
-          }
+          pending = await flushPendingSyncWithRetry(currentUserId);
         } catch (err) {
           // Session is likely already invalid — expected in the common
           // "background refresh failed" case. Fall through to the
