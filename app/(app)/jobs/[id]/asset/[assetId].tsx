@@ -21,7 +21,7 @@ import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
-import { InspectionResult, DefectSeverity, JobStatus, PhotoStage } from '@/constants/Enums';
+import { InspectionResult, DefectSeverity, DefectStatus, JobStatus, PhotoStage } from '@/constants/Enums';
 import { useInspectionStore } from '@/store/inspectionStore';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -35,7 +35,7 @@ import DefectCard from '@/components/defects/DefectCard';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
-import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords } from '@/lib/database';
+import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -535,9 +535,19 @@ export default function AssetDetailScreen() {
             }
           } else {
             if (adDescTrim) {
+              // FIX: same "an already-actioned defect silently keeps
+              // describing a new problem" bug inspectionStore.ts's primary-
+              // defect update was fixed for — this additional-defect
+              // ("Remark") path never got the same reset. Read the current
+              // row directly (not a cached list) so this reflects reality
+              // even if it was actioned by someone else since this screen
+              // last loaded.
+              const existingAd = getRecord<{ description: string }>('defects', eid);
+              const adDescriptionChanged = existingAd ? existingAd.description !== ad!.description : false;
               useDefectsStore.getState().updateDefect(eid, {
                 description: ad!.description,
                 severity: ad!.severity,
+                ...(adDescriptionChanged ? { status: DefectStatus.Open } : {}),
                 // FIX: same clobber risk as inspectionStore.ts's primary-
                 // defect update — only touch defect_code/quote_price when
                 // the technician actually interacted with them this
@@ -726,9 +736,17 @@ export default function AssetDetailScreen() {
   // screen already uses, not routed through updateAssetResult at all.
   const handleSaveAdditionalDefect = (defectId: string | null, value: DefectFieldsValue, photos?: DefectPhotosDraft) => {
     if (defectId) {
+      // FIX: same "an already-actioned defect silently keeps describing a
+      // new problem" bug inspectionStore.ts's primary-defect update was
+      // fixed for — this additional-defect ("Remark") save path never got
+      // the same reset. See the leave-effect's identical fix for the
+      // full reasoning.
+      const existingAd = getRecord<{ description: string }>('defects', defectId);
+      const descriptionChanged = existingAd ? existingAd.description !== value.description : false;
       useDefectsStore.getState().updateDefect(defectId, {
         description: value.description,
         severity: value.severity,
+        ...(descriptionChanged ? { status: DefectStatus.Open } : {}),
         // FIX: only touch defect_code/quote_price when actually changed
         // this session — see the leave-effect's identical fix just above
         // for why (an unrelated re-save must not clobber a price set
