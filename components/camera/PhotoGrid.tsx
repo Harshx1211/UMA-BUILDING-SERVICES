@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, SectionList } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, TouchableOpacity, SectionList } from 'react-native';
 import { Text } from 'react-native-paper';
 import { InspectionPhoto } from '@/types';
 import { useColors } from '@/hooks/useColors';
@@ -13,13 +13,23 @@ interface Props {
   onPhotoLongPress: (photo: InspectionPhoto) => void;
 }
 
-const { width } = Dimensions.get('window');
 const GRID_GAPS = 8;
-const numColumns = 3;
-const CELL_SIZE = (width - 32 - (GRID_GAPS * (numColumns - 1))) / numColumns;
+
+// FIX: was a module-level Dimensions.get('window') read once at import time
+// — the grid never adapted to a tablet's larger width (fixed 3 columns of
+// tiny cells) or to rotation (stale size after turning the device). Now
+// derived per-render from useWindowDimensions(), which re-renders on both.
+function getNumColumns(width: number) {
+  if (width >= 900) return 5;
+  if (width >= 600) return 4;
+  return 3;
+}
 
 export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   const C = useColors();
+  const { width } = useWindowDimensions();
+  const numColumns = getNumColumns(width);
+  const cellSize = (width - 32 - (GRID_GAPS * (numColumns - 1))) / numColumns;
 
   // FIX: this used to call getRecord('assets', ...) — a synchronous SQLite
   // hit — once PER PHOTO, on every render (the grouping ran directly in the
@@ -57,14 +67,14 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
       for (let i = 0; i < list.length; i += numColumns) rows.push(list.slice(i, i + numColumns));
       return { title: key, count: list.length, data: rows };
     });
-  }, [photos]);
+  }, [photos, numColumns]);
 
   const renderPhotoContent = (item: InspectionPhoto) => {
     const isPending = item.photo_url.startsWith('file://');
     return (
-      <TouchableOpacity 
-        key={item.id} 
-        style={[s.cell, { backgroundColor: C.backgroundTertiary }]} 
+      <TouchableOpacity
+        key={item.id}
+        style={[s.cell, { width: cellSize, height: cellSize, backgroundColor: C.backgroundTertiary }]}
         onLongPress={() => onPhotoLongPress(item)}
         activeOpacity={0.8}
       >
@@ -121,14 +131,14 @@ const s = StyleSheet.create({
   countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
   countText: { fontSize: 12, fontWeight: '800' },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAPS },
-  cell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 12, overflow: 'hidden' },
+  cell: { borderRadius: 12, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
   captionOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: T.controlButtonBg,
     paddingHorizontal: 4,
     paddingVertical: 4,
   },

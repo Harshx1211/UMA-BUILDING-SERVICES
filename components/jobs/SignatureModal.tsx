@@ -116,9 +116,9 @@ const s = StyleSheet.create({
   contactTxt: { fontSize: 13 },
   canvasWrap: { height: 260, marginBottom: 20 },
   actions: { flexDirection: 'row', gap: 12 },
-  clearBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12 },
+  clearBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: T.radiusButton },
   clearTxt: { fontSize: 15, fontWeight: '700' },
-  okBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12 },
+  okBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: T.radiusButton },
   okBtnDisabled: { opacity: 0.7 },
   okTxt:    { fontSize: 15, fontWeight: '700' },
 });

@@ -24,6 +24,7 @@ import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -108,13 +109,13 @@ export function ConfirmDialogHost() {
 }
 
 const s = StyleSheet.create({
-  overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 32 },
+  overlay:  { flex: 1, backgroundColor: T.overlay, alignItems: 'center', justifyContent: 'center', padding: 32 },
   card:     { width: '100%', maxWidth: 340, borderRadius: 20, padding: 24, alignItems: 'center' },
   iconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   title:    { fontSize: 17, fontWeight: '800', textAlign: 'center' },
   message:  { fontSize: 13, marginTop: 6, textAlign: 'center', lineHeight: 19 },
   btnRow:       { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
   btnRowStacked:{ flexDirection: 'column' },
-  btn:      { flex: 1, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  btn:      { flex: 1, height: 48, borderRadius: T.radiusButton, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   btnTxt:   { fontSize: 15, fontWeight: '700' },
 });

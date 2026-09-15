@@ -8,6 +8,7 @@ import { Modal, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 export function PhotoChooserSheet({
   visible, onClose, onTakePhoto, onPickGallery,
@@ -24,14 +25,14 @@ export function PhotoChooserSheet({
         <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
           <Text style={[s.chooserTitle, { color: C.text }]}>Add Photo</Text>
           <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
+            <View style={[s.chooserIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
               <MaterialCommunityIcons name="camera-outline" size={20} color={C.primary} />
             </View>
             <Text style={[s.chooserRowTxt, { color: C.text }]}>Take Photo</Text>
           </TouchableOpacity>
           <View style={[s.chooserDivider, { backgroundColor: C.border }]} />
           <TouchableOpacity style={s.chooserRow} onPress={onPickGallery} activeOpacity={0.7}>
-            <View style={[s.chooserIconWrap, { backgroundColor: C.primary + '18' }]}>
+            <View style={[s.chooserIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
               <MaterialCommunityIcons name="image-multiple-outline" size={20} color={C.primary} />
             </View>
             <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from Gallery</Text>
@@ -46,7 +47,7 @@ export function PhotoChooserSheet({
 }
 
 const s = StyleSheet.create({
-  chooserOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, gap: 8 },
+  chooserOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: T.overlay, padding: 12, gap: 8 },
   chooserSheet: { borderRadius: 18, overflow: 'hidden', paddingTop: 14, paddingBottom: 6 },
   chooserTitle: { fontSize: 12, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, paddingBottom: 10 },
   chooserRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },

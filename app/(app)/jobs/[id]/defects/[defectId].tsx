@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
@@ -76,6 +77,7 @@ export default function DefectDetailScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { defectId } = useLocalSearchParams<{ id: string; defectId: string }>();
   const { deleteDefect } = useDefectsStore();
 
@@ -203,7 +205,10 @@ export default function DefectDetailScreen() {
   const renderPhotoThumb = (photo: DefectPhoto) => (
     <TouchableOpacity key={photo.id} onPress={() => setLightboxPhoto(photo)} activeOpacity={0.85} style={s.photoThumbWrap}>
       <ResilientPhoto photoId={photo.id} uri={photo.photo_url} style={s.photoThumb} contentFit="cover" />
-      <View style={[s.photoOverlay, { backgroundColor: C.shadow + '26' }]}>
+      {/* FIX: was C.shadow + '26' — C.shadow is already an rgba(...) string,
+          invalid when hex-suffixed (renders as no tint at all). T.black is
+          a bare hex and can be validly suffixed. */}
+      <View style={[s.photoOverlay, { backgroundColor: T.black + '26' }]}>
         <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={C.textOnPrimary} />
       </View>
     </TouchableOpacity>
@@ -226,7 +231,7 @@ export default function DefectDetailScreen() {
         }
       />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }} showsVerticalScrollIndicator={false}>
 
         {/* Locked notice — shown when job is completed */}
         {jobLocked && (
@@ -242,7 +247,7 @@ export default function DefectDetailScreen() {
 
         {/* Severity Banner */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(380)}>
-          <View style={[s.sevBanner, { backgroundColor: sev.bg, borderColor: sev.color + '40' }]}>
+          <View style={[s.sevBanner, { backgroundColor: sev.bg, borderColor: T.tintBorder(sev.color) }]}>
             <View style={[s.sevIconWrap, { backgroundColor: sev.color }]}>
               <MaterialCommunityIcons name={sev.icon} size={22} color={C.textOnPrimary} />
             </View>
@@ -253,7 +258,7 @@ export default function DefectDetailScreen() {
               </Text>
             </View>
             {defect.quote_price ? (
-              <View style={[s.priceBadge, { backgroundColor: C.success + '18', borderColor: C.success + '40' }]}>
+              <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
                 <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
                 <Text style={[s.priceBadgeTxt, { color: C.success }]}>${defect.quote_price}</Text>
               </View>
@@ -269,7 +274,7 @@ export default function DefectDetailScreen() {
         {/* Resolved on site — informational only, independent of status/quote above */}
         {Boolean(defect.resolved_on_site) && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(55).duration(380)}>
-            <View style={[s.resolvedBanner, { backgroundColor: C.success + '14', borderColor: C.success + '40' }]}>
+            <View style={[s.resolvedBanner, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
               <MaterialCommunityIcons name="check-decagram-outline" size={15} color={C.success} />
               <Text style={[s.resolvedTxt, { color: C.success }]}>Resolved on site — no quote needed</Text>
             </View>
@@ -279,8 +284,8 @@ export default function DefectDetailScreen() {
         {/* Defect Code */}
         {codeInfo && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(70).duration(380)}>
-            <View style={[s.codeBanner, { backgroundColor: C.primary + '0D', borderColor: C.primary + '30' }]}>
-              <View style={[s.codeIconWrap, { backgroundColor: C.primary + '18' }]}>
+            <View style={[s.codeBanner, { backgroundColor: T.selectedBg(C.primary), borderColor: T.tintBorder(C.primary) }]}>
+              <View style={[s.codeIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
                 <MaterialCommunityIcons name="tag-outline" size={16} color={C.primary} />
               </View>
               <View style={{ flex: 1 }}>
@@ -386,21 +391,23 @@ export default function DefectDetailScreen() {
       {/* Bottom action bar — Delete only when job is in_progress */}
       {!jobLocked && (
         <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 20 + insets.bottom }]}>
+          <View style={{ maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
           <TouchableOpacity
-            style={[s.bottomBtn, { backgroundColor: C.error + '12', borderColor: C.error + '30' }]}
+            style={[s.bottomBtn, { backgroundColor: T.tintBg(C.error), borderColor: T.tintBorder(C.error) }]}
             onPress={handleDelete}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="delete-outline" size={18} color={C.error} />
             <Text style={[s.bottomBtnTxt, { color: C.error }]}>Remove Defect</Text>
           </TouchableOpacity>
+          </View>
         </View>
       )}
 
       {/* Photo Lightbox */}
       <Modal visible={!!lightboxPhoto} transparent animationType="fade" onRequestClose={() => setLightboxPhoto(null)}>
-        <View style={[s.lightbox, { backgroundColor: C.shadow + 'EB' }]}>
-          <TouchableOpacity style={[s.lightboxClose, { backgroundColor: C.textOnPrimary + '26' }]} onPress={() => setLightboxPhoto(null)}>
+        <View style={[s.lightbox, { backgroundColor: T.viewerBackground }]}>
+          <TouchableOpacity style={[s.lightboxClose, { backgroundColor: T.iconBg(C.textOnPrimary) }]} onPress={() => setLightboxPhoto(null)}>
             <MaterialCommunityIcons name="close" size={28} color={C.textOnPrimary} />
           </TouchableOpacity>
           {lightboxPhoto && (
@@ -502,7 +509,7 @@ const s = StyleSheet.create({
   },
   bottomBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, height: 50, borderRadius: 14, borderWidth: 1,
+    gap: 8, height: 48, borderRadius: T.radiusButton, borderWidth: 1,
   },
   bottomBtnTxt: { fontSize: 14, fontWeight: '700' },
 

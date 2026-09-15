@@ -28,6 +28,7 @@ import type { Job } from '@/types';
 import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow, SkeletonBlock } from '@/components/ui';
 import { SyncStatusBar } from '@/components/SyncStatusBar';
 import { localDateString } from '@/utils/dateHelpers';
+import { useResponsive } from '@/hooks/useResponsive';
 import { openJob } from '@/utils/navigation';
 
 // ─── Priority left-bar color (semantic, matches the rule: urgent=danger, high=warning) ──
@@ -144,6 +145,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const { user }               = useAuth();
+  const { contentMaxWidth } = useResponsive();
   const { jobs, loadJobs, isLoading } = useJobsStore();
   const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -256,7 +258,7 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
         }
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
       >
         {/* ── Active Job Banner ── */}
         {inProgress && (
@@ -509,7 +511,7 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   priorityBar: {
-    width: 3,
+    width: 4,
   },
   jobBody: {
     flex: 1,

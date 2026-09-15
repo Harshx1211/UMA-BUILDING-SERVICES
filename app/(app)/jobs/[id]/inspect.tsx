@@ -8,6 +8,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
+import { T } from '@/constants/Colors';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { InspectionResult, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
@@ -245,6 +247,7 @@ AssetCard.displayName = 'AssetCard';
 export default function AssetInspectionScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useInspectionStore();
 
@@ -726,7 +729,7 @@ export default function AssetInspectionScreen() {
             <TouchableOpacity
               onPress={() => handleBulkMark(item.label, item.assetIds)}
               hitSlop={8}
-              style={[s.routineHeaderAction, { borderColor: C.primary, backgroundColor: C.primary + '15' }]}
+              style={[s.routineHeaderAction, { borderColor: C.primary, backgroundColor: T.iconBg(C.primary) }]}
             >
               <MaterialCommunityIcons name="lock-outline" size={14} color={C.primary} />
               <Text style={[s.routineHeaderActionTxt, { color: C.primary }]}>No Access</Text>
@@ -794,7 +797,7 @@ export default function AssetInspectionScreen() {
         ref={listRef}
         data={listData}
         keyExtractor={i => i.kind === 'header' ? `header-${i.label}` : i.asset.id}
-        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: 120 }}
+        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: 120, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
         initialNumToRender={6}
@@ -909,7 +912,7 @@ export default function AssetInspectionScreen() {
               <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
               <Text style={[s.emptySub, { color: C.textSecondary }]}>No fire safety assets are on record for this property.</Text>
               <View style={{ marginTop: 24, width: '100%', paddingHorizontal: 32, gap: 12 }}>
-                <Button title="Add Asset On-Site" icon="plus" onPress={() => setShowAddAsset(true)} style={{ borderRadius: 14 }} />
+                <Button title="Add Asset On-Site" icon="plus" onPress={() => setShowAddAsset(true)} />
                 <Button variant="secondary" title="Go Back" onPress={() => router.back()} />
               </View>
             </View>

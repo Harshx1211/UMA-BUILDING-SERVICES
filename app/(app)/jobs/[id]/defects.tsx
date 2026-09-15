@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { cardShadow } from '@/components/ui/Card';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
 import { useDefectsStore } from '@/store/defectsStore';
@@ -20,6 +21,7 @@ import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
 export default function DefectsScreen() {
   const C = useColors();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDefectsStore();
   const [filter, setFilter] = useState<string>('All');
@@ -138,7 +140,7 @@ export default function DefectsScreen() {
         <FlatList
           data={filteredDefects}
           keyExtractor={i => i.id}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 100, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <DefectCard

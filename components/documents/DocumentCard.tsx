@@ -7,6 +7,7 @@ import { openJob } from '@/utils/navigation';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { getOrRefreshDocumentUrl } from '@/lib/documentUpload';
 import type { SiteDocument } from '@/types';
@@ -130,7 +131,7 @@ export default function DocumentCard({ document, currentJobId, onLongPress }: Pr
       onLongPress={() => onLongPress?.(document)}
       disabled={sharing}
     >
-      <View style={[s.iconWrap, { backgroundColor: C.accent + '15' }]}>
+      <View style={[s.iconWrap, { backgroundColor: T.iconBg(C.accent) }]}>
         <MaterialCommunityIcons name="file-pdf-box" size={22} color={C.accent} />
       </View>
 
@@ -149,7 +150,7 @@ export default function DocumentCard({ document, currentJobId, onLongPress }: Pr
             </View>
           )}
           {isThisVisit ? (
-            <View style={[s.badge, { backgroundColor: C.primary + '18' }]}>
+            <View style={[s.badge, { backgroundColor: T.tintBg(C.primary) }]}>
               <Text style={[s.badgeTxt, { color: C.primary }]}>This visit</Text>
             </View>
           ) : document.job_id ? (

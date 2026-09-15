@@ -48,7 +48,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
       case DefectStatus.Open:       return { text: 'Open',       color: C.error,   border: true };
       case DefectStatus.Monitoring: return { text: 'Monitoring', color: C.warning, border: true };
       case DefectStatus.Quoted:     return { text: 'Quoted',     color: C.info,    border: true };
-      case DefectStatus.Repaired:   return { text: 'Repaired',   color: C.success, bg: C.successLight ?? C.success + '20', border: false };
+      case DefectStatus.Repaired:   return { text: 'Repaired',   color: C.success, bg: C.successLight ?? T.tintBg(C.success), border: false };
       default: return { text: 'Unknown', color: C.text, border: true };
     }
   }, [defect.status, C]);
@@ -77,7 +77,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {/* Code badge */}
           {codeInfo && (
-            <View style={[s.codeBadge, { backgroundColor: C.primary + '12', borderColor: C.primary + '30' }]}>
+            <View style={[s.codeBadge, { backgroundColor: T.tintBg(C.primary), borderColor: T.tintBorder(C.primary) }]}>
               <Text style={[s.codeBadgeTxt, { color: C.primary }]}>{codeInfo.code.toUpperCase()}</Text>
             </View>
           )}
@@ -121,7 +121,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
 
       {/* Price badge */}
       {defect.quote_price != null && (
-        <View style={[s.priceBadge, { backgroundColor: C.success + '12', borderColor: C.success + '30' }]}>
+        <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
           <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
           <Text style={[s.priceTxt, { color: C.success }]}>Ref: ${defect.quote_price}</Text>
         </View>

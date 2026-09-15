@@ -12,7 +12,9 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useResponsive } from '@/hooks/useResponsive';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity } from '@/constants/Enums';
@@ -75,6 +77,7 @@ const dr = StyleSheet.create({
 export default function QuoteScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDefectsStore();
 
@@ -158,7 +161,7 @@ export default function QuoteScreen() {
         showBack
         rightComponent={
           hasDefects && total > 0 ? (
-            <View style={[s.totalBadge, { backgroundColor: C.successLight, borderColor: C.success + '50' }]}>
+            <View style={[s.totalBadge, { backgroundColor: C.successLight, borderColor: T.tintBorder(C.success) }]}>
               <Text style={[s.totalBadgeTxt, { color: C.success }]}>{formatCurrency(total)}</Text>
             </View>
           ) : undefined
@@ -173,7 +176,7 @@ export default function QuoteScreen() {
             title="No defects logged yet"
             subtitle="Defects you log during the on-site inspection will appear here, grouped by severity. Admin will then set pricing for each item."
           />
-          <View style={[s.infoBanner, { backgroundColor: C.infoLight, borderColor: C.info + '30' }]}>
+          <View style={[s.infoBanner, { backgroundColor: C.infoLight, borderColor: T.tintBorder(C.info) }]}>
             <MaterialCommunityIcons name="information-outline" size={16} color={C.info} />
             <Text style={[s.infoBannerTxt, { color: C.infoDark }]}>
               Prices and quote approval are managed by your admin — you only need to log the defects found on site.
@@ -181,7 +184,7 @@ export default function QuoteScreen() {
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[s.content, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]} showsVerticalScrollIndicator={false}>
 
           {/* Admin-managed info banner */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(20).duration(300)}>

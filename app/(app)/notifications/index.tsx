@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { openJob } from '@/utils/navigation';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Card } from '@/components/ui/Card';
 import { ScreenHeader, EmptyState, showConfirm } from '@/components/ui';
 import {
@@ -99,6 +100,7 @@ function NotifCard({ item }: { item: AppNotification }) {
 // ── Main Screen ───────────────────────────────────────────
 export default function NotificationsScreen() {
   const C = useColors();
+  const { contentMaxWidth } = useResponsive();
   const {
     notifications, unreadCount, totalCount, isLoading,
     loadNotifications, markAllAsRead, clearAll,
@@ -152,6 +154,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={[
             s.list,
             notifications.length === 0 && s.listEmpty,
+            { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' },
           ]}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => <NotifCard item={item} />}

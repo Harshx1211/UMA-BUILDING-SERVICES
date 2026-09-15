@@ -22,6 +22,7 @@ import {
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card, showConfirm } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -167,7 +168,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
         <View style={s.defectContent}>
           {/* Header row */}
           <View style={s.defectHeaderRow}>
-            <View style={[s.sevBadge, { backgroundColor: sevBg, borderColor: sev.color(C) + '40' }]}>
+            <View style={[s.sevBadge, { backgroundColor: sevBg, borderColor: T.tintBorder(sev.color(C)) }]}>
               <MaterialCommunityIcons name={sev.icon} size={11} color={sev.color(C)} />
               <Text style={[s.sevBadgeTxt, { color: sev.color(C) }]}>{sev.label.toUpperCase()}</Text>
             </View>
@@ -175,7 +176,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
             <View style={[
               s.statusBadge,
               { backgroundColor: isOpen ? C.warningLight : C.successLight,
-                borderColor: isOpen ? C.warning + '60' : C.success + '60' },
+                borderColor: isOpen ? T.tintBorder(C.warning) : T.tintBorder(C.success) },
             ]}>
               <View style={[s.statusDot, { backgroundColor: isOpen ? C.warning : C.success }]} />
               <Text style={[s.statusBadgeTxt, { color: isOpen ? C.warningDark : C.successDark }]}>
@@ -195,7 +196,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
               </Text>
             ) : null}
             {defect.defect_code ? (
-              <View style={[s.codeChip, { backgroundColor: C.primary + '15', borderColor: C.primary + '30' }]}>
+              <View style={[s.codeChip, { backgroundColor: T.tintBg(C.primary), borderColor: T.tintBorder(C.primary) }]}>
                 <Text style={[s.codeChipTxt, { color: C.primary }]}>
                   {defect.defect_code.toUpperCase()}
                 </Text>
@@ -219,6 +220,7 @@ export default function ReportSummaryScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const { updateJobStatus } = useJobsStore();
 
@@ -356,17 +358,17 @@ export default function ReportSummaryScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={s.scrollContent}
+        contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       >
         {/* ── Top Hero Card: Property Info ── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(340)}>
           <Card variant="default" style={{ marginBottom: 20, position: 'relative', overflow: 'hidden' }} padding={16}>
-            <View style={[s.heroDecor, { backgroundColor: C.primary + '10' }]} />
+            <View style={[s.heroDecor, { backgroundColor: T.selectedBg(C.primary) }]} />
             <View style={s.heroInner}>
               <View style={s.heroTopRow}>
-                <View style={[s.heroIconWrap, { backgroundColor: C.primary + '15' }]}>
+                <View style={[s.heroIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
                   <MaterialCommunityIcons name="office-building-marker" size={20} color={C.primary} />
                 </View>
                 <View style={[s.heroBadge, { backgroundColor: C.backgroundTertiary }]}>
@@ -406,9 +408,9 @@ export default function ReportSummaryScreen() {
                 <Text style={{ color: C.errorDark, fontSize: 12, marginTop: 2 }}>This report was completed without a client signature.</Text>
               </View>
               <Button
-                title="Sign" variant="secondary"
+                title="Sign" variant="secondary" size="small"
                 onPress={() => router.push(`/jobs/${job.id}/signature` as never)}
-                style={{ height: 36, paddingHorizontal: 12 }}
+                style={{ paddingHorizontal: 12 }}
               />
             </View>
           </Animated.View>
@@ -467,7 +469,7 @@ export default function ReportSummaryScreen() {
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {/* Inspections Row */}
             <View style={[s.checkRow, { borderBottomColor: C.border }]}>
-              <View style={[s.checkIconWrap, { backgroundColor: isFullyInspected ? C.success + '18' : C.warning + '18' }]}>
+              <View style={[s.checkIconWrap, { backgroundColor: isFullyInspected ? T.iconBg(C.success) : T.iconBg(C.warning) }]}>
                 <MaterialCommunityIcons
                   name={isFullyInspected ? "clipboard-check-outline" : "clipboard-text-clock-outline"}
                   size={18} color={isFullyInspected ? C.success : C.warning}
@@ -484,7 +486,7 @@ export default function ReportSummaryScreen() {
 
             {/* Defects Row */}
             <View style={[s.checkRow, { borderBottomColor: C.border }]}>
-              <View style={[s.checkIconWrap, { backgroundColor: C.primary + '18' }]}>
+              <View style={[s.checkIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
                 <MaterialCommunityIcons name="tools" size={18} color={C.primary} />
               </View>
               <View style={s.checkTextCol}>
@@ -503,7 +505,7 @@ export default function ReportSummaryScreen() {
               activeOpacity={0.7}
               disabled={isCompleted}
             >
-              <View style={[s.checkIconWrap, { backgroundColor: hasSignature ? C.success + '18' : C.errorLight }]}>
+              <View style={[s.checkIconWrap, { backgroundColor: hasSignature ? T.iconBg(C.success) : C.errorLight }]}>
                 <MaterialCommunityIcons name="draw" size={18} color={hasSignature ? C.success : C.error} />
               </View>
               <View style={s.checkTextCol}>
@@ -688,6 +690,6 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, height: 60, borderRadius: 20, flex: 1
   },
-  generateBtnTxt: { fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  generateBtnTxt: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   bottomBtnRow: { flexDirection: 'row', gap: 16 },
 });

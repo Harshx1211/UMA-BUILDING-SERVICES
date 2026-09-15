@@ -20,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { DefectSeverity } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import type { DefectCode } from '@/constants/DefectCodes';
@@ -57,9 +58,9 @@ function severityColor(severity: DefectSeverity, C: ColorsType): string {
 // bg+border tokens for exactly these three severities.
 function severityBg(severity: DefectSeverity, C: ColorsType): { bg: string; border: string } {
   switch (severity) {
-    case DefectSeverity.NonConformance: return { bg: C.infoLight, border: C.info + '40' };
-    case DefectSeverity.NonCritical:    return { bg: C.warningLight, border: C.warning + '40' };
-    case DefectSeverity.Critical:       return { bg: C.errorLight, border: C.error + '40' };
+    case DefectSeverity.NonConformance: return { bg: C.infoLight, border: T.tintBorder(C.info) };
+    case DefectSeverity.NonCritical:    return { bg: C.warningLight, border: T.tintBorder(C.warning) };
+    case DefectSeverity.Critical:       return { bg: C.errorLight, border: T.tintBorder(C.error) };
   }
 }
 
@@ -324,7 +325,7 @@ export function DefectFieldsCard({
         activeOpacity={0.8}
         disabled={saving}
       >
-        <View style={[s.codeIcon, { backgroundColor: selectedCode ? C.primary + '18' : C.background }]}>
+        <View style={[s.codeIcon, { backgroundColor: selectedCode ? T.iconBg(C.primary) : C.background }]}>
           <MaterialCommunityIcons
             name={selectedCode ? 'tag-check-outline' : 'tag-search-outline'}
             size={18}
@@ -422,7 +423,7 @@ export function DefectFieldsCard({
           // of it. Matches the Delete icon button's compact treatment
           // instead, so Cancel/Save Changes keep comfortable room.
           <TouchableOpacity
-            style={[s.iconBtn, { backgroundColor: C.warning + '18', borderColor: C.warning }]}
+            style={[s.iconBtn, { backgroundColor: T.iconBg(C.warning), borderColor: C.warning }]}
             onPress={() => { if (validate()) onReplace(currentValue()); }}
             activeOpacity={0.8}
             disabled={saving}
@@ -516,16 +517,16 @@ const s = StyleSheet.create({
   codeIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   codeTitle: { fontSize: 13, fontWeight: '700' },
   codeSub: { fontSize: 11, marginTop: 2 },
-  priceBadge: { backgroundColor: 'rgba(34,197,94,0.15)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: '#16A34A' },
+  priceBadge: { backgroundColor: T.tintBg(T.success), borderWidth: 1, borderColor: T.tintBorder(T.success), paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: T.success },
 
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500', minHeight: 80, textAlignVertical: 'top' },
 
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  iconBtn: { width: 46, height: 46, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelBtn: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 48, height: 48, borderRadius: T.radiusButton, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelBtn: { flex: 1, height: 48, borderRadius: T.radiusButton, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cancelTxt: { fontSize: 13.5, fontWeight: '700' },
-  saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 14 },
+  saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: T.radiusButton },
   saveTxt: { fontSize: 14, fontWeight: '700' },
 
   // Two stacked photo sections (Before, then After — always both visible,

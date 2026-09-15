@@ -23,6 +23,7 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 
@@ -246,12 +247,12 @@ const s = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
   input: { borderRadius: 12, borderWidth: 1.5, padding: 12, fontSize: 15, marginBottom: 14 },
   actionsRow: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  cancelBtn: { flex: 1, height: 48, borderRadius: T.radiusButton, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   cancelTxt: { fontSize: 14.5, fontWeight: '700' },
-  saveBtn: { flex: 1.6, height: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  saveBtn: { flex: 1.6, height: 48, borderRadius: T.radiusButton, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   saveTxt: { fontSize: 14.5, fontWeight: '700' },
 
-  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  viewerOverlay: { flex: 1, backgroundColor: T.viewerBackground, alignItems: 'center', justifyContent: 'center' },
   viewerCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   viewerImage: { width: '100%', height: '78%' },
   viewerPageLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginTop: 14 },

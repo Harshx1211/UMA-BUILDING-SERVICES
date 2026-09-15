@@ -18,6 +18,8 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useFocusEffect, router } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
@@ -69,7 +71,7 @@ function PhotoViewer({
     <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.viewerOverlay}>
         <TouchableOpacity style={s.viewerCloseBtn} onPress={onClose} hitSlop={10}>
-          <MaterialCommunityIcons name="close" size={26} color="#fff" />
+          <MaterialCommunityIcons name="close" size={26} color={T.textOnPrimary} />
         </TouchableOpacity>
         {uri && photoId ? (
           <ResilientPhoto photoId={photoId} uri={uri} style={s.viewerImage} contentFit="contain" />
@@ -78,7 +80,7 @@ function PhotoViewer({
         ) : null}
         {onDelete && (
           <TouchableOpacity style={s.viewerDeleteBtn} onPress={onDelete} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="trash-can-outline" size={18} color="#fff" />
+            <MaterialCommunityIcons name="trash-can-outline" size={18} color={T.textOnPrimary} />
             <Text style={s.viewerDeleteTxt}>Delete Photo</Text>
           </TouchableOpacity>
         )}
@@ -107,12 +109,12 @@ function SectionCard({
         cardShadow,
         {
           backgroundColor: tinted ? C.errorLight : C.surface,
-          borderColor: tinted ? C.error + '60' : C.border,
+          borderColor: tinted ? T.tintBorder(C.error) : C.border,
         },
       ]}
     >
       <View style={s.cardHeaderRow}>
-        <View style={[s.cardHeaderIconWrap, { backgroundColor: (tinted ? C.error : C.textSecondary) + '26' }]}>
+        <View style={[s.cardHeaderIconWrap, { backgroundColor: T.iconBg(tinted ? C.error : C.textSecondary) }]}>
           <MaterialCommunityIcons name={icon} size={15} color={tinted ? C.error : C.textSecondary} />
         </View>
         <Text style={[s.cardHeaderTitle, { color: C.text }]}>{title}</Text>
@@ -149,6 +151,7 @@ function reconcileDefectPhotos(defectId: string, existing: DefectPhotosDraft, ne
 export default function AssetDetailScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId, assetId, pendingFail: pendingFailParam } = useLocalSearchParams<{ id: string; assetId: string; pendingFail?: string }>();
   const { assets, updateAssetResult, addPhotoToAsset, removePhotoFromAsset, isSaving } = useInspectionStore();
   const asset = assets.find((a) => a.id === assetId);
@@ -875,7 +878,7 @@ export default function AssetDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {jobLocked && (
           <Animated.View entering={noMotion ? undefined : FadeIn.duration(220)}>
             <View style={[s.lockedBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
@@ -1305,12 +1308,17 @@ const s = StyleSheet.create({
   historyLoadMoreChipTxt: { fontSize: 12.5, fontWeight: '700' },
 
   // Photo viewer
-  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  // FIX: these 4 values were raw hex/rgba literals bypassing the token
+  // system — T.viewerBackground (the same full-screen-media-viewer token
+  // now shared with the other photo/document viewers), T.danger + a valid
+  // hex alpha suffix (was a hand-matched rgba() copy of the same color),
+  // and T.textOnPrimary (was '#fff').
+  viewerOverlay: { flex: 1, backgroundColor: T.viewerBackground, alignItems: 'center', justifyContent: 'center' },
   viewerCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   viewerImage: { width: '100%', height: '80%' },
   viewerDeleteBtn: {
     position: 'absolute', bottom: 50, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(220,38,38,0.9)', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24,
+    backgroundColor: T.danger + 'E6', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24,
   },
-  viewerDeleteTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  viewerDeleteTxt: { color: T.textOnPrimary, fontSize: 14, fontWeight: '700' },
 });

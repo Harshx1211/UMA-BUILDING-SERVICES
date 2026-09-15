@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { MAX_LENGTHS } from '@/utils/sanitize';
@@ -143,7 +144,7 @@ export default function LoginScreen() {
           {/* ── Form Section ─────────────── */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(300).duration(500)} style={styles.formContainer}>
             {!isOnline && (
-              <View style={[styles.alertBanner, { backgroundColor: C.warningLight, borderColor: C.warning + '40' }]}>
+              <View style={[styles.alertBanner, { backgroundColor: C.warningLight, borderColor: T.tintBorder(C.warning) }]}>
                 <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />
                 <Text style={[styles.alertText, { color: C.warningDark }]}>
                   You are offline. Biometric sign-in still works. Signing in with a password requires internet.
@@ -152,7 +153,7 @@ export default function LoginScreen() {
             )}
 
             {error && (
-              <View style={[styles.alertBanner, { backgroundColor: C.errorLight, borderColor: C.error + '40' }]}>
+              <View style={[styles.alertBanner, { backgroundColor: C.errorLight, borderColor: T.tintBorder(C.error) }]}>
                 <MaterialCommunityIcons name="alert-circle" size={18} color={C.error} />
                 <Text style={[styles.alertText, { color: C.error }]}>{error}</Text>
               </View>

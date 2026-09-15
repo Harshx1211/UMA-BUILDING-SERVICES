@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { Button } from '@/components/ui';
 
 interface Props {
@@ -44,8 +45,8 @@ export default function CompletionBottomSheet({
           <ScrollView style={s.list}>
             {/* Asset checklist */}
             <View style={[s.checkItem, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={[s.iconBox, { backgroundColor: allAssetsDone ? C.success + '20' : C.warning + '20' }]}>
-                <MaterialCommunityIcons name={allAssetsDone ? "tools" : "alert"} size={20} color={allAssetsDone ? C.success : C.warning} />
+              <View style={[s.iconBox, { backgroundColor: allAssetsDone ? T.iconBg(C.success) : T.iconBg(C.warning) }]}>
+                <MaterialCommunityIcons name={allAssetsDone ? "tools" : "alert"} size={18} color={allAssetsDone ? C.success : C.warning} />
               </View>
               <View style={s.checkTextWrap}>
                 <Text style={[s.itemTitle, { color: C.text }]}>Asset Inspection</Text>
@@ -56,8 +57,8 @@ export default function CompletionBottomSheet({
 
             {/* Signature checklist */}
             <View style={[s.checkItem, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <View style={[s.iconBox, { backgroundColor: hasSignature ? C.success + '20' : C.error + '20' }]}>
-                <MaterialCommunityIcons name={hasSignature ? "pen" : "pen-remove"} size={20} color={hasSignature ? C.success : C.error} />
+              <View style={[s.iconBox, { backgroundColor: hasSignature ? T.iconBg(C.success) : T.iconBg(C.error) }]}>
+                <MaterialCommunityIcons name={hasSignature ? "pen" : "pen-remove"} size={18} color={hasSignature ? C.success : C.error} />
               </View>
               <View style={s.checkTextWrap}>
                 <Text style={[s.itemTitle, { color: C.text }]}>Client Signature</Text>
@@ -68,9 +69,9 @@ export default function CompletionBottomSheet({
 
             {/* Defects warning */}
             {hasDefects && (
-              <View style={[s.checkItem, { backgroundColor: C.warning + '10', borderColor: C.warning + '40' }]}>
-                <View style={[s.iconBox, { backgroundColor: C.warning + '20' }]}>
-                  <MaterialCommunityIcons name="alert-decagram" size={20} color={C.warningDark} />
+              <View style={[s.checkItem, { backgroundColor: T.selectedBg(C.warning), borderColor: T.tintBorder(C.warning) }]}>
+                <View style={[s.iconBox, { backgroundColor: T.iconBg(C.warning) }]}>
+                  <MaterialCommunityIcons name="alert-decagram" size={18} color={C.warningDark} />
                 </View>
                 <View style={s.checkTextWrap}>
                   <Text style={[s.itemTitle, { color: C.warningDark }]}>Defects Logged</Text>
@@ -95,7 +96,7 @@ export default function CompletionBottomSheet({
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: T.overlay },
   backdrop: { ...StyleSheet.absoluteFillObject },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, maxHeight: '80%' },
   handleWrap: { alignItems: 'center', marginBottom: 16 },
@@ -105,7 +106,7 @@ const s = StyleSheet.create({
   list: { marginBottom: 24 },
   
   checkItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 12 },
-  iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   checkTextWrap: { flex: 1 },
   itemTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   itemSub: { fontSize: 13 },

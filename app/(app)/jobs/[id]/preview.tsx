@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useSharedValue, withRepeat, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useReportGeneration } from '@/hooks/useReportGeneration';
 import { useJobsStore } from '@/store/jobsStore';
@@ -119,15 +120,16 @@ function ReadyView({
   onOpenBrowser: () => void;
   isDownloading: boolean;
 }) {
+  const C = useColors();
   const noMotion = useReducedMotion();
   return (
     <Animated.View entering={noMotion ? undefined : FadeInDown} style={styles.centeredWrap}>
-      <View style={[styles.iconCircle, { backgroundColor: '#05966918', borderColor: '#05966930' }]}>
-        <MaterialCommunityIcons name="check-circle-outline" size={42} color="#059669" />
+      <View style={[styles.iconCircle, { backgroundColor: T.iconBg(C.success), borderColor: T.tintBorder(C.success) }]}>
+        <MaterialCommunityIcons name="check-circle-outline" size={42} color={C.success} />
       </View>
 
       <Text style={[styles.bigTitle, { color: textColor }]}>Report Ready</Text>
-      <Text style={[styles.subTitle, { color: '#059669' }]}>{pdfTitle}</Text>
+      <Text style={[styles.subTitle, { color: C.success }]}>{pdfTitle}</Text>
       <Text style={[styles.hintTxt, { color: textSecondary }]}>
         Generated on our servers · Full-resolution · AS1851 compliant
       </Text>
@@ -281,8 +283,8 @@ export default function PreviewScreen() {
 
       {screenState === 'error' && (
         <Animated.View entering={FadeIn} style={styles.centeredWrap}>
-          <View style={[styles.iconCircle, { backgroundColor: '#DC262618', borderColor: '#DC262630' }]}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={42} color="#DC2626" />
+          <View style={[styles.iconCircle, { backgroundColor: T.iconBg(C.error), borderColor: T.tintBorder(C.error) }]}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={42} color={C.error} />
           </View>
           <Text style={[styles.bigTitle, { color: C.text }]}>Generation Failed</Text>
           <Text style={[styles.hintTxt, { color: C.textSecondary }]}>
@@ -290,7 +292,7 @@ export default function PreviewScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => generate()}
-            style={[styles.secondaryBtn, { backgroundColor: C.primary + '18', borderRadius: 10, paddingHorizontal: 24 }]}
+            style={[styles.secondaryBtn, { backgroundColor: T.iconBg(C.primary), borderRadius: 10, paddingHorizontal: 24 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />
             <Text style={[styles.secondaryTxt, { color: C.primary }]}>Try Again</Text>

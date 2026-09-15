@@ -284,13 +284,13 @@ const styles = StyleSheet.create({
   infoLabel:      { color: T.textMuted, fontSize: 13 },
   infoValue:      { color: T.textPrimary, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
   signOutBtn:     {
-    backgroundColor: T.dangerBg, borderRadius: T.radiusCard, borderWidth: 1,
+    backgroundColor: T.dangerBg, borderRadius: T.radiusButton, borderWidth: 1,
     borderColor: T.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 12,
   },
   signOutText:    { color: T.danger, fontSize: 15, fontWeight: '700' },
   retryBtn:       {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: T.warningBg, borderRadius: T.radiusCard, borderWidth: 1,
+    backgroundColor: T.warningBg, borderRadius: T.radiusButton, borderWidth: 1,
     borderColor: T.warning, paddingVertical: 14, marginBottom: 20,
   },
   retryText:      { color: T.warning, fontSize: 14, fontWeight: '700' },

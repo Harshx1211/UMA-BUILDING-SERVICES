@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getPendingSyncItems } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 const HIDDEN_OFFSET = -80;
 
@@ -88,7 +89,7 @@ export function OfflineBanner() {
       fg: C.warningDark,
     },
     syncing: {
-      bg:     C.primary + '15',
+      bg:     T.tintBg(C.primary),
       border: C.primary,
       icon:   'cloud-sync-outline' as const,
       text: 'Syncing with cloud…',

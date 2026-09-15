@@ -88,6 +88,25 @@ export const T = {
 
   /** Absolute black — camera viewfinder backgrounds, iOS shadowColor. Not a themed surface tone. */
   black:             palette.black,
+  /**
+   * Full-screen photo/document VIEWER background — a lightbox or scan
+   * preview's own backdrop, not a "dim the page behind a sheet" scrim
+   * (that's T.overlay/C.overlay, a different, lighter role). Near-opaque:
+   * there's nothing to see "behind" a full-screen media viewer.
+   */
+  viewerBackground:  palette.black + 'EB', // 92% opacity
+  /**
+   * Floating semi-transparent control button sitting on top of live
+   * camera/photo content (a delete/close/shutter button over an image) —
+   * needs to stay visible against any photo content, so it's a
+   * deliberately different (lighter) opacity than the viewer background.
+   */
+  controlButtonBg:   palette.black + '99', // 60% opacity
+  /** Card/element drop shadow tint — navy-tinted, not pure black. */
+  shadow:            'rgba(17, 29, 63, 0.14)',
+  /** "Dim the page behind a modal/sheet" scrim — lets content underneath
+   * still read through. Different role than viewerBackground above. */
+  overlay:           'rgba(17, 29, 63, 0.45)',
 
   // ── Status Colors (strictly semantic — one purpose each) ─────────────────
   /** Green — completed / passed / positive states only */
@@ -138,6 +157,28 @@ export const T = {
    * Usage: { backgroundColor: T.iconBg(T.textMuted) }
    */
   iconBg: (color: string) => color + '26', // 26 hex = 15% opacity
+
+  // ── Other Tint Rules ─────────────────────────────────────────────────────
+  // FIX: these 3 roles were each being hand-rolled with a different literal
+  // hex alpha suffix in nearly every screen that needed them — 17 distinct
+  // values found across the app for what were, in every case, one of these
+  // 3 conceptual roles. Consolidated to one deliberate value per role.
+  /**
+   * Selected/active card or chip background — a very light wash so the
+   * card's own content (icon, text) still reads clearly on top of it.
+   * Usage: { backgroundColor: T.selectedBg(C.primary) }
+   */
+  selectedBg: (color: string) => color + '10', // ~6% opacity
+  /**
+   * Badge/pill/chip/banner fill — a color-coded label's background (a
+   * status badge, a priced-item pill, an info banner). Stronger than
+   * selectedBg since these are meant to be read as a distinct colored
+   * label, not a subtle wash.
+   * Usage: { backgroundColor: T.tintBg(C.success) }
+   */
+  tintBg: (color: string) => color + '20', // ~12.5% opacity
+  /** The matching border for tintBg — same color, stronger. */
+  tintBorder: (color: string) => color + '40', // 25% opacity
 } as const;
 
 // Colors.theme is the one active palette — useColors() reads from here.
@@ -186,8 +227,10 @@ const Colors = {
     // is nearly invisible used as an icon tint against a light background.
     tabIconDefault:      T.textMuted,
     tabIconSelected:     T.primary,
-    shadow:              'rgba(17, 29, 63, 0.14)',
-    overlay:             'rgba(17, 29, 63, 0.45)',
+    shadow:              T.shadow,
+    overlay:             T.overlay,
+    viewerBackground:    T.viewerBackground,
+    controlButtonBg:     T.controlButtonBg,
   },
 };
 

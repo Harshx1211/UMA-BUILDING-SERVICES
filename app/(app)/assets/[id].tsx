@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
@@ -140,7 +141,7 @@ export default function AssetDetailScreen() {
           subtitle={asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No barcode'}
           showBack={true}
           rightComponent={
-            <View style={[s.statusBadge, { backgroundColor: isActive ? C.success + '26' : C.backgroundTertiary }]}>
+            <View style={[s.statusBadge, { backgroundColor: isActive ? T.tintBg(C.success) : C.backgroundTertiary }]}>
               <Text style={[s.statusBadgeText, { color: isActive ? C.success : C.textSecondary }]}>
                 {isActive ? 'ACTIVE' : 'INACTIVE'}
               </Text>

@@ -349,7 +349,7 @@ export default function SignatureScreen() {
             {!jobLocked && (
               <TouchableOpacity
                 onPress={() => { setIsEditing(true); setStep('tech'); setHasSig(false); setSigError(''); }}
-                style={[s.resignBtn, { backgroundColor: C.warning + '20', borderColor: C.warning + '60' }]}
+                style={[s.resignBtn, { backgroundColor: T.tintBg(C.warning), borderColor: T.tintBorder(C.warning) }]}
               >
                 <MaterialCommunityIcons name="pencil-outline" size={13} color={C.warningDark} />
                 <Text style={[s.resignTxt, { color: C.warningDark }]}>Re-sign</Text>
@@ -561,7 +561,7 @@ const s = StyleSheet.create({
 
   // Consent card
   consentRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  consentTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
+  consentTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
   consentTxt:   { fontSize: 13, lineHeight: 20, fontWeight: '500' },
 
   // Banner
@@ -573,7 +573,7 @@ const s = StyleSheet.create({
   // Step indicator
   stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 4 },
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  stepPillTxt:{ fontSize: 10, fontWeight: '900', color: T.textOnPrimary, letterSpacing: 1 },
+  stepPillTxt:{ fontSize: 10, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
 
   // Field label

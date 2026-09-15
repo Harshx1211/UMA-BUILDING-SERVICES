@@ -214,11 +214,11 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
 
       {/* None option */}
       <TouchableOpacity
-        style={[s.assetCard, { borderColor: assetId === '' ? C.primary : C.border, backgroundColor: assetId === '' ? C.primary + '10' : C.surface }]}
+        style={[s.assetCard, { borderColor: assetId === '' ? C.primary : C.border, backgroundColor: assetId === '' ? T.selectedBg(C.primary) : C.surface }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAssetId(''); }}
         activeOpacity={0.8}
       >
-        <View style={[s.assetIconBox, { backgroundColor: assetId === '' ? C.primary + '20' : C.backgroundTertiary }]}>
+        <View style={[s.assetIconBox, { backgroundColor: assetId === '' ? T.iconBg(C.primary) : C.backgroundTertiary }]}>
           <MaterialCommunityIcons name="link-off" size={20} color={assetId === '' ? C.primary : C.textTertiary} />
         </View>
         <View style={{ flex: 1 }}>
@@ -239,11 +239,11 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
           return (
             <TouchableOpacity
               key={a.id}
-              style={[s.assetCard, { borderColor: active ? C.accent : C.border, backgroundColor: active ? C.accent + '0E' : C.surface }]}
+              style={[s.assetCard, { borderColor: active ? C.accent : C.border, backgroundColor: active ? T.selectedBg(C.accent) : C.surface }]}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAssetId(a.id); }}
               activeOpacity={0.8}
             >
-              <View style={[s.assetIconBox, { backgroundColor: active ? C.accent + '20' : C.backgroundTertiary }]}>
+              <View style={[s.assetIconBox, { backgroundColor: active ? T.iconBg(C.accent) : C.backgroundTertiary }]}>
                 <MaterialCommunityIcons name={iconName as MCIconName} size={20} color={active ? C.accent : C.textSecondary} />
               </View>
               <View style={{ flex: 1, gap: 3 }}>
@@ -289,11 +289,11 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
 
       {/* Code library picker */}
       <TouchableOpacity
-        style={[s.codeBtn, { borderColor: selectedCode ? C.primary : C.border, backgroundColor: selectedCode ? C.primary + '0C' : C.surface }]}
+        style={[s.codeBtn, { borderColor: selectedCode ? C.primary : C.border, backgroundColor: selectedCode ? T.selectedBg(C.primary) : C.surface }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCodeVisible(true); }}
         activeOpacity={0.8}
       >
-        <View style={[s.codeIconBox, { backgroundColor: selectedCode ? C.primary + '20' : C.backgroundTertiary }]}>
+        <View style={[s.codeIconBox, { backgroundColor: selectedCode ? T.iconBg(C.primary) : C.backgroundTertiary }]}>
           <MaterialCommunityIcons name={selectedCode ? 'tag-check-outline' : 'tag-search-outline'} size={18} color={selectedCode ? C.primary : C.textSecondary} />
         </View>
         <View style={{ flex: 1 }}>
@@ -346,7 +346,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               s.addPhotoBtn,
               photos.length >= MAX_PHOTOS
                 ? { borderColor: C.border, backgroundColor: C.backgroundTertiary }
-                : { borderColor: C.accent, backgroundColor: C.accent + '10' },
+                : { borderColor: C.accent, backgroundColor: T.tintBg(C.accent) },
             ]}
             onPress={handlePhoto}
             disabled={photos.length >= MAX_PHOTOS}
@@ -532,7 +532,7 @@ const s = StyleSheet.create({
 
   // Code picker
   codeBtn:    { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1.5 },
-  codeIconBox: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  codeIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   codeBtnTitle: { fontSize: 13, fontWeight: '700' },
   codeBtnSub:   { fontSize: 11, marginTop: 2 },
 
@@ -552,13 +552,13 @@ const s = StyleSheet.create({
   photoRow:     { gap: 10, paddingBottom: 4 },
   thumbWrap:    { position: 'relative' },
   thumb:        { width: 80, height: 80, borderRadius: 12 },
-  thumbDel:     { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  thumbDel:     { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: T.controlButtonBg, alignItems: 'center', justifyContent: 'center' },
   noPhotoTxt:   { fontSize: 12, fontStyle: 'italic' },
 
   // Navigation
   navRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, gap: 12 },
-  backBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1, flex: 1 },
+  backBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, height: 48, borderRadius: T.radiusButton, borderWidth: 1, flex: 1 },
   backBtnTxt: { fontSize: 14, fontWeight: '700' },
-  nextBtn:    { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: 14 },
+  nextBtn:    { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: T.radiusButton },
   nextBtnTxt: { color: T.textOnPrimary, fontSize: 15, fontWeight: '800' },
 });

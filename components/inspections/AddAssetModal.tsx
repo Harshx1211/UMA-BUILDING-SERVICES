@@ -595,14 +595,14 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
   headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600' },
 
   // Step indicators
   stepBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 1, justifyContent: 'space-between' },
   stepItem:   { alignItems: 'center', gap: 6, flex: 1 },
   stepDot:    { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  stepNum:    { fontSize: 11, fontWeight: '900' },
+  stepNum:    { fontSize: 11, fontWeight: '800' },
   stepLabel:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
 
   // Type grid
@@ -644,7 +644,7 @@ const s = StyleSheet.create({
   moreFieldsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
   moreFieldsTxt: { fontSize: 13, fontWeight: '700' },
 
-  sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
   formCard:     { marginBottom: 16 },
 
   field:      { marginBottom: 18 },
@@ -681,7 +681,7 @@ const s = StyleSheet.create({
     shadowColor: T.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   },
   saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, height: 54 },
-  saveBtnTxt: { color: T.textOnPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  saveBtnTxt: { color: T.textOnPrimary, fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
   cancelBtn:  { paddingHorizontal: 12 },
   cancelBtnTxt: { fontSize: 15, fontWeight: '800' },
 });

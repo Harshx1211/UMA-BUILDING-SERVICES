@@ -154,7 +154,11 @@ function WalkthroughModal({ visible, onClose }: { visible: boolean; onClose: () 
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={[wt.overlay, { backgroundColor: C.shadow + '99' }]}>
+      {/* FIX: was C.shadow + '99' — C.shadow is already an rgba(...) string,
+          so appending a hex suffix to it produces an invalid CSS color
+          (rendered as no overlay at all, not the intended dark scrim).
+          T.black is a bare hex, so it can be validly suffixed this way. */}
+      <View style={[wt.overlay, { backgroundColor: T.black + '99' }]}>
         <View style={[wt.card, { backgroundColor: C.surface, padding: 16 }]}>
           {/* Progress dots */}
           <View style={wt.dots}>
@@ -305,7 +309,7 @@ export default function HelpScreen() {
         {/* ── Walkthrough CTA ── */}
         <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(30).duration(350)}>
           <Card 
-            style={[s.walkthroughCard, { borderColor: C.accent + '26', borderWidth: 1.5 }]} 
+            style={[s.walkthroughCard, { borderColor: T.tintBorder(C.accent), borderWidth: 1.5 }]}
             noPadding
           >
             <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowWalkthrough(true); }} activeOpacity={0.8} style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>

@@ -303,7 +303,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                               <TouchableOpacity
                                 key={v}
                                 onPress={() => handleVariantSelect(v)}
-                                style={[s.typeChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary + '18' : C.backgroundTertiary }]}
+                                style={[s.typeChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? T.tintBg(C.primary) : C.backgroundTertiary }]}
                               >
                                 <Text style={[s.typeChipTxt, { color: selected ? C.primary : C.textSecondary }]} numberOfLines={1}>{v}</Text>
                               </TouchableOpacity>
@@ -500,7 +500,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
   headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600' },
   detailsScroll: { padding: 16, paddingBottom: 100, gap: 6 },
   formCard:     { marginBottom: 16 },

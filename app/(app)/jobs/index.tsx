@@ -9,14 +9,17 @@ import { useJobsStore, JobWithProperty } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
 import { T } from '@/constants/Colors';
 import type { Job } from '@/types';
-import { ScreenHeader, Badge } from '@/components/ui';
+import { ScreenHeader, Badge, FilterPills } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
 import { getToleranceWindow } from '@/utils/toleranceWindow';
 import JobFilterModal, { JobGroupBy, JobSortBy } from '@/components/jobs/JobFilterModal';
+import { useResponsive } from '@/hooks/useResponsive';
 
 type FilterTab = 'today' | 'week' | 'all';
+const FILTER_TABS: FilterTab[] = ['today', 'week', 'all'];
+const FILTER_TAB_OPTIONS = [{ label: 'Today' }, { label: 'This Week' }, { label: 'All Jobs' }];
 
 type JobWithJoins = Job & { property_name?: string; address?: string; suburb?: string; state?: string };
 
@@ -69,6 +72,7 @@ type ListRow = { kind: 'header'; key: string; label: string } | { kind: 'job'; j
 
 export default function ScheduleScreen() {
   const { user } = useAuth();
+  const { contentMaxWidth } = useResponsive();
   const { jobs, loadJobs } = useJobsStore();
   const [filter, setFilter]     = useState<FilterTab>('today');
   const [search, setSearch]     = useState('');
@@ -222,19 +226,17 @@ export default function ScheduleScreen() {
         subtitle={`${filtered.length} job${filtered.length !== 1 ? 's' : ''} found`}
       />
 
-      {/* ── Filter Tabs ── */}
+      {/* ── Filter Tabs — shared FilterPills, matching the same tab-row
+          pattern already used by the job Defects screen and Site Inspect
+          (was a bespoke 3-box row here, its own distinct look) ── */}
       <View style={styles.filterRow}>
-        {(['today', 'week', 'all'] as FilterTab[]).map(f => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterTab, filter === f && styles.filterTabActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[styles.filterTabText, filter === f && styles.filterTabTextActive]}>
-              {f === 'today' ? 'Today' : f === 'week' ? 'This Week' : 'All Jobs'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <FilterPills
+          options={FILTER_TAB_OPTIONS}
+          activeIndex={FILTER_TABS.indexOf(filter)}
+          onSelect={(idx) => setFilter(FILTER_TABS[idx])}
+          variant="dark"
+          style={{ flex: 1 }}
+        />
         <TouchableOpacity
           style={[styles.filterIconBtn, activeFilterCount > 0 && styles.filterIconBtnActive]}
           onPress={() => setFilterModalVisible(true)}
@@ -271,7 +273,7 @@ export default function ScheduleScreen() {
         data={listData}
         keyExtractor={(row) => row.kind === 'header' ? row.key : row.job.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
         renderItem={({ item }) =>
           item.kind === 'header'
@@ -385,11 +387,7 @@ function ScheduleJobCard({ job }: { job: Job }) {
 
 const styles = StyleSheet.create({
   container:            { flex: 1, backgroundColor: T.background },
-  filterRow:            { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8 },
-  filterTab:            { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
-  filterTabActive:      { backgroundColor: T.primary, borderColor: T.primary },
-  filterTabText:        { color: T.textMuted, fontSize: 12, fontWeight: '600' },
-  filterTabTextActive:  { color: T.textOnPrimary },
+  filterRow:            { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8 },
   filterIconBtn:        { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   filterIconBtnActive:  { backgroundColor: T.primary, borderColor: T.primary },
   filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },

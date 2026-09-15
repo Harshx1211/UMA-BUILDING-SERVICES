@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { cardShadow } from '@/components/ui/Card';
 import { useDocumentsStore } from '@/store/documentsStore';
 import DocumentCard from '@/components/documents/DocumentCard';
@@ -18,6 +19,7 @@ import type { SiteDocument } from '@/types';
 
 export default function DocumentsScreen() {
   const C = useColors();
+  const { contentMaxWidth } = useResponsive();
   const { id: jobId } = useLocalSearchParams<{ id: string }>();
   const store = useDocumentsStore();
   const sheetRef = useRef<DocumentScanSheetRef>(null);
@@ -132,7 +134,7 @@ export default function DocumentsScreen() {
         <FlatList
           data={store.documents}
           keyExtractor={(d) => d.id}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
           renderItem={({ item }) => (
             <DocumentCard document={item} currentJobId={jobId as string} onLongPress={handleLongPress} />
           )}

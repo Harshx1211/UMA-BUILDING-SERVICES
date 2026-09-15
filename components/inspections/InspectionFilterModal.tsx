@@ -105,7 +105,7 @@ export default function InspectionFilterModal({
       <View style={[s.container, { backgroundColor: C.background }]}>
         <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomWidth: 1, borderBottomColor: C.border }]}>
           <View style={s.headerLeft}>
-            <View style={[s.headerIconCircle, { backgroundColor: C.primary + '1A' }]}>
+            <View style={[s.headerIconCircle, { backgroundColor: T.iconBg(C.primary) }]}>
               <MaterialCommunityIcons name="tune-variant" size={17} color={C.primary} />
             </View>
             <Text style={[s.headerTitle, { color: C.text }]}>Filters</Text>
@@ -225,7 +225,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.4 },
+  headerTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
   resetTxt: { fontSize: 13, fontWeight: '700' },
   body: { padding: 20, paddingBottom: 40 },
   section: { marginBottom: 22 },

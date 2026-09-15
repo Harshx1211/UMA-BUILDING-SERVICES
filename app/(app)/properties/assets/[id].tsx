@@ -5,7 +5,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useResponsive } from '@/hooks/useResponsive';
 import { getRecord, getAssetsForProperty } from '@/lib/database';
 import { AssetStatus } from '@/constants/Enums';
 import type { Property, Asset } from '@/types';
@@ -34,6 +36,7 @@ function assetStatusColor(status: string, C: ColorsType) {
 export default function PropertyAssetsScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
@@ -106,7 +109,7 @@ export default function PropertyAssetsScreen() {
         showBack={true}
         rightComponent={
           <TouchableOpacity
-            style={[s.headerAddBtn, { backgroundColor: C.primary + '15' }]}
+            style={[s.headerAddBtn, { backgroundColor: T.iconBg(C.primary) }]}
             onPress={() => setShowAddAsset(true)}
           >
             <MaterialCommunityIcons name="plus" size={18} color={C.primary} />
@@ -138,7 +141,7 @@ export default function PropertyAssetsScreen() {
         // mounted immediately with no windowing. FlatList windows off-screen
         // rows; the card's border/radius/background move onto the wrapping
         // View so the visual "one bordered list" look is unchanged.
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
           <Animated.View
             entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}
             style={[s.card, { backgroundColor: C.surface, borderColor: C.border, flex: 1, marginBottom: 40 }]}
@@ -163,10 +166,10 @@ export default function PropertyAssetsScreen() {
                     activeOpacity={0.7}
                   >
                     {/* Icon */}
-                    <View style={[s.assetIconWrap, { backgroundColor: isOverdue ? C.errorLight : C.primary + '12' }]}>
+                    <View style={[s.assetIconWrap, { backgroundColor: isOverdue ? C.errorLight : T.iconBg(C.primary) }]}>
                       <MaterialCommunityIcons
                         name={assetIconName(asset.asset_type)}
-                        size={20}
+                        size={22}
                         color={isOverdue ? C.error : C.primary}
                       />
                     </View>
@@ -251,7 +254,7 @@ const s = StyleSheet.create({
 
   // Asset rows
   assetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  assetIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  assetIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   assetType:     { fontSize: 14, fontWeight: '700', marginBottom: 1 },
   assetLocation: { fontSize: 12, marginTop: 1 },
   assetSerial:   { fontSize: 11, fontFamily: 'monospace', marginTop: 1 },

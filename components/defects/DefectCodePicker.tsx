@@ -109,7 +109,7 @@ const CodeRow = React.memo(function CodeRow({
       activeOpacity={0.7}
     >
       {/* Left icon */}
-      <View style={[s.codeIcon, { backgroundColor: isCustom ? C.accent + '18' : C.backgroundTertiary }]}>
+      <View style={[s.codeIcon, { backgroundColor: isCustom ? T.iconBg(C.accent) : C.backgroundTertiary }]}>
         <MaterialCommunityIcons
           name={isCustom ? 'pencil-outline' : 'tag-outline'}
           size={16}
@@ -135,7 +135,7 @@ const CodeRow = React.memo(function CodeRow({
 
       {/* Price badge */}
       {item.quote_price !== undefined && (
-        <View style={[s.priceBadge, { backgroundColor: C.success + '18', borderColor: C.success + '40' }]}>
+        <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
           <Text style={[s.priceBadgeTxt, { color: C.success }]}>${item.quote_price}</Text>
         </View>
       )}

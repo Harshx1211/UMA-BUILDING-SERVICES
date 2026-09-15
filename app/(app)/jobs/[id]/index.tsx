@@ -11,6 +11,7 @@ import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'exp
 import type { NavigationAction } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
+import { T } from '@/constants/Colors';
 import { useJobsStore } from '@/store/jobsStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import {
@@ -25,6 +26,7 @@ import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
 import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
@@ -131,6 +133,7 @@ export default function JobDetailScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { updateJobStatus } = useJobsStore();
@@ -497,7 +500,7 @@ export default function JobDetailScreen() {
     },
     ...(!isCancelled ? [{
       key: 'defects', icon: 'alert-circle-outline' as MCIconName,
-      iconBg: defects.length > 0 ? C.error + '15' : C.backgroundTertiary,
+      iconBg: defects.length > 0 ? T.iconBg(C.error) : C.backgroundTertiary,
       iconColor: defects.length > 0 ? C.error : C.textSecondary,
       title: 'Defects',
       subtitle: defects.length === 0 ? 'None logged' : `${defects.length} defect${defects.length !== 1 ? 's' : ''}`,
@@ -516,7 +519,7 @@ export default function JobDetailScreen() {
       onPress: () => router.push(`/jobs/${id}/quote` as never),
     }] : []),
     ...(!isCancelled ? [{
-      key: 'signature', icon: 'draw' as MCIconName, iconBg: hasSig ? C.success + '15' : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
+      key: 'signature', icon: 'draw' as MCIconName, iconBg: hasSig ? T.iconBg(C.success) : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
       title: 'Signature', subtitle: hasSig ? 'Captured' : 'Required for report',
       onPress: () => router.push(`/jobs/${id}/signature` as never),
     }] : []),
@@ -562,7 +565,7 @@ export default function JobDetailScreen() {
         }
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}>
         <View style={s.body}>
 
           {/* ── JOB ACTIONS WIDGET (scheduled state only — once in progress, the
@@ -597,7 +600,7 @@ export default function JobDetailScreen() {
               </View>
               <TouchableOpacity
                 onPress={handleContinueWorking}
-                style={[s.continueBtn, { backgroundColor: C.success + '18', borderColor: C.success }]}
+                style={[s.continueBtn, { backgroundColor: T.iconBg(C.success), borderColor: C.success }]}
               >
                 <MaterialCommunityIcons name="pencil-outline" size={14} color={C.success} />
                 <Text style={[s.continueBtnTxt, { color: C.success }]}>Continue</Text>
@@ -679,10 +682,10 @@ export default function JobDetailScreen() {
                   style={[
                     s.inspectRow,
                     { borderTopWidth: 1, borderTopColor: C.border },
-                    isInProgress && { backgroundColor: C.primary + '0D' },
+                    isInProgress && { backgroundColor: T.selectedBg(C.primary) },
                   ]}
                 >
-                  <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? C.primary + '20' : C.backgroundTertiary }]}>
+                  <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? T.iconBg(C.primary) : C.backgroundTertiary }]}>
                     <MaterialCommunityIcons
                       name={isInProgress ? 'clipboard-check' : 'lock-open-outline'}
                       size={22}
@@ -876,6 +879,7 @@ export default function JobDetailScreen() {
 
       {/* ── BOTTOM ACTION BAR ── */}
       <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, borderTopWidth: 1, shadowColor: C.shadow, paddingBottom: 20 + insets.bottom }]}>
+        <View style={{ maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
         <Button
           title={
             isCompleted && job?.report_url ? 'View Report' :
@@ -906,8 +910,8 @@ export default function JobDetailScreen() {
               color={!isCompleted ? C.textTertiary : C.textOnPrimary}
             />
           }
-          style={{ height: 52, borderRadius: 26 }}
         />
+        </View>
       </View>
 
 
@@ -935,9 +939,13 @@ export default function JobDetailScreen() {
           setShowCompletionModal(false);
         }}
       >
-        <View style={[cm.overlay, { backgroundColor: C.shadow + 'D9' }]}>
+        {/* FIX: was C.shadow + 'D9' — C.shadow is already an rgba(...)
+            string, invalid when hex-suffixed (this celebration modal was
+            rendering with no dark backdrop behind it at all). T.black is
+            a bare hex and can be validly suffixed this way. */}
+        <View style={[cm.overlay, { backgroundColor: T.black + 'D9' }]}>
           <View style={[cm.card, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, shadowColor: C.shadow }]}>
-            <View style={[cm.checkCircle, { backgroundColor: C.success + '18' }]}>
+            <View style={[cm.checkCircle, { backgroundColor: T.iconBg(C.success) }]}>
               <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).springify()}>
                 <MaterialCommunityIcons name="check-bold" size={44} color={C.success} />
               </Animated.View>
@@ -996,7 +1004,7 @@ export default function JobDetailScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   centered: { alignItems: 'center', justifyContent: 'center', padding: 24, flex: 1 },
-  notFound: { fontSize: 20, fontWeight: '900', marginTop: 12, letterSpacing: -0.5 },
+  notFound: { fontSize: 20, fontWeight: '800', marginTop: 12, letterSpacing: -0.5 },
   scrollContent: { paddingBottom: 120 },
 
   body: { padding: 20, gap: 20 },
@@ -1067,12 +1075,12 @@ const cm = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', maxWidth: 360, borderRadius: 32, padding: 32, alignItems: 'center', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 15 },
   checkCircle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  title: { fontSize: 26, fontWeight: '900', marginBottom: 4, letterSpacing: -0.5 },
+  title: { fontSize: 26, fontWeight: '800', marginBottom: 4, letterSpacing: -0.5 },
   property: { fontSize: 14, fontWeight: '600', marginBottom: 28, textAlign: 'center' },
   statsRow: { flexDirection: 'row', borderRadius: 20, padding: 20, width: '100%', marginBottom: 28 },
   statItem: { flex: 1, alignItems: 'center' },
   statIcon: { marginBottom: 6 },
-  statValue: { fontSize: 18, fontWeight: '900', marginBottom: 2, letterSpacing: -0.5 },
+  statValue: { fontSize: 18, fontWeight: '800', marginBottom: 2, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   statDivider: { width: 1, height: '80%', alignSelf: 'center' },
   autoCloseTxt: { fontSize: 13, marginBottom: 16, fontWeight: '600' },

@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useResponsive } from '@/hooks/useResponsive';
 import { T } from '@/constants/Colors';
 import { ScreenHeader } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
@@ -70,12 +71,12 @@ const DefectRow = React.memo(function DefectRow({ defect, onPress, C }: { defect
           </Text>
         </View>
         {codeInfo && (
-          <View style={[s.codeBadge, { backgroundColor: C.primary + '12', borderColor: C.primary + '30' }]}>
+          <View style={[s.codeBadge, { backgroundColor: T.tintBg(C.primary), borderColor: T.tintBorder(C.primary) }]}>
             <Text style={[s.codeBadgeTxt, { color: C.primary }]}>{codeInfo.code.toUpperCase()}</Text>
           </View>
         )}
         <View style={{ flex: 1 }} />
-        <View style={[s.statusBadge, { borderColor: statusColor + '60' }]}>
+        <View style={[s.statusBadge, { borderColor: T.tintBorder(statusColor) }]}>
           <Text style={[s.statusBadgeTxt, { color: statusColor }]}>
             {defect.status.charAt(0).toUpperCase() + defect.status.slice(1)}
           </Text>
@@ -100,7 +101,7 @@ const DefectRow = React.memo(function DefectRow({ defect, onPress, C }: { defect
           </View>
         )}
         {defect.quote_price && (
-          <View style={[s.pricePill, { backgroundColor: C.success + '26' }]}>
+          <View style={[s.pricePill, { backgroundColor: T.tintBg(C.success) }]}>
             <Text style={[s.pricePillTxt, { color: C.success }]}>${defect.quote_price}</Text>
           </View>
         )}
@@ -134,6 +135,7 @@ function FilterPill({ label, isActive, color, onPress, C }: {
 export default function GlobalDefectsScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { defects, isLoading, loadAllDefects } = useDefectsStore();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>('all');
@@ -184,11 +186,11 @@ export default function GlobalDefectsScreen() {
         showBack
         rightComponent={
           openCount > 0 ? (
-            <View style={[s.openCountBadge, { backgroundColor: C.error + '33', borderColor: C.error + '66' }]}>
+            <View style={[s.openCountBadge, { backgroundColor: T.tintBg(C.error), borderColor: T.tintBorder(C.error) }]}>
               <Text style={[s.openCountTxt, { color: C.error }]}>{openCount} OPEN</Text>
             </View>
           ) : (
-            <View style={[s.openCountBadge, { backgroundColor: C.success + '33', borderColor: C.success + '66' }]}>
+            <View style={[s.openCountBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
               <Text style={[s.openCountTxt, { color: C.success }]}>ALL CLEAR</Text>
             </View>
           )
@@ -252,7 +254,7 @@ export default function GlobalDefectsScreen() {
         <FlatList
           data={filtered}
           keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} />}
           renderItem={({ item, index }) => (

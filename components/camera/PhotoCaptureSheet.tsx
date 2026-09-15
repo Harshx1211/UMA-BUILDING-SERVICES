@@ -160,7 +160,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
       backgroundStyle={{ backgroundColor: C.background }}
     >
       <View style={s.topBar}>
-        <TouchableOpacity style={[s.doneBtn, { backgroundColor: C.accent + '18', borderWidth: 1, borderColor: C.accent + '40' }]} onPress={() => bottomSheetRef.current?.close()}>
+        <TouchableOpacity style={[s.doneBtn, { backgroundColor: T.tintBg(C.accent), borderWidth: 1, borderColor: T.tintBorder(C.accent) }]} onPress={() => bottomSheetRef.current?.close()}>
           <MaterialCommunityIcons name="check" size={16} color={C.accent} />
           <Text style={[s.doneText, { color: C.accent }]}>Done ({photosTaken} taken)</Text>
         </TouchableOpacity>
@@ -291,7 +291,7 @@ const s = StyleSheet.create({
   cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: T.black, overflow: 'hidden' },
   camera: { flex: 1 },
   cameraOverlay: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
-  camBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  camBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: T.controlButtonBg, justifyContent: 'center', alignItems: 'center' },
   form: { padding: 16 },
   label: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
   input: { borderRadius: 12, borderWidth: 1.5, padding: 12, fontSize: 15, marginBottom: 16 },

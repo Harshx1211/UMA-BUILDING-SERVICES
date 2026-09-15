@@ -9,6 +9,7 @@ import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { T } from '@/constants/Colors';
 
 export function FilterChip({
   label, displayLabel, active, onPress,
@@ -28,8 +29,8 @@ export function FilterChip({
         { backgroundColor: active ? C.primary : C.background, borderColor: active ? C.primary : C.border },
       ]}
     >
-      {active && <MaterialCommunityIcons name="check" size={13} color="#fff" style={{ marginRight: 4 }} />}
-      <Text style={[styles.chipText, { color: active ? '#fff' : C.textSecondary }]} numberOfLines={1}>{displayLabel ?? label}</Text>
+      {active && <MaterialCommunityIcons name="check" size={13} color={T.textOnPrimary} style={{ marginRight: 4 }} />}
+      <Text style={[styles.chipText, { color: active ? T.textOnPrimary : C.textSecondary }]} numberOfLines={1}>{displayLabel ?? label}</Text>
     </TouchableOpacity>
   );
 }

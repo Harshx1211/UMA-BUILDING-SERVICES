@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ComplianceStatus, AssetStatus, JobStatus } from '@/constants/Enums';
 import { getRecord, getAssetsForProperty, getJobsForProperty, getDocumentsForProperty } from '@/lib/database';
@@ -135,6 +136,7 @@ const infoRow = StyleSheet.create({
 export default function PropertyDetailScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
   const [assets, setAssets]     = useState<Asset[]>([]);
@@ -294,7 +296,7 @@ export default function PropertyDetailScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 40, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
       >
         {/* ── HERO HEADER ────────────────────────────────── */}
         {/* FIX: dropped the compliance pill that used to sit here — the

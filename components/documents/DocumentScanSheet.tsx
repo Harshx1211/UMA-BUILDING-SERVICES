@@ -13,6 +13,7 @@ import { localDateString } from '@/utils/dateHelpers';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import { generateUUID } from '@/utils/uuid';
 import { ScanReviewModal, ScannedPage } from './ScanReviewModal';
+import { T } from '@/constants/Colors';
 
 interface Props {
   propertyId: string;
@@ -287,8 +288,8 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
 });
 
 const overlayStyles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', gap: 14 },
-  text: { color: '#fff', fontSize: 14.5, fontWeight: '600' },
+  wrap: { flex: 1, backgroundColor: T.viewerBackground, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  text: { color: T.textOnPrimary, fontSize: 14.5, fontWeight: '600' },
 });
 
 DocumentScanSheet.displayName = 'DocumentScanSheet';
