@@ -9,7 +9,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Modal,
-  Platform, Image,
+  Platform,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById, queryRecords } from '@/lib/database';
 import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
+import ResilientPhoto from '@/components/camera/ResilientPhoto';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useInspectionStore } from '@/store/inspectionStore';
@@ -31,7 +32,6 @@ import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { DefectSeverity, DefectStatus, JobStatus, PhotoStage } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType } from '@/utils/assetHelpers';
-import { getValidLocalUri } from '@/utils/fileHelpers';
 import { T } from '@/constants/Colors';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -81,7 +81,7 @@ export default function DefectDetailScreen() {
 
   const [defect,      setDefect]      = useState<FullDefect | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
-  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ id: string; photo_url: string } | null>(null);
   const [jobLocked,   setJobLocked]   = useState(false); // true when job is completed or cancelled
 
   // Grouped straight from inspection_photos (the authoritative source of
@@ -89,7 +89,8 @@ export default function DefectDetailScreen() {
   // `photos` mirror, which is deliberately just "every photo, no stage
   // info" (see defectsStore.addDefect's own comment on that column).
   // Matches the same Before/After split the PDF and admin dashboard show.
-  const [photoGroups, setPhotoGroups] = useState<{ before: string[]; after: string[]; untagged: string[] }>({ before: [], after: [], untagged: [] });
+  type DefectPhoto = { id: string; photo_url: string };
+  const [photoGroups, setPhotoGroups] = useState<{ before: DefectPhoto[]; after: DefectPhoto[]; untagged: DefectPhoto[] }>({ before: [], after: [], untagged: [] });
 
   const loadDefect = useCallback(() => {
     if (!defectId) return;
@@ -99,9 +100,9 @@ export default function DefectDetailScreen() {
 
     const photoRows = queryRecords<{ id: string; photo_url: string; stage: string | null }>('inspection_photos', { defect_id: defectId });
     setPhotoGroups({
-      before: photoRows.filter((r) => r.stage === PhotoStage.Before).map((r) => r.photo_url),
-      after: photoRows.filter((r) => r.stage === PhotoStage.After).map((r) => r.photo_url),
-      untagged: photoRows.filter((r) => !r.stage).map((r) => r.photo_url),
+      before: photoRows.filter((r) => r.stage === PhotoStage.Before),
+      after: photoRows.filter((r) => r.stage === PhotoStage.After),
+      untagged: photoRows.filter((r) => !r.stage),
     });
     // FIX: a still-open defect can sit for months before anyone revisits
     // it — extend every photo on it by another full TTL each time this
@@ -199,9 +200,9 @@ export default function DefectDetailScreen() {
   const codeInfo   = defect.defect_code ? findDefectCode(defect.defect_code) : null;
   const totalPhotoCount = photoGroups.before.length + photoGroups.after.length + photoGroups.untagged.length;
 
-  const renderPhotoThumb = (uri: string) => (
-    <TouchableOpacity key={uri} onPress={() => setLightboxUri(uri)} activeOpacity={0.85} style={s.photoThumbWrap}>
-      <Image source={{ uri: getValidLocalUri(uri) }} style={s.photoThumb} resizeMode="cover" />
+  const renderPhotoThumb = (photo: DefectPhoto) => (
+    <TouchableOpacity key={photo.id} onPress={() => setLightboxPhoto(photo)} activeOpacity={0.85} style={s.photoThumbWrap}>
+      <ResilientPhoto photoId={photo.id} uri={photo.photo_url} style={s.photoThumb} contentFit="cover" />
       <View style={[s.photoOverlay, { backgroundColor: C.shadow + '26' }]}>
         <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={C.textOnPrimary} />
       </View>
@@ -397,13 +398,13 @@ export default function DefectDetailScreen() {
       )}
 
       {/* Photo Lightbox */}
-      <Modal visible={!!lightboxUri} transparent animationType="fade" onRequestClose={() => setLightboxUri(null)}>
+      <Modal visible={!!lightboxPhoto} transparent animationType="fade" onRequestClose={() => setLightboxPhoto(null)}>
         <View style={[s.lightbox, { backgroundColor: C.shadow + 'EB' }]}>
-          <TouchableOpacity style={[s.lightboxClose, { backgroundColor: C.textOnPrimary + '26' }]} onPress={() => setLightboxUri(null)}>
+          <TouchableOpacity style={[s.lightboxClose, { backgroundColor: C.textOnPrimary + '26' }]} onPress={() => setLightboxPhoto(null)}>
             <MaterialCommunityIcons name="close" size={28} color={C.textOnPrimary} />
           </TouchableOpacity>
-          {lightboxUri && (
-            <Image source={{ uri: getValidLocalUri(lightboxUri) }} style={s.lightboxImg} resizeMode="contain" />
+          {lightboxPhoto && (
+            <ResilientPhoto photoId={lightboxPhoto.id} uri={lightboxPhoto.photo_url} style={s.lightboxImg} contentFit="contain" />
           )}
         </View>
       </Modal>

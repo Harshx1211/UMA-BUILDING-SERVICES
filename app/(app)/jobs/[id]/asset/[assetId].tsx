@@ -33,6 +33,7 @@ import Toast from 'react-native-toast-message';
 import { DefectFieldsCard, DefectFieldsValue, DefectPhotosDraft } from '@/components/defects/DefectFieldsCard';
 import DefectCard from '@/components/defects/DefectCard';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
+import ResilientPhoto from '@/components/camera/ResilientPhoto';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
@@ -52,9 +53,15 @@ const HISTORY_PAGE_SIZE = 3;
 
 // ─── Full-screen photo viewer ───────────────────────────────────────────
 function PhotoViewer({
-  uri, onClose, onDelete,
+  uri, photoId, onClose, onDelete,
 }: {
   uri: string | null;
+  // FIX: optional — when provided, a load failure (an expired signed URL
+  // being the realistic cause, e.g. the History section's older visits)
+  // re-signs and retries once instead of just showing a broken image.
+  // Omitted for the current-visit gallery below, whose photos are always
+  // freshly uploaded this session and not realistically at risk yet.
+  photoId?: string;
   onClose: () => void;
   onDelete?: () => void;
 }) {
@@ -64,7 +71,9 @@ function PhotoViewer({
         <TouchableOpacity style={s.viewerCloseBtn} onPress={onClose} hitSlop={10}>
           <MaterialCommunityIcons name="close" size={26} color="#fff" />
         </TouchableOpacity>
-        {uri ? (
+        {uri && photoId ? (
+          <ResilientPhoto photoId={photoId} uri={uri} style={s.viewerImage} contentFit="contain" />
+        ) : uri ? (
           <Image source={{ uri: getValidLocalUri(uri) }} style={s.viewerImage} contentFit="contain" />
         ) : null}
         {onDelete && (
@@ -266,7 +275,7 @@ export default function AssetDetailScreen() {
   const [showPhotoChooser, setShowPhotoChooser] = useState(false);
   const [isAddingPhoto, setIsAddingPhoto] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
-  const [viewingHistoryPhoto, setViewingHistoryPhoto] = useState<string | null>(null);
+  const [viewingHistoryPhoto, setViewingHistoryPhoto] = useState<{ id: string; uri: string } | null>(null);
 
   // Maps each photo_url in asset.photos to the fastest URI actually worth
   // rendering it from — the original on-device file when this device still
@@ -1148,8 +1157,8 @@ export default function AssetDetailScreen() {
                       {h.photos.length > 0 && (
                         <View style={s.historyPhotoRow}>
                           {h.photos.map((p) => (
-                            <TouchableOpacity key={p.id} onPress={() => setViewingHistoryPhoto(p.photo_url)} activeOpacity={0.8}>
-                              <Image source={{ uri: getValidLocalUri(p.photo_url) }} style={s.historyPhotoThumb} contentFit="cover" />
+                            <TouchableOpacity key={p.id} onPress={() => setViewingHistoryPhoto({ id: p.id, uri: p.photo_url })} activeOpacity={0.8}>
+                              <ResilientPhoto photoId={p.id} uri={p.photo_url} style={s.historyPhotoThumb} contentFit="cover" />
                             </TouchableOpacity>
                           ))}
                         </View>
@@ -1224,7 +1233,8 @@ export default function AssetDetailScreen() {
         onDelete={jobLocked ? undefined : () => viewingPhoto && handleRemovePhoto(viewingPhoto)}
       />
       <PhotoViewer
-        uri={viewingHistoryPhoto}
+        uri={viewingHistoryPhoto?.uri ?? null}
+        photoId={viewingHistoryPhoto?.id}
         onClose={() => setViewingHistoryPhoto(null)}
       />
     </View>

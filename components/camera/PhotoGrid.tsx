@@ -4,10 +4,9 @@ import { Text } from 'react-native-paper';
 import { InspectionPhoto } from '@/types';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getValidLocalUri } from '@/utils/fileHelpers';
 import { queryRecordsIn } from '@/lib/database';
+import ResilientPhoto from '@/components/camera/ResilientPhoto';
 
 interface Props {
   photos: InspectionPhoto[];
@@ -69,7 +68,7 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
         onLongPress={() => onPhotoLongPress(item)}
         activeOpacity={0.8}
       >
-        <Image source={{ uri: getValidLocalUri(item.photo_url) }} style={s.image} contentFit="cover" />
+        <ResilientPhoto photoId={item.id} uri={item.photo_url} style={s.image} contentFit="cover" />
         {item.caption && (
           <View style={s.captionOverlay}>
             <Text style={s.captionText} numberOfLines={1}>{item.caption}</Text>

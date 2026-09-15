@@ -94,6 +94,41 @@ function extractPhotoStoragePath(url: string): string | null {
 }
 
 /**
+ * Shared batch-sign-and-persist core for both refreshPhotoUrlsOnView
+ * (fire-and-forget, extends expiry for next time) and resignPhotoNow
+ * (awaited, recovers a broken image right now) — same Storage call, same
+ * "persist locally + queue to Supabase" side effect either way. Returns a
+ * map of whichever ids actually got a fresh URL (silently omits any that
+ * failed — the caller decides what a missing entry means for it).
+ */
+async function _signAndPersistPhotoUrls(candidates: { id: string; path: string }[]): Promise<Map<string, string>> {
+  const fresh = new Map<string, string>();
+  if (candidates.length === 0) return fresh;
+  try {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(candidates.map((c) => c.path), PHOTO_URL_EXPIRY_SECONDS);
+    if (error || !data) {
+      if (__DEV__) console.log('[PhotoUpload] _signAndPersistPhotoUrls: batch sign failed:', error?.message);
+      return fresh;
+    }
+    data.forEach((result, i) => {
+      const { id } = candidates[i];
+      if (result.error || !result.signedUrl) {
+        if (__DEV__) console.log(`[PhotoUpload] _signAndPersistPhotoUrls: failed for ${id}:`, result.error);
+        return;
+      }
+      updateRecord('inspection_photos', id, { photo_url: result.signedUrl });
+      addToSyncQueue('inspection_photos', id, SyncOperation.Update, { photo_url: result.signedUrl });
+      fresh.set(id, result.signedUrl);
+    });
+  } catch (err) {
+    if (__DEV__) console.log('[PhotoUpload] _signAndPersistPhotoUrls error:', err);
+  }
+  return fresh;
+}
+
+/**
  * Re-signs a batch of already-uploaded photos for another full
  * PHOTO_URL_EXPIRY_SECONDS from now, and persists the refreshed URLs (both
  * locally and queued to Supabase, so the extension isn't lost if this
@@ -114,28 +149,28 @@ export async function refreshPhotoUrlsOnView(photos: { id: string; photo_url: st
     .filter((p) => isRemotePhotoUrl(p.photo_url))
     .map((p) => ({ id: p.id, path: extractPhotoStoragePath(p.photo_url) }))
     .filter((p): p is { id: string; path: string } => !!p.path);
-  if (candidates.length === 0) return;
+  await _signAndPersistPhotoUrls(candidates);
+}
 
-  try {
-    const { data, error } = await supabase.storage
-      .from(PHOTO_BUCKET)
-      .createSignedUrls(candidates.map((c) => c.path), PHOTO_URL_EXPIRY_SECONDS);
-    if (error || !data) {
-      if (__DEV__) console.log('[PhotoUpload] refreshPhotoUrlsOnView: batch sign failed:', error?.message);
-      return;
-    }
-    data.forEach((result, i) => {
-      const { id } = candidates[i];
-      if (result.error || !result.signedUrl) {
-        if (__DEV__) console.log(`[PhotoUpload] refreshPhotoUrlsOnView: failed for ${id}:`, result.error);
-        return;
-      }
-      updateRecord('inspection_photos', id, { photo_url: result.signedUrl });
-      addToSyncQueue('inspection_photos', id, SyncOperation.Update, { photo_url: result.signedUrl });
-    });
-  } catch (err) {
-    if (__DEV__) console.log('[PhotoUpload] refreshPhotoUrlsOnView error:', err);
-  }
+/**
+ * Awaited, single-photo version — the actual "recover from a broken
+ * image" path, called from an <Image>'s onError handler. Closes the one
+ * remaining real gap refreshPhotoUrlsOnView can't: a photo nobody has
+ * opened in long enough that its link already expired BEFORE this exact
+ * view (refreshPhotoUrlsOnView only ever extends a URL that still works,
+ * fired after the already-loaded image renders — it can't fix one that's
+ * already broken by the time this render happens). Returns the fresh URL
+ * to redisplay, or null if re-signing itself failed (a real outage, or a
+ * photo whose Storage object is genuinely gone) — the caller falls back
+ * to showing the image as broken either way, exactly like today, but a
+ * merely-expired link now self-heals instead of staying broken forever.
+ */
+export async function resignPhotoNow(photoId: string, photoUrl: string): Promise<string | null> {
+  if (!isRemotePhotoUrl(photoUrl)) return null;
+  const path = extractPhotoStoragePath(photoUrl);
+  if (!path) return null;
+  const fresh = await _signAndPersistPhotoUrls([{ id: photoId, path }]);
+  return fresh.get(photoId) ?? null;
 }
 
 // ─── Upload a single photo to Supabase Storage ───────────────
