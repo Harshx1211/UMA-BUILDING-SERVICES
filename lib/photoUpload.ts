@@ -140,22 +140,47 @@ export async function refreshPhotoUrlsOnView(photos: { id: string; photo_url: st
 
 // ─── Upload a single photo to Supabase Storage ───────────────
 
+export type PhotoUploadResult =
+  | { signedUrl: string }
+  | { error: string; isTerminal: boolean };
+
 /**
  * Uploads a local photo file to Supabase Storage under jobs/{jobId}/{filename}.
  *
  * Uses expo-file-system's uploadAsync with PUT (not POST) — Supabase Storage's
  * upsert endpoint requires PUT for binary uploads. Using POST returns a 405.
  *
- * @returns A long-lived signed URL on success, null on failure
+ * FIX: this used to swallow every failure into a bare `null`, and the
+ * caller (processPhotoQueue) recorded the literal hardcoded string
+ * "Upload failed" for every single retry regardless of cause — a network
+ * blip, an expired token, and a local file that no longer exists at all
+ * (OS cache pressure, "clear app storage," anything other than this app's
+ * own post-upload cleanup) were all indistinguishable, and all retried
+ * identically forever (resetStaleFailedSyncItems gives non-terminal
+ * failures a fresh retry budget every 24h). A missing source file can
+ * NEVER succeed no matter how many times it's retried — checking for that
+ * up front and reporting it as terminal, with the real reason, stops that
+ * one specific case from nagging indefinitely and makes every other
+ * failure's actual cause visible in last_error instead of a fixed string.
  */
 export async function uploadPhoto(
   localUri: string,
   jobId: string,
   assetId?: string,
-): Promise<string | null> {
+): Promise<PhotoUploadResult> {
   try {
     // Normalise path for the current Expo Go session — stale absolute paths fail silently
     const resolvedUri = getValidLocalUri(localUri);
+
+    if (isRemotePhotoUrl(resolvedUri)) {
+      // Already a remote URL, not a local file — nothing to upload, and
+      // retrying won't change that.
+      return { error: `Not a local file: ${resolvedUri}`, isTerminal: true };
+    }
+    const info = await FileSystem.getInfoAsync(resolvedUri);
+    if (!info.exists) {
+      return { error: `Local source file no longer exists: ${resolvedUri}`, isTerminal: true };
+    }
 
     // FIX: was Date.now() + a few Math.random() chars — a narrow, guessable
     // keyspace (the same pattern a prior migration flagged as a real
@@ -172,7 +197,7 @@ export async function uploadPhoto(
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
     if (!supabaseUrl) {
-      throw new Error('[PhotoUpload] EXPO_PUBLIC_SUPABASE_URL is not set');
+      return { error: 'EXPO_PUBLIC_SUPABASE_URL is not set', isTerminal: true };
     }
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${PHOTO_BUCKET}/${filePath}`;
@@ -190,9 +215,14 @@ export async function uploadPhoto(
     });
 
     if (uploadResult.status !== 200 && uploadResult.status !== 201) {
-      throw new Error(
-        `[PhotoUpload] Upload failed (status ${uploadResult.status}): ${uploadResult.body}`,
-      );
+      // 4xx (other than a timeout-shaped 408/429) means the request itself
+      // was rejected — a bad/expired token, a permission denial, a
+      // malformed request — and will keep being rejected identically no
+      // matter how many times it's retried unchanged. 5xx and network-layer
+      // failures are genuinely transient.
+      const isTerminal = uploadResult.status >= 400 && uploadResult.status < 500
+        && uploadResult.status !== 408 && uploadResult.status !== 429;
+      return { error: `Upload failed (status ${uploadResult.status}): ${uploadResult.body}`, isTerminal };
     }
 
     const { data, error: signErr } = await supabase.storage
@@ -200,13 +230,17 @@ export async function uploadPhoto(
       .createSignedUrl(filePath, PHOTO_URL_EXPIRY_SECONDS);
 
     if (signErr || !data?.signedUrl) {
-      throw new Error(`[PhotoUpload] Upload succeeded but signing failed: ${signErr?.message}`);
+      // The binary is already on the server at this point — not terminal,
+      // since a retry re-signs the same (already-uploaded) path rather
+      // than re-uploading, and a signing failure is far more likely to be
+      // a transient service hiccup than a permanent one.
+      return { error: `Upload succeeded but signing failed: ${signErr?.message}`, isTerminal: false };
     }
 
-    return data.signedUrl;
+    return { signedUrl: data.signedUrl };
   } catch (err) {
     console.error('[PhotoUpload] uploadPhoto error:', err);
-    return null;
+    return { error: err instanceof Error ? err.message : String(err), isTerminal: false };
   }
 }
 
@@ -296,7 +330,8 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
 
         if (__DEV__) console.log(`[PhotoUpload] Uploading photo for job ${payload.jobId}`);
 
-        const signedUrl = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
+        const uploadResult = await uploadPhoto(payload.localUri, payload.jobId, payload.assetId);
+        const signedUrl = 'signedUrl' in uploadResult ? uploadResult.signedUrl : null;
 
         if (signedUrl && payload.recordId) {
           // FIX: re-check the local row still exists before doing anything
@@ -378,8 +413,10 @@ export async function processPhotoQueue(currentUserId: string): Promise<void> {
 
           if (__DEV__) console.log(`[PhotoUpload] Uploaded: ${signedUrl}`);
         } else {
-          if (__DEV__) console.log(`[PhotoUpload] Upload failed for task ${task.id} — will retry next cycle`);
-          incrementSyncRetry(task.id, 'Upload failed');
+          const reason = 'error' in uploadResult ? uploadResult.error : 'Upload failed';
+          const isTerminal = 'error' in uploadResult && uploadResult.isTerminal;
+          if (__DEV__) console.log(`[PhotoUpload] Upload failed for task ${task.id}${isTerminal ? ' (terminal)' : ' — will retry next cycle'}: ${reason}`);
+          incrementSyncRetry(task.id, reason, MAX_PHOTO_RETRIES, isTerminal);
         }
       }));
     }

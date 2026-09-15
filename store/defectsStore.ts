@@ -114,7 +114,8 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
   loadAllDefects: (statusFilter, severityFilter) => {
     try {
       set({ isLoading: true, error: null, defects: [] });
-      const records = getAllDefects<Defect>({ status: statusFilter, severity: severityFilter });
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const records = getAllDefects<Defect>({ status: statusFilter, severity: severityFilter, companyId });
       set({ defects: normaliseDefects(records), isLoading: false });
     } catch (err: unknown) {
       console.error('[DefectsStore] loadAllDefects error:', err);

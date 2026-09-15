@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, signOut as supabaseSignOut } from '@/lib/supabase';
 import { stopSync } from '@/lib/sync';
 import { clearDatabase, getPendingSyncItems } from '@/lib/database';
+import { setCurrentUserId } from '@/lib/currentUserId';
 import { showConfirm } from '@/components/ui';
 import { SESSION_KEY } from '@/constants/Config';
 import type { User } from '@/types';
@@ -309,7 +310,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
     set({ isForceSyncing: true });
     try {
-      const initialPending = getPendingSyncItems();
+      const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
+      // FIX: only this user's OWN pending items should factor into "is there
+      // work worth flushing" — a shared/pool device can have a previous
+      // account's queued edits still sitting here (see _pushQueue's own
+      // comment on sync_queue.user_id), and those were never going to push
+      // under this session anyway.
+      const initialPending = getPendingSyncItems().filter((p) => !p.user_id || p.user_id === currentUserId);
       if (initialPending.length > 0) {
         if (__DEV__) console.log(`[AuthStore] Deactivated user has ${initialPending.length} pending items. Attempting final sync...`);
 
@@ -318,7 +325,6 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // Photo binaries live in a separate binary upload queue (photoUpload.ts).
         // Previously, offline photos were permanently lost on forced logout.
         const { flushPendingSyncWithRetry } = await import('@/lib/sync');
-        const currentUserId = get().user?.id ?? get().session?.user.id ?? '';
         const pending = await flushPendingSyncWithRetry(currentUserId);
 
         // Critical Data Loss Prevention:
@@ -545,6 +551,20 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   clearError: () => set({ error: null }),
 }));
 
+// FIX: keeps lib/currentUserId.ts's module-level value in lockstep with
+// this store's own `user`, driven by the resulting state rather than
+// scattered at every individual set({ user: ... }) call site above (of
+// which there are several — sign-in, restore-session, and their various
+// fallback paths) — a subscription can't be accidentally missed the way
+// one more sprinkled call easily could be. See that file's own comment
+// for why lib/database.ts needs this at all instead of importing
+// useAuthStore directly (circular import).
+useAuthStore.subscribe((state, prevState) => {
+  if (state.user?.id !== prevState.user?.id) {
+    setCurrentUserId(state.user?.id ?? null);
+  }
+});
+
 // ---------------------------------------------
 // Subscribe to Supabase auth state changes
 // Handles token refresh, server-side sign-out, etc.
@@ -584,11 +604,16 @@ supabase.auth.onAuthStateChange((event, session) => {
       const { waitForSyncIdle } = await import('@/lib/sync');
       await waitForSyncIdle();
 
-      let pending = getPendingSyncItems();
+      const currentUserId = useAuthStore.getState().user?.id ?? useAuthStore.getState().session?.user.id ?? '';
+      // FIX: only THIS (outgoing) user's own pending items should decide
+      // whether it's safe to wipe local data — see _pushQueue's own comment
+      // on sync_queue.user_id. A previous, already-signed-out account's
+      // stale leftover items on a shared device were never going to push
+      // under this session either way, and shouldn't hold this one hostage.
+      let pending = getPendingSyncItems().filter((p) => !p.user_id || p.user_id === currentUserId);
       if (pending.length > 0) {
         try {
           const { flushPendingSyncWithRetry } = await import('@/lib/sync');
-          const currentUserId = useAuthStore.getState().user?.id ?? useAuthStore.getState().session?.user.id ?? '';
           pending = await flushPendingSyncWithRetry(currentUserId);
         } catch (err) {
           // Session is likely already invalid — expected in the common

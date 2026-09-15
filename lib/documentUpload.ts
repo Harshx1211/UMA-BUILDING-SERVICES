@@ -32,19 +32,33 @@ const MAX_DOCUMENT_RETRIES = 5;
 
 // ─── Upload a single document to Supabase Storage ───────────────
 
+export type DocumentUploadResult =
+  | { path: string }
+  | { error: string; isTerminal: boolean };
+
 /**
  * Uploads a local scanned-document PDF to Supabase Storage under
  * properties/{propertyId}/{filename}.pdf.
  *
+ * FIX: see lib/photoUpload.ts's uploadPhoto for the full reasoning — this
+ * used to swallow every failure into a bare `null`, so a network blip, an
+ * expired token, and a local file that no longer exists at all were
+ * indistinguishable and retried identically forever. Mirrors that fix.
+ *
  * @returns The Storage object PATH on success (not a URL — the bucket is
- *          private; see getOrRefreshDocumentUrl below), null on failure.
+ *          private; see getOrRefreshDocumentUrl below).
  */
 export async function uploadDocument(
   localUri: string,
   propertyId: string,
-): Promise<string | null> {
+): Promise<DocumentUploadResult> {
   try {
     const resolvedUri = getValidLocalUri(localUri);
+
+    const info = await FileSystem.getInfoAsync(resolvedUri);
+    if (!info.exists) {
+      return { error: `Local source file no longer exists: ${resolvedUri}`, isTerminal: true };
+    }
 
     // FIX: was Date.now() + a few Math.random() chars — see the identical
     // fix and comment in lib/photoUpload.ts's uploadPhoto().
@@ -57,7 +71,7 @@ export async function uploadDocument(
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
     if (!supabaseUrl) {
-      throw new Error('[DocumentUpload] EXPO_PUBLIC_SUPABASE_URL is not set');
+      return { error: 'EXPO_PUBLIC_SUPABASE_URL is not set', isTerminal: true };
     }
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${DOCUMENT_BUCKET}/${filePath}`;
@@ -75,15 +89,15 @@ export async function uploadDocument(
     });
 
     if (uploadResult.status !== 200 && uploadResult.status !== 201) {
-      throw new Error(
-        `[DocumentUpload] Upload failed (status ${uploadResult.status}): ${uploadResult.body}`,
-      );
+      const isTerminal = uploadResult.status >= 400 && uploadResult.status < 500
+        && uploadResult.status !== 408 && uploadResult.status !== 429;
+      return { error: `Upload failed (status ${uploadResult.status}): ${uploadResult.body}`, isTerminal };
     }
 
-    return filePath;
+    return { path: filePath };
   } catch (err) {
     console.error('[DocumentUpload] uploadDocument error:', err);
-    return null;
+    return { error: err instanceof Error ? err.message : String(err), isTerminal: false };
   }
 }
 
@@ -194,7 +208,8 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
 
         if (__DEV__) console.log(`[DocumentUpload] Uploading document for property ${payload.propertyId}`);
 
-        const path = await uploadDocument(payload.localUri, payload.propertyId);
+        const uploadResult = await uploadDocument(payload.localUri, payload.propertyId);
+        const path = 'path' in uploadResult ? uploadResult.path : null;
 
         if (path && payload.recordId) {
           // FIX: mirrors lib/photoUpload.ts's equivalent fix — re-check the
@@ -248,8 +263,10 @@ export async function processDocumentQueue(currentUserId: string): Promise<void>
 
           if (__DEV__) console.log(`[DocumentUpload] Uploaded: ${path}`);
         } else {
-          if (__DEV__) console.log(`[DocumentUpload] Upload failed for task ${task.id} — will retry next cycle`);
-          incrementSyncRetry(task.id, 'Upload failed');
+          const reason = 'error' in uploadResult ? uploadResult.error : 'Upload failed';
+          const isTerminal = 'error' in uploadResult && uploadResult.isTerminal;
+          if (__DEV__) console.log(`[DocumentUpload] Upload failed for task ${task.id}${isTerminal ? ' (terminal)' : ' — will retry next cycle'}: ${reason}`);
+          incrementSyncRetry(task.id, reason, MAX_DOCUMENT_RETRIES, isTerminal);
         }
       }));
     }

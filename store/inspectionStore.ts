@@ -643,7 +643,13 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           let defectPhotos: string[] = [];
           try { defectPhotos = defect.photos ? JSON.parse(defect.photos) : []; }
           catch { defectPhotos = []; }
-          const updates = { photos: JSON.stringify(defectPhotos.filter(p => p !== photoUri)) };
+          // FIX: every other write path to `defects` stamps updated_at,
+          // which is what _guardedUpdate (lib/sync.ts) keys its conflict
+          // protection on for this table — omitting it here meant a
+          // concurrent edit to this same defect from a second device raced
+          // this one with no protection at all, plain last-write-wins on
+          // whichever pushed last, not whichever actually edited last.
+          const updates = { photos: JSON.stringify(defectPhotos.filter(p => p !== photoUri)), updated_at: new Date().toISOString() };
           updateRecord('defects', defect.id, updates);
           addToSyncQueue('defects', defect.id, SyncOperation.Update, updates);
         }

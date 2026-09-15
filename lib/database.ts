@@ -5,6 +5,7 @@ import type { SyncQueueItem } from "@/types";
 import * as SQLite from "expo-sqlite";
 import { DEFECT_CODES } from "@/constants/DefectCodes";
 import { generateUUID } from "@/utils/uuid";
+import { getCurrentUserId } from "@/lib/currentUserId";
 // ─────────────────────────────────────────────
 // Database connection
 // ─────────────────────────────────────────────
@@ -37,7 +38,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 48;
+const CURRENT_SCHEMA_VERSION = 49;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1632,6 +1633,26 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '48')`);
   }
 
+  // Migration 49: sync_queue.user_id — records which signed-in user queued
+  // each item. On a shared/pool device, a forced sign-out (a background
+  // token refresh failing while offline, e.g.) deliberately preserves
+  // local data rather than wiping it if there's still unflushed work (see
+  // authStore.ts's SIGNED_OUT handler) — so a DIFFERENT technician signing
+  // in next on the same device could otherwise have that stale queue
+  // pushed under THEIR session. NULL (every item queued before this
+  // migration) is treated as "push it regardless" by _pushQueue, same as
+  // today — this only narrows behavior for items queued from now on.
+  if (currentVersion < 49) {
+    try {
+      db.runSync(`ALTER TABLE sync_queue ADD COLUMN user_id TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 49: sync_queue.user_id already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 49: added sync_queue.user_id');
+    currentVersion = 49;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '49')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -2333,9 +2354,9 @@ export function addToSyncQueue(
     }
 
     db.runSync(
-      `INSERT INTO sync_queue (table_name, record_id, operation, payload, synced, retry_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-      [tableName, recordId, operation, JSON.stringify(payload)],
+      `INSERT INTO sync_queue (table_name, record_id, operation, payload, synced, retry_count, user_id)
+       VALUES (?, ?, ?, ?, 0, 0, ?)`,
+      [tableName, recordId, operation, JSON.stringify(payload), getCurrentUserId()],
     );
     queued = true;
   } catch (err) {
@@ -2720,6 +2741,35 @@ export function updateSyncQueuePayload(id: number, payload: string): void {
     db.runSync(`UPDATE sync_queue SET payload = ? WHERE id = ?`, [payload, id]);
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] updateSyncQueuePayload(${id}) error:`, err);
+  }
+}
+
+/**
+ * True if this exact record's own Insert already failed TERMINALLY (bad
+ * data, RLS rejection — never just "still pending" or "still retrying").
+ *
+ * FIX: `_pushQueue`'s `openInsertKeys` guard only ever reflects Inserts
+ * still sitting in the CURRENT pending snapshot — once an Insert is marked
+ * terminal, it drops out of `getPendingSyncItems()` entirely (synced=-1),
+ * so on the very next sync cycle that guard no longer knows the row was
+ * ever supposed to exist. A dependent Update/Delete queued against that
+ * same record_id then runs, matches zero rows server-side (Postgrest
+ * treats that as success, not an error), and gets marked `synced=1` —
+ * silently discarding real work (notes, a photo, a status change) while
+ * reporting it as saved. This lets the push loop check, for any record
+ * it's about to Update/Delete, whether that record can even exist.
+ */
+export function hasTerminalInsertFailure(tableName: string, recordId: string): boolean {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ id: number }>(
+      `SELECT id FROM sync_queue WHERE table_name = ? AND record_id = ? AND operation = 'insert' AND is_terminal = 1 LIMIT 1`,
+      [tableName, recordId],
+    );
+    return !!row;
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] hasTerminalInsertFailure error:', err);
+    return false;
   }
 }
 
@@ -3193,11 +3243,22 @@ export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
 // 3-table LEFT JOIN) got linearly slower over a tenant's lifetime, and ran
 // again on every sync. Both severity and status now push into the WHERE
 // clause, so an active filter actually reduces what's read off disk.
-export function getAllDefects<T = RecordData>(filters?: { status?: string; severity?: string }): T[] {
+export function getAllDefects<T = RecordData>(filters?: { status?: string; severity?: string; companyId?: string | null }): T[] {
   try {
     const db = openDatabase();
     const clauses: string[] = [];
     const params: string[] = [];
+    // FIX: this used to have NO company scoping at all — it only ever
+    // looked "safe" because a normal single-user device's local SQLite
+    // only ever holds one company's data anyway. That assumption breaks on
+    // a shared/pool device: if a previous account's data was ever
+    // preserved locally (deliberately not wiped, e.g. because a forced
+    // sign-out couldn't finish flushing pending offline work — see
+    // authStore.ts's SIGNED_OUT handler), a different technician signing
+    // in next would see that former account's defects listed here
+    // alongside their own, with no filter to stop it. Callers MUST pass
+    // the current session's own company_id.
+    if (filters?.companyId) { clauses.push('d.company_id = ?'); params.push(filters.companyId); }
     // Security: parameterised query — never interpolate these directly into SQL
     if (filters?.status) { clauses.push('d.status = ?'); params.push(filters.status); }
     if (filters?.severity) { clauses.push('d.severity = ?'); params.push(filters.severity); }

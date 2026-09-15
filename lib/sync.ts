@@ -20,6 +20,7 @@ import {
   remapSyncQueueRecordId,
   updateSyncQueuePayload,
   applyRemoteDeletion,
+  hasTerminalInsertFailure,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
@@ -558,6 +559,21 @@ export async function pushPendingWork(userId: string): Promise<void> {
 }
 
 /**
+ * Pending items that actually belong to (or predate) this user — see
+ * _pushQueue's own comment on sync_queue.user_id for why this filter
+ * exists: a shared/pool device can have a previous account's queued edits
+ * still sitting here after a forced sign-out that deliberately preserved
+ * rather than wiped them. Used everywhere a "is there still unsynced
+ * work" decision is made, not just where the actual push happens —
+ * without this, a stale FOREIGN user's stuck item would show up as this
+ * user's own unsynced work and could block them from ever signing out.
+ */
+function getPendingSyncItemsForUser(userId: string): SyncQueueItem[] {
+  const all = getPendingSyncItems();
+  return userId ? all.filter((p) => !p.user_id || p.user_id === userId) : all;
+}
+
+/**
  * Retries pushPendingWork up to `maxAttempts` times (1s/2s/3s/4s/5s
  * backoff between attempts), stopping early once nothing is pending.
  * Returns whatever is still pending when it stops — the caller decides
@@ -575,11 +591,11 @@ export async function pushPendingWork(userId: string): Promise<void> {
  * version did.
  */
 export async function flushPendingSyncWithRetry(userId: string, maxAttempts = 5): Promise<SyncQueueItem[]> {
-  let pending = getPendingSyncItems();
+  let pending = getPendingSyncItemsForUser(userId);
   if (pending.length === 0) return pending;
   for (let i = 0; i < maxAttempts; i++) {
     await pushPendingWork(userId);
-    pending = getPendingSyncItems();
+    pending = getPendingSyncItemsForUser(userId);
     if (pending.length === 0) break;
     await new Promise((r) => setTimeout(r, (i + 1) * 1000));
   }
@@ -1805,7 +1821,15 @@ function _shouldPreserveLocalJobAsset(
   if (localRow.actioned_at && serverRow.actioned_at) {
     const localMs  = new Date(localRow.actioned_at as string).getTime();
     const serverMs = new Date(serverRow.actioned_at as string).getTime();
-    if (localMs > serverMs) return true; // local is newer
+    // FIX: this device's own clock stamps localMs — if it runs slow, a
+    // genuinely newer local result can compare as "older" than the
+    // incoming server/realtime row, so an in-flight (not-yet-pushed) edit
+    // gets visibly reverted on screen until its own queued push eventually
+    // lands. _guardedUpdate (push side) already gives clock skew a
+    // tolerance window before trusting an apparent "newer" comparison —
+    // same margin here, so only a server row genuinely newer by more than
+    // that margin actually wins.
+    if (serverMs <= localMs + CLOCK_SKEW_TOLERANCE_MS) return true;
   }
   return false;
 }
@@ -1829,7 +1853,12 @@ function _shouldPreserveLocalRow(
   if (!localRow?.updated_at || !serverRow.updated_at) return false;
   const localMs  = new Date(localRow.updated_at as string).getTime();
   const serverMs = new Date(serverRow.updated_at as string).getTime();
-  return localMs > serverMs;
+  // FIX: same clock-skew tolerance as _shouldPreserveLocalJobAsset just
+  // above — see its comment. Without this, this device's own slow clock
+  // could make a genuinely newer local edit compare as older than an
+  // incoming pull/realtime row, visibly reverting it until the already-
+  // correct queued push lands.
+  return serverMs <= localMs + CLOCK_SKEW_TOLERANCE_MS;
 }
 
 /** Generic helper to pull a related table for a set of parent ids */
@@ -2026,7 +2055,18 @@ async function _guardedUpdate(
 // so this doesn't depend on _cachedUserId still being set.
 export async function _pushQueue(fallbackUserId?: string): Promise<void> {
   const uid = fallbackUserId ?? _cachedUserId;
-  const pending = getPendingSyncItems();
+  // FIX: a shared/pool device can end up with a previous account's queued
+  // edits still sitting here — a forced sign-out (a background token
+  // refresh failing while offline, say) deliberately preserves local data
+  // rather than wiping it when there's still unflushed work, exactly so it
+  // isn't lost (see authStore.ts's SIGNED_OUT handler). Without this
+  // filter, a DIFFERENT technician signing in next on that same device
+  // would have that stale queue pushed under THEIR session — at best
+  // mis-attributing who actually made the edit, at worst rejected by RLS
+  // as a cross-company write if the two accounts belong to different
+  // companies. Items queued before sync_queue.user_id existed are NULL and
+  // still processed unconditionally, matching the old behavior exactly.
+  const pending = uid ? getPendingSyncItemsForUser(uid) : getPendingSyncItems();
 
   if (pending.length === 0) {
     if (__DEV__) console.log('[UMA BUILDING SERVICES Sync] PUSH: no pending items');
@@ -2139,6 +2179,56 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           }
           error = null; // handled — don't fall through to the generic error path
         }
+
+        // ── signatures conflict: two devices (two techs, or one tech across
+        // two devices/reinstalls) both captured a signature for the same
+        // job while offline, so two rows exist locally for what the
+        // signatures_job_id_key UNIQUE constraint only allows one of
+        // server-side. Without this, the generic isDuplicate fast-path
+        // below would assume "a previous attempt of MINE already
+        // succeeded" — true for an id-keyed retry-after-dropped-connection,
+        // but WRONG here: the row that already exists belongs to a
+        // DIFFERENT device's capture (its own signature_url, signed_by_name
+        // etc.), so this device's own signature would be silently thrown
+        // away while the technician sees "Signature Saved". Same policy and
+        // remap approach as the job_assets conflict just above.
+        if (error?.code === '23505' && item.table_name === 'signatures') {
+          const { data: existing } = await supabase
+            .from('signatures')
+            .select('id, signed_at')
+            .eq('job_id', payload.job_id as string)
+            .maybeSingle();
+
+          if (existing) {
+            const localTime = payload.signed_at ? new Date(payload.signed_at as string).getTime() : 0;
+            const serverTime = existing.signed_at ? new Date(existing.signed_at).getTime() : 0;
+            if (localTime > serverTime) {
+              const { id: _localId, ...updatePayload } = payload;
+              const updateResult = await supabase.from('signatures').update(updatePayload).eq('id', existing.id);
+              if (updateResult.error) {
+                console.warn('[SiteTrack Sync] signatures conflict resolution UPDATE failed:', updateResult.error.message);
+              } else if (__DEV__) {
+                console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: this device's later signature applied to row ${existing.id}`);
+              }
+            } else if (__DEV__) {
+              console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: server row ${existing.id} is already the more recent signature, discarding this device's older one`);
+            }
+            remapSyncQueueRecordId('signatures', item.record_id, existing.id);
+            for (const p of pending) {
+              if (p.id === item.id || p.table_name !== 'signatures' || p.record_id !== item.record_id) continue;
+              p.record_id = existing.id;
+              try {
+                const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
+                if (pPayload.id === item.record_id) {
+                  pPayload.id = existing.id;
+                  p.payload = JSON.stringify(pPayload);
+                }
+              } catch { /* leave payload untouched if unparsable */ }
+            }
+            deleteRecord('signatures', item.record_id);
+          }
+          error = null; // handled — don't fall through to the generic error path
+        }
       } else if (item.operation === SyncOperation.Update) {
         // Defer if this record's own Insert hasn't been confirmed yet this
         // pass — see openInsertKeys above. Soft retry, same idiom as the
@@ -2151,6 +2241,20 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
             incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to sync first`, MAX_SYNC_RETRIES);
           }
+          continue;
+        }
+
+        // FIX: the guard above only catches a same-pass race — it says
+        // nothing about an Insert that already failed TERMINALLY on an
+        // earlier cycle (dropped out of "pending" entirely, so it's no
+        // longer in openInsertKeys). Without this check, this Update would
+        // run against a row that will never exist, match zero rows
+        // (Postgrest reports that as success, not an error), and get
+        // marked synced — silently discarding this edit while reporting it
+        // as saved. See hasTerminalInsertFailure's own comment.
+        if (hasTerminalInsertFailure(item.table_name, item.record_id)) {
+          incrementSyncRetry(item.id, `This record's own creation failed permanently, so this update can never be applied`, MAX_SYNC_RETRIES, true);
+          console.warn(`[SiteTrack Sync] Update for ${item.table_name}/${item.record_id} abandoned — its own Insert failed terminally`);
           continue;
         }
 
@@ -2174,7 +2278,13 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         if (item.table_name === 'job_assets' && payload.actioned_at) {
           error = (await _guardedUpdate('job_assets', item.record_id, payload, 'actioned_at')).error;
         } else if (
-          (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
+          // FIX: site_documents added — it already has pull-side protection
+          // against a stale echo overwriting a rename (updated_at exists on
+          // this table specifically for that, added when the rename feature
+          // shipped), but never got the equivalent push-side guard, so a
+          // concurrent rename from two devices had no conflict protection
+          // at all on the way up, only on the way back down.
+          (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs' || item.table_name === 'site_documents') &&
           payload.updated_at
         ) {
           // Same policy as job_assets, generalised: a stale, later-syncing edit
@@ -2208,6 +2318,18 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
             incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to resolve first`, MAX_SYNC_RETRIES);
           }
+          continue;
+        }
+        // FIX: unlike the equivalent Update-side check, a terminally-failed
+        // own-Insert means this Delete's goal (this row shouldn't exist) is
+        // ALREADY true server-side — the row was never created. Mark it
+        // complete outright rather than sending a pointless network
+        // request; see hasTerminalInsertFailure's own comment for the
+        // Update-side version of this same underlying gap, where the
+        // correct resolution is the opposite (abandon, don't complete).
+        if (hasTerminalInsertFailure(item.table_name, item.record_id)) {
+          if (__DEV__) console.log(`[SiteTrack Sync] Delete for ${item.table_name}/${item.record_id} — its own Insert failed terminally, so it never existed; marking complete`);
+          markSyncItemComplete(item.id);
           continue;
         }
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
@@ -2416,7 +2538,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           } else if (item.table_name === 'job_assets' && payload.actioned_at) {
             error = (await _guardedUpdate('job_assets', item.record_id, payload, 'actioned_at')).error;
           } else if (
-            (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs') &&
+            (item.table_name === 'defects' || item.table_name === 'assets' || item.table_name === 'jobs' || item.table_name === 'site_documents') &&
             payload.updated_at
           ) {
             error = (await _guardedUpdate(item.table_name, item.record_id, payload, 'updated_at')).error;

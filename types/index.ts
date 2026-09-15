@@ -329,6 +329,9 @@ export interface SyncQueueItem {
   next_retry_at: string | null;       // exponential-backoff gate — not retried before this time
   is_terminal: number;                // 1 = failed with a non-retryable error (bad data/permission), not just exhausted retries
   created_at: string;
+  // Which signed-in user queued this item — null for anything queued
+  // before this column existed. See lib/currentUserId.ts's own comment.
+  user_id: string | null;
 }
 
 // ─────────────────────────────────────────────
