@@ -37,7 +37,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 47;
+const CURRENT_SCHEMA_VERSION = 48;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -1612,6 +1612,26 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '47')`);
   }
 
+  // Migration 48: jobs.scoped_asset_ids — NULL means "ordinary job, show
+  // the whole property's asset list" (every job before this one, and every
+  // normal job going forward). A JSON array of asset ids means "this job
+  // only concerns these specific assets" — used by the admin dashboard's
+  // "Create Repair Job" action (quotes/page.tsx) so a repair job created
+  // against an approved quote's defects actually only shows those broken
+  // assets on the inspection screen, instead of the technician seeing
+  // (and being able to re-inspect) the property's entire unrelated asset
+  // list with the real target list buried as raw ids in a notes field.
+  if (currentVersion < 48) {
+    try {
+      db.runSync(`ALTER TABLE jobs ADD COLUMN scoped_asset_ids TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 48: jobs.scoped_asset_ids already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 48: added jobs.scoped_asset_ids');
+    currentVersion = 48;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '48')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -2912,13 +2932,34 @@ export function getJobById<T = RecordData>(jobId: string): T | null {
 /**
  * Returns all active assets for a property with their inspection result for
  * the given job (if the technician has already actioned them).
+ *
+ * `scopedAssetIdsJson` — pass the job's own `scoped_asset_ids` column
+ * through unchanged (a JSON array string, or null/undefined for an
+ * ordinary job). When present, this narrows the result to just those
+ * asset ids instead of every active asset on the property — used for a
+ * "repair job" created against a specific set of defective assets (see
+ * jobs.scoped_asset_ids's own comment in types/index.ts for why this
+ * exists). Malformed JSON is treated the same as "not scoped" rather than
+ * throwing, so a corrupted value degrades to the old, safe behavior
+ * instead of showing the technician nothing at all.
  */
 export function getAssetsWithJobResults<T = RecordData>(
   jobId: string,
   propertyId: string,
+  scopedAssetIdsJson?: string | null,
 ): T[] {
   try {
     const db = openDatabase();
+    let scopedIds: string[] | null = null;
+    if (scopedAssetIdsJson) {
+      try {
+        const parsed = JSON.parse(scopedAssetIdsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) scopedIds = parsed;
+      } catch (err) {
+        if (__DEV__) console.log('[UMA BUILDING SERVICES DB] getAssetsWithJobResults: malformed scoped_asset_ids, ignoring:', err);
+      }
+    }
+    const scopeClause = scopedIds ? `AND a.id IN (${scopedIds.map(() => '?').join(',')})` : '';
     return db.getAllSync<T>(
       // Uses MAX(actioned_at) to select the single most-recent job_assets row per asset.
       // ORDER BY inside IN() is not guaranteed in older SQLite versions — this GROUP BY
@@ -2950,8 +2991,9 @@ export function getAssetsWithJobResults<T = RecordData>(
        LEFT JOIN users u ON ja.actioned_by = u.id
        WHERE a.property_id = ?
          AND a.status = 'active'
+         ${scopeClause}
        ORDER BY a.asset_type ASC, COALESCE(a.asset_ref, '') ASC`,
-      [jobId, jobId, propertyId],
+      scopedIds ? [jobId, jobId, propertyId, ...scopedIds] : [jobId, jobId, propertyId],
     );
   } catch (err) {
     console.error('[UMA BUILDING SERVICES DB] getAssetsWithJobResults error:', err);

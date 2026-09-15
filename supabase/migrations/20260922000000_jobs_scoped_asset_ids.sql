@@ -1,0 +1,32 @@
+-- ============================================================
+-- Migration: jobs.scoped_asset_ids — let a job be scoped to specific assets
+-- ============================================================
+-- The admin dashboard's "Create Repair Job" action (quotes/page.tsx, only
+-- shown on an already-approved quote) opens the job-creation modal with
+-- the exact assets that had a defect on that quote — but the modal never
+-- actually recorded which assets those were anywhere structured. It only
+-- pasted the raw asset ids into the job's free-text notes field, and the
+-- mobile inspection screen always shows a job's ENTIRE property asset
+-- list regardless (job_assets rows are created lazily as a technician
+-- inspects each one, not pre-populated) — so a "repair job" looked
+-- identical to an ordinary one, with the actual target assets buried as
+-- unreadable UUIDs in a notes box.
+--
+-- NULL (every job before this, and every ordinary job going forward) =
+-- unchanged behavior, the technician sees the whole property's asset
+-- list. A JSON array of asset ids = this job only concerns those
+-- specific assets — the mobile app's getAssetsWithJobResults (lib/
+-- database.ts) now filters to just this list when it's present.
+--
+-- Run this once in the Supabase SQL Editor.
+-- ============================================================
+
+-- Deliberately `text`, not `jsonb`: a jsonb column round-trips through
+-- Supabase-js as an already-parsed JS array, but the mobile sync layer
+-- (lib/database.ts's upsertRecord) binds values straight into SQLite with
+-- no generic object/array-to-string coercion anywhere in that path — a
+-- parsed array would fail to bind into this column's local TEXT type once
+-- pulled back down to a device. Storing (and always reading) this as a
+-- plain JSON string sidesteps that entirely, matching how the app already
+-- stores other JSON-ish array fields (e.g. defects.photos) as text.
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS scoped_asset_ids text;

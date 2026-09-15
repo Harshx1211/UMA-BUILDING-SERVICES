@@ -110,6 +110,14 @@ export interface Job {
   priority: Priority;
   notes: string | null;
   report_url: string | null;          // generated PDF URL stored after report creation
+  // JSON-stringified array of asset ids, or null. Null = ordinary job, the
+  // inspection screen shows the whole property's asset list (every job
+  // before this field existed, and every normal job going forward). A
+  // non-null list means this job only concerns those specific assets —
+  // set by the admin dashboard's "Create Repair Job" action so a repair
+  // job only shows the assets that actually had a defect on the quote it
+  // was created from.
+  scoped_asset_ids: string | null;
   created_at: string;
   updated_at: string;
 

@@ -37,6 +37,7 @@ type JobWithProperty = {
   id: string; property_id: string; assigned_to: string;
   job_type: string; status: string; scheduled_date: string;
   scheduled_time: string | null; priority: string; notes: string | null;
+  scoped_asset_ids: string | null;
   property_name: string | null; property_address: string | null;
   property_suburb: string | null; property_state: string | null;
   site_contact_name: string | null;
@@ -235,7 +236,7 @@ export default function ReportSummaryScreen() {
       if (!j) { setIsLoading(false); return; }
       setJob(j);
 
-      const a = getAssetsWithJobResults<ReportAsset>(jobId, j.property_id);
+      const a = getAssetsWithJobResults<ReportAsset>(jobId, j.property_id, j.scoped_asset_ids);
       setAssets(a);
       setDefects(getDefectsForJob<ExtendedDefect>(jobId));
       setSignature(getSignatureForJob(jobId));

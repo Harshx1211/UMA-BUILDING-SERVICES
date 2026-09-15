@@ -41,6 +41,7 @@ type JobDetail = {
   id: string; property_id: string; assigned_to: string;
   job_type: JobType; status: JobStatus; scheduled_date: string;
   scheduled_time: string | null; priority: Priority; notes: string | null;
+  scoped_asset_ids: string | null;
   created_at: string; updated_at: string;
   property_name: string | null; property_address: string | null;
   property_suburb: string | null; property_state: string | null; property_postcode: string | null;
@@ -173,7 +174,7 @@ export default function JobDetailScreen() {
       if (!j) { setIsLoading(false); return; }
       setJob(j);
       setNotes(j.notes ?? '');
-      setAssets(getAssetsWithJobResults<AssetWithResult>(id, j.property_id));
+      setAssets(getAssetsWithJobResults<AssetWithResult>(id, j.property_id, j.scoped_asset_ids));
       setDefects(getDefectsForJob<Defect>(id));
       setPhotos(getPhotosForJob<InspectionPhoto>(id));
       // Property-wide count (not job-scoped) — matches how the Documents
