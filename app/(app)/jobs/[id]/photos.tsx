@@ -10,6 +10,7 @@ import { usePhotosStore } from '@/store/photosStore';
 import PhotoGrid from '@/components/camera/PhotoGrid';
 import PhotoCaptureSheet, { PhotoCaptureSheetRef } from '@/components/camera/PhotoCaptureSheet';
 import { getJobById } from '@/lib/database';
+import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Button, showConfirm } from '@/components/ui';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -34,6 +35,10 @@ export default function PhotosScreen() {
         setPropertyId(job.property_id);
         setJobStatus(job.status);
       }
+      // FIX: extend every photo on this job by another full TTL each time
+      // this tab is actually opened — same reasoning as the asset history,
+      // defect detail, and defects list screens' identical fix.
+      void refreshPhotoUrlsOnView(usePhotosStore.getState().photos);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);

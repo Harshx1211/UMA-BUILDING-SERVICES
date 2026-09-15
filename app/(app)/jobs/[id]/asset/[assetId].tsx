@@ -36,6 +36,7 @@ import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
+import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -397,6 +398,12 @@ export default function AssetDetailScreen() {
     setHistory(entries);
     setHistoryTotal(totalCount);
     setHistoryLoading(false);
+    // FIX: this is exactly the screen a signed-URL TTL was too short for —
+    // an asset's service history can span years, and nothing else ever
+    // re-signs these. Extend every history photo actually being looked at
+    // right now by another full TTL; fire-and-forget, doesn't block the
+    // already-rendered thumbnails.
+    void refreshPhotoUrlsOnView(entries.flatMap((e) => e.photos));
   }, [assetId, jobId]);
 
   // `count` is however many MORE visits the technician asked for (see the

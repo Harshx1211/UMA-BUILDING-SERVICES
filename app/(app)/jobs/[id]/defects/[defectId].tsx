@@ -22,6 +22,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { cardShadow } from '@/components/ui/Card';
 import { getDefectById, getJobById, queryRecords } from '@/lib/database';
+import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
 import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useInspectionStore } from '@/store/inspectionStore';
@@ -96,12 +97,16 @@ export default function DefectDetailScreen() {
     const d = getDefectById<FullDefect>(defectId);
     setDefect(d);
 
-    const photoRows = queryRecords<{ photo_url: string; stage: string | null }>('inspection_photos', { defect_id: defectId });
+    const photoRows = queryRecords<{ id: string; photo_url: string; stage: string | null }>('inspection_photos', { defect_id: defectId });
     setPhotoGroups({
       before: photoRows.filter((r) => r.stage === PhotoStage.Before).map((r) => r.photo_url),
       after: photoRows.filter((r) => r.stage === PhotoStage.After).map((r) => r.photo_url),
       untagged: photoRows.filter((r) => !r.stage).map((r) => r.photo_url),
     });
+    // FIX: a still-open defect can sit for months before anyone revisits
+    // it — extend every photo on it by another full TTL each time this
+    // screen is actually opened, same reasoning as asset history's fix.
+    void refreshPhotoUrlsOnView(photoRows);
 
     // Determine lock state from the job record. FIX: Cancelled was never
     // checked here, only Completed — a defect on a cancelled job showed as

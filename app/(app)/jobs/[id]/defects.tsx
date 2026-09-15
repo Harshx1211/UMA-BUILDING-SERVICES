@@ -9,7 +9,8 @@ import { DefectSeverity, DefectStatus } from '@/constants/Enums';
 import { useDefectsStore } from '@/store/defectsStore';
 import DefectCard from '@/components/defects/DefectCard';
 import AddDefectSheet, { AddDefectSheetRef } from '@/components/defects/AddDefectSheet';
-import { getJobById } from '@/lib/database';
+import { getJobById, queryRecords } from '@/lib/database';
+import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
@@ -36,6 +37,13 @@ export default function DefectsScreen() {
         setPropertyId(job.property_id);
         setJobStatus(job.status);
       }
+      // FIX: extend every photo on this job's defects by another full TTL
+      // each time this list is actually opened — same reasoning as the
+      // asset history and defect detail screens' identical fix. Queried
+      // directly (not derived from defect.photos, a denormalized URL-only
+      // array with no row ids to update) since every photo needs its own
+      // inspection_photos.id to persist a refreshed URL against.
+      void refreshPhotoUrlsOnView(queryRecords<{ id: string; photo_url: string }>('inspection_photos', { job_id: jobId }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);

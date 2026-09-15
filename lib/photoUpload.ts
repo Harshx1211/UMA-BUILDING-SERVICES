@@ -78,6 +78,66 @@ export function isRemotePhotoUrl(url: string): boolean {
   return !url.startsWith('file://') && !url.startsWith('content://');
 }
 
+const SIGN_MARKER = `/object/sign/${PHOTO_BUCKET}/`;
+const PUBLIC_MARKER = `/object/public/${PHOTO_BUCKET}/`;
+
+/** Extracts the storage object path out of an already-signed or (legacy)
+ * public job-photos URL — same marker-based extraction admin's own
+ * signPhotoUrls.ts uses. Returns null for a local file://, an already-bare
+ * path, or anything that doesn't match either shape. */
+function extractPhotoStoragePath(url: string): string | null {
+  for (const marker of [SIGN_MARKER, PUBLIC_MARKER]) {
+    const idx = url.indexOf(marker);
+    if (idx !== -1) return url.slice(idx + marker.length).split('?')[0];
+  }
+  return null;
+}
+
+/**
+ * Re-signs a batch of already-uploaded photos for another full
+ * PHOTO_URL_EXPIRY_SECONDS from now, and persists the refreshed URLs (both
+ * locally and queued to Supabase, so the extension isn't lost if this
+ * device never opens that job again). Fire-and-forget from the caller's
+ * side — call this whenever a screen actually displays a set of
+ * historical photos ("on review"), so a photo someone keeps coming back
+ * to every service visit never actually reaches its expiry, while one
+ * nobody ever looks at again simply ages out at the original TTL. Doesn't
+ * change what's rendered this instant (the already-loaded URL still
+ * works) — this only extends how much longer it'll keep working.
+ *
+ * Errors are swallowed per-photo (logged in dev only) — a failed refresh
+ * just means that one photo's clock keeps ticking on its existing expiry,
+ * not a user-facing failure.
+ */
+export async function refreshPhotoUrlsOnView(photos: { id: string; photo_url: string }[]): Promise<void> {
+  const candidates = photos
+    .filter((p) => isRemotePhotoUrl(p.photo_url))
+    .map((p) => ({ id: p.id, path: extractPhotoStoragePath(p.photo_url) }))
+    .filter((p): p is { id: string; path: string } => !!p.path);
+  if (candidates.length === 0) return;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(candidates.map((c) => c.path), PHOTO_URL_EXPIRY_SECONDS);
+    if (error || !data) {
+      if (__DEV__) console.log('[PhotoUpload] refreshPhotoUrlsOnView: batch sign failed:', error?.message);
+      return;
+    }
+    data.forEach((result, i) => {
+      const { id } = candidates[i];
+      if (result.error || !result.signedUrl) {
+        if (__DEV__) console.log(`[PhotoUpload] refreshPhotoUrlsOnView: failed for ${id}:`, result.error);
+        return;
+      }
+      updateRecord('inspection_photos', id, { photo_url: result.signedUrl });
+      addToSyncQueue('inspection_photos', id, SyncOperation.Update, { photo_url: result.signedUrl });
+    });
+  } catch (err) {
+    if (__DEV__) console.log('[PhotoUpload] refreshPhotoUrlsOnView error:', err);
+  }
+}
+
 // ─── Upload a single photo to Supabase Storage ───────────────
 
 /**
