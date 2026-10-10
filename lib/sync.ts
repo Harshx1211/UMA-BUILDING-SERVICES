@@ -11,6 +11,7 @@ import {
   upsertRecord,
   upsertRecordBulk,
   getJobStatus,
+  getJobStatuses,
   getDeletedPhotoIds,
   getDeletedDocumentIds,
   getDeletedNotebookItemIds,
@@ -45,10 +46,9 @@ const REPORT_SERVICE_WARMUP_MAX_WAIT_MS = 120_000;
 const REPORT_SERVICE_WARMUP_POLL_MS = 4_000;
 
 /**
- * Blocks until sitetrack-report-generator answers its own /health check, or
- * gives up quietly after REPORT_SERVICE_WARMUP_MAX_WAIT_MS. See the call site
- * in the report_generate handler below for why this exists — same cold-start
- * problem as Gotenberg's waitForGotenbergReady, one network hop further out.
+ * Blocks until the report service answers its own /health check, or gives
+ * up quietly after REPORT_SERVICE_WARMUP_MAX_WAIT_MS. See the call site in
+ * the report_generate handler below for why this exists (cold starts).
  * Never throws: if the service is genuinely down (not just cold), the real
  * POST that follows still gets its own error handling and normal sync retry.
  */
@@ -92,6 +92,32 @@ let _syncInterval: ReturnType<typeof setInterval> | null = null;
 let _isSyncing  = false;
 let _shouldStop = false;   // Set by stopSync() to abort an in-progress runSync()
 let _cachedUserId: string | null = null;
+// FIX: _pushQueue() itself had no mutex of its own — only the OUTER
+// functions that call it were individually guarded (_isSyncing for
+// runSync, _isPushingNow for syncNow), and pushPendingWork() had no guard
+// at all beyond a bounded WAIT for _isSyncing that proceeded regardless of
+// whether the wait actually succeeded. Two overlapping passes both
+// attempting the same pending sync_queue rows is exactly the condition
+// that makes the job_assets/signatures conflict handlers mistake a same-
+// device race for a genuine two-device conflict and delete their own
+// just-inserted row (see those handlers' own FIX comments). This single
+// shared flag, checked-and-set synchronously (no `await` in between)
+// immediately before every direct call to _pushQueue(), closes the gap for
+// all three entry points at once instead of each guarding it separately.
+let _isPushingQueue = false;
+
+async function _pushQueueGuarded(userId: string): Promise<void> {
+  if (_isPushingQueue) {
+    if (__DEV__) console.log('[SiteTrack Sync] _pushQueue already running elsewhere — skipping overlapping call');
+    return;
+  }
+  _isPushingQueue = true;
+  try {
+    await _pushQueue(userId);
+  } finally {
+    _isPushingQueue = false;
+  }
+}
 
 // ─────────────────────────────────────────────
 // Sync-complete event bus
@@ -374,34 +400,22 @@ export async function runSync(userId?: string): Promise<boolean> {
     if (_shouldStop) return false;
     if (__DEV__) console.log(`[SiteTrack Sync] Syncing for user: ${resolvedUserId}`);
 
-    // --- REALTIME REVOCATION CHECK ---
-    // FIX: this used to discard `error` entirely — on a transient fetch
-    // failure `profile` came back undefined, and `profile?.is_active ===
-    // false` silently evaluates to false (not true), so a deactivated
-    // user's device looked "confirmed still active" on any sync tick where
-    // this one query happened to fail, instead of triggering
-    // forceFinalSyncAndSignOut(). Logging the failure (rather than treating
-    // it identically to "checked, still active") means a flaky-but-
-    // connected network can't be silently mistaken for a real all-clear —
-    // the very next successful tick still catches a real revocation.
-    const { data: profile, error: profileCheckError } = await supabase.from('users').select('is_active, company_id').eq('id', resolvedUserId).single();
-    if (profileCheckError) {
-      console.warn('[SiteTrack Sync] Could not verify account is still active this cycle:', profileCheckError.message);
-    } else if (profile?.is_active === false) {
-      console.warn('[SiteTrack Sync] Access revoked (User inactive). Forcing sign out.');
-      useAuthStore.getState().forceFinalSyncAndSignOut();
-      return false;
-    } else if (profile?.company_id) {
-      const { data: company, error: companyCheckError } = await supabase.from('companies').select('subscription_status').eq('id', profile.company_id).single();
-      if (companyCheckError) {
-        console.warn('[SiteTrack Sync] Could not verify company subscription this cycle:', companyCheckError.message);
-      } else if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
-        console.warn('[SiteTrack Sync] Access revoked (Company suspended/cancelled). Forcing sign out.');
-        useAuthStore.getState().forceFinalSyncAndSignOut();
-        return false;
-      }
-    }
-    // ---------------------------------
+    // FIX (cold-start perf — "2-3 seconds of data loading" after login):
+    // this used to run its OWN "is this account still active/subscribed"
+    // check right here — two sequential, awaited network round trips
+    // (users, then companies) BEFORE any pull/push even started — on
+    // EVERY sync cycle, including the very first one that fires the
+    // instant a session starts. app/(app)/_layout.tsx's own heartbeat
+    // effect already runs this EXACT same check (identical queries,
+    // identical 'suspended'/'cancelled' condition, identical
+    // forceFinalSyncAndSignOut() action) on a TIGHTER cadence (throttled
+    // to 5 minutes, vs. this running effectively every 10 minutes per
+    // SYNC_INTERVAL_MS) — and it also fires immediately on login, same as
+    // this did. Two independent copies of the identical revocation check
+    // were racing each other on every cold start for zero added safety
+    // margin. Removed here; the heartbeat is now the single source of
+    // truth for this, and it already covers a shorter window than this
+    // copy ever did.
 
     // ── 2. PUSH — upload photo binaries then flush sync queue ────
     // BUG-N12 FIX: Guard processPhotoQueue with a boolean mutex so a manual
@@ -430,7 +444,7 @@ export async function runSync(userId?: string): Promise<boolean> {
     }
     if (_shouldStop) return false;
 
-    await _pushQueue(resolvedUserId);
+    await _pushQueueGuarded(resolvedUserId);
     if (_shouldStop) return false;
 
     // ── 3. PULL — server → local SQLite ──────────────────────────
@@ -539,6 +553,20 @@ export async function pushPendingWork(userId: string): Promise<void> {
   for (let waited = 0; _isSyncing && waited < 10; waited++) {
     await new Promise((r) => setTimeout(r, 500));
   }
+  // FIX: this used to fall through to _pushQueue() unconditionally once the
+  // bounded wait above ended, with NO re-check of _isSyncing and no mutex of
+  // its own — so a still-in-progress runSync() (the 5s wait timed out, or a
+  // slow/rural connection just made it take that long) and this call could
+  // run _pushQueue() concurrently. That's exactly the overlap that made the
+  // job_assets/signatures conflict handlers mistake a same-device race for a
+  // genuine two-device conflict and delete their own just-inserted row (see
+  // those handlers' own FIX comments). If a sync is still running, it will
+  // push these same pending items itself as part of its own cycle — bail
+  // out instead of racing it.
+  if (_isSyncing) {
+    if (__DEV__) console.log('[SiteTrack Sync] pushPendingWork: runSync still in progress after wait — skipping, it will push pending items itself');
+    return;
+  }
   if (!_isProcessingPhotos) {
     _isProcessingPhotos = true;
     try {
@@ -555,7 +583,7 @@ export async function pushPendingWork(userId: string): Promise<void> {
       _isProcessingDocuments = false;
     }
   }
-  await _pushQueue(userId);
+  await _pushQueueGuarded(userId);
 }
 
 /**
@@ -697,34 +725,61 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
 
   if (_liveChannel) return; // already open for this job — just swapped the handler in and bumped the count
 
+  // FIX: job_assets.asset_id and defects.asset_id are both NOT NULL FK
+  // references to assets(id), enforced unconditionally (PRAGMA foreign_keys
+  // = ON at schema init). If a brand-new asset is created server-side and a
+  // job_assets/defect row against it arrives over this channel before the
+  // asset's own row has been applied locally (two independent realtime
+  // subscriptions — this job channel and the asset's own creation event —
+  // with no cross-channel ordering guarantee, and this channel's reconnect
+  // catch-up pull doesn't include `assets`), upsertRecord throws an FK
+  // violation that doesn't match the "unknown column" pattern its own catch
+  // block forgives, so it's silently dropped with no retry. Same fetch-
+  // parent-first pattern applyJobTechnician below already uses for its own
+  // FK (job_technicians.user_id -> users), applied here for the asset_id
+  // parent instead.
+  const _ensureAssetLocal = async (assetId: string | undefined): Promise<boolean> => {
+    if (!assetId || getRecord('assets', assetId)) return true;
+    const { data } = await supabase.from('assets').select('*').eq('id', assetId).maybeSingle();
+    if (!data) return false; // fetch failed, or the row's gone — periodic pull retries once possible
+    upsertRecord('assets', data as Record<string, string | number | boolean | null>);
+    return true;
+  };
+
   const applyJobAsset = (row: Record<string, unknown>) => {
-    const localRow = getRecord<{ result: string | null; actioned_at: string | null }>(
-      'job_assets', row.id as string
-    );
-    if (_shouldPreserveLocalJobAsset(row, localRow)) {
-      if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local job_asset result over incoming row for ${row.id}`);
-      return;
-    }
-    upsertRecord('job_assets', row as Record<string, string | number | boolean | null>);
-    _liveOnChange?.('job_assets');
+    void (async () => {
+      if (!(await _ensureAssetLocal(row.asset_id as string | undefined))) return;
+      const localRow = getRecord<{ result: string | null; actioned_at: string | null }>(
+        'job_assets', row.id as string
+      );
+      if (_shouldPreserveLocalJobAsset(row, localRow)) {
+        if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local job_asset result over incoming row for ${row.id}`);
+        return;
+      }
+      upsertRecord('job_assets', row as Record<string, string | number | boolean | null>);
+      _liveOnChange?.('job_assets');
+    })();
   };
 
   const applyDefect = (row: Record<string, unknown>) => {
-    // FIX: same anti-clobber protection applyJobAsset already had — a
-    // realtime echo of someone else's write (or a stale replay from a
-    // channel that only just reconnected) could otherwise overwrite a
-    // locally-edited defect that hasn't pushed yet.
-    const localRow = getRecord<{ updated_at: string | null }>('defects', row.id as string);
-    if (_shouldPreserveLocalRow(row, localRow)) {
-      if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local defect over incoming row for ${row.id}`);
-      return;
-    }
-    // defects.photos is a Postgres text[] — arrives as a real JS array over
-    // the wire; SQLite needs the same JSON string every other write path
-    // into this column already uses (see defectsStore.ts's normaliseDefects).
-    const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
-    upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
-    _liveOnChange?.('defects');
+    void (async () => {
+      if (!(await _ensureAssetLocal(row.asset_id as string | undefined))) return;
+      // FIX: same anti-clobber protection applyJobAsset already had — a
+      // realtime echo of someone else's write (or a stale replay from a
+      // channel that only just reconnected) could otherwise overwrite a
+      // locally-edited defect that hasn't pushed yet.
+      const localRow = getRecord<{ updated_at: string | null }>('defects', row.id as string);
+      if (_shouldPreserveLocalRow(row, localRow)) {
+        if (__DEV__) console.log(`[SiteTrack Sync] Realtime: preserving local defect over incoming row for ${row.id}`);
+        return;
+      }
+      // defects.photos is a Postgres text[] — arrives as a real JS array over
+      // the wire; SQLite needs the same JSON string every other write path
+      // into this column already uses (see defectsStore.ts's normaliseDefects).
+      const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
+      upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
+      _liveOnChange?.('defects');
+    })();
   };
 
   // Same tombstone check _pullRelated applies for this table — without it, a
@@ -1134,13 +1189,28 @@ export function subscribeToMyDataLive(userId: string): void {
     const rowId = row.id as string;
     const jobId = row.job_id as string | null;
     if (!jobId || !getJobStatus(jobId)) return;
-    const localRow = getRecord<{ updated_at: string | null }>('defects', rowId);
-    if (_shouldPreserveLocalRow(row, localRow)) return;
-    // Same text[] -> JSON string normalisation subscribeToJobLive's own
-    // applyDefect already does.
-    const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
-    upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
-    _emitSyncComplete();
+    // FIX: defects.asset_id is a NOT NULL FK to assets(id), enforced
+    // unconditionally — same silent-drop failure mode subscribeToJobLive's
+    // own applyDefect was fixed for (see its _ensureAssetLocal comment). The
+    // job-ownership gate above only proves the PARENT JOB is known locally;
+    // a brand-new asset added to that job could still arrive here (this
+    // channel is company-wide) before its own row does. Fetch it first if
+    // missing, same fetch-parent-first pattern used throughout this file.
+    void (async () => {
+      const assetId = row.asset_id as string | undefined;
+      if (assetId && !getRecord('assets', assetId)) {
+        const { data } = await supabase.from('assets').select('*').eq('id', assetId).maybeSingle();
+        if (!data) return; // fetch failed, or the row's gone — periodic pull retries once possible
+        upsertRecord('assets', data as Record<string, string | number | boolean | null>);
+      }
+      const localRow = getRecord<{ updated_at: string | null }>('defects', rowId);
+      if (_shouldPreserveLocalRow(row, localRow)) return;
+      // Same text[] -> JSON string normalisation subscribeToJobLive's own
+      // applyDefect already does.
+      const photos: string = Array.isArray(row.photos) ? JSON.stringify(row.photos) : String(row.photos ?? '[]');
+      upsertRecord('defects', { ...row, photos } as Record<string, string | number | boolean | null>);
+      _emitSyncComplete();
+    })();
   };
 
   // Same leak risk and same fix as applyDefect above — assets is also
@@ -1352,7 +1422,7 @@ export function syncNow(userId?: string): void {
         _isProcessingDocuments = true;
         try { await processDocumentQueue(resolvedUserId); } finally { _isProcessingDocuments = false; }
       }
-      await _pushQueue(resolvedUserId);
+      await _pushQueueGuarded(resolvedUserId);
     } catch (err) {
       if (__DEV__) console.warn('[SiteTrack Sync] syncNow error:', err);
     } finally {
@@ -1593,21 +1663,30 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
       }
       if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${properties.length} property/ies`);
 
-      const { data: assets, error: assetError } = assetsResult;
-      if (assetError) {
-        console.error('[UMA BUILDING SERVICES Sync] PULL assets error:', assetError.message);
-      } else if (assets) {
-        for (const asset of assets) {
-          upsertRecord('assets', asset as Record<string, string | number | boolean | null>);
-        }
-        if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assets.length} asset(s)`);
-      }
-
       // Pull scanned documents for these properties — property-scoped like
       // assets above (not job-scoped like inspection_photos), so a document
       // captured during one job still shows up from every other job at the
       // same site. Safe to run without awaiting here (FK-disabled bulk
       // upsert) — collected below alongside the other independent pulls.
+    }
+
+    // FIX: this used to be nested inside the `properties` success branch
+    // even though the two fetches have no real data dependency for a
+    // property this device already has locally from a previous sync — so a
+    // transient error on the properties endpoint discarded an ALREADY-
+    // successful, independent assets fetch entirely for this cycle instead
+    // of applying it, adding a full sync-cycle of unnecessary staleness.
+    // Processed after properties (not concurrently) to preserve the
+    // original dependency-safe write order for a property that's genuinely
+    // new to this device.
+    const { data: assets, error: assetError } = assetsResult;
+    if (assetError) {
+      console.error('[UMA BUILDING SERVICES Sync] PULL assets error:', assetError.message);
+    } else if (assets) {
+      for (const asset of assets) {
+        upsertRecord('assets', asset as Record<string, string | number | boolean | null>);
+      }
+      if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assets.length} asset(s)`);
     }
   }
 
@@ -1615,10 +1694,13 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
   // Use conflict-aware upsert: never let the server overwrite a locally-advanced
   // status (in_progress or completed) with a less-advanced one (scheduled)
   // unless the local change is older than STALE_THRESHOLD_MS.
+  // FIX: was one getJobStatus() round-trip per pulled job (N+1) — batched
+  // into a single WHERE id IN (...) lookup up front.
+  const localStatuses = getJobStatuses(jobs.map((job) => job.id as string));
   let upsertedCount = 0;
   let preservedCount = 0;
   for (const job of jobs) {
-    const localStatus = getJobStatus(job.id as string);
+    const localStatus = localStatuses.get(job.id as string) ?? null;
     // FIX: 'cancelled' used to be ranked lowest on STATUS_PRIORITY (a ladder
     // meant for "how far along" — scheduled < in_progress < completed), so
     // an office cancellation of an already in_progress/completed job looked
@@ -2092,8 +2174,26 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
   );
 
   for (const item of pending) {
+    // FIX: a JSON.parse failure here used to fall through to the generic
+    // catch at the bottom of this loop, which classifies everything as a
+    // transient, retryable failure (isTerminal=false). A malformed payload
+    // is deterministic — it will fail identically on every retry — but
+    // resetStaleFailedSyncItems() (called every successful sync cycle)
+    // resets non-terminal failed items after 24h, so this would burn its
+    // retry budget, "fail," then get silently reset and fail identically
+    // again every 24 hours forever, firing another failure alert each time
+    // with no way to ever actually clear it. Parsed separately, outside the
+    // main try, so it can be classified terminal immediately instead.
+    let payload: Record<string, unknown>;
     try {
-      const payload = JSON.parse(item.payload) as Record<string, unknown>;
+      payload = JSON.parse(item.payload) as Record<string, unknown>;
+    } catch (parseErr) {
+      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      console.warn(`[UMA BUILDING SERVICES Sync] PUSH: queue item ${item.id} has unparsable payload, marking terminal: ${msg}`);
+      incrementSyncRetry(item.id, `Corrupt payload (unparsable JSON): ${msg}`, MAX_SYNC_RETRIES, true);
+      continue;
+    }
+    try {
       let error: { message: string; code?: string } | null = null;
 
       // Ensure defects photos is an array, not a stringified array
@@ -2133,49 +2233,66 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
             .maybeSingle();
 
           if (existing) {
-            const localTime = payload.actioned_at ? new Date(payload.actioned_at as string).getTime() : 0;
-            const serverTime = existing.actioned_at ? new Date(existing.actioned_at).getTime() : 0;
-            if (localTime > serverTime) {
-              const { id: _localId, ...updatePayload } = payload;
-              const updateResult = await supabase.from('job_assets').update(updatePayload).eq('id', existing.id);
-              if (updateResult.error) {
-                console.warn('[SiteTrack Sync] job_assets conflict resolution UPDATE failed:', updateResult.error.message);
-              } else if (__DEV__) {
-                console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: this device's later result applied to row ${existing.id}`);
-              }
-            } else if (__DEV__) {
-              console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: server row ${existing.id} is already the more recent result, discarding this device's older one`);
-            }
-            // FIX: repoint any OTHER still-pending queue item for this local
-            // row (e.g. a follow-up Update queued after this Insert, made
-            // before the conflict was known) at the canonical existing.id —
-            // otherwise it would silently target a local id that no longer
-            // exists anywhere once deleted below, and be marked synced
-            // without ever actually being applied.
-            remapSyncQueueRecordId('job_assets', item.record_id, existing.id);
-            // FIX: remapSyncQueueRecordId only persists the correction to
-            // SQLite — `pending`, the in-memory array this whole _pushQueue
-            // pass is still iterating over, is now stale for that same
-            // follow-up item. Left unpatched, its own turn later in THIS
-            // pass still carries the old record_id/payload.id, matches zero
-            // rows server-side (a no-op success from Supabase's point of
-            // view), and gets marked synced anyway — silently discarding
-            // the technician's follow-up edit with no retry and no alert.
-            for (const p of pending) {
-              if (p.id === item.id || p.table_name !== 'job_assets' || p.record_id !== item.record_id) continue;
-              p.record_id = existing.id;
-              try {
-                const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
-                if (pPayload.id === item.record_id) {
-                  pPayload.id = existing.id;
-                  p.payload = JSON.stringify(pPayload);
+            // FIX: if the "conflicting" row's id is literally the id THIS
+            // device generated for its own insert, this isn't a two-device
+            // conflict at all — it's an ordinary dropped connection or app
+            // kill between "the insert committed server-side" and "this
+            // device marked the queue item synced," so the retry collides
+            // with a row it created itself. Since the retried payload is
+            // byte-identical to what's already there, the tie-break below
+            // always lands on "server's is already the more recent result"
+            // (localTime === serverTime) and would delete this device's own
+            // already-synced local row — no clock skew or second device
+            // needed, just an ordinary reconnect in exactly the environment
+            // (basements, rural sites) this app targets. Treat it as a
+            // plain retry-success no-op: leave the local row alone.
+            if (existing.id === item.record_id) {
+              if (__DEV__) console.log(`[SiteTrack Sync] job_assets insert for ${payload.asset_id} already applied server-side (dropped-response retry) — no-op`);
+            } else {
+              const localTime = payload.actioned_at ? new Date(payload.actioned_at as string).getTime() : 0;
+              const serverTime = existing.actioned_at ? new Date(existing.actioned_at).getTime() : 0;
+              if (localTime > serverTime) {
+                const { id: _localId, ...updatePayload } = payload;
+                const updateResult = await supabase.from('job_assets').update(updatePayload).eq('id', existing.id);
+                if (updateResult.error) {
+                  console.warn('[SiteTrack Sync] job_assets conflict resolution UPDATE failed:', updateResult.error.message);
+                } else if (__DEV__) {
+                  console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: this device's later result applied to row ${existing.id}`);
                 }
-              } catch { /* leave payload untouched if unparsable */ }
+              } else if (__DEV__) {
+                console.log(`[SiteTrack Sync] job_assets conflict for ${payload.asset_id}: server row ${existing.id} is already the more recent result, discarding this device's older one`);
+              }
+              // FIX: repoint any OTHER still-pending queue item for this local
+              // row (e.g. a follow-up Update queued after this Insert, made
+              // before the conflict was known) at the canonical existing.id —
+              // otherwise it would silently target a local id that no longer
+              // exists anywhere once deleted below, and be marked synced
+              // without ever actually being applied.
+              remapSyncQueueRecordId('job_assets', item.record_id, existing.id);
+              // FIX: remapSyncQueueRecordId only persists the correction to
+              // SQLite — `pending`, the in-memory array this whole _pushQueue
+              // pass is still iterating over, is now stale for that same
+              // follow-up item. Left unpatched, its own turn later in THIS
+              // pass still carries the old record_id/payload.id, matches zero
+              // rows server-side (a no-op success from Supabase's point of
+              // view), and gets marked synced anyway — silently discarding
+              // the technician's follow-up edit with no retry and no alert.
+              for (const p of pending) {
+                if (p.id === item.id || p.table_name !== 'job_assets' || p.record_id !== item.record_id) continue;
+                p.record_id = existing.id;
+                try {
+                  const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
+                  if (pPayload.id === item.record_id) {
+                    pPayload.id = existing.id;
+                    p.payload = JSON.stringify(pPayload);
+                  }
+                } catch { /* leave payload untouched if unparsable */ }
+              }
+              // This device's own locally-generated row is now an orphan either
+              // way — the canonical row lives at `existing.id`. Drop it locally;
+              // the next pull brings the canonical (winning) row down normally.
+              deleteRecord('job_assets', item.record_id);
             }
-            // This device's own locally-generated row is now an orphan either
-            // way — the canonical row lives at `existing.id`. Drop it locally;
-            // the next pull brings the canonical (winning) row down normally.
-            deleteRecord('job_assets', item.record_id);
           }
           error = null; // handled — don't fall through to the generic error path
         }
@@ -2200,32 +2317,43 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
             .maybeSingle();
 
           if (existing) {
-            const localTime = payload.signed_at ? new Date(payload.signed_at as string).getTime() : 0;
-            const serverTime = existing.signed_at ? new Date(existing.signed_at).getTime() : 0;
-            if (localTime > serverTime) {
-              const { id: _localId, ...updatePayload } = payload;
-              const updateResult = await supabase.from('signatures').update(updatePayload).eq('id', existing.id);
-              if (updateResult.error) {
-                console.warn('[SiteTrack Sync] signatures conflict resolution UPDATE failed:', updateResult.error.message);
-              } else if (__DEV__) {
-                console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: this device's later signature applied to row ${existing.id}`);
-              }
-            } else if (__DEV__) {
-              console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: server row ${existing.id} is already the more recent signature, discarding this device's older one`);
-            }
-            remapSyncQueueRecordId('signatures', item.record_id, existing.id);
-            for (const p of pending) {
-              if (p.id === item.id || p.table_name !== 'signatures' || p.record_id !== item.record_id) continue;
-              p.record_id = existing.id;
-              try {
-                const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
-                if (pPayload.id === item.record_id) {
-                  pPayload.id = existing.id;
-                  p.payload = JSON.stringify(pPayload);
+            // FIX: same self-retry case as the job_assets conflict handler
+            // just above — if the "conflicting" row's id is literally this
+            // device's own insert id, it's a dropped-connection/app-kill
+            // retry colliding with the row it already successfully created,
+            // not a genuine second device. Leave it alone instead of running
+            // the tie-break (which, on an identical retried payload, always
+            // discards this device's own already-synced signature).
+            if (existing.id === item.record_id) {
+              if (__DEV__) console.log(`[SiteTrack Sync] signatures insert for job ${payload.job_id} already applied server-side (dropped-response retry) — no-op`);
+            } else {
+              const localTime = payload.signed_at ? new Date(payload.signed_at as string).getTime() : 0;
+              const serverTime = existing.signed_at ? new Date(existing.signed_at).getTime() : 0;
+              if (localTime > serverTime) {
+                const { id: _localId, ...updatePayload } = payload;
+                const updateResult = await supabase.from('signatures').update(updatePayload).eq('id', existing.id);
+                if (updateResult.error) {
+                  console.warn('[SiteTrack Sync] signatures conflict resolution UPDATE failed:', updateResult.error.message);
+                } else if (__DEV__) {
+                  console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: this device's later signature applied to row ${existing.id}`);
                 }
-              } catch { /* leave payload untouched if unparsable */ }
+              } else if (__DEV__) {
+                console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: server row ${existing.id} is already the more recent signature, discarding this device's older one`);
+              }
+              remapSyncQueueRecordId('signatures', item.record_id, existing.id);
+              for (const p of pending) {
+                if (p.id === item.id || p.table_name !== 'signatures' || p.record_id !== item.record_id) continue;
+                p.record_id = existing.id;
+                try {
+                  const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
+                  if (pPayload.id === item.record_id) {
+                    pPayload.id = existing.id;
+                    p.payload = JSON.stringify(pPayload);
+                  }
+                } catch { /* leave payload untouched if unparsable */ }
+              }
+              deleteRecord('signatures', item.record_id);
             }
-            deleteRecord('signatures', item.record_id);
           }
           error = null; // handled — don't fall through to the generic error path
         }
@@ -2377,7 +2505,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
       } else if (item.operation === SyncOperation.ReportGenerate) {
         // ── Server-side PDF generation via the report-generator service ──────
         // The payload contains { jobId }. We call the standalone report-generator
-        // service (Node + self-hosted Gotenberg — see services/report-generator/)
+        // service (Node + headless Chromium on Cloud Run — see services/report-generator/)
         // with the user's session token. It replaced the old Supabase Edge
         // Function, which used pdfmake and hit a hard ~150MB memory ceiling that
         // made it unreliable at real-world scale (500-unit / 1000-asset sites).
@@ -2471,18 +2599,13 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
 
         if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PUSH: calling report-generator service for job ${reportJobId}`);
 
-        // Render's free tier (see render.yaml) spins sitetrack-report-generator
-        // down after ~15 min with no inbound traffic. This POST is the very
-        // first thing to touch it, before generateReport() even gets a chance
-        // to run its own internal Gotenberg warm-up — a cold instance can take
-        // 30-60s+ to start listening, and the first request to hit it while
-        // still booting gets a 502 from Render's own proxy. That's exactly the
-        // failure mode already diagnosed and fixed one layer in for Gotenberg
-        // (see gotenberg/client.ts's waitForGotenbergReady): the fix is the
-        // same shape — patiently wait for /health before sending the real
-        // request, instead of letting the first attempt eat a cold 502 and
-        // silently waiting for the next 60s sync cycle (or the user manually
-        // retrying) to paper over it.
+        // The report service scales to zero when idle (Cloud Run; on its
+        // earlier Render free-tier home a cold start took 30-60s+ and the
+        // first request got a 502 from Render's proxy). Cloud Run usually
+        // starts in a few seconds, but patiently waiting for /health before
+        // the real request still costs nothing when it's warm and keeps a
+        // slow cold start from failing this push and waiting for the next
+        // sync cycle.
         await waitForReportServiceReady(reportServiceUrl);
 
         // The service now responds immediately once generation is safely queued

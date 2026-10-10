@@ -7,7 +7,7 @@ import { stopSync } from '@/lib/sync';
 import { clearDatabase, getPendingSyncItems } from '@/lib/database';
 import { setCurrentUserId } from '@/lib/currentUserId';
 import { showConfirm } from '@/components/ui';
-import { SESSION_KEY } from '@/constants/Config';
+import { SESSION_KEY, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY } from '@/constants/Config';
 import type { User } from '@/types';
 import { UserRole } from '@/constants/Enums';
 
@@ -71,11 +71,20 @@ async function resetAllFeatureStores(): Promise<void> {
   const [
     { useJobsStore }, { useDashboardStore }, { useNotificationsStore },
     { useDefectsStore }, { usePhotosStore }, { useDocumentsStore },
-    { useCatalogueStore }, { useInspectionStore },
+    { useCatalogueStore }, { useInspectionStore }, { useNotebookStore },
   ] = await Promise.all([
     import('@/store/jobsStore'), import('@/store/dashboardStore'), import('@/store/notificationsStore'),
     import('@/store/defectsStore'), import('@/store/photosStore'), import('@/store/documentsStore'),
     import('@/store/catalogueStore'), import('@/store/inspectionStore'),
+    // FIX: added after the fact — this store was introduced later (its
+    // property_notebook_items table shipped 2026-09-19, after this reset
+    // list was already written) and never got added here, reintroducing
+    // exactly the stale-singleton class every other store above was
+    // already fixed for. Its only current consumer reloads before
+    // rendering on every open, so no on-screen flash was proven today —
+    // but the very next consumer that reads it without doing that (a
+    // notes-count badge, a search screen) would have one.
+    import('@/store/notebookStore'),
   ]);
   useJobsStore.getState().reset();
   useDashboardStore.getState().reset();
@@ -85,6 +94,25 @@ async function resetAllFeatureStores(): Promise<void> {
   useDocumentsStore.getState().reset();
   useCatalogueStore.getState().reset();
   useInspectionStore.getState().reset();
+  useNotebookStore.getState().reset();
+}
+
+// FIX: app/(app)/jobs/[id]/signature.tsx persists an in-progress signature
+// draft under `draft_tech_sig_<jobId>` (no user/company prefix) so it
+// survives an app kill before the technician taps Save — but nothing ever
+// swept these on sign-out, so a draft abandoned without returning to that
+// screen lingers in AsyncStorage indefinitely. Job ids are globally-unique
+// UUIDs gated by jobs_tenant_isolation RLS, so this was never a cross-
+// tenant confidentiality leak (a different company's technician can never
+// navigate to this job id to read it back) — purely unbounded local
+// storage housekeeping. AsyncStorage has no native prefix-delete, so this
+// scans all keys once and removes only the matching ones.
+async function sweepDraftSignatureKeys(): Promise<void> {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const draftKeys = allKeys.filter((k) => k.startsWith('draft_tech_sig_'));
+    if (draftKeys.length > 0) await AsyncStorage.multiRemove(draftKeys);
+  } catch { /* best-effort housekeeping — never block sign-out on this */ }
 }
 
 // ---------------------------------------------
@@ -121,10 +149,18 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         return;
       }
 
-      // Fetch full profile from public.users
-      const { data: profile, error: profileError } = await supabase
+      // Fetch full profile from public.users — embeds the linked company row
+      // in the SAME query via the users.company_id -> companies.id FK
+      // (PostgREST resolves this server-side) instead of two sequential
+      // round trips (profile, then company). FIX (cold-start "1 full
+      // second" from login tap to Home screen): this was the second of
+      // three back-to-back awaited network calls in this function
+      // (signInWithPassword, profile fetch, company fetch) — each one a
+      // real round trip to Supabase, not a local read. Cutting one out
+      // directly cuts one round trip off the login→Home critical path.
+      const { data: profileWithCompany, error: profileError } = await supabase
         .from('users')
-        .select('*')
+        .select('*, companies(*)')
         .eq('id', data.user.id)
         .maybeSingle();
 
@@ -144,7 +180,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         return;
       }
 
-      if (!profile) {
+      if (!profileWithCompany) {
         // Confirmed no profile row — could be an admin account (no technician row).
         // Build a minimal fallback from the auth session so they can still log in.
         const fallback: User = {
@@ -176,23 +212,16 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         return;
       }
 
-      let fetchedCompany = null;
+      // Split the embedded relation back out — PostgREST returns it as a
+      // nested `companies` object (singular: company_id is a to-one FK)
+      // right on the same row, null when the user has no company.
+      const { companies: fetchedCompany, ...profile } = profileWithCompany as (User & { companies: CompanyRecord | null });
+
       // SaaS Subscription Lockout: check if the company is suspended
-      if (profile.company_id) {
-        const { data: companyRes } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', profile.company_id)
-          .maybeSingle();
-          
-        if (companyRes) {
-          fetchedCompany = companyRes;
-          if (companyRes.subscription_status !== 'active') {
-            await supabase.auth.signOut();
-            set({ error: 'Your company account has been suspended. Please contact platform support.', isLoading: false });
-            return;
-          }
-        }
+      if (fetchedCompany && fetchedCompany.subscription_status !== 'active') {
+        await supabase.auth.signOut();
+        set({ error: 'Your company account has been suspended. Please contact platform support.', isLoading: false });
+        return;
       }
 
       // User Active Check: check if the technician was disabled by an admin
@@ -278,7 +307,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // Security: clear ALL session data including cached profile.
       // Without USER_PROFILE_KEY removal, signing in as a different user
       // via biometrics would restore the previous user's profile.
-      await AsyncStorage.multiRemove([REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY, COMPANY_CACHE_KEY]);
+      // FIX: the three sync checkpoint keys below were never cleared here —
+      // on a shared/pool device, the NEXT (different-company) technician who
+      // signs in inherits this account's leftover deletion-log/notification
+      // checkpoints, since both only ever advance forward and never
+      // backfill. That silently and permanently skips any of the new
+      // account's own deletions/notifications whose id/timestamp happens to
+      // be at or before the old checkpoint — e.g. a decommissioned asset can
+      // stay a permanently visible "ghost" for the new user. See
+      // lib/sync.ts's _pullDeletions/_pullNotifications for how these are
+      // used. LAST_SYNCED_KEY is included too for the same hygiene reason,
+      // though its only live effect today is a cosmetic stale timestamp.
+      await AsyncStorage.multiRemove([
+        REMEMBER_ME_KEY, SESSION_KEY, USER_PROFILE_KEY, COMPANY_CACHE_KEY,
+        LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY,
+      ]);
+      await sweepDraftSignatureKeys();
       clearDatabase();
       await resetAllFeatureStores();
       set({
@@ -443,11 +487,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       // back as {data: null, error: null} — distinguishable from a real
       // fetch error, which single() would otherwise conflate into the same
       // error shape as "no such user."
-      type ProfileResult = { data: User | null; error: { message: string } | null };
+      // FIX: same round-trip-cutting change as signIn() above — embed the
+      // linked company row in this same query instead of a second
+      // sequential fetch further down.
+      type ProfileResult = { data: (User & { companies: CompanyRecord | null }) | null; error: { message: string } | null };
       const profileResult = await withTimeout<ProfileResult>(
         (supabase
           .from('users')
-          .select('*')
+          .select('*, companies(*)')
           .eq('id', session.user.id)
           .maybeSingle() as unknown) as Promise<ProfileResult>,
         5000
@@ -494,28 +541,21 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         return;
       }
 
+      // Split the embedded relation back out — same shape as signIn()'s own
+      // combined query above.
+      const { companies: fetchedCompany, ...profileData } = profileResult.data;
+
       // Save fresh profile to cache for future fast restores
-      const profileData = profileResult.data as User;
       await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileData));
-      
-      let fetchedCompany = null;
+
       // If we did a network fetch, check subscription status before allowing them in
-      if (profileData.company_id) {
-        const { data: companyRes } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', profileData.company_id)
-          .maybeSingle();
-          
-        if (companyRes) {
-          fetchedCompany = companyRes;
-          await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(companyRes));
-          
-          if (companyRes.subscription_status !== 'active') {
-            console.warn('[AuthStore] Company suspended during network restore. Forcing graceful logout.');
-            get().forceFinalSyncAndSignOut();
-            return;
-          }
+      if (fetchedCompany) {
+        await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(fetchedCompany));
+
+        if (fetchedCompany.subscription_status !== 'active') {
+          console.warn('[AuthStore] Company suspended during network restore. Forcing graceful logout.');
+          get().forceFinalSyncAndSignOut();
+          return;
         }
       }
 
@@ -633,7 +673,15 @@ supabase.auth.onAuthStateChange((event, session) => {
       }
 
       await resetAllFeatureStores();
-      AsyncStorage.multiRemove([USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY]).catch(() => null);
+      // FIX: same shared-device checkpoint leak as signOut()'s own multiRemove
+      // above (see its comment) — this is the OTHER teardown pipeline
+      // (SIGNED_OUT listener) that must clear the same keys, since either one
+      // can be the one that actually runs for a given sign-out.
+      AsyncStorage.multiRemove([
+        USER_PROFILE_KEY, COMPANY_CACHE_KEY, SESSION_KEY,
+        LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY,
+      ]).catch(() => null);
+      void sweepDraftSignatureKeys();
       // FIX: this used to leave error/isForceSyncing untouched, while
       // signOut()'s own final set() (above) explicitly resets both — two
       // independent teardown pipelines that can run concurrently (a manual

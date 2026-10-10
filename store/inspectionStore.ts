@@ -100,6 +100,17 @@ interface InspectionState {
     // existing positional call site keeps working unchanged; only a call
     // site that actually cares about internal notes needs to reach this far.
     internalNotes?: string,
+    // FIX: the merge branch below used to pick "the" existing defect via
+    // queryRecords(...)[0] — no ordering, no identity check. The instant an
+    // asset carried more than one defect (e.g. a Remark logged on Pass, plus
+    // a later unrelated Fail), that could silently update the WRONG row —
+    // asset/[assetId].tsx already computes the real primary defect (content-
+    // matched against defect_reason, see its own comment) for display, so
+    // callers that have it should pass it through here instead of letting
+    // this function guess. Optional and additive: every existing call site
+    // that doesn't have this concept (Pass/N-T taps, bulk "mark not tested")
+    // keeps working via the content-match/[0] fallback below.
+    primaryDefectId?: string | null,
     // Returns the id of the defect this call just created or updated (the
     // asset's "primary" one — see asset/[assetId].tsx), or null when this
     // call didn't touch a defect at all (Pass/N-T, or a Fail with no
@@ -139,10 +150,14 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
     try {
       set({ isLoading: true, error: null, currentJobId: jobId });
 
-      const job = getJobById<{ property_id: string }>(jobId);
+      const job = getJobById<{ property_id: string; scoped_asset_ids: string | null }>(jobId);
       if (!job) throw new Error('Job not found');
 
-      const dbAssets         = getAssetsForProperty<Asset>(job.property_id);
+      // FIX: was missing scoped_asset_ids entirely — a repair job created
+      // against specific defective assets still loaded and rendered every
+      // active asset on the property. See getAssetsForProperty's own
+      // comment for the full reasoning.
+      const dbAssets         = getAssetsForProperty<Asset>(job.property_id, job.scoped_asset_ids);
       const jobAssets        = queryRecords<JobAsset>('job_assets', { job_id: jobId })
         .sort((a, b) => (b.actioned_at ?? '').localeCompare(a.actioned_at ?? ''));
       const inspectionPhotos = queryRecords<{ asset_id: string; photo_url: string; local_uri: string | null }>(
@@ -159,7 +174,21 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           ...asset,
           result: ja?.result ?? null,
           checklist_data: ja?.checklist_data ?? null,
-          is_compliant: Boolean(ja?.is_compliant),
+          // FIX: was `Boolean(ja?.is_compliant)` — for an asset with no
+          // job_assets row yet (never inspected in this job), ja is
+          // undefined, so this collapsed straight to `false`, not
+          // null/undefined. Every Pass handler (inspect.tsx, asset/
+          // [assetId].tsx) relies on `asset.is_compliant ?? true` to default
+          // a never-tested asset to compliant on its first Pass — but `??`
+          // only falls through on null/undefined, never on a real `false`.
+          // So that fallback could never fire: EVERY first-ever Pass silently
+          // wrote is_compliant=0, and every reload fed that same `false`
+          // back in, permanently. Net effect: a job's compliance breakdown
+          // (report.tsx's "COMPLIANCE BREAKDOWN" bar caption) could show
+          // "0 compliant" while Passed count was high — the two numbers
+          // come from different fields and had silently diverged on every
+          // real inspection, not just seeded test data.
+          is_compliant: ja ? Boolean(ja.is_compliant) : true,
           defect_reason: ja?.defect_reason ?? null,
           technician_notes: ja?.technician_notes ?? null,
           internal_notes: ja?.internal_notes ?? null,
@@ -178,7 +207,7 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
   updateAssetResult: (
     assetId, result, checklistData, isCompliant,
     defectReason, notes, photos, severity, defectCode, quotePrice,
-    forceNewDefect, internalNotes,
+    forceNewDefect, internalNotes, primaryDefectId,
   ) => {
     try {
       set({ isSaving: true, error: null });
@@ -364,12 +393,25 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
       // it's deliberately NOT filtered back out here.
       // A3 FIX: Also cancel/delete the defect's associated inspection_photos so
       // they don't get uploaded as orphaned rows in Supabase.
+      // FIX: this used to delete EVERY Open defect on the asset, not just the
+      // one being reverted — so an unrelated Remark logged earlier on this
+      // same asset (Remarks are explicitly supported on Pass/N-T assets,
+      // independent of the Fail/Open-defect this block exists to clean up)
+      // got silently deleted, photos included, the moment the technician
+      // changed their mind about an unrelated Fail. Scope to the specific
+      // defect matching this asset's own (pre-write) defect_reason — the
+      // same content-match relationship the display layer and
+      // reconcileJobAssetOnDefectDelete already rely on to identify "the
+      // Fail's defect" — so a Remark with a different description is never
+      // touched by reverting an unrelated result.
       if (result !== InspectionResult.Fail) {
-        const staleDefects = queryRecords<{ id: string }>('defects', {
-          job_id: currentJobId,
-          asset_id: assetId,
-          status: DefectStatus.Open,
-        });
+        const staleDefects = asset.defect_reason
+          ? queryRecords<{ id: string; description: string }>('defects', {
+              job_id: currentJobId,
+              asset_id: assetId,
+              status: DefectStatus.Open,
+            }).filter((d) => d.description === asset.defect_reason)
+          : [];
         for (const stale of staleDefects) {
           // Cancel associated photos first
           const stalePhotos = queryRecords<{ id: string; photo_url: string }>(
@@ -468,7 +510,19 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
           useDefectsStore.getState().loadDefects(currentJobId);
         } else {
           // Update existing defect description/severity/code/price and reconcile photos
-          const existing = existingDefects[0];
+          // FIX: previously always `existingDefects[0]` — no ordering, no
+          // identity check. The instant an asset carried more than one
+          // defect, this could silently update the wrong one (see this
+          // function's own primaryDefectId param comment). Prefer the
+          // caller's own already-known primary defect id; fall back to
+          // content-matching against this asset's OLD defect_reason (the
+          // same relationship the display layer already uses); only fall
+          // back to [0] for callers that pass neither, so a genuinely
+          // single defect on the asset is never skipped.
+          const existing =
+            (primaryDefectId ? existingDefects.find((d) => d.id === primaryDefectId) : undefined) ??
+            (asset.defect_reason ? existingDefects.find((d) => d.description === asset.defect_reason) : undefined) ??
+            existingDefects[0];
           const existingId = existing.id;
           touchedDefectId = existingId;
           // FIX: a defect already moved past Open (Quoted/Monitoring/Repaired

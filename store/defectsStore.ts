@@ -15,6 +15,7 @@ import {
   recordDeletedPhoto,
   logFieldAudit,
   reconcileJobAssetOnDefectDelete,
+  openDatabase,
 } from '@/lib/database';
 import { DefectStatus, SyncOperation, JobStatus, PhotoStage } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
@@ -23,14 +24,30 @@ import { useAuthStore } from '@/store/authStore';
 import { syncNow } from '@/lib/sync';
 
 // ─── State & Actions ──────────────────────────────────────
+const ALL_DEFECTS_PAGE_SIZE = 30;
+
 interface DefectsState {
   defects: Defect[];
   isLoading: boolean;
+  /** True while loadMoreDefects's next page is in flight — distinct from
+   * isLoading (which clears the list and shows a full-screen spinner) so
+   * paging in more rows doesn't blank out what's already on screen. */
+  isLoadingMore: boolean;
+  /** False once loadAllDefects/loadMoreDefects gets back fewer than a full
+   * page — the cheap "maybe more" signal the getJobsForProperty pagination
+   * elsewhere in the app also relies on, no separate COUNT query needed. */
+  hasMoreDefects: boolean;
   isSaving: boolean;
   error: string | null;
 
   loadDefects: (jobId: string) => void;
+  /** Loads the first page only (ALL_DEFECTS_PAGE_SIZE rows) — call
+   * loadMoreDefects to page in the rest as the list is scrolled. */
   loadAllDefects: (statusFilter?: string, severityFilter?: string) => void;
+  /** Appends the next page using the same filters loadAllDefects was last
+   * called with. No-ops while already loading or once hasMoreDefects is
+   * false. */
+  loadMoreDefects: () => void;
   addDefect: (defect: Omit<Defect, 'id' | 'created_at' | 'updated_at' | 'status' | 'company_id'> & {
     /** Photos documenting the issue found — tagged 'before' on insert. */
     beforePhotos?: string[];
@@ -48,6 +65,10 @@ interface DefectsState {
   removePhotoFromDefect: (defectId: string, photoUri: string) => void;
   clearError: () => void;
   reset: () => void;
+
+  /** Internal — the filters loadAllDefects was last called with, so
+   * loadMoreDefects can page in more of the SAME query. Not for outside use. */
+  _lastFilters: { status?: string; severity?: string };
 }
 
 // ─── Helper — extract a message from an unknown catch value ─
@@ -96,8 +117,11 @@ function normaliseDefects(records: Defect[]): Defect[] {
 export const useDefectsStore = create<DefectsState>((set, get) => ({
   defects: [],
   isLoading: false,
+  isLoadingMore: false,
+  hasMoreDefects: false,
   isSaving: false,
   error: null,
+  _lastFilters: {},
 
   loadDefects: (jobId) => {
     try {
@@ -113,13 +137,45 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
   loadAllDefects: (statusFilter, severityFilter) => {
     try {
-      set({ isLoading: true, error: null, defects: [] });
+      set({
+        isLoading: true, error: null, defects: [],
+        _lastFilters: { status: statusFilter, severity: severityFilter },
+      });
       const companyId = useAuthStore.getState().user?.company_id ?? null;
-      const records = getAllDefects<Defect>({ status: statusFilter, severity: severityFilter, companyId });
-      set({ defects: normaliseDefects(records), isLoading: false });
+      const records = getAllDefects<Defect>(
+        { status: statusFilter, severity: severityFilter, companyId },
+        { limit: ALL_DEFECTS_PAGE_SIZE, offset: 0 },
+      );
+      set({
+        defects: normaliseDefects(records),
+        isLoading: false,
+        hasMoreDefects: records.length === ALL_DEFECTS_PAGE_SIZE,
+      });
     } catch (err: unknown) {
       console.error('[DefectsStore] loadAllDefects error:', err);
       set({ error: errorMessage(err), isLoading: false });
+    }
+  },
+
+  loadMoreDefects: () => {
+    const state = get();
+    if (state.isLoading || state.isLoadingMore || !state.hasMoreDefects) return;
+    try {
+      set({ isLoadingMore: true });
+      const companyId = useAuthStore.getState().user?.company_id ?? null;
+      const { status, severity } = state._lastFilters;
+      const records = getAllDefects<Defect>(
+        { status, severity, companyId },
+        { limit: ALL_DEFECTS_PAGE_SIZE, offset: state.defects.length },
+      );
+      set((s) => ({
+        defects: [...s.defects, ...normaliseDefects(records)],
+        isLoadingMore: false,
+        hasMoreDefects: records.length === ALL_DEFECTS_PAGE_SIZE,
+      }));
+    } catch (err: unknown) {
+      console.error('[DefectsStore] loadMoreDefects error:', err);
+      set({ error: errorMessage(err), isLoadingMore: false });
     }
   },
 
@@ -131,6 +187,18 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       // mode" invariant as store/inspectionStore.ts's updateAssetResult — a
       // completed job's report is treated as final.
       assertJobEditable(defectData.job_id);
+
+      // FIX: this store is the single source of truth for writing a defect
+      // row, but had no guard of its own against an empty description —
+      // today's only caller (DefectFieldsCard) validates client-side before
+      // ever calling this, so nothing currently triggers it, but that made
+      // this a defense-in-depth gap rather than an actual invariant: a
+      // future caller (a bulk-import path, a retry, another screen) could
+      // silently persist a blank line item that would render wrong in a
+      // compliance report or break a downstream renderer expecting it.
+      if (!defectData.description || !defectData.description.trim()) {
+        throw new Error('A defect must have a description.');
+      }
 
       const id = generateUUID();
 
@@ -163,8 +231,15 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         resolved_on_site: payload.resolved_on_site ? 1 : 0,
       };
 
-      insertRecord('defects', dbPayload as Record<string, string | number | boolean | null>);
-      addToSyncQueue('defects', id, SyncOperation.Insert, dbPayload as Record<string, string | number | boolean | null>);
+      // FIX: mutate + enqueue must succeed or fail together — same
+      // atomicity gap fixed elsewhere (reconcileJobAssetOnDefectDelete,
+      // jobsStore.updateJobStatus). Without this, a process kill between
+      // the two leaves a defect row that exists locally but was never
+      // queued to reach the server.
+      openDatabase().withTransactionSync(() => {
+        insertRecord('defects', dbPayload as Record<string, string | number | boolean | null>);
+        addToSyncQueue('defects', id, SyncOperation.Insert, dbPayload as Record<string, string | number | boolean | null>);
+      });
 
       const userId = useAuthStore.getState().user?.id ?? '';
 
@@ -230,6 +305,14 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       const currentRow = getRecord<{ job_id: string }>('defects', defectId);
       assertJobEditable(currentRow?.job_id);
 
+      // FIX: same defense-in-depth gap as addDefect (see its own comment) —
+      // only reject when description is explicitly PART of this update
+      // (most updateDefect calls touch unrelated fields like
+      // resolved_on_site/photos/status and must not be blocked by this).
+      if (updates.description !== undefined && !updates.description.trim()) {
+        throw new Error('A defect must have a description.');
+      }
+
       // Read the OLD row before any write touches it — the audit diff needs
       // this, and it must happen before updateRecord, not inside the set()
       // callback below (which only sees post-write in-memory state).
@@ -253,8 +336,11 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
         updated_at: new Date().toISOString(),
       };
 
-      updateRecord('defects', defectId, dbUpdates);
-      addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+      // FIX: same atomicity gap as addDefect's insert above.
+      openDatabase().withTransactionSync(() => {
+        updateRecord('defects', defectId, dbUpdates);
+        addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+      });
 
       if (oldRow) {
         const userId = useAuthStore.getState().user?.id ?? null;
@@ -290,8 +376,11 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       const oldRow = get().defects.find((d) => d.id === defectId);
       const companyId = useAuthStore.getState().user?.company_id ?? null;
       const dbUpdates = { status, updated_at: new Date().toISOString(), company_id: companyId };
-      updateRecord('defects', defectId, dbUpdates);
-      addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+      // FIX: same atomicity gap as addDefect's insert above.
+      openDatabase().withTransactionSync(() => {
+        updateRecord('defects', defectId, dbUpdates);
+        addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
+      });
 
       if (oldRow && oldRow.status !== status) {
         const userId = useAuthStore.getState().user?.id ?? null;
@@ -324,7 +413,16 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       // Read before anything is deleted — need asset_id/job_id afterward to
       // check whether this was the asset's LAST defect (see clearOrphanedFail).
-      const defectRow = get().defects.find((d) => d.id === defectId);
+      // FIX: was `get().defects.find(...)` — the in-memory store, which is
+      // NOT populated on every screen that can reach this function (same gap
+      // assertJobEditable's own lookup above was already fixed for; see its
+      // comment). When empty, defectRow was silently undefined: photos still
+      // got deleted correctly (they key off defectId directly), but the
+      // job_assets reconciliation below never ran (its `if (defectRow?.asset_id)`
+      // guard is false), leaving a Fail asset with no defect behind it, and
+      // the sync-queue payload's job_id landed as null. A fresh DB read has
+      // no dependency on which screen called this.
+      const defectRow = getRecord<{ job_id: string; asset_id: string | null }>('defects', defectId);
 
       // A4 FIX: Cancel / delete all inspection_photos associated with this defect
       // BEFORE deleting the defect row, so we don't leave orphaned upload tasks.
@@ -450,5 +548,5 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  reset: () => set({ defects: [], isLoading: false, isSaving: false, error: null }),
+  reset: () => set({ defects: [], isLoading: false, isLoadingMore: false, hasMoreDefects: false, isSaving: false, error: null, _lastFilters: {} }),
 }));

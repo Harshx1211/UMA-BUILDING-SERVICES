@@ -1,7 +1,7 @@
 // Zustand store — full jobs state: loading, filtering, searching, status updates
 import { create } from 'zustand';
-import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, getAssetsWithJobResults, getDefectsForJob } from '@/lib/database';
-import { JobStatus, SyncOperation, ComplianceStatus, InspectionResult, DefectStatus } from '@/constants/Enums';
+import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, hasFailedAssetForJob, getDefectsForJob, openDatabase } from '@/lib/database';
+import { JobStatus, SyncOperation, ComplianceStatus, DefectStatus } from '@/constants/Enums';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useAuthStore } from '@/store/authStore';
 import type { Job } from '@/types';
@@ -101,8 +101,15 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
       const companyId = localUser?.company_id ?? useAuthStore.getState().user?.company_id ?? null;
 
       const update = { status: newStatus, updated_at: now, company_id: companyId };
-      updateRecord('jobs', jobId, update);
-      addToSyncQueue('jobs', jobId, SyncOperation.Update, update);
+      // FIX: mutate + enqueue were two independent statements — if the app
+      // was killed between them, the local status would already show the
+      // change but the sync_queue entry to push it would never exist, so
+      // the server never learns about it. One transaction, same pattern as
+      // reconcileJobAssetOnDefectDelete.
+      openDatabase().withTransactionSync(() => {
+        updateRecord('jobs', jobId, update);
+        addToSyncQueue('jobs', jobId, SyncOperation.Update, update);
+      });
 
       // Recompute the property's overall compliance whenever a job actually
       // completes. This was previously the one thing missing from the normal
@@ -115,7 +122,6 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
       if (newStatus === JobStatus.Completed) {
         const completedJob = getJobById<{ property_id: string }>(jobId);
         if (completedJob?.property_id) {
-          const propertyAssets = getAssetsWithJobResults<{ result: string | null }>(jobId, completedJob.property_id);
           // FIX: this used to check ONLY job_assets.result, so a defect
           // logged via the standalone Defects screen (AddDefectSheet lets a
           // technician log a defect against any asset regardless of its
@@ -127,12 +133,14 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
           // also forces NonCompliant, same as a Fail result does.
           const jobDefects = getDefectsForJob<{ status: string }>(jobId);
           const hasUnresolvedDefect = jobDefects.some((d) => d.status !== DefectStatus.Repaired);
-          const compliance = (propertyAssets.some(a => a.result === InspectionResult.Fail) || hasUnresolvedDefect)
+          const compliance = (hasFailedAssetForJob(jobId) || hasUnresolvedDefect)
             ? ComplianceStatus.NonCompliant
             : ComplianceStatus.Compliant;
           const propertyUpdate = { compliance_status: compliance, updated_at: now };
-          updateRecord('properties', completedJob.property_id, propertyUpdate);
-          addToSyncQueue('properties', completedJob.property_id, SyncOperation.Update, propertyUpdate);
+          openDatabase().withTransactionSync(() => {
+            updateRecord('properties', completedJob.property_id, propertyUpdate);
+            addToSyncQueue('properties', completedJob.property_id, SyncOperation.Update, propertyUpdate);
+          });
         }
       }
 

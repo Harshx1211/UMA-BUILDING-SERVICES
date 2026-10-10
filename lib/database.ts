@@ -38,7 +38,7 @@ function _safeColumnName(col: string): string {
 // Increment CURRENT_SCHEMA_VERSION whenever you add a migration below.
 // ─────────────────────────────────────────────
 
-const CURRENT_SCHEMA_VERSION = 49;
+const CURRENT_SCHEMA_VERSION = 52;
 
 // ─────────────────────────────────────────────
 // Schema initialisation
@@ -184,7 +184,15 @@ export function initializeSchema(): void {
       FOREIGN KEY (asset_id) REFERENCES assets(id),
       FOREIGN KEY (actioned_by) REFERENCES users(id)
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_job_assets_job_asset_unique ON job_assets(job_id, asset_id);
+    -- FIX: the unique index used to be created right here, unconditionally,
+    -- as part of this same unguarded execSync call. Any device that had ever
+    -- accumulated duplicate (job_id, asset_id) rows (the exact scenario
+    -- Migration 36 below exists to prevent going forward) would have this
+    -- CREATE UNIQUE INDEX throw on EVERY app launch — with no try/catch
+    -- anywhere in this block, that exception propagates out of
+    -- initializeSchema() itself, meaning the app could never get past its own
+    -- database init. Moved below (after a dedup pass) into its own guarded
+    -- block so a pre-existing duplicate can never brick the app.
 
     CREATE TABLE IF NOT EXISTS defects (
       id          TEXT PRIMARY KEY NOT NULL,
@@ -376,6 +384,9 @@ export function initializeSchema(): void {
 
     CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
     CREATE INDEX IF NOT EXISTS idx_notifications_created  ON notifications(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_site_documents_property_id ON site_documents(property_id);
+    CREATE INDEX IF NOT EXISTS idx_property_notebook_items_property_id ON property_notebook_items(property_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_assigned_to       ON jobs(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_jobs_status            ON jobs(status);
     CREATE INDEX IF NOT EXISTS idx_jobs_scheduled_date    ON jobs(scheduled_date);
@@ -385,7 +396,9 @@ export function initializeSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_defects_asset_id       ON defects(asset_id);
     CREATE INDEX IF NOT EXISTS idx_defects_status         ON defects(status);
     CREATE INDEX IF NOT EXISTS idx_defects_property_id    ON defects(property_id);
+    CREATE INDEX IF NOT EXISTS idx_defects_company_created ON defects(company_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_synced       ON sync_queue(synced);
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_table_record ON sync_queue(table_name, record_id, synced);
     CREATE INDEX IF NOT EXISTS idx_job_assets_asset_id    ON job_assets(asset_id);
     CREATE INDEX IF NOT EXISTS idx_inspection_photos_job_id   ON inspection_photos(job_id);
     CREATE INDEX IF NOT EXISTS idx_inspection_photos_asset_id ON inspection_photos(asset_id);
@@ -434,6 +447,39 @@ export function initializeSchema(): void {
       FOREIGN KEY (tag_id)   REFERENCES asset_tags(id)
     );
   `);
+
+  // FIX: dedupe job_assets before ever trying to create the unique index on
+  // (job_id, asset_id) — see the comment left in job_assets' own CREATE TABLE
+  // block above for why this must never be allowed to throw.
+  // PERF: the dedup DELETE is a full scan (a GROUP BY over every row) — cheap
+  // for a fresh install, but real, needless work on EVERY cold start for an
+  // established company with thousands of historical job_assets rows, for a
+  // condition that (once actually fixed) can never recur — the index itself
+  // enforces uniqueness for every row inserted from that point on. Checking
+  // sqlite_master for the index first is one cheap indexed lookup; the
+  // expensive dedup pass then only ever runs the handful of times a device
+  // genuinely still needs it (never on a device already fixed), not on every
+  // single app launch for its entire lifetime.
+  try {
+    const indexExists = db.getFirstSync<{ n: number }>(
+      `SELECT COUNT(*) as n FROM sqlite_master WHERE type = 'index' AND name = 'idx_job_assets_job_asset_unique'`,
+    );
+    if (!indexExists || indexExists.n === 0) {
+      db.runSync(
+        `DELETE FROM job_assets WHERE id NOT IN (
+           SELECT MAX(id) FROM job_assets GROUP BY job_id, asset_id
+         );`,
+      );
+      db.execSync(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_job_assets_job_asset_unique ON job_assets(job_id, asset_id);`,
+      );
+    }
+  } catch (err: unknown) {
+    console.error(
+      '[UMA BUILDING SERVICES DB] job_assets dedup/unique-index pass failed:',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 
   // ── Versioned migrations ───────────────────────────────────
   // Read current stored version (0 if meta table was just created)
@@ -1653,6 +1699,55 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '49')`);
   }
 
+  if (currentVersion < 50) {
+    // FIX: several sync_queue lookups filter by table_name + record_id (and
+    // often synced too) — e.g. checking for an existing unsynced queue entry
+    // before enqueuing another, or finding a terminal insert row — but only
+    // a bare index on `synced` existed, so every one of those scanned the
+    // whole table instead of a covering index seek.
+    try {
+      db.runSync(`CREATE INDEX IF NOT EXISTS idx_sync_queue_table_record ON sync_queue(table_name, record_id, synced);`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 50: idx_sync_queue_table_record already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 50: added idx_sync_queue_table_record');
+    currentVersion = 50;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '50')`);
+  }
+
+  if (currentVersion < 51) {
+    // FIX: getAllDefects (the global Defects screen) is now paginated with
+    // ORDER BY created_at DESC LIMIT/OFFSET, but there was no index backing
+    // that sort — every page still required a full-table sort of `defects`
+    // before slicing. Combined with company_id since that's the other
+    // column every real-world query on this table filters by first.
+    try {
+      db.runSync(`CREATE INDEX IF NOT EXISTS idx_defects_company_created ON defects(company_id, created_at DESC);`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 51: idx_defects_company_created already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 51: added idx_defects_company_created');
+    currentVersion = 51;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '51')`);
+  }
+
+  if (currentVersion < 52) {
+    // FIX: three more WHERE-filtered columns with no supporting index —
+    // notifications.user_id (every notificationsStore query filters by it),
+    // site_documents.property_id and property_notebook_items.property_id
+    // (both queried by property whenever their tab is opened).
+    try {
+      db.runSync(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);`);
+      db.runSync(`CREATE INDEX IF NOT EXISTS idx_site_documents_property_id ON site_documents(property_id);`);
+      db.runSync(`CREATE INDEX IF NOT EXISTS idx_property_notebook_items_property_id ON property_notebook_items(property_id);`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 52: index creation already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 52: added notifications/site_documents/property_notebook_items indexes');
+    currentVersion = 52;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '52')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -1945,12 +2040,36 @@ export function retryAllFailedSyncItems(): number {
 }
 
 /** Returns all active assets for a given property */
-export function getAssetsForProperty<T = RecordData>(propertyId: string): T[] {
+// FIX: this always returned every active asset on the property, with no way
+// to narrow it — jobs.scoped_asset_ids exists precisely so a "repair job"
+// (created from the admin dashboard against specific defective assets) only
+// needs a handful of assets, and getAssetsWithJobResults (used by the job
+// detail/report screens) already reads and applies that column correctly.
+// loadAssetsForInspection (the actual inspection CHECKLIST) called this
+// function directly and never threaded scoped_asset_ids through at all, so
+// a scoped repair job's checklist still loaded and rendered every asset on
+// the property — on a commercial site with 100-300+ fire-safety assets,
+// that's a 30-100x larger fetch than the feature needs for a job scoped to
+// 2-3 assets. New param is optional and defaults to no scoping, so the
+// other two callers (PhotoCaptureSheet/AddDefectSheet, which deliberately
+// let a technician attach a photo/defect to ANY asset on the property, not
+// just a scoped job's subset) are unaffected.
+export function getAssetsForProperty<T = RecordData>(propertyId: string, scopedAssetIdsJson?: string | null): T[] {
   try {
     const db = openDatabase();
+    let scopedIds: string[] | null = null;
+    if (scopedAssetIdsJson) {
+      try {
+        const parsed = JSON.parse(scopedAssetIdsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) scopedIds = parsed;
+      } catch (err) {
+        if (__DEV__) console.log('[UMA BUILDING SERVICES DB] getAssetsForProperty: malformed scoped_asset_ids, ignoring:', err);
+      }
+    }
+    const scopeClause = scopedIds ? `AND id IN (${scopedIds.map(() => '?').join(',')})` : '';
     return db.getAllSync<T>(
-      `SELECT * FROM assets WHERE property_id = ? AND status = 'active' ORDER BY asset_type ASC`,
-      [propertyId],
+      `SELECT * FROM assets WHERE property_id = ? AND status = 'active' ${scopeClause} ORDER BY asset_type ASC`,
+      scopedIds ? [propertyId, ...scopedIds] : [propertyId],
     );
   } catch (err) {
     console.error(
@@ -2215,6 +2334,7 @@ export function reconcileJobAssetOnDefectDelete(
   changedBy: string | null,
 ): boolean {
   try {
+    const db = openDatabase();
     const jobAsset = queryRecords<{ id: string; result: string | null; defect_reason: string | null }>(
       'job_assets', { job_id: jobId, asset_id: assetId },
     )[0];
@@ -2237,8 +2357,17 @@ export function reconcileJobAssetOnDefectDelete(
         { field: 'defect_reason', old: jobAsset.defect_reason, new: null },
       ];
       logFieldAudit('job_assets', jobAsset.id, jobId, companyId, changedBy, changes);
-      updateRecord('job_assets', jobAsset.id, updates);
-      addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+      // FIX: these were two independent statements — if the app process was
+      // killed between them (backgrounded and reclaimed, crash, battery
+      // pull), the local job_assets row would already show the reverted
+      // Fail, but the sync_queue entry to push that change would never have
+      // been created, so the server never finds out and nothing ever
+      // retries it. One transaction makes "mutate the row" and "queue it
+      // for sync" succeed or fail together.
+      db.withTransactionSync(() => {
+        updateRecord('job_assets', jobAsset.id, updates);
+        addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+      });
       return true;
     }
 
@@ -2254,8 +2383,11 @@ export function reconcileJobAssetOnDefectDelete(
     logFieldAudit('job_assets', jobAsset.id, jobId, companyId, changedBy, [
       { field: 'defect_reason', old: jobAsset.defect_reason, new: promoted.description },
     ]);
-    updateRecord('job_assets', jobAsset.id, updates);
-    addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+    // FIX: same atomicity gap as the branch above — see its comment.
+    db.withTransactionSync(() => {
+      updateRecord('job_assets', jobAsset.id, updates);
+      addToSyncQueue('job_assets', jobAsset.id, SyncOperation.Update, updates);
+    });
     return true;
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] reconcileJobAssetOnDefectDelete(${jobId}, ${assetId}) error:`, err);
@@ -2719,6 +2851,28 @@ export function getFailedSyncItems(): SyncQueueItem[] {
   }
 }
 
+/**
+ * Ids of inspection_photos rows whose upload has been permanently abandoned
+ * (retry budget exhausted or a terminal upload error — see
+ * lib/photoUpload.ts's processPhotoQueue). Lets the UI show a distinct
+ * failure state instead of the same "still syncing" badge a genuinely
+ * pending photo gets — for a compliance product, a photo that will never
+ * reach the server should be loudly flagged, not indistinguishable from one
+ * that uploaded 10 seconds ago.
+ */
+export function getFailedPhotoUploadIds(): Set<string> {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ record_id: string }>(
+      `SELECT record_id FROM sync_queue WHERE synced = -1 AND table_name = 'inspection_photos' AND operation = 'photo_upload'`,
+    );
+    return new Set(rows.map((r) => r.record_id));
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getFailedPhotoUploadIds error:', err);
+    return new Set();
+  }
+}
+
 /** Marks a sync queue item as successfully pushed to Supabase */
 export function markSyncItemComplete(id: number): void {
   try {
@@ -2936,9 +3090,20 @@ export function upsertRecordBulk(
   const db = openDatabase();
   try {
     db.runSync('PRAGMA foreign_keys = OFF');
-    for (const row of rows) {
-      upsertRecord(table, row);
-    }
+    // FIX: each upsertRecord() call used to be its own separate autocommit
+    // statement — fine for correctness (each row is independently
+    // idempotent, so a partial batch is always safe to resume) but a real
+    // performance problem: a large initial pull for a tenant with years of
+    // history turned into one WAL commit PER ROW, holding the JS thread
+    // (these are *Sync calls) far longer than necessary. upsertRecord()
+    // already catches its own errors internally rather than throwing, so
+    // wrapping the loop in one transaction is purely a batching win — it
+    // doesn't change what happens when an individual row fails.
+    db.withTransactionSync(() => {
+      for (const row of rows) {
+        upsertRecord(table, row);
+      }
+    });
   } finally {
     // Always re-enable FK enforcement, even if an individual upsert threw.
     db.runSync('PRAGMA foreign_keys = ON');
@@ -3048,6 +3213,39 @@ export function getAssetsWithJobResults<T = RecordData>(
   } catch (err) {
     console.error('[UMA BUILDING SERVICES DB] getAssetsWithJobResults error:', err);
     return [];
+  }
+}
+
+/**
+ * Lean existence check for "does this job have any asset whose most recent
+ * result is Fail?" — used by jobsStore.updateJobStatus's on-completion
+ * compliance recompute, which previously called getAssetsWithJobResults()
+ * (a full asset-table join pulling every column of every active asset on
+ * the property, just to .some(a => a.result === 'fail') over the result).
+ * Mirrors that query's own "most recent job_assets row per asset" dedup
+ * logic (MAX(actioned_at) per asset_id) so behavior is identical, minus
+ * the assets/users joins and full row hydration.
+ */
+export function hasFailedAssetForJob(jobId: string): boolean {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ found: number }>(
+      `SELECT 1 AS found
+       FROM job_assets jb
+       INNER JOIN (
+         SELECT asset_id, MAX(actioned_at) AS latest_at
+         FROM job_assets
+         WHERE job_id = ?
+         GROUP BY asset_id
+       ) latest ON jb.asset_id = latest.asset_id AND jb.actioned_at = latest.latest_at
+       WHERE jb.job_id = ? AND jb.result = 'fail'
+       LIMIT 1`,
+      [jobId, jobId],
+    );
+    return row != null;
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] hasFailedAssetForJob(${jobId}) error:`, err);
+    return false;
   }
 }
 
@@ -3215,6 +3413,36 @@ export function getJobStatus(jobId: string): { status: string; updated_at: strin
   }
 }
 
+/**
+ * Batched sibling of getJobStatus — one query for however many job ids are
+ * given, instead of one query per job. FIX: lib/sync.ts's pull loop used to
+ * call getJobStatus() individually for every job in a pulled batch before
+ * its conflict-resolution upsert — each lookup is a fast indexed PK hit on
+ * its own, but a first install/reinstall pulling a tenant's full job
+ * history (hundreds of jobs) turned into hundreds of synchronous JS<->
+ * native SQLite round-trips in a single pull cycle for no reason, the same
+ * "one query per row instead of one batched query" pattern already fixed
+ * elsewhere (e.g. getAssetHistory). Returns a Map for O(1) lookup per job
+ * in the caller's own loop.
+ */
+export function getJobStatuses(jobIds: string[]): Map<string, { status: string; updated_at: string }> {
+  const result = new Map<string, { status: string; updated_at: string }>();
+  if (jobIds.length === 0) return result;
+  try {
+    const db = openDatabase();
+    const placeholders = jobIds.map(() => '?').join(',');
+    const rows = db.getAllSync<{ id: string; status: string; updated_at: string }>(
+      `SELECT id, status, updated_at FROM jobs WHERE id IN (${placeholders})`,
+      jobIds,
+    );
+    for (const row of rows) result.set(row.id, { status: row.status, updated_at: row.updated_at });
+    return result;
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getJobStatuses error:', err);
+    return result;
+  }
+}
+
 /** Returns all defects linked to a specific asset */
 export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
   try {
@@ -3243,11 +3471,14 @@ export function getDefectsForAsset<T = RecordData>(assetId: string): T[] {
 // 3-table LEFT JOIN) got linearly slower over a tenant's lifetime, and ran
 // again on every sync. Both severity and status now push into the WHERE
 // clause, so an active filter actually reduces what's read off disk.
-export function getAllDefects<T = RecordData>(filters?: { status?: string; severity?: string; companyId?: string | null }): T[] {
+export function getAllDefects<T = RecordData>(
+  filters?: { status?: string; severity?: string; companyId?: string | null },
+  opts?: { limit?: number; offset?: number },
+): T[] {
   try {
     const db = openDatabase();
     const clauses: string[] = [];
-    const params: string[] = [];
+    const params: (string | number)[] = [];
     // FIX: this used to have NO company scoping at all — it only ever
     // looked "safe" because a normal single-user device's local SQLite
     // only ever holds one company's data anyway. That assumption breaks on
@@ -3263,6 +3494,17 @@ export function getAllDefects<T = RecordData>(filters?: { status?: string; sever
     if (filters?.status) { clauses.push('d.status = ?'); params.push(filters.status); }
     if (filters?.severity) { clauses.push('d.severity = ?'); params.push(filters.severity); }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    // FIX: this pulled the company's ENTIRE defect history (3-table JOIN,
+    // every row) on every load, unbounded — fine for a new tenant, linearly
+    // slower forever after. Paginated the same way getJobsForProperty
+    // already is: opts.limit present -> LIMIT/OFFSET, opts.limit absent ->
+    // unbounded (keeps every existing caller that doesn't pass opts working
+    // exactly as before).
+    let limitClause = '';
+    if (opts?.limit != null) {
+      limitClause = 'LIMIT ? OFFSET ?';
+      params.push(opts.limit, opts.offset ?? 0);
+    }
     return db.getAllSync<T>(
       `SELECT d.*,
               a.asset_type, a.location_on_site,
@@ -3273,7 +3515,8 @@ export function getAllDefects<T = RecordData>(filters?: { status?: string; sever
        LEFT JOIN properties p ON d.property_id = p.id
        LEFT JOIN jobs j ON d.job_id = j.id
        ${where}
-       ORDER BY d.created_at DESC`,
+       ORDER BY d.created_at DESC
+       ${limitClause}`,
       params,
     );
   } catch (err) {
@@ -3289,14 +3532,28 @@ export function getAllDefects<T = RecordData>(filters?: { status?: string; sever
  * stats stay cheap even while a severity/status filter narrows the list
  * itself down to a subset.
  */
-export function getDefectCounts(): { total: number; open: number; critical: number } {
+// FIX: this had no company_id scoping at all, unlike its sibling
+// getAllDefects (see that function's own comment on the shared-device
+// scenario this protects against — a previous account's locally-preserved
+// data must never surface for the account that signs in next). Both
+// functions back the SAME screen (app/(app)/defects/index.tsx uses this for
+// the header stats and getAllDefects for the list beneath it), so leaving
+// this one unscoped meant the header total/open/critical counts could
+// silently include — or, worse, be composed ENTIRELY of — another
+// company's defects on a shared device, while the list right below it was
+// correctly scoped and would visibly disagree.
+export function getDefectCounts(companyId?: string | null): { total: number; open: number; critical: number } {
   try {
     const db = openDatabase();
+    const where = companyId ? 'WHERE company_id = ?' : '';
+    const params = companyId ? [companyId] : [];
     const row = db.getFirstSync<{ total: number; open: number; critical: number }>(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open,
               SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical
-       FROM defects`,
+       FROM defects
+       ${where}`,
+      params,
     );
     return { total: row?.total ?? 0, open: row?.open ?? 0, critical: row?.critical ?? 0 };
   } catch (err) {
@@ -3431,6 +3688,19 @@ export function clearDatabase(): void {
       // Junk once `jobs`/`users` above are wiped — no company_id of its own,
       // but stale rows referencing now-gone jobs serve no purpose.
       'job_technicians',
+      // FIX: `companies` was missing from this list entirely — lib/sync.ts
+      // upserts the full row here (name, ABN, address, contact info,
+      // compliance_standards, accreditations), so on a shared/pool device
+      // this contract's own "wipes all tenant-specific local data" promise
+      // was silently violated for this one table: a previous company's
+      // details stayed in local SQLite indefinitely across a sign-out, with
+      // no scoping key to distinguish "whose" row it even is. No current
+      // screen reads it back locally (branding/subscription/sidebar all go
+      // through the Zustand `company` state and its own AsyncStorage cache,
+      // both already cleared on sign-out) — but that's exactly what makes
+      // this a landmine for the first future feature that does read it,
+      // not a currently-visible bug.
+      'companies',
     ];
 
     // Use WAL checkpointing first to ensure all pending operations commit
