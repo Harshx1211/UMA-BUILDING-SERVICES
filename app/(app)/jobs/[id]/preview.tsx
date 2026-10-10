@@ -186,7 +186,8 @@ export default function PreviewScreen() {
     pdfUrl,
     error: errorMsg,
     generate,
-  } = useReportGeneration(jobId, { forceOnMount: mode !== 'view' });
+    loadExisting,
+  } = useReportGeneration(jobId, { forceOnMount: mode !== 'view', hasExistingReport: mode === 'view' });
 
   const screenState: ScreenState =
     genStatus === 'completed' ? (isDownloading ? 'downloading' : 'ready') :
@@ -250,6 +251,7 @@ export default function PreviewScreen() {
           : 'Generating Report'
         }
         showBack
+        fallbackHref="/jobs"
         rightComponent={
           (screenState === 'ready' && pdfUrl) ? (
             <TouchableOpacity
@@ -291,7 +293,14 @@ export default function PreviewScreen() {
             {errorMsg ?? 'Could not generate report. Please try again.'}
           </Text>
           <TouchableOpacity
-            onPress={() => generate()}
+            // FIX: this used to always call generate() — for a genuine
+            // generation failure that's right, but in view mode (just
+            // trying to open an existing report) it would wrongly kick off
+            // a brand new server-side regeneration via the report service, even though
+            // the actual failure here is just "couldn't reach Supabase" —
+            // completely unrelated to the report service. Retry the same thing that
+            // just failed.
+            onPress={() => (isViewMode ? loadExisting() : generate())}
             style={[styles.secondaryBtn, { backgroundColor: T.iconBg(C.primary), borderRadius: 10, paddingHorizontal: 24 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />

@@ -3,9 +3,10 @@
  *
  * Client-side interface to the server-side PDF report pipeline.
  *
- * The actual PDF (fetch data → render HTML → convert via Gotenberg → upload
- * to Storage) is produced entirely by the standalone `services/report-generator`
- * service deployed on Render — this file only talks to it:
+ * The actual PDF (fetch data → render HTML → convert with headless Chromium →
+ * upload to Storage) is produced entirely by the standalone
+ * `services/report-generator` service on Google Cloud Run — this file only
+ * talks to it:
  *   - queueReportGeneration()  queues a `report_generate` sync-queue item so
  *     the sync engine (lib/sync.ts) calls the service's POST /generate-report
  *     next cycle (or immediately, if online).
@@ -129,11 +130,13 @@ export function hasReportUrl(jobId: string): boolean {
 // queue item is only responsible for kicking generation off, never for
 // reporting how it turned out.
 
+// updatedAt (when that result was recorded) lets useReportGeneration tell a
+// previous run's leftover result apart from the run it just asked for.
 export type ReportStatusResult =
   | { status: 'not_started' }
   | { status: 'generating'; startedAt: string | null }
-  | { status: 'completed'; pdfUrl: string }
-  | { status: 'failed'; error: string };
+  | { status: 'completed'; pdfUrl: string; updatedAt?: string | null }
+  | { status: 'failed'; error: string; updatedAt?: string | null };
 
 export async function pollReportStatus(jobId: string): Promise<ReportStatusResult> {
   const reportServiceUrl = process.env.EXPO_PUBLIC_REPORT_SERVICE_URL;

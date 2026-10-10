@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import NetInfo from '@react-native-community/netinfo';
-import { queueReportGeneration, pollReportStatus } from '@/lib/pdfGenerator';
+import { queueReportGeneration, pollReportStatus, getOrRefreshReportUrl } from '@/lib/pdfGenerator';
 import { runSync } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
 
@@ -52,6 +52,19 @@ export function useReportGeneration(
   const nudgeRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const notifiedRef  = useRef(false);
   const isMounted    = useRef(true);
+  // FIX (Generate instantly showing a PREVIOUS run's result — an old
+  // "Generation Failed" error, or "marked complete but no file was found"):
+  // generate() starts polling the moment it's tapped, but its actual request
+  // only reaches the server once the sync queue pushes it, which takes a few
+  // seconds. Until then /report-status still returns the last run's result,
+  // and the poll used to stop on it — while the new report went on to
+  // generate fine in the background. This holds which result was already
+  // sitting there when Generate was tapped, so polling ignores exactly that:
+  //   undefined — Generate just tapped, not known yet: ignore every
+  //               completed/failed until the resume-check below answers
+  //   string    — that previous result's updatedAt: ignore only that one
+  //   null      — nothing to ignore (normal resume/view polling)
+  const staleResultAt = useRef<string | null | undefined>(null);
 
   const stop = useCallback(() => {
     if (pollRef.current)    clearInterval(pollRef.current);
@@ -88,6 +101,12 @@ export function useReportGeneration(
         return;
       }
       if (!isMounted.current) return;
+
+      if (result.status === 'completed' || result.status === 'failed') {
+        const stale = staleResultAt.current;
+        if (stale === undefined) return;
+        if (stale !== null && result.updatedAt === stale) return;
+      }
 
       if (result.status === 'not_started') {
         // Nothing queued yet. On an initial resume-check this means the tech
@@ -156,6 +175,7 @@ export function useReportGeneration(
     startedAtMs.current = Date.now();
     setElapsedS(0);
     setStatus('generating');
+    staleResultAt.current = undefined;
     poll(jobId);
 
     // FIX (wrong "Queued — Waiting for Connection" toast while actually
@@ -185,6 +205,13 @@ export function useReportGeneration(
     if (isOnline) {
       try {
         const existing = await pollReportStatus(jobId);
+        // Whatever finished result is here now belongs to an EARLIER run —
+        // this request hasn't even been queued yet. (No updatedAt = an older
+        // server that doesn't send one: fall back to accepting it, as before.)
+        staleResultAt.current =
+          existing.status === 'completed' || existing.status === 'failed'
+            ? existing.updatedAt ?? null
+            : null;
         if (existing.status === 'generating') {
           // Genuinely already running (e.g. a previous attempt from
           // another screen/device) — correct the elapsed timer to its real
@@ -223,6 +250,10 @@ export function useReportGeneration(
       }
     }
 
+    // Offline, or the status check failed: no baseline to compare against —
+    // stop ignoring results rather than risk polling past a real one.
+    if (staleResultAt.current === undefined) staleResultAt.current = null;
+
     // Status/elapsed timer/polling were already started optimistically at
     // the top of this function — this is the genuinely-fresh-generation
     // path, so there's nothing left to flip, just the actual queue+push.
@@ -247,6 +278,45 @@ export function useReportGeneration(
     });
   }, [jobId, poll]);
 
+  // FIX: "View Report" (job already has a report_url — that's the only
+  // reason the button reads "View Report" rather than "Generate Report")
+  // used to fall straight through to poll(), which hits the report-
+  // generator service's GET /report-status (then hosted on Render) — a completely
+  // unnecessary dependency for a PDF that has already been sitting safely
+  // in Supabase Storage since it was generated. If that service happened to be
+  // down (or just slow/unreachable), this poll failed every 5s forever
+  // (caught and logged, never surfaced), leaving the screen stuck showing
+  // "Fetching your existing report…" with no way out — a functional
+  // regression entirely disconnected from whether the actual PDF was
+  // available. getOrRefreshReportUrl() only ever talks to Supabase (reads
+  // the locally-synced path/URL, re-signs it via supabase.storage if the
+  // cached signed URL expired) — never the report-generator service — so
+  // viewing an existing report no longer depends on the report service being up at
+  // all. Exposed as its own callback (not just inline in the mount effect)
+  // so the screen's error-state "Try Again" can retry THIS instead of
+  // accidentally calling generate() — which would queue a whole new
+  // server-side regeneration via the report service, exactly the dependency this is
+  // trying to avoid when the technician only wanted to re-view a report
+  // that's already sitting in Storage.
+  const loadExisting = useCallback(async () => {
+    if (!jobId) return;
+    setError(null);
+    try {
+      const url = await getOrRefreshReportUrl(jobId);
+      if (url) {
+        setPdfUrl(url);
+        setStatus('completed');
+      } else {
+        setStatus('failed');
+        setError('This report could not be loaded — it may not have finished generating.');
+      }
+    } catch (e) {
+      console.error('[useReportGeneration] getOrRefreshReportUrl failed:', e);
+      setStatus('failed');
+      setError('Could not load the report — check your connection and try again.');
+    }
+  }, [jobId]);
+
   // On mount: either always start a fresh generation (forceOnMount — used by
   // "Generate"/"Draft Preview"/"Regenerate", which all mean "make me a
   // current PDF"), or just resume-watch an already-in-flight one without
@@ -261,10 +331,13 @@ export function useReportGeneration(
       generate();
       return;
     }
-    if (opts?.hasExistingReport) return;
+    if (opts?.hasExistingReport) {
+      void loadExisting();
+      return;
+    }
     if (status === 'idle') poll(jobId, { oneShot: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, opts?.hasExistingReport, opts?.forceOnMount]);
 
-  return { status, elapsedS, pdfUrl, error, generate, stopPolling: stop };
+  return { status, elapsedS, pdfUrl, error, generate, loadExisting, stopPolling: stop };
 }

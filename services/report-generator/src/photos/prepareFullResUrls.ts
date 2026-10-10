@@ -12,6 +12,7 @@ import { extractObjectPath } from './prepareInlinePhotos';
 // accepted for job-reports' own signed links, just extended further since
 // this is a permanent document rather than a same-session download.
 const LINK_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years
+const SIGN_BATCH_SIZE = 500;
 
 /**
  * Signs the ORIGINAL full-resolution photo for each id — distinct from
@@ -20,8 +21,8 @@ const LINK_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years
  * report photos clickable in the generated PDF (Chromium's print-to-PDF
  * preserves <a href> as real clickable link annotations).
  *
- * Batches all paths into one createSignedUrls call instead of one request
- * per photo — this bucket can hold hundreds of photos for a large site.
+ * Signs in batches of SIGN_BATCH_SIZE paths per createSignedUrls call rather
+ * than one request per photo — a large site can have well over 1000 photos.
  */
 export async function prepareFullResUrls(
   db: SupabaseClient,
@@ -35,18 +36,26 @@ export async function prepareFullResUrls(
 
   if (withPaths.length === 0) return urls;
 
-  const { data, error } = await db.storage
-    .from(bucket)
-    .createSignedUrls(withPaths.map((p) => p.path), LINK_EXPIRY_SECONDS);
-
-  if (error || !data) return urls;
-
-  // createSignedUrls returns results in the same order as the input paths —
-  // zip back up with the ids we sent in, rather than trusting a `path` field
-  // on the result to round-trip unchanged.
-  data.forEach((result, i) => {
-    if (result.signedUrl) urls.set(withPaths[i].id, result.signedUrl);
-  });
+  // Supabase rejects more than 1000 paths per createSignedUrls call ("body/
+  // paths must NOT have more than 1000 items" — measured), and this used to
+  // swallow that error and return an empty map, so every photo on a large
+  // site silently lost its link. Sign in batches, and fail the report on a
+  // real error rather than shipping it with no working photo links.
+  for (let i = 0; i < withPaths.length; i += SIGN_BATCH_SIZE) {
+    const batch = withPaths.slice(i, i + SIGN_BATCH_SIZE);
+    const { data, error } = await db.storage
+      .from(bucket)
+      .createSignedUrls(batch.map((p) => p.path), LINK_EXPIRY_SECONDS);
+    if (error || !data) {
+      throw new Error(`Failed to sign photo links: ${error?.message ?? 'no data returned'}`);
+    }
+    // createSignedUrls returns results in the same order as the input paths —
+    // zip back up with the ids we sent in, rather than trusting a `path` field
+    // on the result to round-trip unchanged.
+    data.forEach((result, j) => {
+      if (result.signedUrl) urls.set(batch[j].id, result.signedUrl);
+    });
+  }
 
   return urls;
 }

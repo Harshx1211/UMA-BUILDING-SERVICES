@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { fetchAllPaged } from './paginate';
+import { fetchAllByIds, fetchAllPaged } from './paginate';
 import { parseCategory } from './categoryGrouping';
 import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
 import { prepareFullResUrls } from '../photos/prepareFullResUrls';
@@ -21,6 +21,18 @@ import {
 } from '../types';
 
 export class JobNotFoundError extends Error {}
+
+/**
+ * Every query below feeds content into a compliance document. A failed read
+ * must stop generation (the technician just taps Generate again) rather than
+ * quietly producing a PDF with the company details, signature or crew
+ * missing — the same reasoning as the asset_type_definitions fix in
+ * generation/pipeline.ts.
+ */
+function check<T>(result: { data: T; error: { message: string } | null }, what: string): T {
+  if (result.error) throw new Error(`Failed to load ${what}: ${result.error.message}`);
+  return result.data;
+}
 
 export async function fetchReportData(db: SupabaseClient, jobId: string): Promise<ReportData> {
   const { data: job, error: jobErr } = await db
@@ -45,24 +57,26 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     ),
   ]);
 
-  const { data: company } = await db
-    .from('companies')
-    .select('*')
-    .eq('id', job.company_id)
-    .single();
+  const company = check(
+    await db.from('companies').select('*').eq('id', job.company_id).single(),
+    'company details',
+  );
 
   // Only fetch assets that actually have a job_assets row for THIS job — fetching
   // every property asset (the original bug) makes out-of-scope assets show as N/T.
   const assetIds = [...new Set(jobAssets.map((ja) => ja.asset_id).filter(Boolean))];
   const assets =
     assetIds.length > 0
-      ? await fetchAllPaged<Asset>(db, () => db.from('assets').select('*').in('id', assetIds))
+      ? await fetchAllByIds<Asset>(assetIds, (batch) => db.from('assets').select('*').in('id', batch))
       : [];
 
-  const { data: assetTypeDefRows } = await db
-    .from('asset_type_definitions')
-    .select('value, label, full_label, inspection_routine')
-    .or(`company_id.eq.${job.company_id},company_id.is.null`);
+  const assetTypeDefRows = check(
+    await db
+      .from('asset_type_definitions')
+      .select('value, label, full_label, inspection_routine')
+      .or(`company_id.eq.${job.company_id},company_id.is.null`),
+    'asset type definitions',
+  );
   const assetTypesByValue = new Map<string, AssetTypeDefinition>(
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
   );
@@ -74,7 +88,9 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
   const actionedByIds = [...new Set(jobAssets.map((ja) => ja.actioned_by).filter((id): id is string => !!id))];
   const actionedByNameById = new Map<string, string>();
   if (actionedByIds.length > 0) {
-    const { data: actionedByUsers } = await db.from('users').select('id, full_name').in('id', actionedByIds);
+    const actionedByUsers = await fetchAllByIds<{ id: string; full_name: string }>(actionedByIds, (batch) =>
+      db.from('users').select('id, full_name').in('id', batch),
+    );
     for (const u of actionedByUsers ?? []) actionedByNameById.set(u.id, u.full_name);
   }
 
@@ -126,20 +142,22 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     prepareFullResUrls(db, photos, config.photoBucket),
   ]);
 
-  const { data: signature } = await db
-    .from('signatures')
-    .select('*')
-    .eq('job_id', jobId)
-    .maybeSingle();
+  const signature = check(
+    await db.from('signatures').select('*').eq('job_id', jobId).maybeSingle(),
+    'signature',
+  );
 
   // The assigned crew — a flat list, no primary (see job_technicians
   // migration). Falls back to the legacy single assigned_user for any job
   // whose job_technicians rows haven't been created (created before this
   // feature existed).
-  const { data: jobTechRows } = await db
-    .from('job_technicians')
-    .select('user:users(id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry)')
-    .eq('job_id', jobId);
+  const jobTechRows = check(
+    await db
+      .from('job_technicians')
+      .select('user:users(id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry)')
+      .eq('job_id', jobId),
+    'assigned technicians',
+  );
   const assignedUsers: JobUser[] =
     jobTechRows && jobTechRows.length > 0
       ? ((jobTechRows as unknown as { user: JobUser | null }[]).map((r) => r.user).filter(Boolean) as JobUser[])
@@ -161,10 +179,12 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
   const extraUserIds = userIds.filter((id) => !assignedUserIds.has(id));
   let usersById = new Map<string, JobUser>();
   if (extraUserIds.length > 0) {
-    const { data: users } = await db
-      .from('users')
-      .select('id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry')
-      .in('id', extraUserIds);
+    const users = await fetchAllByIds<JobUser>(extraUserIds, (batch) =>
+      db
+        .from('users')
+        .select('id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry')
+        .in('id', batch),
+    );
     usersById = new Map<string, JobUser>((users ?? []).map((u: JobUser) => [u.id, u]));
   }
 

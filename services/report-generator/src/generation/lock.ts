@@ -1,8 +1,17 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
-const STALE_LOCK_MS = 10 * 60 * 1000; // a crashed generation shouldn't lock a job forever
+// A crashed generation shouldn't lock a job forever — but this must stay
+// LONGER than a legitimate worst-case generation, or a second request can
+// "steal" the lock mid-render and run a duplicate pipeline. Sized against
+// the worst case: 2 render passes x CHUNK_RETRY_ATTEMPTS (2) x
+// RENDER_TIMEOUT_MS (5 min) = 20 min plus retry backoff.
+// Ordinary restarts/deploys no longer rely on this at all — index.ts's
+// SIGTERM handler marks unfinished jobs failed immediately — so this now
+// only covers a hard crash (e.g. an out-of-memory kill), where a longer
+// wait is an acceptable trade for never double-rendering.
+const STALE_LOCK_MS = 25 * 60 * 1000;
 
-export type LockResult = { acquired: true } | { acquired: false; reason: string };
+export type LockResult = { acquired: true } | { acquired: false; retryable: boolean; reason: string };
 
 export interface GenerationStatus {
   status: 'not_started' | 'generating' | 'completed' | 'failed';
@@ -45,8 +54,12 @@ export async function tryAcquireLock(db: SupabaseClient, jobId: string): Promise
     p_stale_before: staleBefore,
   });
 
-  if (error) return { acquired: false, reason: `Failed to acquire generation lock: ${error.message}` };
-  if (!acquired) return { acquired: false, reason: 'A report is already being generated for this job.' };
+  // A failed lock CALL is not "someone else holds the lock": answering that
+  // (409) made the app treat the request as accepted and stop retrying, so
+  // nothing was ever generated. Flag it so the route answers 503 instead,
+  // which the app's sync queue retries.
+  if (error) return { acquired: false, retryable: true, reason: `Failed to acquire generation lock: ${error.message}` };
+  if (!acquired) return { acquired: false, retryable: false, reason: 'A report is already being generated for this job.' };
   return { acquired: true };
 }
 
@@ -56,17 +69,30 @@ export async function markGenerationResult(
   status: 'completed' | 'failed',
   lastError: string | null = null,
 ): Promise<void> {
-  await db
-    .from('report_generation_status')
-    .upsert({ job_id: jobId, status, last_error: lastError, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+  // This row is the ONLY way the app learns the outcome. If the write is
+  // lost, the app shows "generating" until the stale-lock window expires
+  // even though the report finished long ago, so retry it.
+  let lastErr = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const { error } = await db
+      .from('report_generation_status')
+      .upsert({ job_id: jobId, status, last_error: lastError, updated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+    if (!error) return;
+    lastErr = error.message;
+    if (attempt < 3) await new Promise((r) => setTimeout(r, 2_000 * attempt));
+  }
+  throw new Error(`Could not record report ${status} for job ${jobId}: ${lastErr}`);
 }
 
 export async function getGenerationStatus(db: SupabaseClient, jobId: string): Promise<GenerationStatus> {
-  const { data } = await db
+  const { data, error } = await db
     .from('report_generation_status')
     .select('status, last_error, updated_at')
     .eq('job_id', jobId)
     .maybeSingle();
+  // Not "not_started": that would be a wrong answer, not a missing one. The
+  // route turns this into a 500, which the app's poll simply retries.
+  if (error) throw new Error(`Could not read report status: ${error.message}`);
 
   if (!data) return { status: 'not_started', lastError: null, updatedAt: null };
   return { status: data.status, lastError: data.last_error ?? null, updatedAt: data.updated_at ?? null };

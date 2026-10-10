@@ -62,7 +62,7 @@ export interface MarkerScanResult {
 export async function findMarkerPages(pdfBuffer: Buffer, keys: string[]): Promise<MarkerScanResult> {
   // Dynamic import: pdfjs-dist ships ESM-only, this project compiles to
   // CommonJS — a static import would become a `require()` that fails.
-  const pdfjs = await import('pdfjs-dist');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(pdfBuffer),
     // No fonts/images need to actually be rendered/rasterized here — only

@@ -26,7 +26,10 @@ export async function uploadReport(
     throw new Error(`Signed URL failed: ${signErr?.message ?? 'unknown error'}`);
   }
 
-  await db.from('jobs').update({ report_url: storagePath }).eq('id', jobId);
+  // Without this the PDF exists but nothing points to it — the app would
+  // never find the report it just waited for.
+  const { error: jobErr } = await db.from('jobs').update({ report_url: storagePath }).eq('id', jobId);
+  if (jobErr) throw new Error(`Saving the report location failed: ${jobErr.message}`);
 
   return { storagePath, signedUrl: signedData.signedUrl };
 }
@@ -36,13 +39,20 @@ export async function uploadReport(
  * /report-status so the app can get a fresh, usable URL directly from the
  * status poll once generation completes, without a separate round-trip.
  */
-export async function signExistingReport(db: SupabaseClient, jobId: string): Promise<string | null> {
+export type ExistingReport =
+  | { kind: 'signed'; url: string }
+  /** jobs.report_url is empty — the app clears it whenever the job is edited
+   * after a report was made (the report is stale), so there's no current one. */
+  | { kind: 'none' }
+  | { kind: 'error' };
+
+export async function signExistingReport(db: SupabaseClient, jobId: string): Promise<ExistingReport> {
   const { data: job } = await db.from('jobs').select('report_url').eq('id', jobId).single();
-  if (!job?.report_url) return null;
+  if (!job?.report_url) return { kind: 'none' };
 
   const { data: signedData, error } = await db.storage
     .from(config.reportBucket)
     .createSignedUrl(job.report_url, 60 * 60);
-  if (error || !signedData?.signedUrl) return null;
-  return signedData.signedUrl;
+  if (error || !signedData?.signedUrl) return { kind: 'error' };
+  return { kind: 'signed', url: signedData.signedUrl };
 }

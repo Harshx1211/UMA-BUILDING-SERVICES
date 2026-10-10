@@ -52,25 +52,41 @@ export async function prepareInlinePhotos(
     .map((p) => ({ id: p.id, path: extractObjectPath(p.photo_url, bucket) }))
     .filter((p): p is { id: string; path: string } => p.path != null);
 
+  const resizeOne = async (path: string): Promise<string> => {
+    const { data, error } = await db.storage.from(bucket).download(path);
+    if (error || !data) throw new Error(error?.message ?? 'empty download');
+    const original = Buffer.from(await data.arrayBuffer());
+    const resized = await sharp(original)
+      .rotate() // respect EXIF orientation before resizing — phone photos are often stored sideways
+      .resize({ width: TARGET_DIMENSION, height: TARGET_DIMENSION, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer();
+    return `data:image/jpeg;base64,${resized.toString('base64')}`;
+  };
+
   await mapWithConcurrency(withPaths, DOWNLOAD_CONCURRENCY, async ({ id, path }) => {
-    try {
-      const { data, error } = await db.storage.from(bucket).download(path);
-      if (error || !data) return;
-
-      const original = Buffer.from(await data.arrayBuffer());
-      const resized = await sharp(original)
-        .rotate() // respect EXIF orientation before resizing — phone photos are often stored sideways
-        .resize({ width: TARGET_DIMENSION, height: TARGET_DIMENSION, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: JPEG_QUALITY })
-        .toBuffer();
-
-      inline.set(id, `data:image/jpeg;base64,${resized.toString('base64')}`);
-    } catch {
-      // One bad/corrupt photo shouldn't abort the whole report — the template
-      // layer renders an explicit "photo unavailable" placeholder for any
-      // photo id missing from this map, same as a failed signed URL would.
+    // One retry: with ~1500 downloads on a large site, a single transient
+    // network/storage blip shouldn't turn a perfectly good photo into a
+    // "photo unavailable" placeholder in a compliance report.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        inline.set(id, await resizeOne(path));
+        return;
+      } catch {
+        if (attempt === 1) await new Promise((r) => setTimeout(r, 1_000));
+      }
     }
+    // Still failing (missing/corrupt file): the template layer renders an
+    // explicit "photo unavailable" placeholder for any id missing from this
+    // map, so one bad photo doesn't abort the whole report.
   });
+
+  // Every single photo failing isn't "a few bad files" — it's storage being
+  // unreachable. Fail so the technician retries, instead of delivering a
+  // report where every photo is a placeholder.
+  if (withPaths.length > 0 && inline.size === 0) {
+    throw new Error(`Could not load any of the ${withPaths.length} photos from storage — please try again.`);
+  }
 
   return inline;
 }

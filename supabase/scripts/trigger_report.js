@@ -26,7 +26,9 @@ const env = loadEnv(path.join(__dirname, '..', '..', '..', 'admin', '.env.local'
 const supabaseAdmin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 const supabaseAnon = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-const REPORT_GEN_URL = 'https://sitetrack-report-generator.onrender.com';
+// Cloud Run report service (replaced the Render deployment). Override with
+// REPORT_GEN_URL=... to test another deployment.
+const REPORT_GEN_URL = process.env.REPORT_GEN_URL || 'https://report-service-267881656439.australia-southeast1.run.app';
 
 async function main() {
   const email = process.argv[2];

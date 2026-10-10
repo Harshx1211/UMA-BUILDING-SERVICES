@@ -47,12 +47,28 @@ export async function optimizePdf(input: Buffer): Promise<Buffer> {
 
     await execFileAsync('gs', [
       '-sDEVICE=pdfwrite',
-      '-dCompatibilityLevel=1.4',
+      // Was 1.4 — bumping to 1.5 lets Ghostscript write compressed object/
+      // cross-reference streams instead of the older, larger per-object
+      // table format. PDF 1.5 dates to 2003 and is universally supported by
+      // every real-world viewer, so there's no compatibility cost, only a
+      // structural-overhead saving (more pronounced the more objects a
+      // report has — i.e. more on a many-chunk/many-photo job).
+      '-dCompatibilityLevel=1.5',
       '-dNOPAUSE',
       '-dBATCH',
       '-dQUIET',
       '-dDetectDuplicateImages=true',
-      '-dPDFSETTINGS=/printer',
+      // Was /printer (300dpi target, higher-fidelity re-encode) — this report
+      // is read on-screen, not printed, and every embedded photo is already
+      // a 200px/quality-58 JPEG (see prepareInlinePhotos.ts) with a
+      // full-resolution version one tap away. /printer's 300dpi ceiling
+      // never even triggers on an image that small, so it was only costing
+      // us Ghostscript's higher-fidelity (larger) re-encode of Chromium's
+      // own PDF image output with no visible benefit. /ebook targets 150dpi
+      // and a more compressed re-encode — still comfortably sharp at the
+      // size these photos are ever displayed, and the one setting actually
+      // meant for "read on a screen" documents.
+      '-dPDFSETTINGS=/ebook',
       `-sOutputFile=${outPath}`,
       inPath,
     ]);

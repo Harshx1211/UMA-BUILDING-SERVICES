@@ -3,7 +3,7 @@ import { config } from '../config';
 import { fetchReportData } from '../data/fetchReportData';
 import { buildAssetLogChunksByCategory } from '../data/chunking';
 import { TocSectionEntry, rangesFromMarkers } from '../data/tableOfContents';
-import { convertHtmlToPdf, waitForGotenbergReady } from '../gotenberg/client';
+import { convertHtmlToPdf } from '../render/chromium';
 import { stampPageNumbers } from '../pdf/stampPageNumbers';
 import { optimizePdf } from '../pdf/optimizePdf';
 import { markerHtml, findMarkerPages } from '../pdf/pageMarkers';
@@ -17,7 +17,7 @@ import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
 import { BASE_STYLE } from '../templates/theme';
 import { uploadReport } from '../storage';
-import { AssetTypeDefinition, Defect } from '../types';
+import { AssetTypeDefinition, Defect, ReportData } from '../types';
 
 export class ReportGenerationError extends Error {}
 
@@ -82,14 +82,6 @@ async function convertCombined(html: string, footerTemplate: string): Promise<Bu
 export async function generateReport(db: SupabaseClient, jobId: string): Promise<PipelineResult> {
   const started = Date.now();
 
-  // Kick off Gotenberg's cold-start check in parallel with the data fetch
-  // below rather than after it — on Render's free tier, Gotenberg is often
-  // asleep by the time a report is requested, and its cold boot (30-60s+)
-  // can otherwise dwarf the actual data-fetch time.
-  const gotenbergReady = waitForGotenbergReady().catch((err) => {
-    console.warn(`[generate-report] Gotenberg warm-up check: ${err instanceof Error ? err.message : err}`);
-  });
-
   const data = await fetchReportData(db, jobId);
 
   // FIX: this used to destructure only `data`, discarding `error` — a
@@ -111,6 +103,29 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
   );
 
+  const { pdf, chunkCount } = await renderReportPdf(data, assetTypesByValue);
+
+  const { storagePath, signedUrl } = await uploadReport(db, jobId, pdf);
+
+  return {
+    storagePath,
+    signedUrl,
+    assetCount: data.assets.length,
+    chunkCount,
+    durationMs: Date.now() - started,
+  };
+}
+
+/**
+ * Everything between "data fetched" and "PDF ready to upload": both render
+ * passes, page-number stamping and the Ghostscript pass. Pure function of
+ * the report data — no Supabase access — so test/render.localtest.ts can
+ * drive the real renderer with synthetic data at any scale.
+ */
+export async function renderReportPdf(
+  data: ReportData,
+  assetTypesByValue: Map<string, AssetTypeDefinition>,
+): Promise<{ pdf: Buffer; chunkCount: number }> {
   const defectsByAsset = new Map<string, Defect[]>();
   for (const d of data.defects) {
     if (!d.asset_id) continue;
@@ -133,8 +148,6 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     { key: 'yearly_condition_report', html: ycrHtml },
     { key: 'signoff', html: signoffHtml },
   ];
-
-  await gotenbergReady;
 
   // Marker keys are short, plain alphanumeric tokens (c0, c1, t0, ...) —
   // deliberately NOT the real category/tail labels, which contain spaces,
@@ -243,13 +256,5 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     );
   }
 
-  const { storagePath, signedUrl } = await uploadReport(db, jobId, output);
-
-  return {
-    storagePath,
-    signedUrl,
-    assetCount: data.assets.length,
-    chunkCount: categorySections.length,
-    durationMs: Date.now() - started,
-  };
+  return { pdf: output, chunkCount: categorySections.length };
 }
