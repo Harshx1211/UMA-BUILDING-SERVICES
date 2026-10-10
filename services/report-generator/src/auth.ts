@@ -46,14 +46,27 @@ export async function assertOwnsJob(
   userId: string,
   jobCompanyId: string,
 ): Promise<void> {
+  // FIX: this only compared company ids. This service uses the service role,
+  // so the database's own "deactivated user / suspended company gets
+  // nothing" rule (get_user_company_id, 20261010060000) never applies here —
+  // a deactivated technician's still-valid login could keep generating and
+  // downloading the company's reports. Checked explicitly instead.
   const { data: caller, error } = await db
     .from('users')
-    .select('company_id')
+    .select('company_id, is_active, companies(subscription_status)')
     .eq('id', userId)
     .single();
 
   if (error || !caller) {
     throw new AuthError('Caller account not found', 403);
+  }
+  if (caller.is_active === false) {
+    throw new AuthError('This account has been deactivated', 403);
+  }
+  const companies = caller.companies as { subscription_status: string } | { subscription_status: string }[] | null;
+  const company = Array.isArray(companies) ? companies[0] : companies;
+  if (company?.subscription_status !== 'active') {
+    throw new AuthError('This company account is not active', 403);
   }
   if (caller.company_id !== jobCompanyId) {
     throw new AuthError('You do not have access to this job', 403);

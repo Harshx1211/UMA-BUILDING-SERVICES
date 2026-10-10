@@ -9,7 +9,38 @@ import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
 
 const app = express();
-app.use(express.json());
+// Don't advertise the framework (X-Powered-By: Express) to scanners.
+app.disable('x-powered-by');
+// Bodies here are tiny ({ jobId }) — cap them well below Express's 100kb default.
+app.use(express.json({ limit: '10kb' }));
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
+/**
+ * Per-user throttle on starting generations. The atomic lock already stops
+ * duplicate runs for the SAME job, but nothing stopped one signed-in user
+ * from starting generations for every job in their company in a loop —
+ * each one a full Chromium render on paid compute. Generous for real use
+ * (a technician generates a handful of reports a day). In-memory and
+ * per-instance, which is fine here: --max-instances caps the multiplier,
+ * and this is about runaway loops and abuse, not exact accounting.
+ */
+const GENERATE_LIMIT = 10;
+const GENERATE_WINDOW_MS = 10 * 60_000;
+const generateLog = new Map<string, number[]>();
+function allowGenerate(userId: string): boolean {
+  const now = Date.now();
+  const recent = (generateLog.get(userId) ?? []).filter((t) => now - t < GENERATE_WINDOW_MS);
+  if (recent.length >= GENERATE_LIMIT) {
+    generateLog.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  generateLog.set(userId, recent);
+  return true;
+}
 
 // Jobs whose generation is running in THIS process right now. Generation is
 // fire-and-forget after the 202 (see POST /generate-report), so without this
@@ -40,28 +71,29 @@ const route = (fn: AsyncHandler): express.RequestHandler => (req, res, next) => 
 };
 
 /** Shared by both endpoints: verify the token, then that the caller's company owns the job. */
-async function authorize(req: express.Request, res: express.Response, jobId: string): Promise<boolean> {
+/** Returns the caller's user id when allowed; null when it has already sent the error response. */
+async function authorize(req: express.Request, res: express.Response, jobId: string): Promise<string | null> {
   let userId: string;
   try {
     userId = await verifyAccessToken(db, req.headers.authorization);
   } catch (err) {
     const status = err instanceof AuthError ? err.status : 401;
     res.status(status).json({ error: err instanceof Error ? err.message : 'Unauthorized' });
-    return false;
+    return null;
   }
 
   try {
     const { data: job, error: jobErr } = await db.from('jobs').select('company_id').eq('id', jobId).single();
     if (jobErr || !job) {
       res.status(404).json({ error: 'Job not found' });
-      return false;
+      return null;
     }
     await assertOwnsJob(db, userId, job.company_id);
-    return true;
+    return userId;
   } catch (err) {
     const status = err instanceof AuthError ? err.status : 500;
     res.status(status).json({ error: err instanceof Error ? err.message : 'Authorization check failed' });
-    return false;
+    return null;
   }
 }
 
@@ -84,7 +116,12 @@ app.post('/generate-report', route(async (req, res) => {
     return res.status(400).json({ error: 'jobId is required' });
   }
 
-  if (!(await authorize(req, res, jobId))) return; // authorize() already sent the response
+  const userId = await authorize(req, res, jobId);
+  if (!userId) return; // authorize() already sent the response
+
+  if (!allowGenerate(userId)) {
+    return res.status(429).json({ error: 'Too many reports started recently. Please wait a few minutes and try again.' });
+  }
 
   // A request that slips in on a kept-alive connection after SIGTERM must
   // not start a generation this process is about to abandon. 503 is
@@ -254,7 +291,7 @@ app.get('/report-status', route(async (req, res) => {
     return res.status(400).json({ error: 'jobId is required' });
   }
 
-  if (!(await authorize(req, res, jobId))) return;
+  if (!(await authorize(req, res, jobId))) return; // authorize() already sent the response
 
   const status = await getGenerationStatus(db, jobId);
 
