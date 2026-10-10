@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useResponsive } from '@/hooks/useResponsive';
 import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums';
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
@@ -69,15 +70,20 @@ function InfoRow({
 export default function AssetDetailScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [serviceHistory, setServiceHistory] = useState<ServiceRecord[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // FIX: a genuine load failure used to render identically to "this asset
+  // doesn't exist" — see properties/[id].tsx's identical fix.
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const a = getRecord<Asset>('assets', id);
       setAsset(a);
@@ -87,6 +93,7 @@ export default function AssetDetailScreen() {
       }
     } catch (err) {
       console.error('[AssetDetail] load error:', err);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +114,21 @@ export default function AssetDetailScreen() {
     return (
       <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
         <ActivityIndicator color={C.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader title="Error" showBack={true} />
+        <EmptyState
+          icon="cloud-alert-outline"
+          title="Couldn't load this asset"
+          subtitle="Something went wrong loading this record. Check your connection and try again."
+          actionLabel="Retry"
+          onAction={load}
+        />
       </View>
     );
   }
@@ -133,7 +155,13 @@ export default function AssetDetailScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+      {/* FIX: this screen was one of the only detail screens in the app with
+          no tablet-width cap on its ScrollView — every other equivalent
+          screen (properties/[id].tsx, jobs/[id]/asset/[assetId].tsx, etc.)
+          caps content at contentMaxWidth and centers it on a tablet; this
+          one stretched its cards edge-to-edge across the full tablet width
+          instead. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
         {/* ── ASSET HEADER ─────────────── */}
         <ScreenHeader
           eyebrow="ASSET RECORD"

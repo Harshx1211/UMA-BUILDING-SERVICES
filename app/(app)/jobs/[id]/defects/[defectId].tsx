@@ -221,6 +221,7 @@ export default function DefectDetailScreen() {
         title={defect.asset_type ? formatAssetType(defect.asset_type) : 'Defect Details'}
         subtitle={defect.property_name || defect.location_on_site || ''}
         showBack
+        fallbackHref="/jobs"
         rightComponent={
           <View style={[s.statusChip, { backgroundColor: statusColor + '22', borderColor: statusColor + '55' }]}>
             <View style={[s.statusDot, { backgroundColor: statusColor }]} />

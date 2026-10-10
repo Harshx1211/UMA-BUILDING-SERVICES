@@ -7,6 +7,7 @@ import {
   Animated,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -17,6 +18,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Card, ScreenHeader, SectionHeader, Button } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
@@ -285,8 +287,17 @@ const CHECKLIST_GUIDE: { id: string; title: string; icon: MCIconName; color: str
 export default function HelpScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
+  const { contentMaxWidth } = useResponsive();
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  // FIX: this row used to read "Build 1 · Android" as literal strings
+  // regardless of the actual platform or how many times the build number
+  // has incremented — wrong the moment either changes, and wrong outright
+  // if this ever ships to iOS.
+  const buildNumber = Platform.OS === 'ios'
+    ? Constants.expoConfig?.ios?.buildNumber
+    : Constants.expoConfig?.android?.versionCode;
+  const platformLabel = Platform.OS === 'ios' ? 'iOS' : 'Android';
 
   const handleFeedback = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -304,7 +315,9 @@ export default function HelpScreen() {
         rightComponent={<MaterialCommunityIcons name="lifebuoy" size={26} color={C.textTertiary} />} 
       />
 
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      {/* FIX: no tablet-width cap — matches the same gap fixed on
+          profile.tsx and assets/[id].tsx (see their own comments). */}
+      <ScrollView contentContainerStyle={[s.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]} showsVerticalScrollIndicator={false}>
 
         {/* ── Walkthrough CTA ── */}
         <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(30).duration(350)}>
@@ -372,7 +385,9 @@ export default function HelpScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.versionApp, { color: C.text }]}>SiteTrack — Field Service App</Text>
-              <Text style={[s.versionNum, { color: C.textTertiary }]}>Version {version} · Build 1 · Android</Text>
+              <Text style={[s.versionNum, { color: C.textTertiary }]}>
+                Version {version}{buildNumber ? ` · Build ${buildNumber}` : ''} · {platformLabel}
+              </Text>
             </View>
           </Card>
           <Text style={[s.legalNote, { color: C.textTertiary }]}>

@@ -226,47 +226,56 @@ export default function ScheduleScreen() {
         subtitle={`${filtered.length} job${filtered.length !== 1 ? 's' : ''} found`}
       />
 
-      {/* ── Filter Tabs — shared FilterPills, matching the same tab-row
-          pattern already used by the job Defects screen and Site Inspect
-          (was a bespoke 3-box row here, its own distinct look) ── */}
-      <View style={styles.filterRow}>
-        <FilterPills
-          options={FILTER_TAB_OPTIONS}
-          activeIndex={FILTER_TABS.indexOf(filter)}
-          onSelect={(idx) => setFilter(FILTER_TABS[idx])}
-          variant="dark"
-          style={{ flex: 1 }}
-        />
-        <TouchableOpacity
-          style={[styles.filterIconBtn, activeFilterCount > 0 && styles.filterIconBtnActive]}
-          onPress={() => setFilterModalVisible(true)}
-        >
-          <MaterialCommunityIcons name="tune-variant" size={16} color={activeFilterCount > 0 ? T.textOnPrimary : T.textMuted} />
-          {activeFilterCount > 0 && (
-            <View style={styles.filterCountBadge}>
-              <Text style={styles.filterCountBadgeTxt}>{activeFilterCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Search ── */}
-      <View style={styles.searchWrap}>
-        <MaterialCommunityIcons name="magnify" size={16} color={T.textMuted} style={{ marginRight: 6 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search property or address…"
-          placeholderTextColor={T.textMuted}
-          value={search}
-          onChangeText={setSearch}
-          maxLength={80}
-          autoCorrect={false}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <MaterialCommunityIcons name="close-circle" size={16} color={T.textMuted} />
+      {/* FIX: the FlatList below is correctly capped to contentMaxWidth and
+          centered on a tablet, but the filter row + search bar were
+          separate siblings with only horizontal padding — on a tablet they
+          stretched edge-to-edge across the full width while the job cards
+          right underneath sat centered at 720px, a visibly inconsistent
+          layout (a search bar dramatically wider than the list below it).
+          Same max-width/centered treatment, applied here too. */}
+      <View style={{ maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
+        {/* ── Filter Tabs — shared FilterPills, matching the same tab-row
+            pattern already used by the job Defects screen and Site Inspect
+            (was a bespoke 3-box row here, its own distinct look) ── */}
+        <View style={styles.filterRow}>
+          <FilterPills
+            options={FILTER_TAB_OPTIONS}
+            activeIndex={FILTER_TABS.indexOf(filter)}
+            onSelect={(idx) => setFilter(FILTER_TABS[idx])}
+            variant="dark"
+            style={{ flex: 1 }}
+          />
+          <TouchableOpacity
+            style={[styles.filterIconBtn, activeFilterCount > 0 && styles.filterIconBtnActive]}
+            onPress={() => setFilterModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="tune-variant" size={16} color={activeFilterCount > 0 ? T.textOnPrimary : T.textMuted} />
+            {activeFilterCount > 0 && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountBadgeTxt}>{activeFilterCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        )}
+        </View>
+
+        {/* ── Search ── */}
+        <View style={styles.searchWrap}>
+          <MaterialCommunityIcons name="magnify" size={16} color={T.textMuted} style={{ marginRight: 6 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search property or address…"
+            placeholderTextColor={T.textMuted}
+            value={search}
+            onChangeText={setSearch}
+            maxLength={80}
+            autoCorrect={false}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <MaterialCommunityIcons name="close-circle" size={16} color={T.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <FlatList

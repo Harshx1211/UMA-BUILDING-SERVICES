@@ -38,6 +38,7 @@ expo-env.d.ts
 
 # Dev/scratch folders
 recycle_bin/
+app-images/
 
 # Lint/test output files
 lint.json

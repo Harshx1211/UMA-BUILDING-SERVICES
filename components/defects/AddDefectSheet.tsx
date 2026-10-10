@@ -168,9 +168,38 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
       });
       return;
     }
+    // Marks this as a deliberate, already-persisted close so the dismiss
+    // guard below doesn't mistake it for an accidental swipe/backdrop close
+    // and pop up a "discard?" prompt right after a successful save.
+    closedViaSaveRef.current = true;
     sheetRef.current?.close();
     onSaved();
     Toast.show({ type: 'success', text1: 'Defect logged' });
+  };
+
+  // FIX: BottomSheet has no built-in way to prevent a pan-down-to-close or
+  // backdrop-tap dismiss — swiping down or tapping outside after filling in
+  // severity/asset/description/photos (potentially minutes of work, plus
+  // photos already copied to disk) silently discarded all of it with no
+  // warning. @gorhom/bottom-sheet's own recommended workaround for this
+  // exact gap is to catch the close via onChange (index -1) and, if the
+  // form is dirty, re-expand it and ask before actually discarding.
+  const closedViaSaveRef = useRef(false);
+  const handleSheetChange = (index: number) => {
+    if (index !== -1) return; // only care about the sheet actually closing
+    if (closedViaSaveRef.current) { closedViaSaveRef.current = false; return; }
+    const isDirty = severity !== DefectSeverity.NonConformance || assetId !== '' || description.trim() !== '' || photos.length > 0 || selectedCode !== null;
+    if (!isDirty) return;
+    sheetRef.current?.expand();
+    showConfirm({
+      title: 'Discard Defect?',
+      message: "You've started logging a defect. Leaving now will discard everything you've entered, including any photos.",
+      icon: 'alert-circle-outline',
+      buttons: [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => { reset(); sheetRef.current?.close(); } },
+      ],
+    });
   };
 
   const selectedAsset = assets.find(a => a.id === assetId) ?? null;
@@ -369,8 +398,18 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoRow}>
             {photos.map(uri => (
               <TouchableOpacity key={uri} onLongPress={() => removePhoto(uri)} activeOpacity={0.85} style={s.thumbWrap}>
-                <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
-                <TouchableOpacity style={s.thumbDel} onPress={() => removePhoto(uri)}>
+                <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" transition={200} />
+                <TouchableOpacity
+                  style={s.thumbDel}
+                  onPress={() => removePhoto(uri)}
+                  // FIX: 22x22 with no hitSlop at all — well under the ~44pt
+                  // guideline, a precise target for a technician tapping a
+                  // photo thumbnail to remove it, worse with work gloves or
+                  // wet/dirty hands. No accessibilityLabel either.
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel="Remove photo"
+                  accessibilityRole="button"
+                >
                   <MaterialCommunityIcons name="close" size={12} color={T.textOnPrimary} />
                 </TouchableOpacity>
               </TouchableOpacity>
@@ -403,6 +442,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
         index={-1}
         snapPoints={['80%', '95%']}
         enablePanDownToClose
+        onChange={handleSheetChange}
         backdropComponent={p => <BottomSheetBackdrop {...p} disappearsOnIndex={-1} appearsOnIndex={0} />}
         backgroundStyle={{ backgroundColor: C.background }}
         handleIndicatorStyle={{ backgroundColor: C.border }}
@@ -469,7 +509,14 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[s.nextBtn, { backgroundColor: description.trim() ? C.success : C.textTertiary }]}
+                // FIX: was swapping the whole background to C.textTertiary
+                // when disabled — a TEXT color token (slate400) used as a
+                // solid button fill, which read as a washed-out, muddy grey-
+                // blue block inconsistent with every other button in the
+                // app. The shared Button component's own disabled state
+                // just dims the button's real color via opacity instead of
+                // changing it outright — matching that here.
+                style={[s.nextBtn, { backgroundColor: C.success, opacity: description.trim() ? 1 : 0.45 }]}
                 onPress={handleSave}
                 disabled={!description.trim()}
                 activeOpacity={0.85}

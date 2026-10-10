@@ -76,7 +76,7 @@ function PhotoViewer({
         {uri && photoId ? (
           <ResilientPhoto photoId={photoId} uri={uri} style={s.viewerImage} contentFit="contain" />
         ) : uri ? (
-          <Image source={{ uri: getValidLocalUri(uri) }} style={s.viewerImage} contentFit="contain" />
+          <Image source={{ uri: getValidLocalUri(uri) }} style={s.viewerImage} contentFit="contain" transition={200} cachePolicy="memory-disk" />
         ) : null}
         {onDelete && (
           <TouchableOpacity style={s.viewerDeleteBtn} onPress={onDelete} activeOpacity={0.8}>
@@ -500,7 +500,7 @@ export default function AssetDetailScreen() {
             // into whatever unrelated defect already existed on this asset
             // (e.g. an earlier Remark), exactly the bug forceNewDefect
             // exists to prevent — see updateAssetResult's own comment on it.
-            const touchedId = updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.codeOrPriceChanged ? pd!.defectCode : undefined, pd!.codeOrPriceChanged ? pd!.quotePrice : undefined, wasPendingFail, internalNoteTrim);
+            const touchedId = updateAssetResult(a.id, InspectionResult.Fail, a.checklist_data ?? undefined, false, descTrim, noteTrim, undefined, pd!.severity, pd!.codeOrPriceChanged ? pd!.defectCode : undefined, pd!.codeOrPriceChanged ? pd!.quotePrice : undefined, wasPendingFail, internalNoteTrim, primaryDefectId);
             notifyIfRejected(() => useInspectionStore.getState().error);
             if (touchedId) {
               useDefectsStore.getState().updateDefect(touchedId, { resolved_on_site: pd!.resolvedOnSite });
@@ -514,6 +514,18 @@ export default function AssetDetailScreen() {
             if (resolvedOnSiteChanged) useDefectsStore.getState().updateDefect(primaryDefectId, { resolved_on_site: pd!.resolvedOnSite });
             if (pdPhotosChanged) reconcileDefectPhotos(primaryDefectId, dpMap[primaryDefectId] ?? { before: [], after: [] }, pdPhotos!);
             notifyIfRejected(() => useDefectsStore.getState().error);
+          } else if (!primaryDefectId && pdPhotos && (pdPhotos.before.length > 0 || pdPhotos.after.length > 0)) {
+            // FIX: a description-less Fail can't create a defect (a defect
+            // requires one), so photos already picked for it used to just be
+            // discarded from React state on unmount with zero warning the
+            // moment a technician left before finishing the text field — for
+            // a field app where the photo IS the evidence, a real loss.
+            // Fall back to saving them as ordinary asset-level photos (which
+            // don't require a description) so nothing already captured is
+            // lost; they'll still show in the asset's own Photos section.
+            for (const uri of [...pdPhotos.before, ...pdPhotos.after]) {
+              addPhotoToAsset(a.id, uri);
+            }
           }
         } else if (!failed && (n.trim() !== (a.technician_notes || '') || internalNoteChanged)) {
           updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim(), undefined, undefined, undefined, undefined, undefined, internalNoteTrim);
@@ -583,13 +595,13 @@ export default function AssetDetailScreen() {
           notifyIfRejected(() => useDefectsStore.getState().error);
         }
       };
-    }, [updateAssetResult, jobId])
+    }, [updateAssetResult, addPhotoToAsset, jobId])
   );
 
   if (!asset) {
     return (
       <View style={[s.container, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Asset" showBack />
+        <ScreenHeader title="Asset" showBack fallbackHref="/jobs" />
         <View style={s.emptyWrap}>
           <MaterialCommunityIcons name="alert-circle-outline" size={28} color={C.textTertiary} />
           <Text style={{ color: C.textSecondary, marginTop: 8 }}>This asset couldn&apos;t be found.</Text>
@@ -702,7 +714,7 @@ export default function AssetDetailScreen() {
     // on this asset (see updateAssetResult's own comment on this param).
     // Re-editing an already-Fail asset's existing defect (pendingFail is
     // false by then) still merges into it exactly as before.
-    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim());
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, value.severity, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim(), primaryDefect?.id ?? null);
     // updateAssetResult only creates/updates the defect ROW itself — it has
     // no concept of before/after photos or resolved_on_site, so those go
     // through defectsStore directly against the id it just handed back,
@@ -731,7 +743,7 @@ export default function AssetDetailScreen() {
     // unrelated Remark defect had this fast path silently MERGE into it
     // instead of creating an independent record. See updateAssetResult's
     // own comment on forceNewDefect for why that's wrong.
-    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim());
+    const touchedId = updateAssetResult(asset.id, InspectionResult.Fail, asset.checklist_data ?? undefined, false, value.description, note.trim(), undefined, DefectSeverity.Critical, value.codeOrPriceChanged ? value.defectCode : undefined, value.codeOrPriceChanged ? value.quotePrice : undefined, pendingFail, internalNote.trim(), primaryDefect?.id ?? null);
     // FIX: this form now offers the same Before/After photos + resolved-on-
     // site fields as Save Defect (see handleSaveDefect's own comment) — a
     // tech who filled those in and then tapped Replace Now instead used to
@@ -849,7 +861,7 @@ export default function AssetDetailScreen() {
       asset.id, asset.result, asset.checklist_data ?? undefined, asset.is_compliant,
       asset.defect_reason ?? undefined, note.trim(), undefined,
       primaryDefect?.severity, primaryDefect?.defect_code ?? null, primaryDefect?.quote_price ?? null,
-      undefined, internalNote.trim(),
+      undefined, internalNote.trim(), primaryDefect?.id ?? null,
     );
   };
 
@@ -871,7 +883,7 @@ export default function AssetDetailScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: C.background }]}>
-      <ScreenHeader title={formatAssetType(asset.asset_type)} subtitle={location} showBack />
+      <ScreenHeader title={formatAssetType(asset.asset_type)} subtitle={location} showBack fallbackHref="/jobs" />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -899,11 +911,17 @@ export default function AssetDetailScreen() {
         {/* ── Result — one segmented track, not three separate boxes ──── */}
         <Text style={[s.sectionLabel, { color: C.textTertiary, marginTop: 0 }]}>Result</Text>
         <View style={[s.resultTrack, { backgroundColor: C.backgroundTertiary, opacity: (isSaving || jobLocked) ? 0.5 : 1 }]}>
+          {/* FIX: same gap as jobs/[id]/inspect.tsx's identical row — zero
+              accessibility props on the actual Pass/Fail/N-T decision for
+              this asset. Matches site-inspect/[id].tsx's proven pattern. */}
           <TouchableOpacity
             style={[s.resultSeg, isPassed && { backgroundColor: C.success }]}
             onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.Pass)}
             activeOpacity={0.8}
             disabled={isSaving || jobLocked}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isPassed }}
+            accessibilityLabel="Pass"
           >
             <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.success} />
             <Text style={[s.resultSegTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
@@ -913,6 +931,9 @@ export default function AssetDetailScreen() {
             onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.Fail)}
             activeOpacity={0.8}
             disabled={isSaving || jobLocked}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFailed }}
+            accessibilityLabel="Fail"
           >
             <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.error} />
             <Text style={[s.resultSegTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
@@ -922,6 +943,9 @@ export default function AssetDetailScreen() {
             onPress={() => !isSaving && !jobLocked && handleResult(InspectionResult.NotTested)}
             activeOpacity={0.8}
             disabled={isSaving || jobLocked}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isNT }}
+            accessibilityLabel="Not tested"
           >
             <MaterialCommunityIcons name="minus-circle-outline" size={16} color={isNT ? C.textOnPrimary : C.textSecondary} />
             <Text style={[s.resultSegTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
@@ -932,8 +956,18 @@ export default function AssetDetailScreen() {
         <SectionCard icon="camera-outline" title={`Photos${(asset.photos ?? []).length > 0 ? ` · ${(asset.photos ?? []).length}` : ''}`} C={C}>
           <View style={s.photoRow}>
             {(asset.photos ?? []).map((uri) => (
-              <TouchableOpacity key={uri} style={s.photoThumbWrap} onPress={() => setViewingPhoto(uri)} activeOpacity={0.8}>
-                <Image source={{ uri: displayUris[uri] ?? getValidLocalUri(uri) }} style={s.photoThumb} contentFit="cover" />
+              <TouchableOpacity key={uri} style={[s.photoThumbWrap, { backgroundColor: C.backgroundTertiary }]} onPress={() => setViewingPhoto(uri)} activeOpacity={0.8}>
+                {/* FIX: was a raw expo-image <Image> with no error handling —
+                    an expired signed URL (this photo can sit on an open
+                    asset for weeks) just rendered nothing, invisible against
+                    photoThumbWrap's transparent background. ResilientPhoto
+                    self-heals an expired URL the same way DefectCard and
+                    this screen's own history-photo grid already do; the
+                    added backgroundColor above also means a photo that's
+                    still genuinely loading — or one where re-signing itself
+                    fails — now shows as a visible tinted box instead of a
+                    blank hole indistinguishable from "no photo here". */}
+                <ResilientPhoto uri={displayUris[uri] ?? uri} style={s.photoThumb} contentFit="cover" />
               </TouchableOpacity>
             ))}
             {!jobLocked && (
@@ -1261,7 +1295,10 @@ const s = StyleSheet.create({
 
   // Result — single segmented track
   resultTrack: { flexDirection: 'row', borderRadius: 14, padding: 4, gap: 4, marginBottom: 20 },
-  resultSeg: { flex: 1, height: 42, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  // FIX: was `height: 42` — see inspect.tsx's identical resultBtn fix for
+  // why a fixed height risks clipping this label under accessibility text
+  // scaling; minHeight preserves the default look exactly.
+  resultSeg: { flex: 1, minHeight: 42, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   resultSegTxt: { fontSize: 14, fontWeight: '700' },
 
   // Section card — every section (Photos / Note / History / Timeline)

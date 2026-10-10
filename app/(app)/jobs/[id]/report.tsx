@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -30,6 +30,7 @@ import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus, SyncOperation } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
+import type { JobLiveChangeTable } from '@/lib/sync';
 import type { Defect, Signature } from '@/types';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -228,6 +229,7 @@ export default function ReportSummaryScreen() {
   const [assets, setAssets]       = useState<ReportAsset[]>([]);
   const [defects, setDefects]     = useState<ExtendedDefect[]>([]);
   const [signature, setSignature] = useState<Signature | null>(null);
+  const [techName, setTechName]   = useState('Site Technician');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -242,6 +244,12 @@ export default function ReportSummaryScreen() {
       setAssets(a);
       setDefects(getDefectsForJob<ExtendedDefect>(jobId));
       setSignature(getSignatureForJob(jobId));
+      // FIX: this used to be a direct getRecord() call in the render body
+      // (see the old `techRecord` line below) — a synchronous SQLite lookup
+      // re-run on every single render, including refreshing/isLoading
+      // toggles, instead of resolved once here alongside everything else.
+      const techRecord = getRecord<{ full_name: string }>('users', j.assigned_to);
+      setTechName(techRecord?.full_name ?? 'Site Technician');
     } catch (e) {
       console.error('[ReportSummary] load error:', e);
     } finally {
@@ -250,19 +258,52 @@ export default function ReportSummaryScreen() {
     }
   }, [jobId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // FIX: this used to ALSO have a plain `useEffect(() => { loadData(); },
+  // [loadData])` right alongside useFocusEffect — since a screen is always
+  // "focused" the instant it first mounts in a stack navigator, both fired
+  // back-to-back on every first open, doubling all 5 queries below for zero
+  // benefit. useFocusEffect alone already covers mount, matching the
+  // pattern properties/[id].tsx already uses correctly.
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   // This summary reads job_assets/defects/signature directly (not through a
   // store), so — unlike the job's own status — none of it refreshes live on
   // its own. Someone adding a defect while this screen is open, right
   // before the technician hits Generate, is exactly the case this closes.
-  useJobLiveSync(jobId, useCallback(() => { loadData(); }, [loadData]));
+  // FIX: this used to reload on ANY table change at all, unlike every other
+  // job sub-screen (inspect.tsx/quote.tsx/photos.tsx/documents.tsx each
+  // filter to the specific table(s) they read) — subscribeToJobLive's own
+  // initial-subscribe catch-up alone fires 9 separate table events, each
+  // one re-triggering this screen's full 5-query loadData(), and the same
+  // storm repeats every time the app backgrounds/foregrounds while this
+  // screen stays open. Filtered to exactly what loadData() actually reads.
+  useJobLiveSync(jobId, useCallback((table: JobLiveChangeTable) => {
+    if (table === 'jobs' || table === 'job_assets' || table === 'defects' || table === 'inspection_photos' || table === 'signatures') {
+      loadData();
+    }
+  }, [loadData]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData();
   }, [loadData]);
+
+  // FIX: these were 4 separate .filter() passes over `assets` run directly
+  // in the render body (recomputed on every render, including unrelated
+  // state changes like `refreshing` toggling), the same unmemoized-
+  // derived-value pattern already fixed on the Home screen. Folded into one
+  // reduce pass, memoized on `assets`. Must stay above the early returns
+  // below (Rules of Hooks — every hook has to run on every render).
+  const { passedCount, failedCount, ntCount, compliantCount } = useMemo(() => {
+    let passed = 0, failed = 0, nt = 0, compliant = 0;
+    for (const a of assets) {
+      if (a.result === 'pass') passed++;
+      else if (a.result === 'fail') failed++;
+      else nt++; // !a.result || a.result === 'not_tested'
+      if (a.is_compliant) compliant++;
+    }
+    return { passedCount: passed, failedCount: failed, ntCount: nt, compliantCount: compliant };
+  }, [assets]);
 
   if (isLoading) {
     return (
@@ -282,13 +323,8 @@ export default function ReportSummaryScreen() {
     );
   }
 
-  // Derived stats
+  // Derived stats (counts computed above, before the early returns)
   const totalAssets = assets.length;
-  const passedCount = assets.filter(a => a.result === 'pass').length;
-  const failedCount = assets.filter(a => a.result === 'fail').length;
-  const ntCount     = assets.filter(a => !a.result || a.result === 'not_tested').length;
-  const compliantCount = assets.filter(a => a.is_compliant).length;
-
   const progressPct = totalAssets > 0 ? (passedCount / totalAssets) * 100 : 0;
   const failPct     = totalAssets > 0 ? (failedCount / totalAssets) * 100 : 0;
   const ntPct       = totalAssets > 0 ? (ntCount / totalAssets) * 100 : 0;
@@ -302,10 +338,9 @@ export default function ReportSummaryScreen() {
   const hasSignature     = !!signature?.signature_url;
   const readyToGenerate  = isFullyInspected && hasSignature;
   const isCompleted      = job.status === 'completed';
-  // F5: Technician Info (for top banner)
-  // Retrieve the technician's name from SQLite `users` table instead of hardcoding
-  const techRecord = getRecord<{ full_name: string }>('users', job.assigned_to);
-  const techName   = techRecord?.full_name ?? 'Site Technician';
+  // F5: Technician Info (for top banner) — techName is now resolved once in
+  // loadData() and held in state (see its own FIX comment); no longer a
+  // render-body query here.
   const reportDate = new Date().toLocaleDateString('en-AU', {
     day: 'numeric', month: 'long', year: 'numeric'
   });
@@ -355,6 +390,7 @@ export default function ReportSummaryScreen() {
         eyebrow={`JOB #${job.id.substring(0, 8).toUpperCase()}`}
         title="Report Summary"
         showBack
+        fallbackHref="/jobs"
       />
 
       <ScrollView

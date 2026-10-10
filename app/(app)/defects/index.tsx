@@ -8,13 +8,12 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useResponsive } from '@/hooks/useResponsive';
 import { T } from '@/constants/Colors';
-import { ScreenHeader } from '@/components/ui';
+import { ScreenHeader, Button } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
 import { formatAssetType } from '@/utils/assetHelpers';
@@ -23,6 +22,8 @@ import { findDefectCode } from '@/constants/DefectCodes';
 import * as Haptics from 'expo-haptics';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { getDefectCounts } from '@/lib/database';
+import { useAuthStore } from '@/store/authStore';
+import { openJobRoute } from '@/utils/navigation';
 
 type ExtendedDefect = Defect & {
   asset_type?: string;
@@ -136,7 +137,7 @@ export default function GlobalDefectsScreen() {
   const C = useColors();
   const noMotion = useReducedMotion();
   const { contentMaxWidth } = useResponsive();
-  const { defects, isLoading, loadAllDefects } = useDefectsStore();
+  const { defects, isLoading, isLoadingMore, hasMoreDefects, error, loadAllDefects, loadMoreDefects } = useDefectsStore();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [statusFilter,   setStatusFilter]   = useState<StatusFilter>('all');
   // FIX: header/result-bar stats used to come from .filter()/.length over
@@ -158,7 +159,13 @@ export default function GlobalDefectsScreen() {
       statusFilter === 'all' ? undefined : statusFilter,
       severityFilter === 'all' ? undefined : severityFilter,
     );
-    setCounts(getDefectCounts());
+    // FIX: this called getDefectCounts() with no company scoping at all,
+    // unlike loadAllDefects (via defectsStore) right above it — on a shared
+    // device where a previous account's data was ever preserved locally, the
+    // header total/open/critical counts could silently include, or be
+    // composed entirely of, another company's defects, while the filtered
+    // list right below (correctly scoped) would visibly disagree with it.
+    setCounts(getDefectCounts(useAuthStore.getState().user?.company_id ?? null));
   }, [loadAllDefects, statusFilter, severityFilter]);
 
   // Re-run whenever a filter changes, not just on mount/sync.
@@ -234,6 +241,17 @@ export default function GlobalDefectsScreen() {
         <View style={s.center}>
           <ActivityIndicator color={C.primary} size="large" />
         </View>
+      ) : error ? (
+        // FIX: a genuine load failure (SQLite error, corrupted row) used to
+        // render identically to "the company genuinely has zero defects" —
+        // the store already catches and stores this, nothing here ever read
+        // it. Telling a technician "no defects" when the real answer is
+        // "couldn't load" is actively misleading in a compliance context.
+        <View style={[s.center, { padding: 32, gap: 12 }]}>
+          <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
+          <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>{error}</Text>
+          <Button title="Retry" onPress={load} />
+        </View>
       ) : filtered.length === 0 ? (
         <View style={s.center}>
           {/* FIX: `defects` is now the already-filtered fetch (see load()),
@@ -257,6 +275,15 @@ export default function GlobalDefectsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} />}
+          onEndReachedThreshold={0.4}
+          onEndReached={() => { if (hasMoreDefects) loadMoreDefects(); }}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={{ paddingVertical: 20 }}>
+                <ActivityIndicator color={C.primary} size="small" />
+              </View>
+            ) : null
+          }
           renderItem={({ item, index }) => (
             // M1: Key includes filter state so animation only fires on genuine new items,
             // not on every filter change re-render.
@@ -277,13 +304,10 @@ export default function GlobalDefectsScreen() {
                   // reached from outside the Jobs tab's own stack, same
                   // shape openJob()'s own doc comment warns about (Home
                   // dashboard cards, notifications, a property's job
-                  // history row). Pushing straight to a job-scoped screen
-                  // here put it on top of an otherwise-empty Jobs-tab
-                  // stack, so back navigation (and switching to the
-                  // Schedule tab afterwards) never landed on the jobs list.
-                  // Seed it first, same as openJob() does.
-                  router.push('/jobs' as never);
-                  router.push(`/jobs/${item.job_id}/defects/${item.id}` as never);
+                  // history row). Routed through the shared helper (which
+                  // also fixes the seed-then-push race — see its own
+                  // comment) instead of duplicating the two-push logic here.
+                  openJobRoute(`/jobs/${item.job_id}/defects/${item.id}`);
                 }}
                 C={C}
               />

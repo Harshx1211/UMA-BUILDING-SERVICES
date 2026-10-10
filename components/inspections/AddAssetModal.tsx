@@ -107,7 +107,31 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     setShowMoreFields(false);
   };
 
-  const handleClose = () => { resetAll(); onClose(); };
+  // FIX: X/Cancel/hardware-back/swipe-down (pageSheet) all silently
+  // discarded whatever had been typed — location, notes, asset ref, serial
+  // number, tags, etc. — with zero warning, while this exact app already
+  // treats accidental data loss as serious enough to warrant a full confirm
+  // dialog one flow over (site-inspect's own beforeRemove guard). "dirty"
+  // covers every field a technician could have actually filled in.
+  const isDirty = selectedType !== '' || location.trim() !== '' || assetRef.trim() !== ''
+    || serialNumber.trim() !== '' || baseDate.trim() !== '' || notes.trim() !== ''
+    || quantity !== 1 || tower.trim() !== '' || floorNo.trim() !== '' || unitNo.trim() !== '';
+  const handleClose = () => {
+    if (isDirty) {
+      showConfirm({
+        title: 'Discard Changes?',
+        message: 'You have unsaved changes. Are you sure you want to discard them?',
+        icon: 'alert-circle-outline',
+        buttons: [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => { resetAll(); onClose(); } },
+        ],
+      });
+      return;
+    }
+    resetAll();
+    onClose();
+  };
 
   // ── Navigation ────────────────────────────────────────────────
   // Tapping a type expands its variant list inline (right under that row) —
@@ -207,7 +231,10 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAssetAdded(created);
-      handleClose();
+      // Bypasses handleClose's dirty-check directly — the data was already
+      // saved successfully, so there's nothing to confirm discarding.
+      resetAll();
+      onClose();
     } catch (err) {
       console.error('[AddAssetModal] save error:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -471,12 +498,28 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 </View>
                 <TouchableOpacity
                   style={[s.qtyBtn, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent' }]}
-                  onPress={() => { if (quantity < 100) { setQuantity(q => q + 1); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } }}
+                  onPress={() => {
+                    if (quantity < 100) {
+                      setQuantity(q => q + 1);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    } else {
+                      // FIX: this used to just silently do nothing at the
+                      // cap — a technician tapping "+" got no feedback at
+                      // all about why the button stopped responding, only
+                      // discovering the 100-item limit later via a separate
+                      // alert at Save time (for a state they're no longer
+                      // even in, since the stepper itself can't exceed 100).
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    }
+                  }}
                   activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons name="plus" size={20} color={C.text} />
                 </TouchableOpacity>
               </View>
+              {quantity >= 100 && (
+                <Text style={[s.qtyMaxHint, { color: C.textTertiary }]}>Maximum 100 at once</Text>
+              )}
             </View>
 
             {/* Notes */}
@@ -670,6 +713,7 @@ const s = StyleSheet.create({
   qtyDisplay:{ flex: 1, flexDirection: 'row', borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 40, gap: 6 },
   qtyValue:  { fontSize: 16, fontWeight: '800' },
   qtyUnit:   { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  qtyMaxHint:{ fontSize: 11, marginTop: 6 },
 
   // Bottom action bar
   bottomBar: {

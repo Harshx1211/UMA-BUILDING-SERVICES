@@ -195,6 +195,12 @@ const AssetInspectCard = React.memo(({
                   onSeverityToggle(asset.id);
                 }}
                 activeOpacity={0.8}
+                // FIX: checked state was only conveyed by icon swap + fill
+                // color — a screen reader announced an unchanging "button"
+                // with no indication whether Critical was toggled on or off.
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: result.severity === DefectSeverity.Critical }}
+                accessibilityLabel="Mark as critical — immediate action required"
               >
                 <MaterialCommunityIcons
                   name={result.severity === DefectSeverity.Critical ? 'checkbox-marked' : 'checkbox-blank-outline'}
@@ -220,6 +226,14 @@ const AssetInspectCard = React.memo(({
                 onResult(asset.id, InspectionResult.Pass);
               }}
               activeOpacity={0.8}
+              // FIX: this is the single most safety-critical input in the
+              // whole app (pass/fail on fire-safety equipment) — selection
+              // was conveyed only by fill color, so a screen reader
+              // announced three identical "button"s with no indication
+              // which was currently selected.
+              accessibilityRole="button"
+              accessibilityState={{ selected: isPassed }}
+              accessibilityLabel="Pass"
             >
               <MaterialCommunityIcons name="check-circle" size={15} color={isPassed ? C.textOnPrimary : C.success} />
               <Text style={[s.btnTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
@@ -235,6 +249,9 @@ const AssetInspectCard = React.memo(({
                 onResult(asset.id, InspectionResult.Fail);
               }}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFailed }}
+              accessibilityLabel="Fail"
             >
               <MaterialCommunityIcons name="close-circle" size={15} color={isFailed ? C.textOnPrimary : C.error} />
               <Text style={[s.btnTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
@@ -250,6 +267,9 @@ const AssetInspectCard = React.memo(({
                 onResult(asset.id, InspectionResult.NotTested);
               }}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isNT }}
+              accessibilityLabel="Not tested"
             >
               <MaterialCommunityIcons name="minus-circle-outline" size={15} color={isNT ? C.textOnPrimary : C.textSecondary} />
               <Text style={[s.btnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
@@ -922,7 +942,11 @@ const s = StyleSheet.create({
 
   // Buttons
   btnRow:    { flexDirection: 'row', gap: 10, marginTop: 16 },
-  resultBtn: { flex: 1, height: 42, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
+  // FIX: was height: 42, just under the ~44pt touch-target guideline — these
+  // are frequently-tapped, safety-critical buttons, worse to mis-tap with
+  // gloved/wet/cold field hands. minHeight also avoids clipping the label
+  // under larger accessibility text sizes.
+  resultBtn: { flex: 1, minHeight: 44, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
   btnTxt:    { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
 
   // FAB

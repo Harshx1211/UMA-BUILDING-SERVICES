@@ -8,7 +8,6 @@ import { startSync, subscribeToMyDataLive, unsubscribeFromMyDataLive } from '@/l
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useJobsStore } from '@/store/jobsStore';
-import { useDashboardStore } from '@/store/dashboardStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { supabase } from '@/lib/supabase';
 import { T } from '@/constants/Colors';
@@ -50,7 +49,6 @@ export default function AppLayout() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isForceSyncing } = useAuthStore();
   const { subscribeToSync: jobsSubscribe, unsubscribeFromSync: jobsUnsub } = useJobsStore();
-  const { subscribeToSync: dashSubscribe, unsubscribeFromSync: dashUnsub } = useDashboardStore();
 
   // Throttle the heartbeat access check to once per 5 minutes.
   // Checking on every segment change causes up to 10+ Supabase calls/min during normal navigation.
@@ -116,8 +114,16 @@ export default function AppLayout() {
   //  2. Eagerly load from SQLite cache so the UI isn't blank
   //  3. Start the sync loop (runs immediately + every 60s)
   //     The loop is started AFTER subscribing so the first sync-complete fires correctly
+  // FIX (cold start felt slow): this used to also eagerly run
+  // useDashboardStore's loadDashboard() here — 4+ separate SQL queries
+  // (today's jobs with a property JOIN, a week-range scan, an open-defects
+  // count, an all-time aggregate), synchronously, on EVERY cold start and
+  // every sync completion. Grepped the whole app: no screen anywhere reads
+  // useDashboardStore's state — there's no Dashboard tab (only Home/
+  // Schedule/Profile). This was pure dead weight sitting in the single
+  // hottest, most latency-sensitive moment in the app (the instant after
+  // splash hides), computing a screen's worth of stats nobody ever sees.
   const { loadJobs } = useJobsStore();
-  const { loadDashboard } = useDashboardStore();
   const { load: loadCatalogue, subscribeToSync: catSubscribe, unsubscribeFromSync: catUnsub } = useCatalogueStore();
 
   useEffect(() => {
@@ -125,12 +131,10 @@ export default function AppLayout() {
 
     // Subscribe to future sync completions first
     jobsSubscribe(user.id);
-    dashSubscribe(user.id);
     catSubscribe(); // A8: refresh catalogue after every sync
 
     // Load whatever is already in the local SQLite cache immediately
     loadJobs(user.id);
-    loadDashboard(user.id);
     loadCatalogue();
 
     // Now start the background sync loop
@@ -138,7 +142,6 @@ export default function AppLayout() {
 
     return () => {
       jobsUnsub();
-      dashUnsub();
       catUnsub();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

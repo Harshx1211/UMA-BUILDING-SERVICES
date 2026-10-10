@@ -19,6 +19,19 @@ interface Props {
   eyebrow?: string;
   /** Optional extra row under the subtitle — e.g. a sync status readout */
   extra?: React.ReactNode;
+  /**
+   * Where to land when there's no navigation history to go back to
+   * (router.canGoBack() is false — e.g. this screen became the root of its
+   * stack for any reason). Defaults to Home, which is correct for most
+   * screens. FIX: every screen inside the Jobs tab's own flow (job detail
+   * and everything under it) used to fall back to Home unconditionally —
+   * for a screen that conceptually lives under Schedule, landing on Home
+   * instead reads as "back is broken" even though it's really just a
+   * fallback path most users never should have hit in the first place.
+   * Pass '/jobs' from job-related screens so the fallback is at least as
+   * sensible as the normal case, regardless of why canGoBack() was false.
+   */
+  fallbackHref?: string;
 }
 
 export function ScreenHeader({
@@ -28,6 +41,7 @@ export function ScreenHeader({
   showBack = false,
   eyebrow,
   extra,
+  fallbackHref = '/(app)',
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
@@ -47,7 +61,7 @@ export function ScreenHeader({
         {showBack && (
           <TouchableOpacity
             onPress={() =>
-              router.canGoBack() ? router.back() : router.replace('/(app)' as never)
+              router.canGoBack() ? router.back() : router.replace(fallbackHref as never)
             }
             style={[styles.backBtn, { backgroundColor: C.backgroundTertiary }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

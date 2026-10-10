@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,6 +23,21 @@ export default function CompletionBottomSheet({
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
+
+  // FIX: this confirm button had no loading/disabled/double-tap guard at
+  // all, unlike the Pass/Fail/N-T buttons elsewhere in this same flow
+  // (explicitly disabled while a save is in flight, per this codebase's
+  // own documented BUG-N7 fix). A rapid double-tap here could fire
+  // onConfirm twice before the sheet's own `visible` prop flips to false.
+  // Reset whenever the sheet is (re)opened so a second Complete attempt
+  // after Review->Finalize isn't permanently stuck disabled.
+  const [isConfirming, setIsConfirming] = useState(false);
+  useEffect(() => { if (visible) setIsConfirming(false); }, [visible]);
+  const handleConfirmPress = () => {
+    if (isConfirming) return;
+    setIsConfirming(true);
+    onConfirm();
+  };
 
   // FIX: assetsInspected used to be pass+fail only, so an all-N/T job showed
   // the warning state even though all assets had been actioned.
@@ -83,9 +98,11 @@ export default function CompletionBottomSheet({
 
           <View style={s.actionRow}>
             <Button variant="secondary" title="Review" onPress={onClose} style={{ flex: 1 }} />
-            <Button 
-              title={hasSignature ? "Finalize Job" : "Need Signature"} 
-              onPress={hasSignature ? onConfirm : () => onNeedSignature?.()} 
+            <Button
+              title={hasSignature ? "Finalize Job" : "Need Signature"}
+              onPress={hasSignature ? handleConfirmPress : () => onNeedSignature?.()}
+              isLoading={hasSignature && isConfirming}
+              disabled={hasSignature && isConfirming}
               style={{ flex: 1.5 }}
             />
           </View>

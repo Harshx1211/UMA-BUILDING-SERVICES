@@ -115,7 +115,37 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const toggleTag = (tagId: string) =>
     setSelectedTagIds(prev => prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]);
 
+  // FIX: X/Cancel/hardware-back/swipe-down (pageSheet) all silently
+  // discarded any edits with zero warning — same gap as AddAssetModal, and
+  // inconsistent with this exact app's own site-inspect flow, which treats
+  // accidental data loss as serious enough for a full confirm dialog.
+  // Compares live state against the asset prop's original values (set into
+  // state by the load effect above when the modal opened) plus the tag
+  // selection, rather than a blanket "any field non-empty" check, since
+  // every field here starts pre-filled from the existing record.
+  const isDirty = !!asset && (
+    selectedType !== asset.asset_type ||
+    (selectedVariant || null) !== (asset.variant || null) ||
+    effectiveLocation.trim() !== (asset.location_on_site || '') ||
+    assetRef.trim() !== (asset.asset_ref || '') ||
+    serialNumber.trim() !== (asset.serial_number || '') ||
+    notes.trim() !== (asset.description || '') ||
+    selectedTagIds.length !== initialAssignments.length ||
+    selectedTagIds.some(id => !initialAssignments.some(a => a.tag_id === id))
+  );
   const handleClose = () => {
+    if (isDirty) {
+      showConfirm({
+        title: 'Discard Changes?',
+        message: 'You have unsaved changes. Are you sure you want to discard them?',
+        icon: 'alert-circle-outline',
+        buttons: [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: onClose },
+        ],
+      });
+      return;
+    }
     onClose();
   };
 

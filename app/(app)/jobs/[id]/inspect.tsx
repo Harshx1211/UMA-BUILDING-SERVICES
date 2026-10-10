@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, FlatList,
+  View, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   Platform, TextInput, Modal,
 } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -31,7 +31,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
-import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
 import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 
 const ALL = 'All';
@@ -168,11 +168,22 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
           {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
           <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
+            {/* FIX: these three buttons — the actual Pass/Fail/N-T call for
+                every asset in every inspection — had zero accessibility
+                props, on this, the main inspection screen. The one screen
+                that got this right (properties/site-inspect/[id].tsx) is
+                the secondary quick-inspect flow; a screen-reader user on
+                THIS screen heard "button, button, button" with no result
+                name and no indication of which one was currently selected.
+                Matches that screen's own proven pattern exactly. */}
             <TouchableOpacity
               style={[s.resultBtn, isPassed ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => !isSaving && handleResult(InspectionResult.Pass)}
               activeOpacity={0.8}
               disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isPassed }}
+              accessibilityLabel="Pass"
             >
               <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.success : C.textSecondary} />
               <Text style={[s.resultBtnTxt, { color: isPassed ? C.success : C.textSecondary }]}>Pass</Text>
@@ -182,6 +193,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               onPress={() => !isSaving && handleResult(InspectionResult.Fail)}
               activeOpacity={0.8}
               disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFailed }}
+              accessibilityLabel="Fail"
             >
               <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.error : C.textSecondary} />
               <Text style={[s.resultBtnTxt, { color: isFailed ? C.error : C.textSecondary }]}>Fail</Text>
@@ -191,6 +205,9 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               onPress={() => !isSaving && handleResult(InspectionResult.NotTested)}
               activeOpacity={0.8}
               disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isNT }}
+              accessibilityLabel="Not tested"
             >
               <MaterialCommunityIcons name="minus-circle-outline" size={16} color={C.textSecondary} />
               <Text style={[s.resultBtnTxt, { color: C.textSecondary }]}>N/T</Text>
@@ -280,6 +297,26 @@ export default function AssetInspectionScreen() {
   const { assetTypes: catalogueAssetTypes } = useCatalogueStore();
 
   const listRef = useRef<FlatList>(null);
+  // FIX: see the useJobLiveSync callback below — tracks the last (jobId,
+  // time) this screen itself triggered a full loadAssetsForInspection, so
+  // the live channel's own initial catch-up (which fires job_assets AND
+  // inspection_photos as two separate events right after this screen's own
+  // mount already loaded fresh data) doesn't re-run the same expensive
+  // load a second and third time for identical results. A purely local,
+  // additive guard — doesn't change loadAssetsForInspection's own
+  // synchronous contract, which several other call sites in this file rely
+  // on completing immediately.
+  const lastLoadRef = useRef<{ jobId: string; at: number } | null>(null);
+
+  // FIX: this checklist had no pull-to-refresh — the job list one tap up
+  // (jobs/index.tsx) and the job detail hub one tap over both offer it;
+  // this screen, one tap deeper in the same flow, didn't.
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await runSync();
+    setIsRefreshing(false);
+  }, []);
 
   useEffect(() => {
     if (jobId) {
@@ -324,7 +361,10 @@ export default function AssetInspectionScreen() {
   }, [store.assets]);
 
   useEffect(() => {
-    if (jobId) store.loadAssetsForInspection(jobId);
+    if (jobId) {
+      store.loadAssetsForInspection(jobId);
+      lastLoadRef.current = { jobId, at: Date.now() };
+    }
     return () => store.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -347,8 +387,19 @@ export default function AssetInspectionScreen() {
     // displays), that catch-all fired a full, unnecessary
     // loadAssetsForInspection reload (itself several queries plus an O(n·m)
     // merge) for every one of them too.
-    if (table === 'defects') useDefectsStore.getState().loadDefects(jobId);
-    else if (table === 'job_assets' || table === 'inspection_photos') store.loadAssetsForInspection(jobId);
+    if (table === 'defects') { useDefectsStore.getState().loadDefects(jobId); return; }
+    if (table !== 'job_assets' && table !== 'inspection_photos') return;
+    // FIX: subscribeToJobLive's initial-subscribe catch-up fires job_assets
+    // AND inspection_photos as two separate events on first open of this
+    // job — right after the mount effect above already ran the exact same
+    // load a moment earlier. Skip a reload this screen already just did for
+    // this same job within the last second; a genuinely later change
+    // (a teammate's real edit, not the initial catch-up) still reloads
+    // normally since it lands well outside that window.
+    const last = lastLoadRef.current;
+    if (last && last.jobId === jobId && Date.now() - last.at < 1000) return;
+    store.loadAssetsForInspection(jobId);
+    lastLoadRef.current = { jobId, at: Date.now() };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, store.loadAssetsForInspection]));
 
@@ -748,7 +799,7 @@ export default function AssetInspectionScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Asset Inspection" showBack={true} />
+        <ScreenHeader title="Asset Inspection" showBack={true} fallbackHref="/jobs" />
         <View style={{ padding: 16, gap: 12 }}>
           <SkeletonBlock width="100%" height={160} borderRadius={16} />
           <SkeletonBlock width="100%" height={160} borderRadius={16} />
@@ -774,6 +825,7 @@ export default function AssetInspectionScreen() {
         eyebrow="FIRE SAFETY COMPLIANCE"
         title="Inspection Form"
         showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {propertyId ? (
@@ -784,9 +836,15 @@ export default function AssetInspectionScreen() {
                 <MaterialCommunityIcons name="notebook-outline" size={22} color={C.text} />
               </TouchableOpacity>
             ) : null}
-            <View style={[s.progressBadge, { backgroundColor: allDone ? C.successLight : C.backgroundTertiary, borderColor: allDone ? C.success : C.border, borderWidth: 1 }]}>
+            {/* FIX: the "All Done " text prefix (the widest state this badge
+                ever reaches) squeezed the title column — "Inspection Form"
+                truncated to "Inspectio…" on a typical phone width once the
+                badge grew this wide. A checkmark icon reads the same but
+                takes a fraction of the horizontal space. */}
+            <View style={[s.progressBadge, { backgroundColor: allDone ? C.successLight : C.backgroundTertiary, borderColor: allDone ? C.success : C.border, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+              {allDone && <MaterialCommunityIcons name="check-circle" size={13} color={C.success} />}
               <Text style={[s.progressBadgeTxt, { color: allDone ? C.success : C.textSecondary }]}>
-                {allDone ? 'All Done ' : ''}{store.progress.inspected}/{store.progress.total}
+                {store.progress.inspected}/{store.progress.total}
               </Text>
             </View>
           </View>
@@ -803,6 +861,7 @@ export default function AssetInspectionScreen() {
         initialNumToRender={6}
         maxToRenderPerBatch={6}
         windowSize={8}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} />}
         ListHeaderComponent={
           <View>
             <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
@@ -940,7 +999,7 @@ export default function AssetInspectionScreen() {
             disabled={store.progress.inspected === 0 || isCompleting}
             loading={isCompleting}
             onPress={handleComplete}
-            style={{ minWidth: 140, borderRadius: 22, height: 46 }}
+            style={{ minWidth: 140, borderRadius: 22, minHeight: 46 }}
           />
         </View>
       )}
@@ -1068,7 +1127,13 @@ const s = StyleSheet.create({
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
   overflowBtn:  { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  resultBtn:    { flex: 1, height: 42, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
+  // FIX: was `height: 42` — under an OS "Larger Text" accessibility
+  // setting, RN Text's default allowFontScaling can grow the Pass/Fail/N-T
+  // label taller than a hard-fixed box, clipping it instead of the pill
+  // growing to fit. minHeight keeps the same 42px on default text sizes
+  // (RN never shrinks a row below its content) while letting it grow when
+  // the label actually needs more room.
+  resultBtn:    { flex: 1, minHeight: 42, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
   resultBtnTxt: { fontSize: 14, fontWeight: '700' },
 
   // Tap-through row — photos/note/defect detail all live on the Asset Detail

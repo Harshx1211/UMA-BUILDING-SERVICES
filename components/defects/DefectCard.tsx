@@ -6,10 +6,9 @@ import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { cardShadow } from '@/components/ui/Card';
 import { DefectSeverity, DefectStatus } from '@/constants/Enums';
-import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { findDefectCode } from '@/constants/DefectCodes';
-import { getValidLocalUri } from '@/utils/fileHelpers';
+import ResilientPhoto from '@/components/camera/ResilientPhoto';
 
 interface Props {
   defect: Defect & { asset_type?: string; location_on_site?: string };
@@ -137,7 +136,15 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
           style={s.photoList}
           contentContainerStyle={{ gap: 8 }}
           renderItem={({ item }) => (
-            <Image source={{ uri: getValidLocalUri(item) }} style={s.thumbnail} contentFit="cover" />
+            // FIX: was a raw expo-image <Image> reading straight off
+            // defects.photos (a flat URL-only mirror with no row id) — a
+            // defect can sit open/unresolved for months, long enough for
+            // an old signed URL to expire, and this card had no way to
+            // self-heal that the way the defect detail screen (which reads
+            // real inspection_photos rows) already does. ResilientPhoto
+            // now resolves the id itself by matching the URL when one
+            // isn't passed in — see its own comment.
+            <ResilientPhoto uri={item} style={s.thumbnail} contentFit="cover" />
           )}
         />
       )}

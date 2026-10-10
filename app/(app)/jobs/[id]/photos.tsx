@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { cardShadow } from '@/components/ui/Card';
 import { usePhotosStore } from '@/store/photosStore';
@@ -68,6 +69,11 @@ export default function PhotosScreen() {
 
   /** Long-press handler — confirms then deletes photo from SQLite + syncs */
   const handlePhotoLongPress = (photo: { id: string }) => {
+    // FIX: this had no haptic feedback anywhere in the flow, unlike other
+    // destructive actions in the app (e.g. JobCard's delete confirm fires
+    // Warning on the prompt and Success on confirm) — deleting a photo felt
+    // flatter than deleting anything else.
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     showConfirm({
       title: 'Delete Photo',
       message: 'Are you sure you want to delete this photo? This cannot be undone.',
@@ -79,6 +85,7 @@ export default function PhotosScreen() {
           style: 'destructive',
           onPress: () => {
             store.deletePhoto(photo.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Toast.show({ type: 'success', text1: 'Photo deleted' });
           },
         },
@@ -89,7 +96,7 @@ export default function PhotosScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Job Photos" showBack={true} />
+        <ScreenHeader title="Job Photos" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.accent} />
         </View>
@@ -100,7 +107,7 @@ export default function PhotosScreen() {
   if (store.error) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Job Photos" showBack={true} />
+        <ScreenHeader title="Job Photos" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
           <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
           <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
@@ -114,9 +121,10 @@ export default function PhotosScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
-      <ScreenHeader 
-        title="Job Photos" 
-        showBack={true} 
+      <ScreenHeader
+        title="Job Photos"
+        showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           store.photos.length > 0 ? (
             <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>

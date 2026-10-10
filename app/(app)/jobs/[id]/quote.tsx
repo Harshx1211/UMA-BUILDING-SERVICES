@@ -8,14 +8,14 @@
  * No editing on this screen — all quote management is admin-only.
  */
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useResponsive } from '@/hooks/useResponsive';
-import { ScreenHeader, EmptyState } from '@/components/ui';
+import { ScreenHeader, EmptyState, Button } from '@/components/ui';
 import { useDefectsStore } from '@/store/defectsStore';
 import { DefectSeverity } from '@/constants/Enums';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -144,9 +144,26 @@ export default function QuoteScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack />
+        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack fallbackHref="/jobs" />
         <View style={{ paddingTop: 24, gap: 12 }}>
           <SkeletonCard /><SkeletonCard />
+        </View>
+      </View>
+    );
+  }
+
+  // FIX: a genuine load failure used to render identically to "no defects
+  // logged yet" — for a screen a technician stands in front of a client
+  // discussing pricing with, showing an encouraging empty state instead of
+  // a real error is actively misleading.
+  if (store.error) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader eyebrow="QUOTE SUMMARY" title="Quote" showBack fallbackHref="/jobs" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
+          <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
+          <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>{store.error}</Text>
+          <Button title="Retry" onPress={() => jobId && store.loadDefects(jobId)} />
         </View>
       </View>
     );
@@ -159,6 +176,7 @@ export default function QuoteScreen() {
         title="Quote"
         subtitle={`${store.defects.length} defect${store.defects.length !== 1 ? 's' : ''} logged`}
         showBack
+        fallbackHref="/jobs"
         rightComponent={
           hasDefects && total > 0 ? (
             <View style={[s.totalBadge, { backgroundColor: C.successLight, borderColor: T.tintBorder(C.success) }]}>
@@ -184,7 +202,15 @@ export default function QuoteScreen() {
           </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={[s.content, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[s.content, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
+          showsVerticalScrollIndicator={false}
+          // FIX: this screen relied entirely on live-sync/periodic sync to
+          // pick up admin-set prices, with no manual way to force a refresh
+          // — a real gap for a technician standing with a client discussing
+          // pricing who wants to confirm the number on screen is current.
+          refreshControl={<RefreshControl refreshing={store.isLoading} onRefresh={() => jobId && store.loadDefects(jobId)} tintColor={C.primary} />}
+        >
 
           {/* Admin-managed info banner */}
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(20).duration(300)}>

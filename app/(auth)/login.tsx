@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
@@ -42,6 +43,7 @@ export default function LoginScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const passwordRef = useRef<TextInput>(null);
   const { isOnline } = useNetworkStatus();
+  const insets = useSafeAreaInsets();
 
   const [email, setEmail]                   = useState('');
   const [password, setPassword]             = useState('');
@@ -51,6 +53,7 @@ export default function LoginScreen() {
   const [passwordError, setPasswordError]   = useState('');
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [biometricType, setBiometricType]   = useState<'fingerprint' | 'face' | null>(null);
+  const [isAuthenticatingBiometric, setIsAuthenticatingBiometric] = useState(false);
 
   // Adjust scroll when keyboard opens so inputs remain visible
   useEffect(() => {
@@ -107,6 +110,12 @@ export default function LoginScreen() {
   };
 
   const handleBiometric = async () => {
+    // FIX: this button never showed any busy/disabled state while the OS
+    // biometric prompt + restoreSession() were in flight — unlike the
+    // "Sign In" button right above it, which is correctly wired to
+    // isLoading. A tap while the prompt was dismissing (or a second,
+    // impatient tap) got no feedback that anything was happening at all.
+    setIsAuthenticatingBiometric(true);
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Sign in to SiteTrack',
@@ -116,7 +125,11 @@ export default function LoginScreen() {
       if (result.success) {
         await restoreSession();
       }
-    } catch (err) { console.warn('[Login] Biometric error:', err); }
+    } catch (err) {
+      console.warn('[Login] Biometric error:', err);
+    } finally {
+      setIsAuthenticatingBiometric(false);
+    }
   };
 
   return (
@@ -131,7 +144,15 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <View style={styles.content}>
+        {/* FIX: paddingTop was a hardcoded 100 with no safe-area awareness
+            at all (contrast components/ui/ScreenHeader.tsx's own
+            Math.max(insets.top, 14) pattern) — fine on most current
+            devices' notch/Dynamic Island depth, but a guess rather than a
+            guarantee. Math.max keeps the original, deliberately generous
+            100px on every normal device and only grows past it on a
+            device with an unusually deep top inset, so this never
+            actually shrinks the existing design. */}
+        <View style={[styles.content, { paddingTop: Math.max(100, insets.top + 40) }]}>
           {/* ── Brand Logo ────── */}
           <Animated.View entering={noMotion ? undefined : FadeIn.delay(100).duration(600)} style={styles.logoContainer}>
             <BrandLogo
@@ -246,6 +267,8 @@ export default function LoginScreen() {
                   title={biometricType === 'face' ? 'Sign in with Face ID' : 'Sign in with Fingerprint'}
                   variant="secondary"
                   onPress={handleBiometric}
+                  isLoading={isAuthenticatingBiometric}
+                  disabled={isAuthenticatingBiometric}
                   icon={
                     <MaterialCommunityIcons
                       name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
@@ -260,7 +283,11 @@ export default function LoginScreen() {
           </Animated.View>
         </View>
 
-        <View style={styles.footer}>
+        {/* FIX: paddingVertical: 32 had no bottom-safe-area addition — on a
+            device with a home indicator/gesture bar, this copyright line
+            (pushed to the bottom by justifyContent: 'space-between' above)
+            could end up sitting right at, or under, that system chrome. */}
+        <View style={[styles.footer, { paddingBottom: 32 + insets.bottom }]}>
           <Text style={[styles.footerTxt, { color: C.textTertiary }]}>© 2026 {APP_NAME} · Field Service Platform</Text>
         </View>
       </ScrollView>

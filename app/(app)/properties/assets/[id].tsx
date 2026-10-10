@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -42,12 +42,14 @@ export default function PropertyAssetsScreen() {
   const [assets, setAssets]     = useState<Asset[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
   const [showAddAsset, setShowAddAsset] = useState(false);
-
-
+  // FIX: a genuine load failure used to render identically to "this
+  // property doesn't exist" — see properties/[id].tsx's identical fix.
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const p = getRecord<Property>('properties', id);
       setProperty(p);
@@ -56,6 +58,7 @@ export default function PropertyAssetsScreen() {
       }
     } catch (err) {
       console.error('[PropertyAssets] load error:', err);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -73,10 +76,35 @@ export default function PropertyAssetsScreen() {
     return () => offSyncComplete(load);
   }, [load]);
 
+  // FIX: two plain `.filter().length` passes over `assets` in the render
+  // body — recomputed on every render regardless of whether assets actually
+  // changed. Must sit above the early returns below — Hooks can't run
+  // conditionally.
+  const today = new Date().toISOString().slice(0, 10);
+  const { activeAssetsCount, overdueAssetsCount } = useMemo(() => ({
+    activeAssetsCount: assets.filter(a => a.status === AssetStatus.Active).length,
+    overdueAssetsCount: assets.filter(a => a.next_service_date && a.next_service_date < today).length,
+  }), [assets, today]);
+
   if (isLoading) {
     return (
       <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
         <ActivityIndicator color={C.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader title="Error" showBack={true} />
+        <EmptyState
+          icon="cloud-alert-outline"
+          title="Couldn't load the asset register"
+          subtitle="Something went wrong loading this record. Check your connection and try again."
+          actionLabel="Retry"
+          onAction={load}
+        />
       </View>
     );
   }
@@ -96,9 +124,8 @@ export default function PropertyAssetsScreen() {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const activeAssets  = assets.filter(a => a.status === AssetStatus.Active).length;
-  const overdueAssets = assets.filter(a => a.next_service_date && a.next_service_date < today).length;
+  const activeAssets  = activeAssetsCount;
+  const overdueAssets = overdueAssetsCount;
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
@@ -156,6 +183,7 @@ export default function PropertyAssetsScreen() {
               renderItem={({ item: asset, index: i }) => {
                 const isOverdue = asset.next_service_date && asset.next_service_date < today;
                 const statusColor = assetStatusColor(asset.status, C);
+                const isInactive = asset.status !== AssetStatus.Active;
                 return (
                   <TouchableOpacity
                     style={[
@@ -164,6 +192,11 @@ export default function PropertyAssetsScreen() {
                     ]}
                     onPress={() => router.push(`/assets/${asset.id}` as never)}
                     activeOpacity={0.7}
+                    // FIX: Active/Inactive was conveyed ONLY by a 6x6 colored
+                    // dot — no text/icon backup for a colorblind technician,
+                    // and nothing in the accessibility tree conveyed it at
+                    // all (no accessibilityLabel on the row).
+                    accessibilityLabel={`${asset.asset_type}${asset.location_on_site ? ', ' + asset.location_on_site : ''}, ${isInactive ? 'inactive' : 'active'}${isOverdue ? ', overdue for service' : ''}`}
                   >
                     {/* Icon */}
                     <View style={[s.assetIconWrap, { backgroundColor: isOverdue ? C.errorLight : T.iconBg(C.primary) }]}>
@@ -216,6 +249,9 @@ export default function PropertyAssetsScreen() {
 
                     {/* Status indicator */}
                     <View style={s.assetRight}>
+                      {isInactive && (
+                        <Text style={[s.inactiveLabel, { color: C.textTertiary }]}>Inactive</Text>
+                      )}
                       <View style={[s.statusDot, { backgroundColor: statusColor }]} />
                       <MaterialCommunityIcons name="chevron-right" size={18} color={C.border} />
                     </View>
@@ -263,6 +299,7 @@ const s = StyleSheet.create({
   dateChipTxt:   { fontSize: 10, fontWeight: '600' },
   assetRight:    { alignItems: 'center', gap: 2 },
   statusDot:     { width: 6, height: 6, borderRadius: 3 },
+  inactiveLabel: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
 
   // Empty state
   emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },

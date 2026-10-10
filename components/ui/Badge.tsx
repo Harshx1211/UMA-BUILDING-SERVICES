@@ -29,8 +29,21 @@ type KnownStatus =
   | 'urgent' | 'high' | 'normal' | 'low'
   | 'active' | 'decommissioned'
   | 'compliant' | 'non_compliant' | 'overdue' | 'pending'
-  // Job types
-  | 'routine_service' | 'defect_repair' | 'installation' | 'emergency' | 'quote';
+  // Job types — must cover every value in constants/Enums.ts's JobType enum.
+  // FIX: this only ever had the stale 'routine_service' (no frequency
+  // suffix), which — per that enum's own comment — "doesn't match ANY real
+  // DB value". Every actual routine-service job (the 5 frequency variants
+  // below) fell through to the `?? status` fallback and rendered as a raw,
+  // unhumanized string like "routine_service_3_monthly" wherever a Badge
+  // showed a job's type (JobCard.tsx — the Jobs tab/Schedule/Home card —
+  // and properties/[id].tsx's Job History), stretching those pills far
+  // wider than every other short label next to them. Labels/colors below
+  // match app/(app)/jobs/index.tsx and jobs/[id]/index.tsx's own
+  // JOB_TYPE_LABEL maps exactly, so a job's type never reads differently
+  // depending on which screen happens to render it.
+  | 'routine_service' | 'routine_service_monthly' | 'routine_service_3_monthly'
+  | 'routine_service_6_monthly' | 'routine_service_annual' | 'routine_service_5_yearly'
+  | 'defect_repair' | 'defect_repair_quote' | 'installation' | 'emergency' | 'quote';
 
 const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
   in_progress:    'In Progress',
@@ -55,11 +68,17 @@ const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
   overdue:        'Overdue',
   pending:        'Pending',
   // Job types
-  routine_service: 'Routine Service',
-  defect_repair:   'Defect Repair',
-  installation:    'Installation',
-  emergency:       'EMERGENCY',
-  quote:           'Quote',
+  routine_service:            'Routine Service',
+  routine_service_monthly:    'Monthly Service',
+  routine_service_3_monthly:  '3-Monthly Service',
+  routine_service_6_monthly:  '6-Monthly Service',
+  routine_service_annual:     'Annual Service',
+  routine_service_5_yearly:   '5-Yearly Service',
+  defect_repair:              'Defect Repair',
+  defect_repair_quote:        'Defect Repair Quote',
+  installation:               'Installation',
+  emergency:                  'EMERGENCY',
+  quote:                      'Quote',
 };
 
 const STATUS_COLORS: Record<KnownStatus, { bg: string; text: string }> = {
@@ -85,11 +104,17 @@ const STATUS_COLORS: Record<KnownStatus, { bg: string; text: string }> = {
   overdue:        { bg: T.dangerBg,   text: T.danger   },
   pending:        { bg: T.warningBg,  text: T.warning  },
   // Job types
-  routine_service: { bg: T.infoBg,    text: T.info    },
-  defect_repair:   { bg: T.dangerBg,  text: T.danger  },
-  installation:    { bg: T.infoBg,    text: T.info    },
-  emergency:       { bg: T.dangerBg,  text: T.danger  },
-  quote:           { bg: T.border,    text: T.textMuted },
+  routine_service:            { bg: T.infoBg,    text: T.info    },
+  routine_service_monthly:    { bg: T.infoBg,    text: T.info    },
+  routine_service_3_monthly:  { bg: T.infoBg,    text: T.info    },
+  routine_service_6_monthly:  { bg: T.infoBg,    text: T.info    },
+  routine_service_annual:     { bg: T.infoBg,    text: T.info    },
+  routine_service_5_yearly:   { bg: T.infoBg,    text: T.info    },
+  defect_repair:              { bg: T.dangerBg,  text: T.danger  },
+  defect_repair_quote:        { bg: T.dangerBg,  text: T.danger  },
+  installation:               { bg: T.infoBg,    text: T.info    },
+  emergency:                  { bg: T.dangerBg,  text: T.danger  },
+  quote:                      { bg: T.border,    text: T.textMuted },
 };
 
 interface BadgeProps {

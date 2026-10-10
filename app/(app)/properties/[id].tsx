@@ -1,5 +1,5 @@
 // Property detail screen — professional inspection-officer view inspired by Uptick
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Linking, ScrollView, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
@@ -7,6 +7,7 @@ import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -114,7 +115,16 @@ function InfoRow({ icon, label, value, onPress, valueColor }: {
       </View>
       <View style={infoRow.right}>
         <Text style={[infoRow.label, { color: C.textTertiary }]}>{label}</Text>
-        <Text style={[infoRow.value, { color: valueColor || C.text }, onPress && { textDecorationLine: 'underline' }]}>
+        {/* FIX: was underlined on every tappable row (any onPress), whether
+            or not it was actually styled as a link — Phone (orange text) is
+            a genuine link and reads fine underlined, but "Total Assets: 15"
+            has no valueColor at all and got the exact same reflexive
+            underline, just plain-black digits with a stray underline next
+            to the chevron that already signals "tap to navigate". The
+            chevron on its own is this app's normal, sufficient tappable-row
+            affordance; only underline when a color was deliberately set to
+            make this specific value read as a link. */}
+        <Text style={[infoRow.value, { color: valueColor || C.text }, valueColor && onPress && { textDecorationLine: 'underline' }]}>
           {value}
         </Text>
       </View>
@@ -123,7 +133,12 @@ function InfoRow({ icon, label, value, onPress, valueColor }: {
   );
 }
 const infoRow = StyleSheet.create({
-  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  // FIX: had no horizontal padding at all — the icon box sat flush against
+  // the card's left edge and the chevron flush against its right edge, with
+  // only the 1px card border between content and the outside world. Every
+  // other card on this screen (Call Contact/Navigate buttons, Job History
+  // rows) insets its content by 14-16px; this now matches.
+  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 16 },
   iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   right:   { flex: 1 },
   label:   { fontSize: 10, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 1 },
@@ -146,6 +161,11 @@ export default function PropertyDetailScreen() {
   const [jobHistoryLoadingMore, setJobHistoryLoadingMore] = useState(false);
   const [documents, setDocuments]   = useState<SiteDocument[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
+  // FIX: a genuine load failure (SQLite error) used to render identically to
+  // "this property record doesn't exist" — both just left `property` null.
+  // A transient glitch got the same dead-end "Go Back" messaging as a
+  // permanently deleted record, with no way to retry.
+  const [loadError, setLoadError] = useState(false);
 
   // Tracks how many job-history rows are currently on screen, kept in sync
   // SYNCHRONOUSLY at every point jobHistory itself is set (load,
@@ -160,6 +180,7 @@ export default function PropertyDetailScreen() {
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const p = getRecord<Property>('properties', id);
       setProperty(p);
@@ -182,6 +203,7 @@ export default function PropertyDetailScreen() {
       }
     } catch (err) {
       console.error('[PropertyDetail] load error:', err);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -252,10 +274,34 @@ export default function PropertyDetailScreen() {
     }
   }, [id, jobHistory.length, jobHistoryLoadingMore]);
 
+  // FIX: was a plain `.filter().length` in the render body, recomputed on
+  // every render of this screen (every job-history page load, every sync
+  // event) regardless of whether `assets` actually changed. Must sit above
+  // the early returns below — React Hooks can't run conditionally.
+  const activeAssetsCount = useMemo(
+    () => assets.filter(a => a.status === AssetStatus.Active).length,
+    [assets],
+  );
+
   if (isLoading) {
     return (
       <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
         <ActivityIndicator color={C.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader title="Error" showBack={true} />
+        <EmptyState
+          icon="cloud-alert-outline"
+          title="Couldn't load this property"
+          subtitle="Something went wrong loading this record. Check your connection and try again."
+          actionLabel="Retry"
+          onAction={load}
+        />
       </View>
     );
   }
@@ -280,7 +326,7 @@ export default function PropertyDetailScreen() {
     ?? COMPLIANCE_CONFIG[ComplianceStatus.Pending];
 
   const today         = localDateString();
-  const activeAssets  = assets.filter(a => a.status === AssetStatus.Active).length;
+  const activeAssets  = activeAssetsCount;
   const isOverdue     = property.next_inspection_date && property.next_inspection_date < today;
   // FIX: derived from a dedicated COUNT query (jobHistoryCompleted) rather
   // than .filter().length over `jobHistory` — that array is now only a
@@ -361,7 +407,7 @@ export default function PropertyDetailScreen() {
           {property.site_contact_phone && (
             <TouchableOpacity
               style={[s.actionBtn, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() => Linking.openURL(`tel:${property.site_contact_phone}`)}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${property.site_contact_phone}`); }}
               activeOpacity={0.75}
             >
               <View style={[s.actionBtnIcon, { backgroundColor: C.backgroundTertiary }]}>
@@ -373,7 +419,7 @@ export default function PropertyDetailScreen() {
           {property.address && (
             <TouchableOpacity
               style={[s.actionBtn, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`)}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`); }}
               activeOpacity={0.75}
             >
               <View style={[s.actionBtnIcon, { backgroundColor: C.backgroundTertiary }]}>
@@ -443,7 +489,7 @@ export default function PropertyDetailScreen() {
                   label="Phone"
                   value={property.site_contact_phone}
                   valueColor={C.primary}
-                  onPress={() => Linking.openURL(`tel:${property.site_contact_phone}`)}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${property.site_contact_phone}`); }}
                 />
               </>
             )}
@@ -518,7 +564,14 @@ export default function PropertyDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={[s.historyDate, { color: C.text }]}>
                         {fmtDate(job.scheduled_date)}
-                        {(job.status === JobStatus.Completed || job.status === JobStatus.InProgress) && job.updated_at
+                        {/* FIX: was also shown for In Progress jobs, using
+                            updated_at (bumped on every save while the tech
+                            is still actively working it) as if it were a
+                            completion date — "1 Sept → 20 Sept" reads as a
+                            19-day job when it's really just "scheduled 1
+                            Sept, still open today". A → range only means
+                            something once the job has actually finished. */}
+                        {job.status === JobStatus.Completed && job.updated_at
                           ? ` → ${fmtDate(job.updated_at)}`
                           : ''}
                       </Text>
@@ -630,9 +683,30 @@ const s = StyleSheet.create({
   alertBody:    { fontSize: 12, lineHeight: 18 },
 
   // Cards
-  card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden',
+  // FIX: had `overflow: 'hidden'` alongside a shadow — on iOS a shadow
+  // renders OUTSIDE the view's own bounds, so overflow:hidden clips it away
+  // entirely, silently. Every card on this screen (Site Details, Asset
+  // Register, Job History, Documents) was rendering with zero shadow on
+  // iOS despite the shadow properties being set. The app's own shared Card
+  // component (components/ui/Card.tsx, "the single container used for
+  // every info block in SiteTrack") never sets overflow on its card style
+  // for exactly this reason — this screen predates that component and
+  // drifted from it.
+  //
+  // Removing it unmasked a second, previously-hidden bug: `divider` below
+  // used `marginHorizontal: -16` as if the card (or InfoRow) had 16px of
+  // padding to cancel out — neither did, so the divider was always 16px
+  // wider than the card on each side, just silently clipped back down to
+  // size by the overflow:hidden above. Fixed both together: InfoRow now
+  // carries its own 16px inset (see infoRow.wrap below — this is also the
+  // actual "content flush against the card edge" look, since icons/text in
+  // Site Details and Asset Register had NO horizontal padding at all,
+  // unlike every other card on this screen), and the divider's margin is 0
+  // so it spans the card's own (unpadded) width exactly edge-to-edge — the
+  // standard grouped-list look: full-width separators, inset row content.
+  card: { borderRadius: 16, borderWidth: 1,
           shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  divider: { height: 1, marginHorizontal: -16 },
+  divider: { height: 1 },
 
   // Job history rows
   historyRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },

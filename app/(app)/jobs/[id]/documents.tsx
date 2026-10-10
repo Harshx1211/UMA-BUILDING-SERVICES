@@ -87,7 +87,7 @@ export default function DocumentsScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Site Documents" showBack={true} />
+        <ScreenHeader title="Site Documents" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.accent} />
         </View>
@@ -98,7 +98,7 @@ export default function DocumentsScreen() {
   if (store.error) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Site Documents" showBack={true} />
+        <ScreenHeader title="Site Documents" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
           <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
           <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
@@ -115,6 +115,7 @@ export default function DocumentsScreen() {
       <ScreenHeader
         title="Site Documents"
         showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           store.documents.length > 0 ? (
             <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>

@@ -1,7 +1,7 @@
 // app/(app)/notifications/index.tsx
 import React, { useEffect, useCallback } from 'react';
 import {
-  FlatList, StyleSheet, TouchableOpacity, View,
+  FlatList, StyleSheet, TouchableOpacity, View, RefreshControl,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Card } from '@/components/ui/Card';
-import { ScreenHeader, EmptyState, showConfirm } from '@/components/ui';
+import { ScreenHeader, EmptyState, showConfirm, Button } from '@/components/ui';
 import {
   useNotificationsStore, type AppNotification, type NotificationType,
 } from '@/store/notificationsStore';
@@ -102,7 +102,7 @@ export default function NotificationsScreen() {
   const C = useColors();
   const { contentMaxWidth } = useResponsive();
   const {
-    notifications, unreadCount, totalCount, isLoading,
+    notifications, unreadCount, totalCount, isLoading, error,
     loadNotifications, markAllAsRead, clearAll,
   } = useNotificationsStore();
   const isCapped = totalCount > notifications.length;
@@ -147,6 +147,15 @@ export default function NotificationsScreen() {
         <View style={s.centered}>
           <ActivityIndicator color={C.accent} size="large" />
         </View>
+      ) : error ? (
+        // FIX: the store already catches and stores load/mark/clear errors —
+        // nothing here ever read it, so a genuine failure rendered
+        // identically to "you have no notifications" with no retry.
+        <View style={[s.centered, { padding: 32, gap: 12 }]}>
+          <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
+          <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>{error}</Text>
+          <Button title="Retry" onPress={loadNotifications} />
+        </View>
       ) : (
         <FlatList
           data={notifications}
@@ -157,6 +166,9 @@ export default function NotificationsScreen() {
             { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' },
           ]}
           showsVerticalScrollIndicator={false}
+          // FIX: this list had no pull-to-refresh — the only way to force a
+          // refresh was leaving and returning to the screen.
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadNotifications} tintColor={C.accent} />}
           renderItem={({ item }) => <NotifCard item={item} />}
           ListEmptyComponent={
             <EmptyState 
@@ -205,7 +217,9 @@ export default function NotificationsScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  markAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  // FIX: paddingVertical 6 made this ~28pt tall, under the ~44pt touch-
+  // target guideline for a frequently-tapped control.
+  markAllBtn: { paddingHorizontal: 10, paddingVertical: 12, borderRadius: 10 },
   markAllText:{ fontSize: 12, fontWeight: '700' },
 
   list:      { padding: 16, gap: 12, paddingBottom: 32 },

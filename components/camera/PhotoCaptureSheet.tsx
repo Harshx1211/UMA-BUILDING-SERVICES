@@ -1,5 +1,5 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView, Animated } from 'react-native';
 import { Text } from 'react-native-paper';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useColors } from '@/hooks/useColors';
@@ -8,12 +8,15 @@ import { CameraView, useCameraPermissions, FlashMode } from 'expo-camera';
 
 import * as ImageManipulator from 'expo-image-manipulator';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { usePhotosStore } from '@/store/photosStore';
 import { getAssetsForProperty } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Asset } from '@/types';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system/legacy';
+import { generateUUID } from '@/utils/uuid';
 
 interface Props {
   jobId: string;
@@ -33,13 +36,19 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
 
   const { addPhoto } = usePhotosStore();
   const [permission, requestPermission] = useCameraPermissions();
-  
+  const { contentMaxWidth } = useResponsive();
+
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
   const [caption, setCaption] = useState('');
   const [assetId, setAssetId] = useState('');
   const [assets, setAssets] = useState<Asset[]>([]);
   const [photosTaken, setPhotosTaken] = useState(0);
+  // Drives the shutter's visual disabled/dim state — a ref alone (isTakingRef
+  // below) doesn't trigger a re-render, so the button looked fully tappable
+  // during the native capture call with no feedback at all.
+  const [isCapturing, setIsCapturing] = useState(false);
+  const flashOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setAssets(getAssetsForProperty(propertyId));
@@ -80,71 +89,110 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
   // Guard: prevent double-tap from firing two concurrent takePicture calls
   const isTakingRef = useRef(false);
 
+  // FIX (shutter felt laggy on rapid-fire multi-photo capture — the exact
+  // workflow this screen exists for): this used to await resize/compress/
+  // copy-to-disk/addPhoto all in sequence BEFORE releasing isTakingRef, so
+  // the shutter stayed unresponsive for the full ~300-800ms of that chain
+  // on every single shot. Split into a fast native-capture step (guarded,
+  // released immediately after) and this background processing step, which
+  // runs fire-and-forget so the shutter is ready for the next photo right
+  // away while this one finishes compressing/saving/queuing in the
+  // background. Takes the caption/assetId as params (captured at the
+  // moment of the shot, before the caption field resets) rather than
+  // reading live state, since a technician may change the caption before
+  // this async chain for the PREVIOUS photo finishes.
+  const processPhoto = async (photo: { uri: string }, capturedCaption: string, capturedAssetId: string) => {
+    try {
+      // Industry standard compression (saves MBs per job)
+      const manipResult = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      // Save to document directory for permanent app access. FIX: filename
+      // used to be just `photo_${Date.now()}` — safe when capture was fully
+      // serialized (guaranteed unique), but now that processing can overlap
+      // across rapid shots, two photos could collide within the same
+      // millisecond. A random suffix makes it unique regardless of timing.
+      const filename = `photo_${Date.now()}_${generateUUID().slice(0, 8)}.jpg`;
+      const destUri = `${FileSystem.documentDirectory}${filename}`;
+
+      // FIX: If the permanent copy fails, abort entirely. Previously the catch was
+      // silent and addPhoto still ran with the temp camera URI — that temp file is
+      // deleted by the OS, leaving a broken photo row and an upload task that retries
+      // 5 times before being permanently abandoned.
+      try {
+        await FileSystem.copyAsync({ from: manipResult.uri, to: destUri });
+      } catch (copyErr) {
+        console.error('[PhotoCapture] Failed to copy to document directory:', copyErr);
+        Toast.show({ type: 'error', text1: 'Photo save failed', text2: 'Could not write to device storage. Please try again.' });
+        return;
+      }
+
+      const currentUserId = useAuthStore.getState().user?.id ?? null;
+
+      // Defensive guard — the app layout enforces authentication, so user?.id
+      // should never be null here. But if it somehow is, abort gracefully.
+      if (!currentUserId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Session Error',
+          text2: 'Please re-sign in before taking photos.',
+        });
+        return;
+      }
+
+      addPhoto({
+        job_id: jobId,
+        company_id: useAuthStore.getState().user?.company_id ?? null,
+        asset_id: capturedAssetId === '' ? null : capturedAssetId,
+        defect_id: null,
+        stage: null,
+        photo_url: destUri,
+        // local_uri preserves the device file path so offline PDF generation
+        // can encode the photo directly without downloading from Supabase.
+        local_uri: destUri,
+        caption: capturedCaption.trim() || null,
+        uploaded_by: currentUserId,
+      });
+
+      setPhotosTaken(prev => prev + 1);
+      Toast.show({ type: 'success', text1: 'Photo saved' });
+    } catch (e) {
+      console.error(e);
+      Toast.show({ type: 'error', text1: 'Failed to process photo' });
+    }
+  };
+
   const takePicture = async () => {
     if (!cameraRef.current || isTakingRef.current) return;
     isTakingRef.current = true;
+    setIsCapturing(true);
+    // FIX: animateShutter={false} on the CameraView disables the native
+    // shutter flash/animation with nothing replacing it — no haptic, no
+    // visual confirmation at all, unlike every other primary action in this
+    // app (Button, JobCard's destructive actions, etc.). A quick flash
+    // overlay + haptic gives the same instant "I heard your tap" feedback.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    flashOpacity.setValue(0.85);
+    Animated.timing(flashOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (photo) {
-        // Industry standard compression (saves MBs per job)
-        const manipResult = await ImageManipulator.manipulateAsync(
-          photo.uri,
-          [{ resize: { width: 1600 } }],
-          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-        );
-
-        // Save to document directory for permanent app access
-        const filename = `photo_${Date.now()}.jpg`;
-        const destUri = `${FileSystem.documentDirectory}${filename}`;
-
-        // FIX: If the permanent copy fails, abort entirely. Previously the catch was
-        // silent and addPhoto still ran with the temp camera URI — that temp file is
-        // deleted by the OS, leaving a broken photo row and an upload task that retries
-        // 5 times before being permanently abandoned.
-        try {
-          await FileSystem.copyAsync({ from: manipResult.uri, to: destUri });
-        } catch (copyErr) {
-          console.error('[PhotoCapture] Failed to copy to document directory:', copyErr);
-          Toast.show({ type: 'error', text1: 'Photo save failed', text2: 'Could not write to device storage. Please try again.' });
-          return;
-        }
-
-        const currentUserId = useAuthStore.getState().user?.id ?? null;
-
-        // Defensive guard — the app layout enforces authentication, so user?.id
-        // should never be null here. But if it somehow is, abort gracefully.
-        if (!currentUserId) {
-          Toast.show({
-            type: 'error',
-            text1: 'Session Error',
-            text2: 'Please re-sign in before taking photos.',
-          });
-          return;
-        }
-
-        addPhoto({
-          job_id: jobId,
-          company_id: useAuthStore.getState().user?.company_id ?? null,
-          asset_id: assetId === '' ? null : assetId,
-          defect_id: null,
-          stage: null,
-          photo_url: destUri,
-          // local_uri preserves the device file path so offline PDF generation
-          // can encode the photo directly without downloading from Supabase.
-          local_uri: destUri,
-          caption: caption.trim() || null,
-          uploaded_by: currentUserId,
-        });
-
-        setPhotosTaken(prev => prev + 1);
+        const capturedCaption = caption;
+        const capturedAssetId = assetId;
         setCaption(''); // reset per photo as a nice touch
-        Toast.show({ type: 'success', text1: 'Photo saved' });
+        void processPhoto(photo, capturedCaption, capturedAssetId);
       }
     } catch (e) {
       console.error(e);
       Toast.show({ type: 'error', text1: 'Failed to take photo' });
     } finally {
+      // Released immediately once the native capture itself is done — the
+      // (now backgrounded) processing chain no longer holds this open.
       isTakingRef.current = false;
+      setIsCapturing(false);
     }
   };
 
@@ -169,12 +217,22 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
         
         {permission?.granted ? (
           <View style={s.cameraContainer}>
-            <CameraView 
+            <CameraView
               ref={cameraRef}
-              style={s.camera} 
-              facing={facing} 
+              style={s.camera}
+              facing={facing}
               flash={flash}
               animateShutter={false}
+              // FIX: without an explicit ratio, expo-camera on Android can
+              // capture at a different native aspect ratio than what's
+              // shown in this 4:3 preview box, so the saved photo can be
+              // framed/cropped differently than what the technician saw.
+              // Harmless no-op on iOS.
+              ratio="4:3"
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFillObject, { backgroundColor: '#FFFFFF', opacity: flashOpacity }]}
             />
             <View style={s.cameraOverlay}>
               <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} style={s.camBtn}>
@@ -196,7 +254,12 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           </View>
         )}
 
-        <View style={s.form}>
+        {/* FIX: this form rendered at raw full width with no cap — every
+            other polished screen in the app adopted useResponsive's
+            contentMaxWidth specifically because unconstrained full-width
+            controls stretch edge-to-edge and look unfinished on a tablet
+            (see the hook's own doc comment). */}
+        <View style={[s.form, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}>
           <Text style={[s.label, { color: C.textSecondary }]}>Add a caption (optional)</Text>
           <TextInput
             style={[s.input, { backgroundColor: C.surface, borderColor: C.border, color: C.text }]}
@@ -270,8 +333,13 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
           </ScrollView>
         </View>
 
-        <TouchableOpacity style={s.captureBtnInner} onPress={takePicture} activeOpacity={0.7}>
-          <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight }]}>
+        <TouchableOpacity
+          style={s.captureBtnInner}
+          onPress={takePicture}
+          activeOpacity={0.7}
+          disabled={isCapturing}
+        >
+          <View style={[s.captureBtnOuter, { backgroundColor: C.accent, borderColor: C.accentLight, opacity: isCapturing ? 0.5 : 1 }]}>
              <MaterialCommunityIcons name="camera" size={32} color={T.textOnPrimary} />
           </View>
         </TouchableOpacity>
@@ -300,7 +368,13 @@ const s = StyleSheet.create({
   assetChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderWidth: 1.5, maxWidth: 180 },
   assetChipTxt: { fontSize: 12, fontWeight: '700' },
   assetChipSub: { fontSize: 10, marginTop: 1 },
-  captureBtnInner: { alignSelf: 'center', marginTop: 32 },
+  // FIX: was marginTop 32 — on a compact phone (iPhone SE-class), the
+  // camera box + form + this button's total height can exceed the sheet's
+  // visible area, pushing the shutter below the fold and forcing a scroll
+  // before every shot. Trimmed to reclaim a little vertical room; a full
+  // fix (pinning the shutter outside the scroll content) needs on-device
+  // verification across screen sizes before attempting.
+  captureBtnInner: { alignSelf: 'center', marginTop: 16 },
   captureBtnOuter: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', borderWidth: 4 },
 });
 

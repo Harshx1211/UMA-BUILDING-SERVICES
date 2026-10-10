@@ -3,7 +3,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Platform, ScrollView, Image,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import type { NavigationAction } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureScreenCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
@@ -13,6 +14,7 @@ import { runSync } from '@/lib/sync';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { generateUUID } from '@/utils/uuid';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { SyncOperation, JobStatus } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import { useJobsStore } from '@/store/jobsStore';
@@ -32,6 +34,8 @@ export default function SignatureScreen() {
   const { id, autoComplete: autoCompleteParam } = useLocalSearchParams<{ id: string; autoComplete?: string }>();
   const autoComplete = autoCompleteParam === '1';
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const { contentMaxWidth } = useResponsive();
 
   // Two SEPARATE refs, one per step — react-native-signature-canvas has a
   // known issue where the second SignatureCanvas instance on a screen stops
@@ -87,6 +91,34 @@ export default function SignatureScreen() {
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     };
   }, [id]);
+
+  // FIX: this is a legally-binding document (see CONSENT text below, citing
+  // the Electronic Transactions Act) — the header back button/hardware back
+  // could previously discard a drawn-but-unsaved signature with zero
+  // warning, and worse, could discard an ALREADY-CAPTURED technician
+  // signature waiting in the client step (the unmount cleanup above wipes
+  // draft_tech_sig on the way out). Warn whenever leaving would lose either.
+  useEffect(() => {
+    const wouldLoseTechDraft = step === 'client' && !existingSig && !!techSigBase64;
+    const unsub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data: { action: NavigationAction } }) => {
+      if (!hasSig && !wouldLoseTechDraft) return; // nothing unsaved — let it navigate normally
+      e.preventDefault();
+      showConfirm({
+        title: 'Discard Signature?',
+        message: wouldLoseTechDraft && hasSig
+          ? "You have a captured technician signature and an unsaved client signature in progress. Leaving now will discard both."
+          : wouldLoseTechDraft
+          ? "You have a captured technician signature that hasn't been saved yet. Leaving now will discard it."
+          : "This signature hasn't been saved yet. Leaving now will discard it.",
+        icon: 'draw',
+        buttons: [
+          { text: 'Keep Signing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ],
+      });
+    });
+    return unsub;
+  }, [navigation, hasSig, step, existingSig, techSigBase64]);
 
   // Only reacts to the job locking/unlocking (Completed/Cancelled elsewhere)
   // while this screen is open — deliberately NOT a full reload on every
@@ -302,6 +334,7 @@ export default function SignatureScreen() {
         eyebrow="JOB SIGN-OFF"
         title="Sign-Off"
         showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           showCanvas ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -324,6 +357,12 @@ export default function SignatureScreen() {
       <ScrollView
         ref={scrollRef}
         style={s.scroll}
+        // FIX: every other screen in this flow caps content at
+        // contentMaxWidth and centers it on a tablet (see useResponsive's
+        // own doc comment) — this screen never adopted it, so the consent
+        // card, name input, and signature canvas would stretch full-width
+        // on a tablet, breaking visual consistency with the rest of the app.
+        contentContainerStyle={{ maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         // Start with scroll enabled; lockScroll/unlockScroll toggle via setNativeProps

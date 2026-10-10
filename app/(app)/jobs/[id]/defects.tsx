@@ -13,7 +13,7 @@ import AddDefectSheet, { AddDefectSheetRef } from '@/components/defects/AddDefec
 import { getJobById, queryRecords } from '@/lib/database';
 import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
-import { ScreenHeader, EmptyState, FilterPills } from '@/components/ui';
+import { ScreenHeader, EmptyState, FilterPills, Button } from '@/components/ui';
 import * as Haptics from 'expo-haptics';
 import type { Defect } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -89,11 +89,29 @@ export default function DefectsScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Defects" showBack={true} />
+        <ScreenHeader title="Defects" showBack={true} fallbackHref="/jobs" />
         <View style={{ paddingTop: 24, gap: 12 }}>
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
+        </View>
+      </View>
+    );
+  }
+
+  // FIX: a genuine load failure (SQLite error) used to render identically
+  // to "this job genuinely has zero defects" — defectsStore already catches
+  // and stores the error, nothing here ever read it. Telling a technician
+  // "great work, no issues" when the real answer is "couldn't load" is
+  // actively misleading in a compliance context.
+  if (store.error) {
+    return (
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader title="Defects" showBack={true} fallbackHref="/jobs" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
+          <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
+          <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>{store.error}</Text>
+          <Button title="Retry" onPress={() => jobId && store.loadDefects(jobId)} />
         </View>
       </View>
     );
@@ -107,6 +125,7 @@ export default function DefectsScreen() {
       <ScreenHeader
         title="Defects"
         showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           store.defects.length > 0 ? (
             <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>

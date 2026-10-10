@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking, Modal, Platform, ScrollView, StyleSheet,
-  View, TouchableOpacity, TextInput,
+  View, TouchableOpacity, TextInput, RefreshControl,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -28,10 +28,11 @@ import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/no
 import { useColors } from '@/hooks/useColors';
 import { useResponsive } from '@/hooks/useResponsive';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
+import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
-import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { onSyncComplete, offSyncComplete, runSync, JobLiveChangeTable } from '@/lib/sync';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -157,6 +158,13 @@ export default function JobDetailScreen() {
   const [notes,   setNotes]   = useState('');
   const [isEditingNotes,   setIsEditingNotes]   = useState(false);
   const [isLoading,        setIsLoading]        = useState(true);
+  // Kept in sync with `job` state purely so the live-sync partial-reload
+  // callback below (a stable closure captured once per focus by
+  // useJobLiveSync — see its own comment on why onChange isn't in its
+  // effect's dependency array) can always read the CURRENT property_id/
+  // scoped_asset_ids without needing its own identity to change.
+  const jobRef = useRef<JobDetail | null>(null);
+  useEffect(() => { jobRef.current = job; }, [job]);
   const [hasSig,           setHasSig]           = useState(false);
   const [showBottomSheet,  setShowBottomSheet]  = useState(false);
   const [detailsExpanded,  setDetailsExpanded]  = useState(false);
@@ -169,6 +177,20 @@ export default function JobDetailScreen() {
   }, []);
 
   // ── Data loading ──────────────────────────────────────────────────────
+  // FIX (screen freezes on every load): these are 6 synchronous SQLite
+  // calls (getAssetsWithJobResults's own JOIN + GROUP BY subquery is the
+  // heaviest, run against every active asset on the property) — expo-
+  // sqlite's *Sync API fully blocks the JS thread for each one, so running
+  // them back-to-back with no gap used to freeze the whole screen (no
+  // touch/gesture handling at all) for their FULL combined cost, on every
+  // trigger: first mount, every return to this screen, every relevant
+  // realtime push, every periodic sync completion. A yield (the standard
+  // setTimeout(0) trick to hand control back to the JS event loop for a
+  // tick) between each call lets React actually paint what's already been
+  // set and lets any pending touch/gesture event get processed in between,
+  // instead of one unbroken freeze for the sum of all six.
+  const yieldTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
   const loadJob = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
@@ -178,12 +200,17 @@ export default function JobDetailScreen() {
       setJob(j);
       setNotes(j.notes ?? '');
       setAssets(getAssetsWithJobResults<AssetWithResult>(id, j.property_id, j.scoped_asset_ids));
+      await yieldTick();
       setDefects(getDefectsForJob<Defect>(id));
+      await yieldTick();
       setPhotos(getPhotosForJob<InspectionPhoto>(id));
+      await yieldTick();
       // Property-wide count (not job-scoped) — matches how the Documents
       // screen itself lists every document for the site, not just this visit.
       setDocumentCount(getDocumentsForProperty(j.property_id).length);
+      await yieldTick();
       setNotebookCount(getNotebookItemsForProperty(j.property_id).length);
+      await yieldTick();
       setHasSig(!!getSignatureForJob(id));
     } catch (err) {
       console.error('[JobDetail] load error:', err);
@@ -191,6 +218,44 @@ export default function JobDetailScreen() {
       setIsLoading(false);
     }
   }, [id]);
+
+  // FIX: useJobLiveSync's onChange used to always call the FULL loadJob()
+  // above — every one of its 6 queries re-run for a single changed row on
+  // ANY of the tables this screen cares about, even though only one of
+  // them actually went stale. On a multi-technician crew job, a teammate
+  // ticking off one asset elsewhere re-froze this screen for the combined
+  // cost of reloading assets/defects/photos/documents/notebook/signature
+  // just to reflect that one row. Reload only the specific piece the
+  // changed table actually backs, mirroring the table-aware pattern
+  // inspect.tsx and asset/[assetId].tsx already use for their own live
+  // updates. Reads jobRef (not `job` state) since this callback is
+  // captured once per focus by useJobLiveSync (see its own comment).
+  const reloadTable = useCallback((table: JobLiveChangeTable) => {
+    const j = jobRef.current;
+    if (!j) { loadJob(); return; } // header not loaded yet — fall back to a full load
+    switch (table) {
+      case 'jobs':
+        { const fresh = getJobById<JobDetail>(j.id); if (fresh) setJob(fresh); }
+        break;
+      case 'job_assets':
+        setAssets(getAssetsWithJobResults<AssetWithResult>(j.id, j.property_id, j.scoped_asset_ids));
+        break;
+      case 'defects':
+        setDefects(getDefectsForJob<Defect>(j.id));
+        break;
+      case 'inspection_photos':
+        setPhotos(getPhotosForJob<InspectionPhoto>(j.id));
+        break;
+      case 'site_documents':
+        setDocumentCount(getDocumentsForProperty(j.property_id).length);
+        break;
+      case 'signatures':
+        setHasSig(!!getSignatureForJob(j.id));
+        break;
+      // job_technicians/quotes/quote_items/time_logs are excluded before
+      // this is ever called — see useJobLiveSync's own filter below.
+    }
+  }, [loadJob]);
 
   const handleSaveNotes = useCallback(() => {
     if (!job) return;
@@ -241,14 +306,16 @@ export default function JobDetailScreen() {
   // job screen using this hook hands the live channel off to whichever one
   // is currently focused, so it stays live everywhere inside this job.
   // FIX: this used to reload on ANY table change, including
-  // job_technicians/quotes/quote_items/time_logs — none of which loadJob()
-  // actually reads (it only reads jobs/job_assets/defects/inspection_photos/
-  // site_documents/signatures), so those three previously fired the same
-  // full 6-query reload for no reason.
-  useJobLiveSync(id, useCallback((table) => {
+  // job_technicians/quotes/quote_items/time_logs — none of which this
+  // screen reads at all (it only reads jobs/job_assets/defects/
+  // inspection_photos/site_documents/signatures), so those three
+  // previously fired a reload for no reason. The remaining tables now go
+  // through reloadTable (see its own comment) instead of the full
+  // loadJob() — reloading only the one piece that actually changed.
+  useJobLiveSync(id, useCallback((table: JobLiveChangeTable) => {
     if (table === 'job_technicians' || table === 'quotes' || table === 'quote_items' || table === 'time_logs') return;
-    loadJob();
-  }, [loadJob]));
+    reloadTable(table);
+  }, [reloadTable]));
 
   // FIX: subscribeToJobLive never subscribes to DELETE events for any
   // table — the only way a deletion made on another device reaches this
@@ -289,14 +356,34 @@ export default function JobDetailScreen() {
   }, [navigation, isEditingNotes, handleSaveNotes]);
 
   // ── Job actions ────────────────────────────────────────────────────────
+  // FIX: this was the one un-gated state-transition button on this screen —
+  // Pass/Fail/N-T (inspect.tsx/asset detail) are all disabled while a save
+  // is in flight (the codebase's own documented BUG-N7 fix, "prevent
+  // rapid-tap duplicates"), but Start Job had no such guard: a rapid
+  // double-tap could fire updateJobStatus + the success Toast twice.
+  const [isStarting, setIsStarting] = useState(false);
+  // FIX: this screen had no pull-to-refresh, unlike the job list one tap
+  // up (jobs/index.tsx) — an inconsistent gesture affordance between two
+  // screens in the same flow. Live-sync + the 10-minute periodic sync
+  // already cover most staleness, but this is the familiar, expected
+  // gesture for "give me the latest now."
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await runSync();
+    setIsRefreshing(false);
+  }, []);
   const handleStartJob = async () => {
-    if (!job || !user) return;
+    if (!job || !user || isStarting) return;
+    setIsStarting(true);
     try {
       updateJobStatus(job.id, JobStatus.InProgress);
       setJob(p => p ? { ...p, status: JobStatus.InProgress } : p);
       Toast.show({ type: 'success', text1: 'Job Started' });
     } catch {
       Toast.show({ type: 'error', text1: 'Failed to start job' });
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -435,10 +522,21 @@ export default function JobDetailScreen() {
   const failedPct = totalAssets > 0 ? (failedCount / totalAssets) * 100 : 0;
 
   // ── Loading / error states ─────────────────────────────────────────────
+  // FIX: was a bare centered spinner on a blank background — inconsistent
+  // with inspect.tsx (one screen over, in the same job flow), which already
+  // shows a skeleton shaped like its real content. Shaped to this screen's
+  // own layout: a header, a big overview/progress card, then a few
+  // action-row-shaped blocks.
   if (isLoading) {
     return (
-      <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
-        <ActivityIndicator color={C.primary} size="large" />
+      <View style={[s.screen, { backgroundColor: C.background }]}>
+        <ScreenHeader title="Job Details" showBack={true} fallbackHref="/jobs" />
+        <View style={{ padding: 16, gap: 12 }}>
+          <SkeletonBlock width="100%" height={140} borderRadius={16} />
+          <SkeletonBlock width="100%" height={64} borderRadius={16} />
+          <SkeletonBlock width="100%" height={64} borderRadius={16} />
+          <SkeletonBlock width="100%" height={64} borderRadius={16} />
+        </View>
       </View>
     );
   }
@@ -552,6 +650,7 @@ export default function JobDetailScreen() {
         title={job.property_name || 'Job Details'}
         subtitle={[job.property_address, job.property_suburb].filter(Boolean).join(', ') || 'No address on record'}
         showBack={true}
+        fallbackHref="/jobs"
         rightComponent={
           <Badge
             status={job.status}
@@ -565,7 +664,11 @@ export default function JobDetailScreen() {
         }
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+      >
         <View style={s.body}>
 
           {/* ── JOB ACTIONS WIDGET (scheduled state only — once in progress, the
@@ -580,9 +683,12 @@ export default function JobDetailScreen() {
                 </View>
                 <TouchableOpacity
                   onPress={handleStartJob}
-                  style={[s.continueBtn, { backgroundColor: C.primary, borderColor: C.primary, paddingHorizontal: 20, paddingVertical: 10 }]}
+                  disabled={isStarting}
+                  style={[s.continueBtn, { backgroundColor: C.primary, borderColor: C.primary, paddingHorizontal: 20, paddingVertical: 10, opacity: isStarting ? 0.6 : 1 }]}
                 >
-                  <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start Job</Text>
+                  {isStarting
+                    ? <ActivityIndicator size="small" color={C.textOnPrimary} />
+                    : <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start Job</Text>}
                 </TouchableOpacity>
               </Card>
             </Animated.View>

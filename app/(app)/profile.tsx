@@ -1,13 +1,15 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
-import { router } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import Constants from 'expo-constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
-import { retryAllFailedSyncItems } from '@/lib/sync';
+import { retryAllFailedSyncItems, onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { updateRecord, addToSyncQueue, getFailedSyncItems, getPendingSyncItems } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
 import { useColors } from '@/hooks/useColors';
+import { useResponsive } from '@/hooks/useResponsive';
 import { ScreenHeader, Badge, showConfirm } from '@/components/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { cardShadow } from '@/components/ui/Card';
@@ -26,6 +28,7 @@ export default function ProfileScreen() {
   const { user } = useAuth();
   const { signOut, company, updateUser } = useAuthStore();
   const C = useColors();
+  const { contentMaxWidth } = useResponsive();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,7 +57,22 @@ export default function ProfileScreen() {
     return () => clearInterval(interval);
   }, [isSigningOut]);
 
-  const failedSyncCount = getFailedSyncItems().length;
+  // FIX: this used to call getFailedSyncItems().length directly in the
+  // render body — a SQLite query re-run on EVERY render of this screen
+  // (every keystroke while editing the phone field, every state change
+  // anywhere on the page), not just when the failed-sync count could
+  // plausibly have changed. Moved to state, refreshed on focus (covers the
+  // normal "come back to this tab" case) and whenever a sync cycle
+  // completes (covers retryAllFailedSyncItems() below actually clearing it).
+  const [failedSyncCount, setFailedSyncCount] = useState(0);
+  const refreshFailedSyncCount = useCallback(() => {
+    setFailedSyncCount(getFailedSyncItems().length);
+  }, []);
+  useFocusEffect(refreshFailedSyncCount);
+  useEffect(() => {
+    onSyncComplete(refreshFailedSyncCount);
+    return () => offSyncComplete(refreshFailedSyncCount);
+  }, [refreshFailedSyncCount]);
 
   function _confirmLogout() {
     showConfirm({
@@ -117,14 +135,26 @@ export default function ProfileScreen() {
       <ScreenHeader
         title="My Profile"
         rightComponent={
-          <TouchableOpacity onPress={() => isEditing ? handleSave() : setIsEditing(true)}>
-            {isSaving ? <ActivityIndicator size="small" color={C.accent} /> : 
+          <TouchableOpacity
+            onPress={() => isEditing ? handleSave() : setIsEditing(true)}
+            // FIX: this was bare Text/ActivityIndicator with zero padding —
+            // the tap target was exactly the glyph bounding box, well under
+            // the ~44pt guideline, for the primary action on the whole
+            // screen. hitSlop covers the immediate gap; real padding fixes
+            // the visible/hit area together.
+            style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {isSaving ? <ActivityIndicator size="small" color={C.accent} /> :
               <Text style={{ color: C.accent, fontWeight: '700', fontSize: 16 }}>{isEditing ? 'Save' : 'Edit'}</Text>}
           </TouchableOpacity>
         }
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      {/* FIX: this screen had no tablet-width cap — every other screen in
+          the app caps its scroll content at contentMaxWidth and centers it
+          on a tablet; Profile stretched every card edge-to-edge instead. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}>
         {/* Avatar card */}
         <View style={styles.avatarCard}>
           <View style={styles.avatarCircle}>
@@ -239,7 +269,11 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.version}>SiteTrack v2.0  •  {company?.name || 'Company'}</Text>
+        {/* FIX: this was a hardcoded "v2.0" literal — help.tsx (the app's
+            other version-display screen) already reads the real version via
+            Constants.expoConfig, so the two screens could show different,
+            contradictory version numbers to the same user. */}
+        <Text style={styles.version}>SiteTrack v{Constants.expoConfig?.version ?? '1.0.0'}  •  {company?.name || 'Company'}</Text>
       </ScrollView>
     </View>
   );

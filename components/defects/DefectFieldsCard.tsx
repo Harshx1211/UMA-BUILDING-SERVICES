@@ -478,8 +478,8 @@ function PhotoStageSection({ label, hint, photos, onAdd, onRemove, disabled, loa
       <View style={s.photoGrid}>
         {photos.map((uri) => (
           <TouchableOpacity key={uri} onLongPress={() => onRemove(uri)} activeOpacity={0.85} style={s.thumbWrap}>
-            <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" />
-            <TouchableOpacity style={[s.thumbDel, { backgroundColor: C.text }]} onPress={() => onRemove(uri)} hitSlop={6}>
+            <Image source={{ uri: getValidLocalUri(uri) }} style={s.thumb} contentFit="cover" transition={200} />
+            <TouchableOpacity style={[s.thumbDel, { backgroundColor: C.text }]} onPress={() => onRemove(uri)} hitSlop={6} accessibilityLabel="Remove photo" accessibilityRole="button">
               <MaterialCommunityIcons name="close" size={12} color={C.textOnPrimary} />
             </TouchableOpacity>
           </TouchableOpacity>

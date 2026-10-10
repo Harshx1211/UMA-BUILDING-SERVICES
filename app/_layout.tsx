@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
@@ -18,6 +19,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as ScreenCapture from 'expo-screen-capture';
 
 SplashScreen.preventAutoHideAsync();
+// FIX (cold-start feels unprofessional): hideAsync() used to just cut the
+// native splash away in a single frame the instant auth restore finished —
+// whatever was already rendered underneath (a skeleton, a half-mounted tab
+// bar) popped into view abruptly instead of the two states handing off
+// smoothly. expo-splash-screen's own fade option cross-fades the splash's
+// background/logo out over the app's real content instead of an instant cut.
+SplashScreen.setOptions({ duration: 400, fade: true });
 
 
 // SiteTrack has one light theme — used regardless of system preference.
@@ -41,15 +49,26 @@ export default function RootLayout() {
   const { isLoading, restoreSession } = useAuthStore();
 
   // ── Screenshot / Screen-capture prevention ─────────────────────────────────
-  // Android: FLAG_SECURE is set natively in MainActivity.kt (blocks at OS level)
-  // iOS + JS layer: expo-screen-capture blocks screen recording
+  // FIX: this comment previously claimed FLAG_SECURE was hand-set natively
+  // in MainActivity.kt — it isn't; there's no such code there. FLAG_SECURE
+  // is set by expo-screen-capture's OWN native module (ScreenCaptureModule.kt)
+  // as a side effect of the preventScreenCaptureAsync() call below — the one
+  // call below is the entire mechanism, on both platforms:
+  // Android: preventScreenCaptureAsync() sets FLAG_SECURE on the window (blocks
+  //          screenshots and recent-apps thumbnail at the OS level)
+  // iOS:     preventScreenCaptureAsync() blocks screen recording/broadcast
+  //          (iOS has no OS-level way to block a plain screenshot — see the
+  //          separate AppState overlay below for app-switcher content)
   // iOS app-switcher: AppState blur overlay hides content when app backgrounds
   const [isObscured, setIsObscured] = useState(false);
   const obscureOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Re-enabled screen capture prevention for production build.
-    ScreenCapture.preventScreenCaptureAsync();
+    // TEMPORARILY DISABLED so screenshots can be taken to report bugs/UI
+    // issues during QA. MUST be re-enabled (uncomment the line below,
+    // remove allowScreenCaptureAsync()) before any production/release build.
+    // ScreenCapture.preventScreenCaptureAsync();
+    ScreenCapture.allowScreenCaptureAsync();
     return () => {
       ScreenCapture.allowScreenCaptureAsync();
     };
@@ -112,14 +131,22 @@ export default function RootLayout() {
   // Single theme — field service app.
   const theme = paperTheme;
 
-  // Show a blank loading screen while session is being restored.
+  // FIX: the native splash screen shows the SiteTrack brand mark
+  // (app.json's splash-icon.png); the instant JS took over, this branch
+  // replaced it with a bare spinner on a plain background — no mark at
+  // all — until restoreSession() resolved and the login screen (which
+  // re-introduces the same BrandLogo) mounted. The mark flickered out and
+  // back in across one continuous "app is opening" moment. Keeping it
+  // visible through the auth-check phase reads as one smooth transition
+  // instead of splash -> blank -> login.
   if (isLoading) {
     return (
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
           <PaperProvider theme={theme}>
             <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-              <ActivityIndicator color={theme.colors.primary} size="large" />
+              <BrandLogo size="large" showWordmark={false} />
+              <ActivityIndicator color={theme.colors.primary} size="large" style={{ marginTop: 32 }} />
             </View>
             <StatusBar style="dark" />
           </PaperProvider>

@@ -10,12 +10,13 @@
  *  - Section labels are sentence-case via <SectionHeader>
  *  - Notification bell uses MaterialCommunityIcons, not an emoji
  */
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, ScrollView, TouchableOpacity, StyleSheet, Animated, RefreshControl,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
@@ -58,8 +59,13 @@ function JobCard({ job, index }: { job: Job; index: number }) {
   const j = job as JobWithJoins;
 
   useEffect(() => {
+    // FIX: uncapped index*50 delay meant a busy day (10-15 jobs across
+    // Today + Upcoming) took up to ~1s for the last card to finish
+    // appearing — a genuinely fast local-SQLite load was made to FEEL
+    // slow by the animation itself. Capped so the stagger is still visible
+    // for the first few cards but the whole list settles quickly either way.
     Animated.timing(anim, {
-      toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true,
+      toValue: 1, duration: 300, delay: Math.min(index * 50, 200), useNativeDriver: true,
     }).start();
   }, [anim, index]);
 
@@ -145,8 +151,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const { user }               = useAuth();
-  const { contentMaxWidth } = useResponsive();
-  const { jobs, loadJobs, isLoading } = useJobsStore();
+  const { contentMaxWidth, isTablet } = useResponsive();
+  const { jobs, isLoading } = useJobsStore();
   const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
@@ -164,26 +170,48 @@ export default function HomeScreen() {
   // so an in_progress/completed job counts as "today's" if either its
   // schedule or its actual activity falls today — matches the same fix
   // applied to the Schedule tab's Today/Week filters.
-  const todayJobs  = jobs.filter((j: Job) =>
+  // FIX: these used to re-filter/re-scan the full `jobs` array inline in
+  // the render body on EVERY render of this screen — including renders
+  // triggered by unrelated state (unreadCount, overdueCount, refreshing),
+  // not just when `jobs` itself actually changed. Memoized so this work
+  // only re-runs when the jobs list or the current date actually changes.
+  const todayJobs = useMemo(() => jobs.filter((j: Job) =>
     j.scheduled_date === today ||
     ((j.status === JobStatus.InProgress || j.status === JobStatus.Completed) && j.updated_at?.substring(0, 10) === today)
-  );
-  const doneToday  = todayJobs.filter((j: Job) => j.status === JobStatus.Completed).length;
-  const inProgress = jobs.find((j: Job) => j.status === JobStatus.InProgress);
-  const openCount  = jobs.filter((j: Job) =>
+  ), [jobs, today]);
+  const doneToday  = useMemo(() => todayJobs.filter((j: Job) => j.status === JobStatus.Completed).length, [todayJobs]);
+  const inProgress = useMemo(() => jobs.find((j: Job) => j.status === JobStatus.InProgress), [jobs]);
+  const openCount  = useMemo(() => jobs.filter((j: Job) =>
     j.status !== JobStatus.Completed && j.status !== JobStatus.Cancelled
-  ).length;
+  ).length, [jobs]);
+  // Exclude anything already shown in Today's Jobs — a job scheduled ahead
+  // but started early now qualifies for todayJobs via updated_at too, and
+  // without this it would render twice (once per section).
+  const upcoming = useMemo(() => {
+    const todayJobIds = new Set(todayJobs.map((j: Job) => j.id));
+    return jobs
+      .filter((j: Job) => j.scheduled_date > today && !todayJobIds.has(j.id))
+      .slice(0, 5);
+  }, [jobs, todayJobs, today]);
 
+  // FIX: this used to call loadJobs(user.id) itself, both here and inside
+  // onSync below — but app/(app)/_layout.tsx (this screen's own parent)
+  // already does an eager loadJobs() the moment the user session is ready,
+  // AND subscribes the jobs store to auto-reload on every future sync
+  // completion (subscribeToSync). Since `jobs`/`isLoading` come from that
+  // same shared Zustand store, this screen already re-renders correctly
+  // whenever either of those fires — calling loadJobs() a second time here
+  // just re-ran the exact same synchronous SQLite query for no benefit,
+  // stacking right on top of the layout's own load at the single moment
+  // (login -> home transition) most likely to produce a visible stutter.
   useEffect(() => {
     if (user) {
-      loadJobs(user.id);
       setUnreadCount(getUnreadNotificationCount(user.id));
       setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
     }
 
     const onSync = () => {
       if (user) {
-        loadJobs(user.id);
         setUnreadCount(getUnreadNotificationCount(user.id));
         setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
       }
@@ -205,7 +233,7 @@ export default function HomeScreen() {
       // "Can't perform a React state update on an unmounted component" warning.
       pulseAnimation.stop();
     };
-  }, [user, loadJobs, pulseAnim, today]);
+  }, [user, pulseAnim, today]);
 
   // FIX: the bell badge only refreshed on mount or on a full sync cycle —
   // now up to 10 minutes apart (constants/Config.ts) — so marking
@@ -235,7 +263,12 @@ export default function HomeScreen() {
         rightComponent={
           <TouchableOpacity
             style={styles.bellBtn}
-            onPress={() => router.push('/(app)/notifications')}
+            // FIX: every other interactive control on this screen/the login
+            // screen fires a haptic on press (Button component, biometric
+            // button, etc.) — this frequently-tapped nav target didn't,
+            // breaking the tap-buzz pattern the rest of the app trains the
+            // user to expect.
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(app)/notifications'); }}
             accessibilityRole="button"
             accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
           >
@@ -297,10 +330,18 @@ export default function HomeScreen() {
         )}
 
         {/* ── KPI Stat Tiles ── */}
-        <View style={styles.kpiRow}>
+        {/* FIX: kpiRow/kpiCard used to be pure flex:1, so on a tablet
+            (contentMaxWidth capped at 720 but nothing constraining these
+            individual tiles) the three cards stretched to fill the full
+            width — three very wide, mostly-empty cards with a small
+            centered number. Capped to a fixed max width and the row
+            centered (instead of stretched) on tablet, same fix pattern
+            useResponsive's own doc comment describes for phone-sized
+            elements otherwise stretching edge-to-edge. */}
+        <View style={[styles.kpiRow, isTablet && styles.kpiRowTablet]}>
           {isLoading
             ? (["Today's Jobs", 'Open Jobs', 'Completed Today'] as const).map((label) => (
-                <View key={label} style={styles.kpiCard}>
+                <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <SkeletonBlock width={32} height={26} borderRadius={6} />
                   <SkeletonBlock width={48} height={10} borderRadius={4} style={{ marginTop: 6 }} />
                 </View>
@@ -312,7 +353,7 @@ export default function HomeScreen() {
                 { value: openCount,        label: 'Open Jobs'      },
                 { value: doneToday,        label: 'Completed Today' },
               ].map(({ value, label }) => (
-                <View key={label} style={styles.kpiCard}>
+                <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <Text style={styles.kpiValue}>{value}</Text>
                   <Text style={styles.kpiLabel}>{label}</Text>
                 </View>
@@ -339,24 +380,14 @@ export default function HomeScreen() {
         </View>
 
         {/* ── Upcoming ── */}
-        {(() => {
-          // Exclude anything already shown above — a job scheduled ahead but
-          // started early now qualifies for todayJobs via updated_at too, and
-          // without this it would render twice (once per section).
-          const todayJobIds = new Set(todayJobs.map((j: Job) => j.id));
-          const upcoming = jobs
-            .filter((j: Job) => j.scheduled_date > today && !todayJobIds.has(j.id))
-            .slice(0, 5);
-          if (!upcoming.length) return null;
-          return (
-            <View style={styles.section}>
-              <SectionHeader title="Upcoming" style={styles.sectionHeader} />
-              {upcoming.map((job: Job, idx: number) => (
-                <JobCard key={job.id} job={job} index={idx} />
-              ))}
-            </View>
-          );
-        })()}
+        {upcoming.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Upcoming" style={styles.sectionHeader} />
+            {upcoming.map((job: Job, idx: number) => (
+              <JobCard key={job.id} job={job} index={idx} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -467,6 +498,11 @@ const styles = StyleSheet.create({
     gap: T.space12,
     marginBottom: T.space24,
   },
+  // Tablet: don't stretch to fill the full capped content width — center a
+  // row of fixed-width tiles instead (see the FIX comment at the JSX).
+  kpiRowTablet: {
+    justifyContent: 'center',
+  },
   kpiCard: {
     flex: 1,
     backgroundColor: T.surface,
@@ -477,6 +513,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: T.space16,
     alignItems: 'center',
     ...cardShadow,
+  },
+  kpiCardTablet: {
+    flex: 0,
+    width: 180,
   },
   kpiValue: {
     // Neutral — not semantic colors (confirmed with user)
