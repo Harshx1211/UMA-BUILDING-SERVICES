@@ -2038,6 +2038,18 @@ async function _pullRelated(
         }
       }
 
+      // Counterpart of the field_audit_log push fix in _pushQueue: rows
+      // written since then come back from PostgREST as a real array, which
+      // isn't a valid SQLite bind value (it would silently fail the whole
+      // row's upsert). Older rows are still a jsonb string and already
+      // arrive as the string getFieldAuditLog expects — leave those alone.
+      if (table === 'field_audit_log') {
+        const auditRow = row as Record<string, unknown>;
+        if (Array.isArray(auditRow.changes)) {
+          auditRow.changes = JSON.stringify(auditRow.changes);
+        }
+      }
+
       rowsToUpsert.push(row as Record<string, string | number | boolean | null>);
     }
 
@@ -2202,6 +2214,22 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           payload.photos = JSON.parse(payload.photos);
         } catch {
           payload.photos = [];
+        }
+      }
+
+      // FIX: same shape problem as defects.photos above. logFieldAudit
+      // (lib/database.ts) stores `changes` as a JSON string — SQLite has no
+      // array type — and it used to be pushed exactly like that, so the
+      // server's jsonb column got a jsonb STRING containing the array's
+      // text instead of the array itself. The admin dashboard's job
+      // Timeline then crashed calling .map() on it. Parsed here so the
+      // server gets a real array; covers items already sitting in the
+      // queue too, since this runs at push time, not at enqueue time.
+      if (item.table_name === 'field_audit_log' && typeof payload.changes === 'string') {
+        try {
+          payload.changes = JSON.parse(payload.changes);
+        } catch {
+          payload.changes = [];
         }
       }
 
