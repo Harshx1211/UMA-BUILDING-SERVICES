@@ -81,4 +81,121 @@ SELECT '20260827010000_job_assets_unique_constraint',
        'unique constraint job_assets_job_asset_unique exists',
        CASE WHEN EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'job_assets_job_asset_unique') THEN 'OK' ELSE 'MISSING' END
 
+-- Everything below was added after this script was first written — it used
+-- to stop at 20260827, so it could never tell whether the later security
+-- and report-pipeline migrations had actually been applied.
+
+UNION ALL
+SELECT '20260829000000_auto_seed_company_catalogue',
+       'function seed_default_catalogue_for_new_company exists',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'seed_default_catalogue_for_new_company') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260901000000_site_documents',
+       'table site_documents exists',
+       CASE WHEN to_regclass('public.site_documents') IS NOT NULL THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260905000000_field_audit_log',
+       'table field_audit_log exists',
+       CASE WHEN to_regclass('public.field_audit_log') IS NOT NULL THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260908030000_site_documents_updated_at',
+       'site_documents.updated_at column exists',
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='site_documents' AND column_name='updated_at')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260910000000_deletion_log',
+       'table deletion_log exists',
+       CASE WHEN to_regclass('public.deletion_log') IS NOT NULL THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260914000000_admin_notification_toggles',
+       'function notify_critical_defect exists',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_critical_defect') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260914010000_overdue_service_notifications',
+       'function check_overdue_properties exists',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'check_overdue_properties') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260915000000_server_side_business_rules',
+       'function enforce_job_completion_requirements exists',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'enforce_job_completion_requirements') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260916000000_site_documents_bucket_private',
+       'storage bucket site-documents is private',
+       CASE WHEN EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'site-documents' AND public = false) THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260917000000_enquiry_email_exists_rpc',
+       'function enquiry_email_exists exists',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'enquiry_email_exists') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260918000000_job_photos_bucket_private',
+       'storage bucket job-photos is private',
+       CASE WHEN EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'job-photos' AND public = false) THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260919000000_property_notebook_items',
+       'table property_notebook_items exists',
+       CASE WHEN to_regclass('public.property_notebook_items') IS NOT NULL THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260919010000_job_assets_internal_notes',
+       'job_assets.internal_notes column exists',
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='job_assets' AND column_name='internal_notes')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260920000000_inspection_photos_stage',
+       'inspection_photos.stage column exists',
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='inspection_photos' AND column_name='stage')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260920010000_defects_resolved_on_site',
+       'defects.resolved_on_site column exists',
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='defects' AND column_name='resolved_on_site')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260921010000_atomic_report_lock',
+       'function try_acquire_report_lock exists (report-generator needs this)',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'try_acquire_report_lock') THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260922000000_jobs_scoped_asset_ids',
+       'jobs.scoped_asset_ids column exists',
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema='public' AND table_name='jobs' AND column_name='scoped_asset_ids')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260922010000_fix_job_technicians_cross_tenant_leak',
+       'job_technicians_self_assign_insert checks the job belongs to the caller''s company',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_policies
+                         WHERE schemaname='public' AND tablename='job_technicians'
+                           AND policyname='job_technicians_self_assign_insert'
+                           AND with_check ILIKE '%jobs%')
+            THEN 'OK' ELSE 'MISSING' END
+
+UNION ALL
+SELECT '20260922010000_fix_job_technicians_cross_tenant_leak',
+       'photos_delete_via_job_technicians checks company_id',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_policies
+                         WHERE schemaname='public' AND tablename='inspection_photos'
+                           AND policyname='photos_delete_via_job_technicians'
+                           AND qual ILIKE '%company_id%')
+            THEN 'OK' ELSE 'MISSING' END
+
 ORDER BY migration;
