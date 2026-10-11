@@ -1,6 +1,7 @@
-// Supabase client — uses AsyncStorage for session persistence across app restarts
+// Supabase client — session persisted across app restarts, encrypted at rest
+// (see lib/secureSessionStorage.ts)
 import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureSessionStorage } from '@/lib/secureSessionStorage';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
 // ── Environment validation ────────────────────────────────────────────────
@@ -25,7 +26,7 @@ if (!supabaseAnonKey) {
 /** Typed Supabase client — import this everywhere you need backend access */
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage:            AsyncStorage,
+    storage:            secureSessionStorage,
     autoRefreshToken:   true,
     persistSession:     true,
     detectSessionInUrl: false,

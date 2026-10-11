@@ -73,6 +73,11 @@ export async function uploadDocument(
     if (!supabaseUrl) {
       return { error: 'EXPO_PUBLIC_SUPABASE_URL is not set', isTerminal: true };
     }
+    // Same as uploadPhoto: never send the anon key as the bearer — wait for
+    // a real session instead.
+    if (!token) {
+      return { error: 'Not signed in — will retry once a session is available', isTerminal: false };
+    }
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${DOCUMENT_BUCKET}/${filePath}`;
 
@@ -81,7 +86,7 @@ export async function uploadDocument(
       httpMethod: 'PUT',
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       headers: {
-        Authorization: `Bearer ${token ?? anonKey}`,
+        Authorization: `Bearer ${token}`,
         apikey: anonKey,
         'Content-Type': 'application/pdf',
         'x-upsert': 'true',
@@ -171,7 +176,9 @@ export function queueDocumentUpload(
 export async function processDocumentQueue(currentUserId: string): Promise<void> {
   try {
     const pending       = getPendingSyncItems();
-    const documentTasks = pending.filter(i => String(i.operation) === 'document_upload');
+    // Only this user's own tasks — see processPhotoQueue's identical filter.
+    const documentTasks = pending.filter(i => String(i.operation) === 'document_upload'
+      && (!i.user_id || i.user_id === currentUserId));
 
     if (documentTasks.length === 0) return;
 

@@ -96,7 +96,11 @@ export default function AppLayout() {
             .eq('id', data.company_id)
             .single()
             .then(({ data: company }) => {
-              if (company?.subscription_status === 'suspended' || company?.subscription_status === 'cancelled') {
+              // Same rule as sign-in/restore (authStore): anything but
+              // 'active' ends the session — previously this only caught
+              // 'suspended'/'cancelled', so any other status passed here
+              // while sign-in would have refused it.
+              if (company && company.subscription_status !== 'active') {
                 console.warn('[AppLayout] Company suspended. Forcing graceful logout.');
                 useAuthStore.getState().forceFinalSyncAndSignOut();
               }

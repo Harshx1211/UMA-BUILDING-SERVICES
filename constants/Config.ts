@@ -47,3 +47,10 @@ export const SESSION_KEY = '@sitetrack/session';
 export const PHOTO_BUCKET = 'job-photos';
 export const REPORT_BUCKET = 'job-reports';
 export const DOCUMENT_BUCKET = 'site-documents';
+
+/** Where the "Forgot password" email's link lands — the admin portal's
+ * /reset-password page (admin/src/app/reset-password). Must also be listed
+ * under Supabase → Authentication → URL Configuration → Redirect URLs, or
+ * Supabase falls back to the project's Site URL. Overridable per build. */
+export const PASSWORD_RESET_URL =
+  process.env.EXPO_PUBLIC_PASSWORD_RESET_URL ?? 'https://site-track-admin.vercel.app/reset-password';

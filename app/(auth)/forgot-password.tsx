@@ -12,6 +12,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { PASSWORD_RESET_URL } from '@/constants/Config';
 import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
@@ -47,8 +48,12 @@ export default function ForgotPasswordScreen() {
     setIsLoading(true);
     setBanner(null);
     try {
+      // FIX: no redirectTo used to be sent, so the link went to the project's
+      // Site URL, where nothing handles a recovery link — the reset could
+      // never actually be completed. See PASSWORD_RESET_URL.
       const { error } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase()
+        email.trim().toLowerCase(),
+        { redirectTo: PASSWORD_RESET_URL },
       );
       if (error) {
         setBanner({ type: 'error', message: error.message });

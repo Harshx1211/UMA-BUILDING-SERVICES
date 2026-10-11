@@ -407,7 +407,7 @@ export default function PropertyDetailScreen() {
           {property.site_contact_phone && (
             <TouchableOpacity
               style={[s.actionBtn, { backgroundColor: C.surface, borderColor: C.border }]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${property.site_contact_phone}`); }}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${String(property.site_contact_phone).replace(/[^\d+]/g, '')}`); }}
               activeOpacity={0.75}
             >
               <View style={[s.actionBtnIcon, { backgroundColor: C.backgroundTertiary }]}>
@@ -489,7 +489,7 @@ export default function PropertyDetailScreen() {
                   label="Phone"
                   value={property.site_contact_phone}
                   valueColor={C.primary}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${property.site_contact_phone}`); }}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${String(property.site_contact_phone).replace(/[^\d+]/g, '')}`); }}
                 />
               </>
             )}

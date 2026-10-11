@@ -12,13 +12,10 @@ import {
 } from 'react-native';
 import { Checkbox, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/store/authStore';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui';
@@ -30,14 +27,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 import { APP_NAME } from '@/constants/Config';
 
-// CRITICAL FIX: must match the key used in authStore.ts line 13.
-// Previously '@uma-building-services/remember_me' — AsyncStorage reads always
-// returned null so biometrics never activated even when 'Remember me' was ticked.
-const REMEMBER_ME_KEY = '@sitetrack/remember_me';
-
 export default function LoginScreen() {
   const { signIn, isLoading, error, clearError } = useAuth();
-  const { restoreSession } = useAuthStore();
   const C = useColors();
   const noMotion = useReducedMotion();
   const scrollRef = useRef<ScrollView>(null);
@@ -48,12 +39,13 @@ export default function LoginScreen() {
   const [email, setEmail]                   = useState('');
   const [password, setPassword]             = useState('');
   const [showPassword, setShowPassword]     = useState(false);
-  const [rememberMe, setRememberMe]         = useState(false);
+  // On by default: a remembered session is still protected by the device
+  // unlock (fingerprint/face/PIN) on every launch — see authStore's isLocked
+  // and components/AppLockScreen.tsx. Unticked, the session ends when the
+  // app is fully closed and the next launch needs the password again.
+  const [rememberMe, setRememberMe]         = useState(true);
   const [emailError, setEmailError]         = useState('');
   const [passwordError, setPasswordError]   = useState('');
-  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
-  const [biometricType, setBiometricType]   = useState<'fingerprint' | 'face' | null>(null);
-  const [isAuthenticatingBiometric, setIsAuthenticatingBiometric] = useState(false);
 
   // Adjust scroll when keyboard opens so inputs remain visible
   useEffect(() => {
@@ -61,27 +53,6 @@ export default function LoginScreen() {
       scrollRef.current?.scrollTo({ y: 150, animated: true });
     });
     return () => show.remove();
-  }, []);
-
-  useEffect(() => {
-    const checkBiometrics = async () => {
-      try {
-        const [compatible, enrolled, remembered] = await Promise.all([
-          LocalAuthentication.hasHardwareAsync(),
-          LocalAuthentication.isEnrolledAsync(),
-          AsyncStorage.getItem(REMEMBER_ME_KEY),
-        ]);
-        if (compatible && enrolled && remembered === 'true') {
-          setBiometricsAvailable(true);
-          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-          setBiometricType(
-            types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
-              ? 'face' : 'fingerprint'
-          );
-        }
-      } catch { /* silently skip */ }
-    };
-    checkBiometrics();
   }, []);
 
   const validate = (): boolean => {
@@ -107,29 +78,6 @@ export default function LoginScreen() {
       return;
     }
     await signIn(normalisedEmail, password, rememberMe);
-  };
-
-  const handleBiometric = async () => {
-    // FIX: this button never showed any busy/disabled state while the OS
-    // biometric prompt + restoreSession() were in flight — unlike the
-    // "Sign In" button right above it, which is correctly wired to
-    // isLoading. A tap while the prompt was dismissing (or a second,
-    // impatient tap) got no feedback that anything was happening at all.
-    setIsAuthenticatingBiometric(true);
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to SiteTrack',
-        cancelLabel: 'Use Password',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        await restoreSession();
-      }
-    } catch (err) {
-      console.warn('[Login] Biometric error:', err);
-    } finally {
-      setIsAuthenticatingBiometric(false);
-    }
   };
 
   return (
@@ -168,7 +116,7 @@ export default function LoginScreen() {
               <View style={[styles.alertBanner, { backgroundColor: C.warningLight, borderColor: T.tintBorder(C.warning) }]}>
                 <MaterialCommunityIcons name="wifi-off" size={18} color={C.warning} />
                 <Text style={[styles.alertText, { color: C.warningDark }]}>
-                  You are offline. Biometric sign-in still works. Signing in with a password requires internet.
+                  You are offline. Signing in needs an internet connection.
                 </Text>
               </View>
             )}
@@ -256,30 +204,6 @@ export default function LoginScreen() {
               style={{ height: 52, borderRadius: 12, marginTop: 8 }}
             />
 
-            {biometricsAvailable && (
-              <>
-                <View style={styles.dividerRow}>
-                  <View style={[styles.divider, { backgroundColor: C.border }]} />
-                  <Text style={[styles.dividerTxt, { color: C.textTertiary }]}>or</Text>
-                  <View style={[styles.divider, { backgroundColor: C.border }]} />
-                </View>
-                <Button
-                  title={biometricType === 'face' ? 'Sign in with Face ID' : 'Sign in with Fingerprint'}
-                  variant="secondary"
-                  onPress={handleBiometric}
-                  isLoading={isAuthenticatingBiometric}
-                  disabled={isAuthenticatingBiometric}
-                  icon={
-                    <MaterialCommunityIcons
-                      name={biometricType === 'face' ? 'face-recognition' : 'fingerprint'}
-                      size={20}
-                      color={C.primary}
-                    />
-                  }
-                  style={{ height: 52, borderRadius: 12 }}
-                />
-              </>
-            )}
           </Animated.View>
         </View>
 
@@ -353,16 +277,6 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: '600' 
   },
-
-  // ── Divider ──────────────────────
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 24,
-  },
-  divider: { flex: 1, height: 1 },
-  dividerTxt: { fontSize: 13, fontWeight: '500' },
 
   // ── Footer ───────────────────────
   footer: {

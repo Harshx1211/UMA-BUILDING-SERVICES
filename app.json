@@ -43,8 +43,13 @@
         "android.permission.USE_FINGERPRINT",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
@@ -65,7 +70,9 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "SiteTrack needs camera access to photograph fire safety assets and defects."
+          "cameraPermission": "SiteTrack needs camera access to photograph fire safety assets and defects.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -86,6 +93,13 @@
         "react-native-document-scanner-plugin",
         {
           "cameraPermission": "SiteTrack needs camera access to scan on-site documents."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "SiteTrack uses Face ID to unlock the app and keep inspection data private."
         }
       ]
     ],

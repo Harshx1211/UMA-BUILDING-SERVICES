@@ -70,7 +70,34 @@ const MAX_PHOTO_RETRIES = 5;
 // versus the original 10-year value. The fully-correct fix would be
 // sign-on-read for these screens, matching admin's own pattern — not
 // done here, flagged as a real follow-up if this keeps mattering.
-const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365 * 1.5; // 1.5 years
+//
+// FIX (security): 1.5 years meant a link that leaked anywhere (a forwarded
+// message, a log, a cached page) kept showing that photo, with no login,
+// for 18 months. Every reader now re-signs from the storage path on its own
+// (admin's signPhotoUrls, the report service's prepare*Photos, and
+// ResilientPhoto's resign-on-failure here), so the stored link no longer
+// needs to outlive anything: 30 days, refreshed on view only once it's
+// close to expiring (see REFRESH_WITHIN_SECONDS).
+const PHOTO_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 30; // 30 days
+// refreshPhotoUrlsOnView only re-signs a link with less than this left —
+// it used to re-sign (and queue a sync write for) every photo on every
+// single view.
+const REFRESH_WITHIN_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+/** Expiry (unix seconds) of a Supabase signed URL, read from its token's
+ * `exp` claim; null when it isn't a signed URL or can't be parsed. */
+function signedUrlExpiry(url: string): number | null {
+  const token = /[?&]token=([^&]+)/.exec(url)?.[1];
+  const payload = token?.split('.')[1];
+  if (!payload) return null;
+  try {
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4))) as { exp?: unknown };
+    return typeof json.exp === 'number' ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
 
 /** True if this is a real Storage URL (uploaded) rather than a local
  * file:// or content:// URI (still pending upload). */
@@ -145,8 +172,12 @@ async function _signAndPersistPhotoUrls(candidates: { id: string; path: string }
  * not a user-facing failure.
  */
 export async function refreshPhotoUrlsOnView(photos: { id: string; photo_url: string }[]): Promise<void> {
+  const refreshBefore = Date.now() / 1000 + REFRESH_WITHIN_SECONDS;
   const candidates = photos
     .filter((p) => isRemotePhotoUrl(p.photo_url))
+    // Still comfortably valid — nothing to do. An unparsable expiry (e.g. a
+    // legacy public URL) is treated as due, so it gets a real signed one.
+    .filter((p) => (signedUrlExpiry(p.photo_url) ?? 0) < refreshBefore)
     .map((p) => ({ id: p.id, path: extractPhotoStoragePath(p.photo_url) }))
     .filter((p): p is { id: string; path: string } => !!p.path);
   await _signAndPersistPhotoUrls(candidates);
@@ -234,6 +265,12 @@ export async function uploadPhoto(
     if (!supabaseUrl) {
       return { error: 'EXPO_PUBLIC_SUPABASE_URL is not set', isTerminal: true };
     }
+    // FIX: this used to fall back to the public anon key as the bearer when
+    // there was no session. Storage rejects that anyway (uploads require a
+    // signed-in user of the job's company) — wait for a session instead.
+    if (!token) {
+      return { error: 'Not signed in — will retry once a session is available', isTerminal: false };
+    }
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${PHOTO_BUCKET}/${filePath}`;
 
@@ -242,7 +279,7 @@ export async function uploadPhoto(
       httpMethod: 'PUT',
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       headers: {
-        Authorization: `Bearer ${token ?? anonKey}`,
+        Authorization: `Bearer ${token}`,
         apikey: anonKey,
         'Content-Type': 'image/jpeg',
         'x-upsert': 'true',
@@ -322,8 +359,14 @@ export function queuePhotoUpload(
  */
 export async function processPhotoQueue(currentUserId: string): Promise<void> {
   try {
+    // FIX: only this user's own tasks (or pre-user_id legacy ones) — the
+    // same filter _pushQueue applies. On a shared device a previous
+    // account's queued photos would otherwise upload under THIS session:
+    // attributed to the wrong technician, or rejected outright (and burned
+    // as a permanent failure) when the two accounts are different companies.
     const pending    = getPendingSyncItems();
-    const photoTasks = pending.filter(i => String(i.operation) === 'photo_upload');
+    const photoTasks = pending.filter(i => String(i.operation) === 'photo_upload'
+      && (!i.user_id || i.user_id === currentUserId));
 
     if (photoTasks.length === 0) return;
 

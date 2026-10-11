@@ -2,14 +2,15 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { supabase, signOut as supabaseSignOut } from '@/lib/supabase';
 import { stopSync } from '@/lib/sync';
+import { DRAFT_PREFIX } from '@/lib/signatureDraft';
 import { clearDatabase, getPendingSyncItems } from '@/lib/database';
 import { setCurrentUserId } from '@/lib/currentUserId';
 import { showConfirm } from '@/components/ui';
 import { SESSION_KEY, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY } from '@/constants/Config';
 import type { User } from '@/types';
-import { UserRole } from '@/constants/Enums';
 
 
 const REMEMBER_ME_KEY    = '@sitetrack/remember_me';
@@ -36,6 +37,8 @@ interface AuthState {
   isLoading: boolean;
   isForceSyncing: boolean;
   isAuthenticated: boolean;
+  /** Signed in, but the device unlock (components/AppLockScreen.tsx) hasn't been passed yet. */
+  isLocked: boolean;
   error: string | null;
 }
 
@@ -48,6 +51,10 @@ interface AuthActions {
   restoreSession: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
   clearError: () => void;
+  /** Called by AppLockScreen once the device unlock succeeds. */
+  unlock: () => void;
+  /** Re-lock (e.g. returning after a while in the background) — no-op unless the session is remembered and the device has a screen lock. */
+  lockIfRemembered: () => Promise<void>;
 }
 
 // Helper: race a promise against a timeout — returns null on timeout
@@ -110,10 +117,37 @@ async function resetAllFeatureStores(): Promise<void> {
 async function sweepDraftSignatureKeys(): Promise<void> {
   try {
     const allKeys = await AsyncStorage.getAllKeys();
-    const draftKeys = allKeys.filter((k) => k.startsWith('draft_tech_sig_'));
+    const draftKeys = allKeys.filter((k) => k.startsWith(DRAFT_PREFIX));
     if (draftKeys.length > 0) await AsyncStorage.multiRemove(draftKeys);
   } catch { /* best-effort housekeeping — never block sign-out on this */ }
 }
+
+// ── Remembered session + device lock ──────────────────────────────────
+// FIX (anyone holding an unlocked phone was straight in): the session was
+// always restored at launch, whether or not "Remember me" was ticked, and
+// the old "Sign in with Fingerprint" button only re-ran that same restore —
+// there was no lock anywhere. Now:
+//  - "Remember me" off: the session ends when the app is fully closed; the
+//    next launch needs the password.
+//  - "Remember me" on: launching the app, or coming back to it after
+//    LOCK_AFTER_MS in the background (app/_layout.tsx), needs the device
+//    unlock — fingerprint, face, or the phone's own PIN/pattern.
+//  - A phone with no screen lock at all has nothing to check the person
+//    against, so the lock is skipped there (it can't add anything).
+async function isRemembered(): Promise<boolean> {
+  try { return (await AsyncStorage.getItem(REMEMBER_ME_KEY)) === 'true'; } catch { return false; }
+}
+
+async function deviceHasScreenLock(): Promise<boolean> {
+  try {
+    return (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
+  } catch {
+    return false;
+  }
+}
+
+const NO_PROFILE_MESSAGE =
+  "This account isn't set up for the SiteTrack app. Contact your company administrator.";
 
 // ---------------------------------------------
 // Store
@@ -126,6 +160,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   isLoading: true,
   isForceSyncing: false,
   isAuthenticated: false,
+  isLocked: false,
   error: null,
 
   // Sign in
@@ -181,34 +216,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       }
 
       if (!profileWithCompany) {
-        // Confirmed no profile row — could be an admin account (no technician row).
-        // Build a minimal fallback from the auth session so they can still log in.
-        const fallback: User = {
-          id: data.user.id,
-          email: data.user.email ?? '',
-          full_name:
-            (data.user.user_metadata?.full_name as string) ??
-            data.user.email?.split('@')[0] ??
-            'User',
-          role: UserRole.Admin,
-          company_id: null,
-          phone: null,
-          avatar_url: null,
-          push_token: null,
-          fpas_number: null,
-          fpas_class: null,
-          fpas_expiry: null,
-          state_license: null,
-          state_license_expiry: null,
-          accepted_tos_at: null,
-          accepted_aup_at: null,
-          is_active: true,
-          created_at: data.user.created_at ?? new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        if (rememberMe) await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
-        await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(fallback));
-        set({ user: fallback, company: null, session: data.session, isAuthenticated: true, isLoading: false, error: null });
+        // FIX: a confirmed zero-row result used to build a local fallback
+        // profile labelled Admin (company_id null) and let the account in.
+        // Server-side RLS still returned nothing to it, but the app has no
+        // business admitting an auth account that has no technician profile
+        // (an office/superadmin login, or a stray sign-up) — refuse it.
+        await supabase.auth.signOut();
+        set({ error: NO_PROFILE_MESSAGE, isLoading: false });
         return;
       }
 
@@ -231,9 +245,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         return;
       }
 
-      if (rememberMe) {
-        await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
-      }
+      // FIX: unticking used to leave an earlier sign-in's 'true' in place.
+      if (rememberMe) await AsyncStorage.setItem(REMEMBER_ME_KEY, 'true');
+      else await AsyncStorage.removeItem(REMEMBER_ME_KEY);
       // FLOW-11: Cache profile so offline restoreSession can succeed without network
       await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
       if (fetchedCompany) await AsyncStorage.setItem(COMPANY_CACHE_KEY, JSON.stringify(fetchedCompany));
@@ -243,6 +257,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         company: fetchedCompany,
         session: data.session,
         isAuthenticated: true,
+        isLocked: false, // just proved who they are with the password
         isLoading: false,
         error: null,
       });
@@ -335,6 +350,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         // gap (see below) went unnoticed — set it directly here too.
         session: null,
         isAuthenticated: false,
+        isLocked: false,
         isLoading: false,
         isForceSyncing: false,
         error: null,
@@ -415,6 +431,16 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       const { session } = sessionResult.data;
 
+      // "Remember me" was off — this session ends with the app. Signing out
+      // locally (no network needed) runs the SIGNED_OUT teardown below,
+      // which keeps any unsynced work on the device for the next sign-in.
+      if (!(await isRemembered())) {
+        set({ isLoading: false, isAuthenticated: false, isLocked: false });
+        void supabase.auth.signOut({ scope: 'local' });
+        return;
+      }
+      const startLocked = await deviceHasScreenLock();
+
       // If we have a cached profile, authenticate immediately — don't block on network
       if (cachedProfileStr) {
         try {
@@ -428,7 +454,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             throw new Error('stale cache');
           }
           const cachedCompany = cachedCompanyStr ? JSON.parse(cachedCompanyStr) : null;
-          set({ user: cached, company: cachedCompany, session, isAuthenticated: true, isLoading: false, error: null });
+          set({ user: cached, company: cachedCompany, session, isAuthenticated: true, isLocked: startLocked, isLoading: false, error: null });
           // Refresh cache in the background (non-blocking) so it stays fresh
           // Also verify the company hasn't been suspended while the app was closed
           void Promise.resolve().then(async () => {
@@ -514,30 +540,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       }
 
       if (!profileResult.data) {
-        // Confirmed zero rows — an admin account with no technician row.
-        // Build a minimal fallback from the auth session so they can still log in.
-        const su = session.user;
-        const fallback: User = {
-          id: su.id,
-          email: su.email ?? '',
-          full_name: (su.user_metadata?.full_name as string) ?? su.email?.split('@')[0] ?? 'User',
-          role: UserRole.Admin,
-          company_id: null,
-          phone: null,
-          avatar_url: null,
-          push_token: null,
-          fpas_number: null,
-          fpas_class: null,
-          fpas_expiry: null,
-          state_license: null,
-          state_license_expiry: null,
-          accepted_tos_at: null,
-          accepted_aup_at: null,
-          is_active: true,
-          created_at: su.created_at ?? new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        set({ user: fallback, company: null, session, isAuthenticated: true, isLoading: false });
+        // No technician profile — same refusal as signIn() (see its comment).
+        set({ isLoading: false, isAuthenticated: false, isLocked: false, error: NO_PROFILE_MESSAGE });
+        void supabase.auth.signOut({ scope: 'local' });
         return;
       }
 
@@ -570,6 +575,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         company: fetchedCompany,
         session,
         isAuthenticated: true,
+        isLocked: startLocked,
         isLoading: false,
         error: null,
       });
@@ -589,6 +595,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
   // Clear error
   clearError: () => set({ error: null }),
+
+  unlock: () => set({ isLocked: false }),
+
+  lockIfRemembered: async () => {
+    if (!get().isAuthenticated || get().isLocked) return;
+    if ((await isRemembered()) && (await deviceHasScreenLock())) set({ isLocked: true });
+  },
 }));
 
 // FIX: keeps lib/currentUserId.ts's module-level value in lockstep with
@@ -697,9 +710,12 @@ supabase.auth.onAuthStateChange((event, session) => {
         company: null,
         session: null,
         isAuthenticated: false,
+        isLocked: false,
         isLoading: false,
         isForceSyncing: false,
-        error: null,
+        // Keep a refusal message (e.g. NO_PROFILE_MESSAGE) set by whichever
+        // path triggered this sign-out, so the login screen can show it.
+        error: useAuthStore.getState().error,
       });
     })();
   } else if (event === 'TOKEN_REFRESHED' && session) {

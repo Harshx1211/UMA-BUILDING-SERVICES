@@ -10,6 +10,7 @@ import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { AppLockScreen } from '@/components/AppLockScreen';
 
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
@@ -26,6 +27,12 @@ SplashScreen.preventAutoHideAsync();
 // smoothly. expo-splash-screen's own fade option cross-fades the splash's
 // background/logo out over the app's real content instead of an instant cut.
 SplashScreen.setOptions({ duration: 400, fade: true });
+
+// A remembered session re-locks after this long in the background (see
+// authStore's "Remembered session + device lock" notes). Short trips out —
+// the camera, the document scanner, the photo picker, a quick call — stay
+// well under it.
+const LOCK_AFTER_MS = 5 * 60 * 1000;
 
 
 // SiteTrack has one light theme — used regardless of system preference.
@@ -46,7 +53,7 @@ const paperTheme = {
 
 
 export default function RootLayout() {
-  const { isLoading, restoreSession } = useAuthStore();
+  const { isLoading, restoreSession, isAuthenticated, isLocked } = useAuthStore();
 
   // ── Screenshot / Screen-capture prevention ─────────────────────────────────
   // FIX: this comment previously claimed FLAG_SECURE was hand-set natively
@@ -92,6 +99,23 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [obscureOpacity]);
   // ──────────────────────────────────────────────────────────────────────────
+
+  // Re-lock after LOCK_AFTER_MS away. Only a real 'background' counts as
+  // leaving: iOS also reports 'inactive' while the Face ID prompt itself is
+  // on screen, which would otherwise make the lock re-trigger itself.
+  useEffect(() => {
+    let backgroundedAt: number | null = null;
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'background') {
+        backgroundedAt = Date.now();
+      } else if (next === 'active' && backgroundedAt != null) {
+        const away = Date.now() - backgroundedAt;
+        backgroundedAt = null;
+        if (away >= LOCK_AFTER_MS) void useAuthStore.getState().lockIfRemembered();
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // 1. Initialise local SQLite then restore session — MUST be sequential.
   //    On a fresh install, restoreSession() can trigger loadJobs() → SQLite queries
@@ -163,6 +187,8 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <Toast />
           <ConfirmDialogHost />
+          {/* Last, so it covers every screen, toast and dialog above. */}
+          {isAuthenticated && isLocked && <AppLockScreen />}
           {/* iOS app-switcher screenshot shield */}
           {isObscured && (
             <Animated.View
