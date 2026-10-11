@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, fmtCurrency, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection } from './helpers';
+import { esc, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection, stripPrices } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -125,13 +125,11 @@ export function renderDefectCard(
   const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
   const photos = photosByDefect.get(defect.id) ?? [];
+  // No quote price on the report (owner's rule, 2026-10-11 — see
+  // stripPrices in helpers.ts): quotes live in the app and admin portal.
   // "Resolved on site" is purely informational — a technician's on-the-spot
-  // fix, independent of status/quote. Shown alongside the quote rather than
-  // replacing it: a defect can be resolved on site AND have a quote on record.
-  const tags = [
-    defect.quote_price != null ? pill(`Quote: ${esc(fmtCurrency(defect.quote_price))}`, COLORS.PILL.quote) : '',
-    defect.resolved_on_site ? pill('Resolved on site', COLORS.PILL.pass) : '',
-  ].join('');
+  // fix.
+  const tags = defect.resolved_on_site ? pill('Resolved on site', COLORS.PILL.pass) : '';
 
   return `
     <div class="defect" style="background:${sev.bg};border-color:${sev.border};border-left-color:${sev.accent}">
@@ -139,7 +137,7 @@ export function renderDefectCard(
         <span class="defect-title" style="color:${sev.title}">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
         <span class="defect-time">Logged ${fmtDateTime(defect.created_at)}</span>
       </div>
-      <div class="defect-desc">${esc(defect.description)}</div>
+      <div class="defect-desc">${esc(stripPrices(defect.description))}</div>
       ${tags ? `<div class="tags">${tags}</div>` : ''}
       ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls, includeUntaggedPhotos)}
     </div>`;

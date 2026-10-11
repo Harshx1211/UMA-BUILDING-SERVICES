@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, pill, stagedPhotoSection } from './helpers';
+import { esc, pill, stagedPhotoSection, stripPrices } from './helpers';
 import { Defect, InspectionPhoto, Quote } from '../types';
 
 /**
@@ -39,7 +39,7 @@ export function renderRepairs(
       .map(
         (i) => `
         <tr>
-          <td>${esc(i.item_name ?? i.inventory_item?.name ?? 'Item')}</td>
+          <td>${esc(stripPrices(i.item_name ?? i.inventory_item?.name ?? 'Item'))}</td>
           <td class="num">${i.quantity}</td>
         </tr>`,
       )
@@ -54,7 +54,7 @@ export function renderRepairs(
     return `
       <div class="asset-card keep" style="margin-top:8px">
         <div class="asset-head" style="border-left-color:${COLORS.GREEN_TEXT}">
-          <span class="asset-title pre">${esc(defect.description)}</span>
+          <span class="asset-title pre">${esc(stripPrices(defect.description))}</span>
           ${pill('Resolved', COLORS.PILL.pass)}
         </div>
         ${body ? `<div class="asset-body">${body}</div>` : ''}

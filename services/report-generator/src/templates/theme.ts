@@ -46,7 +46,6 @@ export const COLORS = {
     pass: { bg: '#DCFCE7', text: '#166534', border: '#86EFAC' },
     fail: { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5' },
     not_tested: { bg: '#F1F5F9', text: '#475569', border: '#CBD5E1' },
-    quote: { bg: '#FFF7ED', text: '#9A3412', border: '#FDBA74' },
   } as Record<string, { bg: string; text: string; border: string }>,
 
   // An asset card's left edge, by inspection result.

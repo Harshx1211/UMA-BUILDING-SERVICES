@@ -52,6 +52,48 @@ export function fmtCurrency(v: number | null | undefined): string {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(Number(v));
 }
 
+// ── Prices never print ───────────────────────────────────────────────────
+// Owner's rule (2026-10-11): the report must not show prices — a client
+// reading "Critical defect" next to a dollar figure reads it as a sales
+// pitch. Quotes stay in the app and admin portal. The defect-code library's
+// descriptions carry prices inline ("…replace Seal $135.00", "…investigation
+// $85.00+GST p/hr"), and picking a code copies that text onto the defect, so
+// descriptions are cleaned here, at print time; the stored text (which
+// technicians quote from) is never changed.
+
+// "$135", "$1,350.00", "AU$90", "@$150" — plus any GST / rate wording around it.
+const GST = String.raw`(?:\s*(?:\+|plus\s+|inc\.?\s*|incl\.?\s*|ex\.?\s*|excl\.?\s*)GST)`;
+const RATE = String.raw`(?:\s*(?:\/\s*h(?:r|our)?|p\/\s*h(?:r)?|per\s+hour|per\s+hr|an?\s+hour|ea|each)\b)`;
+const AMOUNT = String.raw`@?\s*(?:AU|A)?\$\s?\d[\d,]*(?:\.\d{1,2})?${GST}?${RATE}?${GST}?`;
+// Wording that only exists to introduce the price goes with it.
+const LEAD_IN = String.raw`(?:\b(?:at\s+(?:an?\s+)?(?:additional|extra)(?:\s+cost)?(?:\s+of)?|at\s+a\s+cost\s+of|costing|for)\s*)?`;
+// After a comparison the sentence still needs an object: "exceeds $400" ->
+// "exceeds the agreed limit".
+const COMPARED = new RegExp(String.raw`\b(exceeds?|over|above|under|below|up\s+to|more\s+than|less\s+than)\s+${AMOUNT}`, 'gi');
+const PRICE = new RegExp(String.raw`\s*${LEAD_IN}${AMOUNT}`, 'gi');
+const HAS_PRICE = /\$\s?\d/;
+
+export function stripPrices(text: string): string;
+export function stripPrices(text: string | null | undefined): string | null | undefined;
+export function stripPrices(text: string | null | undefined): string | null | undefined {
+  if (!text || !HAS_PRICE.test(text)) return text;
+  return text
+    .replace(COMPARED, '$1 the agreed limit')
+    .replace(PRICE, '')
+    // Tidy what the removal left behind.
+    .replace(/[ \t]*[—–-][ \t]*(?=[.,;)]|$)/gm, '') // "repair — ." -> "repair."
+    .replace(/[ \t]*&[ \t]*(?=[.,;)]|$)/gm, '')       // "… & )" -> "…)"
+    .replace(/[ \t]*&[ \t]*\(/g, ' (')                // "Speaker & (…" -> "Speaker (…"
+    .replace(/\([ \t]*(?:add|plus)?[ \t]*\)/gi, '')   // empty "( )"
+    .replace(/\([ \t]*(?:add|plus)[ \t]+for[ \t]+/gi, '(') // "(add for electrician…" -> "(electrician…"
+    .replace(/\([ \t]+/g, '(')
+    .replace(/[ \t]+([.,;:)])/g, '$1')
+    .replace(/([.,;:])(?=[.,;:])/g, '')                // ",." -> "."
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
+}
+
 type PillColors = { bg: string; text: string; border: string };
 
 /** A small rounded status tag. `label` must already be safe HTML. */

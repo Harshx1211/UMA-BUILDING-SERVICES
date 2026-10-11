@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, field, fmtDate } from './helpers';
+import { esc, field, fmtDate, stripPrices } from './helpers';
 import { groupByCategory, AS1851_SECTIONS } from '../data/categoryGrouping';
 import { AssetTypeDefinition, ReportData } from '../types';
 
@@ -76,7 +76,7 @@ export function renderYearlyConditionReport(
           <td style="text-align:center"><span class="type-badge" style="background:${color}">${t.type}</span></td>
           <td style="font-weight:700;color:${color}">${esc(t.label)}</td>
           <td>${section != null ? `Section ${section}` : '&mdash;'}</td>
-          <td class="pre">${esc(d.description)}</td>
+          <td class="pre">${esc(stripPrices(d.description))}</td>
         </tr>`;
     })
     .join('');
