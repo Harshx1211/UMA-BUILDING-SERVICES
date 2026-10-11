@@ -120,6 +120,28 @@ export function hasReportUrl(jobId: string): boolean {
   return !!(getRecord<{ report_url: string | null }>('jobs', jobId)?.report_url);
 }
 
+// ─── Pre-warm ──────────────────────────────────────────────────────────────
+
+let lastWarmUpAt = 0;
+const WARM_UP_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * Wakes the report service ahead of time. It scales to zero after ~15 idle
+ * minutes, and starting it back up (container + Chromium) used to land
+ * exactly when the technician tapped Generate — the sync handler waits for
+ * /health before sending the request. Called when the technician reaches
+ * the sign-off / report summary screens, so the service is already up by
+ * the time they generate. Fire-and-forget, at most once per 5 minutes; a
+ * failure (offline, etc.) changes nothing — generation still waits for
+ * /health itself.
+ */
+export function warmUpReportService(): void {
+  const url = process.env.EXPO_PUBLIC_REPORT_SERVICE_URL;
+  if (!url || Date.now() - lastWarmUpAt < WARM_UP_INTERVAL_MS) return;
+  lastWarmUpAt = Date.now();
+  fetch(`${url}/health`).catch(() => { lastWarmUpAt = 0; });
+}
+
 // ─── Async generation status polling ───────────────────────────────────────
 //
 // Report generation runs in the background on the report-generator service

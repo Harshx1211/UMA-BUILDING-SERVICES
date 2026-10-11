@@ -22,6 +22,7 @@ import { ScreenHeader, Button, Card, showConfirm } from '@/components/ui';
 import { T } from '@/constants/Colors';
 import { MAX_LENGTHS } from '@/utils/sanitize';
 import { readTechDraft, writeTechDraft, clearTechDraft } from '@/lib/signatureDraft';
+import { warmUpReportService } from '@/lib/pdfGenerator';
 
 export default function SignatureScreen() {
   const C = useColors();
@@ -89,6 +90,9 @@ export default function SignatureScreen() {
   // later.
   useEffect(() => {
     if (!id) return;
+    // Signing comes right before generating the report — wake the report
+    // service now so it's up by then (see warmUpReportService).
+    warmUpReportService();
     const job = getJobById<{ status: string }>(id);
     setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
 

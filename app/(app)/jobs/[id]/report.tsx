@@ -27,6 +27,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
+import { warmUpReportService } from '@/lib/pdfGenerator';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { JobLiveChangeTable } from '@/lib/sync';
 import type { Defect, Signature } from '@/types';
@@ -262,7 +263,9 @@ export default function ReportSummaryScreen() {
   // back-to-back on every first open, doubling all 5 queries below for zero
   // benefit. useFocusEffect alone already covers mount, matching the
   // pattern properties/[id].tsx already uses correctly.
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  // Start waking the report service now, while the technician reviews this
+  // summary — see warmUpReportService.
+  useFocusEffect(useCallback(() => { loadData(); warmUpReportService(); }, [loadData]));
 
   // This summary reads job_assets/defects/signature directly (not through a
   // store), so — unlike the job's own status — none of it refreshes live on
