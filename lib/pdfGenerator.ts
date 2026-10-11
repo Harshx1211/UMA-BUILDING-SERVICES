@@ -148,9 +148,17 @@ export async function pollReportStatus(jobId: string): Promise<ReportStatusResul
     throw new Error('No auth session');
   }
 
-  const res = await fetch(`${reportServiceUrl}/report-status?jobId=${encodeURIComponent(jobId)}`, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
-  });
+  // FIX: the service's responses carried an ETag, and the native HTTP stack
+  // answered repeat polls with conditional requests -> 304 Not Modified with
+  // an empty body, which this treated as an error on every poll after the
+  // first. A unique URL plus no-store means every poll gets a real answer.
+  const res = await fetch(
+    `${reportServiceUrl}/report-status?jobId=${encodeURIComponent(jobId)}&t=${Date.now()}`,
+    {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Cache-Control': 'no-cache' },
+    },
+  );
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new Error(data?.error ?? `report-status returned HTTP ${res.status}`);

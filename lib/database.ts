@@ -2884,6 +2884,99 @@ export function markSyncItemComplete(id: number): void {
 }
 
 /**
+ * Leaves an item pending WITHOUT counting it as a failure: records why it's
+ * waiting (shown to the technician) and clears any backoff so the very next
+ * push pass re-checks it. For items that are blocked, not broken — e.g. a
+ * PDF request waiting for the job's own changes to upload first.
+ */
+export function deferSyncItem(id: number, note: string): void {
+  try {
+    const db = openDatabase();
+    db.runSync(`UPDATE sync_queue SET last_error = ?, next_retry_at = NULL WHERE id = ?`, [note, id]);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] deferSyncItem(${id}) error:`, err);
+  }
+}
+
+/**
+ * For every job with a local edit not yet pushed to the server, the set of
+ * columns those edits touch (union of their queued payloads). Used by
+ * lib/sync.ts's _mergeServerJob so a server copy of a job can never
+ * overwrite a field this device has changed but not yet synced — e.g.
+ * "Continue Working" flipping a completed job back to in_progress. Counts
+ * items sitting out a retry backoff too (still unsynced); excludes
+ * permanently failed ones (synced = -1), which will never land, so the
+ * server's value is the honest one for those.
+ */
+export function getPendingJobFieldMap(): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ record_id: string; payload: string }>(
+      `SELECT record_id, payload FROM sync_queue
+       WHERE table_name = 'jobs' AND synced = 0 AND operation IN (?, ?)`,
+      [SyncOperation.Insert, SyncOperation.Update],
+    );
+    for (const row of rows) {
+      let fields = map.get(row.record_id);
+      if (!fields) { fields = new Set(); map.set(row.record_id, fields); }
+      try {
+        for (const k of Object.keys(JSON.parse(row.payload) as Record<string, unknown>)) fields.add(k);
+      } catch { /* unparsable payload — the push loop marks it terminal */ }
+    }
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getPendingJobFieldMap error:', err);
+  }
+  return map;
+}
+
+/**
+ * Drops a not-yet-run PDF request for this job (marks it done unsent).
+ * Called when the job is reopened: the request was for the data as it was
+ * at completion, and letting it run now would attach a PDF to a job that's
+ * being edited again. Returns how many were dropped.
+ */
+export function cancelPendingReportGeneration(jobId: string): number {
+  try {
+    const db = openDatabase();
+    const result = db.runSync(
+      `UPDATE sync_queue SET synced = 1
+       WHERE table_name = 'jobs' AND record_id = ? AND operation = ? AND synced = 0`,
+      [jobId, SyncOperation.ReportGenerate],
+    );
+    return result.changes;
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] cancelPendingReportGeneration(${jobId}) error:`, err);
+    return 0;
+  }
+}
+
+/**
+ * Retires any not-yet-synced Delete for this record that was queued BEFORE
+ * `beforeQueueId`, by marking it done without sending it. Used when a newer
+ * write has just adopted that server row (lib/sync.ts's signatures conflict
+ * handler): the old Delete was aimed at the row's previous content, and
+ * letting it run now would erase the new content instead. Covers items in
+ * retry backoff and permanently failed ones too (the latter get reset and
+ * retried later). A Delete queued AFTER `beforeQueueId` is a later, genuine
+ * intent and is left alone. Returns how many were retired.
+ */
+export function supersedeEarlierDeletes(tableName: string, recordId: string, beforeQueueId: number): number {
+  try {
+    const db = openDatabase();
+    const result = db.runSync(
+      `UPDATE sync_queue SET synced = 1
+       WHERE table_name = ? AND record_id = ? AND operation = ? AND id < ? AND synced != 1`,
+      [tableName, recordId, SyncOperation.Delete, beforeQueueId],
+    );
+    return result.changes;
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] supersedeEarlierDeletes(${tableName}, ${recordId}) error:`, err);
+    return 0;
+  }
+}
+
+/**
  * Overwrites a queued sync item's stored payload — used to strip a column
  * Supabase no longer recognises (e.g. a field removed from a table after
  * the item was already queued) so the corrected payload is what gets sent

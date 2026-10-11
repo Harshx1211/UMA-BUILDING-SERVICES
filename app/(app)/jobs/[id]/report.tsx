@@ -17,8 +17,6 @@ import {
   getDefectsForJob,
   getSignatureForJob,
   getRecord,
-  updateRecord,
-  addToSyncQueue,
 } from '@/lib/database';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
@@ -27,7 +25,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card, showConfirm } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
-import { DefectSeverity, JobStatus, SyncOperation } from '@/constants/Enums';
+import { DefectSeverity, JobStatus } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { JobLiveChangeTable } from '@/lib/sync';
@@ -376,9 +374,10 @@ export default function ReportSummaryScreen() {
       return;
     }
     if (!isCompleted) {
-      const now = new Date().toISOString();
-      updateRecord('jobs', job.id, { status: JobStatus.Completed, updated_at: now });
-      addToSyncQueue('jobs', job.id, SyncOperation.Update, { status: JobStatus.Completed, updated_at: now });
+      // One write path for every status change: updateJobStatus saves and
+      // queues the status atomically and recomputes property compliance.
+      // (This used to also write + queue the same update itself first —
+      // a duplicate queue entry for no gain.)
       updateJobStatus(job.id, JobStatus.Completed);
     }
     router.push(`/jobs/${job.id}/preview` as never);

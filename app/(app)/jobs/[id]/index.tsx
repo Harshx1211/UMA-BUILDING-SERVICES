@@ -20,7 +20,7 @@ import {
 import {
   getJobById, getAssetsWithJobResults, getDefectsForJob, getPhotosForJob,
   getSignatureForJob, getDocumentsForProperty, getNotebookItemsForProperty, updateRecord, addToSyncQueue,
-  deleteRecord,
+  deleteRecord, cancelPendingReportGeneration, openDatabase,
 } from '@/lib/database';
 import CompletionBottomSheet from '@/components/jobs/CompletionBottomSheet';
 import { ToleranceLabel } from '@/components/jobs/ToleranceLabel';
@@ -33,6 +33,7 @@ import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete, runSync, JobLiveChangeTable } from '@/lib/sync';
+import { clearTechDraft } from '@/lib/signatureDraft';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type AssetWithResult = Asset & {
@@ -478,19 +479,35 @@ export default function JobDetailScreen() {
           text: 'Continue Working',
           onPress: () => {
             const now = new Date().toISOString();
-            updateRecord('jobs', job.id, { status: JobStatus.InProgress, report_url: null, updated_at: now });
-            addToSyncQueue('jobs', job.id, SyncOperation.Update, {
-              status: JobStatus.InProgress,
-              report_url: null,
-              updated_at: now,
+            // Reopen, clear the signature and drop any queued PDF as ONE
+            // commit — an app kill part-way must not leave e.g. a reopened
+            // job still carrying the old signature, or a signature deleted
+            // locally with no queued delete.
+            openDatabase().withTransactionSync(() => {
+              updateRecord('jobs', job.id, { status: JobStatus.InProgress, report_url: null, updated_at: now });
+              addToSyncQueue('jobs', job.id, SyncOperation.Update, {
+                status: JobStatus.InProgress,
+                report_url: null,
+                updated_at: now,
+              });
+              if (existingSig) {
+                deleteRecord('signatures', existingSig.id);
+                addToSyncQueue('signatures', existingSig.id, SyncOperation.Delete, { id: existingSig.id, job_id: job.id });
+              }
+              // A PDF request still waiting in the queue was for the job as
+              // it stood at completion — don't let it attach a report to a
+              // job that's being edited again.
+              cancelPendingReportGeneration(job.id);
             });
-            if (existingSig) {
-              deleteRecord('signatures', existingSig.id);
-              addToSyncQueue('signatures', existingSig.id, SyncOperation.Delete, { id: existingSig.id, job_id: job.id });
-              setHasSig(false);
-            }
+            if (existingSig) setHasSig(false);
+            // The fresh sign-off this forces must start from step 1 — never
+            // resume a technician draft left over from before the reopen.
+            void clearTechDraft(job.id);
             updateJobStatus(job.id, JobStatus.InProgress);
             setJob(p => p ? { ...p, status: JobStatus.InProgress, report_url: null } : p);
+            // Push the reopen now rather than at the next periodic cycle —
+            // until it lands, the server still says "completed".
+            void runSync();
             Toast.show({
               type: 'success',
               text1: 'Job re-opened',
@@ -637,7 +654,7 @@ export default function JobDetailScreen() {
       key: 'call', icon: 'phone-in-talk' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
       title: job.site_contact_name || 'Call Site Contact',
       subtitle: job.site_contact_phone,
-      onPress: () => Linking.openURL(`tel:${job.site_contact_phone}`),
+      onPress: () => Linking.openURL(`tel:${String(job.site_contact_phone).replace(/[^\d+]/g, '')}`),
     }] : []),
   ];
 

@@ -33,6 +33,7 @@ function PendingView({
   border,
   elapsedS,
   isViewMode,
+  waitingOn,
 }: {
   primaryColor: string;
   textColor: string;
@@ -40,6 +41,7 @@ function PendingView({
   border: string;
   elapsedS: number;
   isViewMode: boolean;
+  waitingOn: string | null;
 }) {
   const pulse = useSharedValue(1);
   useEffect(() => {
@@ -83,6 +85,12 @@ function PendingView({
             <Text style={[styles.infoLine, { color: textSecondary }]}>
               ⏱  Elapsed: {elapsedS}s
             </Text>
+            {/* Still on this device — say exactly what it's waiting for. */}
+            {waitingOn ? (
+              <Text style={[styles.infoLine, { color: textColor, fontWeight: '600', marginBottom: 8 }]}>
+                {waitingOn}
+              </Text>
+            ) : null}
             <Text style={[styles.infoLine, { color: textSecondary }]}>
               The PDF is being built on our servers with full-resolution photos.
               {'\n'}Large sites (1000+ assets) take 15–45 seconds.
@@ -185,6 +193,7 @@ export default function PreviewScreen() {
     elapsedS,
     pdfUrl,
     error: errorMsg,
+    waitingOn,
     generate,
     loadExisting,
   } = useReportGeneration(jobId, { forceOnMount: mode !== 'view', hasExistingReport: mode === 'view' });
@@ -280,6 +289,7 @@ export default function PreviewScreen() {
           border={C.border}
           elapsedS={elapsedS}
           isViewMode={isViewMode}
+          waitingOn={waitingOn}
         />
       )}
 

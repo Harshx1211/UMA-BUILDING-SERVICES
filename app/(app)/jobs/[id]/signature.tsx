@@ -8,7 +8,6 @@ import type { NavigationAction } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SignatureScreenCanvas, { SignatureViewRef } from 'react-native-signature-canvas';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { upsertRecord, addToSyncQueue, getSignatureForJob, getJobById } from '@/lib/database';
 import { runSync } from '@/lib/sync';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
@@ -22,6 +21,7 @@ import type { Signature } from '@/types';
 import { ScreenHeader, Button, Card, showConfirm } from '@/components/ui';
 import { T } from '@/constants/Colors';
 import { MAX_LENGTHS } from '@/utils/sanitize';
+import { readTechDraft, writeTechDraft, clearTechDraft } from '@/lib/signatureDraft';
 
 export default function SignatureScreen() {
   const C = useColors();
@@ -68,8 +68,25 @@ export default function SignatureScreen() {
   const existingRecordId = useRef<string | null>(null);
   // Safety timer ref — never stored on the canvas ref
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True when the technician signature on the client step was restored from
+  // an earlier visit (see the draft notes below) — shown as a hint so it's
+  // clear why step 1 is already done.
+  const [resumedDraft, setResumedDraft] = useState(false);
+  // Set right before this screen navigates away ON PURPOSE after a
+  // successful save, so the beforeRemove guard below never mistakes its own
+  // exit for the user abandoning an unsaved signature.
+  const leavingAfterSaveRef = useRef(false);
 
   // ── Load existing / draft ──────────────────────────────────────────────
+  // The technician signature captured in step 1 is kept as a draft (per
+  // job, in AsyncStorage) until the client signs, the technician taps
+  // Restart, or it expires. FIX: it used to be wiped on unmount, so leaving
+  // the screen between the two steps — e.g. to check the report — silently
+  // threw it away and the technician had to sign again from scratch. The
+  // key is per job id (no cross-job bleed), drafts are swept on sign-out
+  // (authStore's sweepDraftSignatureKeys), and a draft older than
+  // DRAFT_TTL_MS is discarded so a stale signature is never reused days
+  // later.
   useEffect(() => {
     if (!id) return;
     const job = getJobById<{ status: string }>(id);
@@ -81,35 +98,51 @@ export default function SignatureScreen() {
       setSignedBy(existing.signed_by_name || '');
       existingRecordId.current = existing.id ?? null;
     } else {
-      AsyncStorage.getItem(`draft_tech_sig_${id}`).then(draft => {
-        if (draft) { setTechSigBase64(draft); setStep('client'); }
+      readTechDraft(id).then(draft => {
+        if (draft) { setTechSigBase64(draft); setStep('client'); setResumedDraft(true); }
       });
     }
     return () => {
-      // Clear draft on unmount — prevents cross-job bleed (BUG-N8)
-      AsyncStorage.removeItem(`draft_tech_sig_${id}`).catch(() => {});
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     };
   }, [id]);
 
-  // FIX: this is a legally-binding document (see CONSENT text below, citing
-  // the Electronic Transactions Act) — the header back button/hardware back
-  // could previously discard a drawn-but-unsaved signature with zero
-  // warning, and worse, could discard an ALREADY-CAPTURED technician
-  // signature waiting in the client step (the unmount cleanup above wipes
-  // draft_tech_sig on the way out). Warn whenever leaving would lose either.
+  // What leaving this screen right now would genuinely lose. Kept in a ref
+  // (refreshed every render) so the beforeRemove listener always reads the
+  // CURRENT value — a closure captured at subscribe time can lag a render
+  // behind the state that matters.
+  //  - Strokes on the open canvas are never saved anywhere until Save.
+  //  - A re-sign's new technician signature is held in memory only (the
+  //    draft store is for first-time sign-off), so it's lost too.
+  //  - A first-time technician draft is NOT lost — it's persisted above.
+  const unsavedRef = useRef<'strokes' | 'resign' | null>(null);
+  const showCanvasNow = !jobLocked && (!existingSig || isEditing);
+  unsavedRef.current = !showCanvasNow
+    ? null
+    : (isEditing && step === 'client' && !!techSigBase64)
+      ? 'resign'
+      : hasSig
+        ? 'strokes'
+        : null;
+
+  // This is a legally-binding document (see CONSENT text below, citing the
+  // Electronic Transactions Act) — warn before leaving would discard
+  // anything not yet saved.
+  // FIX: `hasSig` was never cleared after a SUCCESSFUL save, so this guard
+  // fired on the screen's own exit after "Signature Saved → OK" (and on any
+  // back press afterwards), asking the technician to "Keep Signing" or
+  // "Discard" a signature that had in fact already been saved — and with
+  // ?autoComplete=1, "Keep Signing" stranded them on a now-completed job.
   useEffect(() => {
-    const wouldLoseTechDraft = step === 'client' && !existingSig && !!techSigBase64;
     const unsub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data: { action: NavigationAction } }) => {
-      if (!hasSig && !wouldLoseTechDraft) return; // nothing unsaved — let it navigate normally
+      const unsaved = unsavedRef.current;
+      if (leavingAfterSaveRef.current || !unsaved) return; // nothing unsaved — let it navigate normally
       e.preventDefault();
       showConfirm({
         title: 'Discard Signature?',
-        message: wouldLoseTechDraft && hasSig
-          ? "You have a captured technician signature and an unsaved client signature in progress. Leaving now will discard both."
-          : wouldLoseTechDraft
-          ? "You have a captured technician signature that hasn't been saved yet. Leaving now will discard it."
-          : "This signature hasn't been saved yet. Leaving now will discard it.",
+        message: unsaved === 'resign'
+          ? "The new signatures haven't been saved. Leaving now will discard them and keep the existing signature."
+          : "The signature you're drawing hasn't been saved yet. Leaving now will discard it.",
         icon: 'draw',
         buttons: [
           { text: 'Keep Signing', style: 'cancel' },
@@ -118,7 +151,7 @@ export default function SignatureScreen() {
       });
     });
     return unsub;
-  }, [navigation, hasSig, step, existingSig, techSigBase64]);
+  }, [navigation]);
 
   // Only reacts to the job locking/unlocking (Completed/Cancelled elsewhere)
   // while this screen is open — deliberately NOT a full reload on every
@@ -169,8 +202,8 @@ export default function SignatureScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Restart', style: 'destructive', onPress: async () => {
           if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null; }
-          if (id) await AsyncStorage.removeItem(`draft_tech_sig_${id}`);
-          setStep('tech'); setTechSigBase64(null); setHasSig(false); setSigError('');
+          if (id && !isEditing) await clearTechDraft(id);
+          setStep('tech'); setTechSigBase64(null); setHasSig(false); setSigError(''); setResumedDraft(false);
         }},
       ],
     });
@@ -205,6 +238,7 @@ export default function SignatureScreen() {
   // Shared "what happens after a signature is successfully saved" action —
   // see the autoComplete comment near the top of this component.
   function finishAfterSignature() {
+    leavingAfterSaveRef.current = true;
     if (autoComplete && id) {
       useJobsStore.getState().updateJobStatus(id, JobStatus.Completed);
       router.replace(`/jobs/${id}/report` as never);
@@ -218,7 +252,13 @@ export default function SignatureScreen() {
     if (safetyTimerRef.current) { clearTimeout(safetyTimerRef.current); safetyTimerRef.current = null; }
 
     if (step === 'tech') {
-      await AsyncStorage.setItem(`draft_tech_sig_${id}`, signature);
+      // First-time sign-off: persist so leaving and coming back resumes at
+      // the client step. A re-sign keeps it in memory only, so abandoning a
+      // re-sign can never leave a stray draft to resurface later.
+      // FIX: this await used to be unguarded — a storage failure threw
+      // after the safety timer was already cleared, leaving the button on
+      // "Processing…" for good. writeTechDraft never throws.
+      if (id && !isEditing) await writeTechDraft(id, signature);
       setTechSigBase64(signature);
       setStep('client');
       setHasSig(false);
@@ -236,8 +276,13 @@ export default function SignatureScreen() {
     }
     try {
       const now      = new Date().toISOString();
-      const recordId = existingRecordId.current ?? generateUUID();
-      const isUpdate = !!existingRecordId.current;
+      // Re-read the job's row rather than trusting the id captured on mount:
+      // a sync conflict can re-key it to the server's id while this screen
+      // is open (lib/sync.ts), and an Update aimed at the old id would
+      // match nothing server-side.
+      const currentId = (getSignatureForJob(id!) as Signature | null)?.id ?? existingRecordId.current;
+      const recordId = currentId ?? generateUUID();
+      const isUpdate = !!currentId;
       const companyId = useAuthStore.getState().user?.company_id ?? null;
       const record: Record<string, string | null> = {
         id: recordId,
@@ -250,12 +295,23 @@ export default function SignatureScreen() {
         device_info: Platform.OS === 'ios' ? 'iOS' : 'Android',
       };
       upsertRecord('signatures', record);
+      // upsertRecord logs and swallows its own errors, so confirm the row
+      // really landed before telling anyone it's saved (or queueing a sync
+      // for a row that doesn't exist).
+      const written = getSignatureForJob(id!) as Signature | null;
+      if (written?.id !== recordId || written?.signed_at !== now) throw new Error('signature write not persisted');
       addToSyncQueue('signatures', recordId, isUpdate ? SyncOperation.Update : SyncOperation.Insert, record);
       void runSync();
-      if (id) await AsyncStorage.removeItem(`draft_tech_sig_${id}`);
+      if (id) await clearTechDraft(id);
       existingRecordId.current = recordId;
       setSaving(false);
       setIsEditing(false);
+      // Nothing is pending any more — see unsavedRef. Without this the
+      // leave-guard still saw the old strokes and asked to discard them.
+      setHasSig(false);
+      setTechSigBase64(null);
+      setStep('tech');
+      setResumedDraft(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
       showConfirm({
@@ -272,6 +328,10 @@ export default function SignatureScreen() {
 
   // ── Client Unavailable ────────────────────────────────────────────────
   async function handleClientUnavailable() {
+    if (jobLocked) {
+      setSigError("This job is no longer active and can't be signed.");
+      return;
+    }
     if (!techSigBase64) {
       setSigError('Technician must sign first before marking client as unavailable.');
       return;
@@ -279,8 +339,13 @@ export default function SignatureScreen() {
     setSaving(true);
     try {
       const now      = new Date().toISOString();
-      const recordId = existingRecordId.current ?? generateUUID();
-      const isUpdate = !!existingRecordId.current;
+      // Re-read the job's row rather than trusting the id captured on mount:
+      // a sync conflict can re-key it to the server's id while this screen
+      // is open (lib/sync.ts), and an Update aimed at the old id would
+      // match nothing server-side.
+      const currentId = (getSignatureForJob(id!) as Signature | null)?.id ?? existingRecordId.current;
+      const recordId = currentId ?? generateUUID();
+      const isUpdate = !!currentId;
       const companyId = useAuthStore.getState().user?.company_id ?? null;
       const record: Record<string, string | null> = {
         id: recordId, job_id: id!,
@@ -292,12 +357,23 @@ export default function SignatureScreen() {
         device_info: Platform.OS === 'ios' ? 'iOS' : 'Android',
       };
       upsertRecord('signatures', record);
+      // upsertRecord logs and swallows its own errors, so confirm the row
+      // really landed before telling anyone it's saved (or queueing a sync
+      // for a row that doesn't exist).
+      const written = getSignatureForJob(id!) as Signature | null;
+      if (written?.id !== recordId || written?.signed_at !== now) throw new Error('signature write not persisted');
       addToSyncQueue('signatures', recordId, isUpdate ? SyncOperation.Update : SyncOperation.Insert, record);
       void runSync();
-      if (id) await AsyncStorage.removeItem(`draft_tech_sig_${id}`);
+      if (id) await clearTechDraft(id);
       existingRecordId.current = recordId;
       setSaving(false);
       setIsEditing(false);
+      // Nothing is pending any more — see unsavedRef. Without this the
+      // leave-guard still saw the old strokes and asked to discard them.
+      setHasSig(false);
+      setTechSigBase64(null);
+      setStep('tech');
+      setResumedDraft(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
       showConfirm({
@@ -312,7 +388,7 @@ export default function SignatureScreen() {
     }
   }
 
-  const showCanvas   = !jobLocked && (!existingSig || isEditing);
+  const showCanvas   = showCanvasNow;
   const showTechView = !showCanvas; // view-only after completion, cancellation, or lock
   const isClientStep = step === 'client';
 
@@ -419,6 +495,11 @@ export default function SignatureScreen() {
               {step === 'tech' ? 'Technician Sign-off' : 'Client Sign-off'}
             </Text>
           </View>
+        )}
+        {showCanvas && isClientStep && resumedDraft && (
+          <Text style={[s.resumedTxt, { color: C.textTertiary }]}>
+            Your technician signature from earlier was kept. Tap Restart to sign it again.
+          </Text>
         )}
 
         {/* ─────────────── TECHNICIAN SIGNATURE ─────────────── */}
@@ -576,7 +657,7 @@ export default function SignatureScreen() {
               <Button
                 variant="secondary"
                 title="Cancel Re-sign"
-                onPress={() => { setIsEditing(false); setStep('tech'); setHasSig(false); setSigError(''); }}
+                onPress={() => { setIsEditing(false); setStep('tech'); setHasSig(false); setTechSigBase64(null); setSigError(''); }}
                 disabled={saving}
               />
             )}
@@ -614,6 +695,7 @@ const s = StyleSheet.create({
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   stepPillTxt:{ fontSize: 10, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
+  resumedTxt: { fontSize: 12, fontWeight: '500', marginTop: 8, lineHeight: 17 },
 
   // Field label
   fieldLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' },

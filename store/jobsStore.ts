@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { getJobsForTechnician, updateRecord, addToSyncQueue, getRecord, getJobById, hasFailedAssetForJob, getDefectsForJob, openDatabase } from '@/lib/database';
 import { JobStatus, SyncOperation, ComplianceStatus, DefectStatus } from '@/constants/Enums';
-import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { onSyncComplete, offSyncComplete, syncNow } from '@/lib/sync';
 import { useAuthStore } from '@/store/authStore';
 import type { Job } from '@/types';
 
@@ -143,6 +143,10 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
           });
         }
       }
+
+      // Push the status change now, like a recorded result — until it lands
+      // the server (and every crew-mate's device) still sees the old status.
+      syncNow();
 
       // Optimistic UI update — reflects change before the next sync cycle
       set((state) => ({

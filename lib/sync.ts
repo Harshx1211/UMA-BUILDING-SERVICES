@@ -11,7 +11,6 @@ import {
   upsertRecord,
   upsertRecordBulk,
   getJobStatus,
-  getJobStatuses,
   getDeletedPhotoIds,
   getDeletedDocumentIds,
   getDeletedNotebookItemIds,
@@ -19,6 +18,9 @@ import {
   getRecord,
   deleteRecord,
   remapSyncQueueRecordId,
+  supersedeEarlierDeletes,
+  getPendingJobFieldMap,
+  deferSyncItem,
   updateSyncQueuePayload,
   applyRemoteDeletion,
   hasTerminalInsertFailure,
@@ -71,18 +73,43 @@ let _isProcessingPhotos = false;
 let _isProcessingDocuments = false;
 
 /**
- * Status priority ladder for conflict resolution.
- * Higher number = further along in the job lifecycle.
- * A local status should never be overwritten by a server status with a lower priority
- * unless the local change is stale (> 6 hours old).
+ * What a server copy of a job is allowed to overwrite locally. Shared by
+ * the periodic pull (_pullJobs) and both realtime channels so the three can
+ * never disagree.
+ *
+ * Rule: a column this device has changed but NOT YET PUSHED keeps its local
+ * value (see getPendingJobFieldMap); every other column takes the server's.
+ * An office cancellation always applies — it's an administrative override,
+ * not something a pending local edit should hold back.
+ *
+ * FIX (reopened job snapping back to "completed"): this used to be a status
+ * ladder — scheduled < in_progress < completed — that only protected a local
+ * status AHEAD of the server's. "Continue Working" moves a job BACKWARDS
+ * (completed → in_progress), so any server copy still saying "completed"
+ * (the report service writing report_url, a periodic pull, a realtime echo
+ * of the earlier completion) arriving before the reopen had synced won
+ * outright: the job re-locked and the inspection form shut mid-edit. Worse,
+ * the reopen's own echo then lost to the ladder (local "completed" was now
+ * "ahead" and freshly stamped), leaving it stuck completed locally for up
+ * to 6 hours. Basing the decision on "is there an unpushed local edit"
+ * instead of "which status is further along" handles both directions.
  */
-const STATUS_PRIORITY: Record<string, number> = {
-  cancelled: 0,
-  scheduled: 1,
-  in_progress: 2,
-  completed: 3,
-};
-const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
+function _mergeServerJob(
+  serverRow: Record<string, unknown>,
+  pendingFields: Map<string, Set<string>> = getPendingJobFieldMap(),
+): Record<string, string | number | boolean | null> {
+  const row = serverRow as Record<string, string | number | boolean | null>;
+  if (row.status === 'cancelled') return row;
+  const fields = pendingFields.get(row.id as string);
+  if (!fields || fields.size === 0) return row;
+  const local = getRecord<Record<string, string | number | boolean | null>>('jobs', row.id as string);
+  if (!local) return row;
+  const merged = { ...row };
+  for (const k of fields) {
+    if (k in local) merged[k] = local[k];
+  }
+  return merged;
+}
 
 // ─────────────────────────────────────────────
 // Internal state
@@ -106,16 +133,28 @@ let _cachedUserId: string | null = null;
 // all three entry points at once instead of each guarding it separately.
 let _isPushingQueue = false;
 
+// Set when a push is requested while one is already running. FIX: the
+// overlapping call used to just be dropped — so work queued mid-push (e.g.
+// the PDF request, queued a moment after the job's completion started
+// pushing) sat until some unrelated later trigger. Now the running pass
+// goes round once more when it finishes, picking it up straight away.
+let _pushRequestedAgain = false;
+
 async function _pushQueueGuarded(userId: string): Promise<void> {
   if (_isPushingQueue) {
-    if (__DEV__) console.log('[SiteTrack Sync] _pushQueue already running elsewhere — skipping overlapping call');
+    if (__DEV__) console.log('[SiteTrack Sync] _pushQueue already running — will run once more when it finishes');
+    _pushRequestedAgain = true;
     return;
   }
   _isPushingQueue = true;
   try {
-    await _pushQueue(userId);
+    do {
+      _pushRequestedAgain = false;
+      await _pushQueue(userId);
+    } while (_pushRequestedAgain && !_shouldStop);
   } finally {
     _isPushingQueue = false;
+    _pushRequestedAgain = false;
   }
 }
 
@@ -803,23 +842,8 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   // stale/out-of-order realtime echo can't regress a locally-more-advanced
   // status.
   const applyJob = (row: Record<string, unknown>) => {
-    const rowId = row.id as string;
-    if (rowId !== jobId) return;
-    const localStatus = getJobStatus(rowId);
-    // FIX: same 'cancelled' fix as _pullJobs's own job-upsert loop — it's an
-    // administrative override, not a step on the scheduled/in_progress/
-    // completed progression STATUS_PRIORITY ranks, so it must always apply
-    // immediately rather than being treated as a "stale, lower-priority"
-    // regression of whatever the technician had gotten to locally.
-    if (localStatus && row.status !== 'cancelled') {
-      const serverPriority = STATUS_PRIORITY[row.status as string] ?? 1;
-      const localPriority  = STATUS_PRIORITY[localStatus.status]   ?? 1;
-      if (localPriority > serverPriority) {
-        const localUpdateMs = new Date(localStatus.updated_at).getTime();
-        if (Date.now() - localUpdateMs <= STALE_THRESHOLD_MS) return; // local wins
-      }
-    }
-    upsertRecord('jobs', row as Record<string, string | number | boolean | null>);
+    if ((row.id as string) !== jobId) return;
+    upsertRecord('jobs', _mergeServerJob(row));
     _liveOnChange?.('jobs');
   };
 
@@ -1034,7 +1058,7 @@ async function _teardownLiveChannel(): Promise<void> {
  *
  * Every handler below (1) writes the incoming row to local SQLite with the
  * same guard the periodic pull already uses for that table where one
- * exists (STATUS_PRIORITY for jobs, _shouldPreserveLocalRow for
+ * exists (_mergeServerJob for jobs, _shouldPreserveLocalRow for
  * defects/assets — properties/notifications/users/catalogue tables have no
  * local-edit path from the mobile app to protect, so a plain upsert
  * matches what the periodic pull already does for them too), then (2)
@@ -1091,18 +1115,8 @@ export function subscribeToMyDataLive(userId: string): void {
   // INSERT, and applyMyJobTechnician's catch-up fetch right after being
   // added to a job's crew) are both cases where relevance is already
   // established a different way, so there's nothing to gate.
-  const doUpsertJob = (row: Record<string, unknown>, localStatus: { status: string; updated_at: string } | null) => {
-    // Same 'cancelled' override as subscribeToJobLive's own applyJob — an
-    // administrative override, not a step on the priority ladder.
-    if (localStatus && row.status !== 'cancelled') {
-      const serverPriority = STATUS_PRIORITY[row.status as string] ?? 1;
-      const localPriority  = STATUS_PRIORITY[localStatus.status]   ?? 1;
-      if (localPriority > serverPriority) {
-        const localUpdateMs = new Date(localStatus.updated_at).getTime();
-        if (Date.now() - localUpdateMs <= STALE_THRESHOLD_MS) return;
-      }
-    }
-    upsertRecord('jobs', row as Record<string, string | number | boolean | null>);
+  const doUpsertJob = (row: Record<string, unknown>) => {
+    upsertRecord('jobs', _mergeServerJob(row));
     _emitSyncComplete();
   };
 
@@ -1111,7 +1125,7 @@ export function subscribeToMyDataLive(userId: string): void {
     const localStatus = getJobStatus(rowId);
     if (requireLocal && !localStatus) return;
     if (localStatus) {
-      doUpsertJob(row, localStatus);
+      doUpsertJob(row);
       return;
     }
     // FIX: a genuinely new job locally (only reachable here when
@@ -1137,7 +1151,7 @@ export function subscribeToMyDataLive(userId: string): void {
         const { data } = await supabase.from('users').select('*').eq('id', assignedTo).maybeSingle();
         if (data) upsertRecord('users', data as Record<string, string | number | boolean | null>);
       }
-      doUpsertJob(row, null);
+      doUpsertJob(row);
     })();
   };
 
@@ -1651,7 +1665,12 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
     // FK-disabled the way _pullRelated's bulk upsert is).
     const [propsResult, assetsResult] = await Promise.all([
       supabase.from('properties').select('*').in('id', propertyIds),
-      supabase.from('assets').select('*').in('property_id', propertyIds).eq('status', 'active'),
+      // Every status, not just 'active'. FIX: filtering here meant an asset
+      // the office decommissioned never had that change reach this device
+      // (unless the realtime channel happened to be connected at that
+      // moment) — it stayed 'active' locally and on the checklist forever.
+      // Local queries already filter to status = 'active' themselves.
+      supabase.from('assets').select('*').in('property_id', propertyIds),
     ]);
 
     const { data: properties, error: propError } = propsResult;
@@ -1683,57 +1702,33 @@ async function _pullJobs(userId: string, _lastSynced: string | null): Promise<vo
     if (assetError) {
       console.error('[UMA BUILDING SERVICES Sync] PULL assets error:', assetError.message);
     } else if (assets) {
+      // FIX: this pull path upserted assets blindly — the "never revert an
+      // unsynced local edit" guard (_shouldPreserveLocalRow) only lived in
+      // _pullRelated, which assets don't go through. An offline asset edit
+      // or Delete Asset (decommission) could be reverted by the very next
+      // pull, before its own queued push landed.
+      let preserved = 0;
       for (const asset of assets) {
+        const localRow = getRecord<{ updated_at: string | null }>('assets', asset.id as string);
+        if (_shouldPreserveLocalRow(asset as Record<string, unknown>, localRow)) { preserved++; continue; }
         upsertRecord('assets', asset as Record<string, string | number | boolean | null>);
       }
-      if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assets.length} asset(s)`);
+      if (__DEV__) console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assets.length - preserved} asset(s), kept ${preserved} newer local`);
     }
   }
 
-  // Now safe to upsert jobs since properties and user exist locally.
-  // Use conflict-aware upsert: never let the server overwrite a locally-advanced
-  // status (in_progress or completed) with a less-advanced one (scheduled)
-  // unless the local change is older than STALE_THRESHOLD_MS.
-  // FIX: was one getJobStatus() round-trip per pulled job (N+1) — batched
-  // into a single WHERE id IN (...) lookup up front.
-  const localStatuses = getJobStatuses(jobs.map((job) => job.id as string));
-  let upsertedCount = 0;
+  // Now safe to upsert jobs since properties and user exist locally. Each
+  // row goes through _mergeServerJob, so a field with an unpushed local edit
+  // (a reopen, a status change, field notes) keeps its local value. The
+  // pending-edit map is read once for the whole batch, not per job.
+  const pendingJobFields = getPendingJobFieldMap();
   let preservedCount = 0;
   for (const job of jobs) {
-    const localStatus = localStatuses.get(job.id as string) ?? null;
-    // FIX: 'cancelled' used to be ranked lowest on STATUS_PRIORITY (a ladder
-    // meant for "how far along" — scheduled < in_progress < completed), so
-    // an office cancellation of an already in_progress/completed job looked
-    // like "the server regressed this job" and was discarded as stale for up
-    // to 6 hours below. Cancellation isn't part of that progression at all —
-    // it's an administrative override that should always win immediately,
-    // regardless of how far the technician had gotten locally.
-    if (localStatus && job.status !== 'cancelled') {
-      const serverPriority = STATUS_PRIORITY[job.status as string] ?? 1;
-      const localPriority  = STATUS_PRIORITY[localStatus.status]  ?? 1;
-      if (localPriority > serverPriority) {
-        // Local is ahead — only allow override if the local change is stale
-        const localUpdateMs = new Date(localStatus.updated_at).getTime();
-        const isStale = Date.now() - localUpdateMs > STALE_THRESHOLD_MS;
-        if (!isStale) {
-          // FIX: Also strip updated_at from the server payload.
-          // Previously we only stripped 'status' but wrote the server's updated_at.
-          // On the next pull, the staleness check (Date.now() - updated_at > 6h)
-          // treated the row as freshly-updated by the server and overwrote the
-          // tech's in_progress/completed status. Stripping both columns ensures
-          // the local updated_at (set when the tech changed status) is preserved.
-          const { status: _ignored, updated_at: _updIgnored, ...rest } = job as Record<string, unknown>;
-          upsertRecord('jobs', { ...rest, status: localStatus.status } as Record<string, string | number | boolean | null>);
-          preservedCount++;
-          continue;
-        }
-      }
-    }
-    upsertRecord('jobs', job as Record<string, string | number | boolean | null>);
-    upsertedCount++;
+    if (pendingJobFields.has(job.id as string) && job.status !== 'cancelled') preservedCount++;
+    upsertRecord('jobs', _mergeServerJob(job as Record<string, unknown>, pendingJobFields));
   }
   if (__DEV__) {
-    console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${upsertedCount} job(s), preserved local status on ${preservedCount}`);
+    console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${jobs.length} job(s), kept unsynced local edits on ${preservedCount}`);
   }
 
   // Pull job_assets, defects, inspection_photos, and everything else these
@@ -1920,7 +1915,7 @@ function _shouldPreserveLocalJobAsset(
  * Generalized version of _shouldPreserveLocalJobAsset for tables keyed by a
  * plain `updated_at` column (defects, assets) rather than job_assets' own
  * actioned_at. FIX: previously only job_assets (via the function above) and
- * jobs.status (via STATUS_PRIORITY below) had any protection against a pull
+ * jobs (via _mergeServerJob) had any protection against a pull
  * overwriting a fresher local edit with a stale server copy — defects and
  * assets had none at all, so an edit made offline (or one whose push
  * attempt raced behind a pull in the same sync cycle) could be silently
@@ -2126,6 +2121,74 @@ async function _guardedUpdate(
   );
   const retry = await supabase.from(table).update(payload).eq('id', recordId);
   return { error: retry.error };
+}
+
+/** Tables whose unsynced changes must reach the server before a job's PDF
+ * is generated from server data. */
+const PDF_CRITICAL_TABLES = ['jobs', 'assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
+// Tables whose local row carries its own job_id column — looked up fresh
+// from SQLite rather than trusting the queued payload, because several call
+// sites queue partial UPDATE payloads (only the changed fields, no job_id).
+const TABLES_WITH_JOB_ID = ['job_assets', 'defects', 'signatures', 'inspection_photos'];
+
+/**
+ * Unsynced local changes for this job that its PDF has to wait for — the
+ * report is generated from SERVER data, so generating before these land
+ * produces a PDF missing what the technician just did.
+ *
+ * Counts items sitting out a retry backoff too (getUnsyncedItemsIncludingBackoff):
+ * a change whose first push failed is still unsynced. Exported so the
+ * report screen (useReportGeneration) can show what it's waiting for —
+ * including a blocker's last error — instead of an unexplained spinner.
+ */
+export function getReportBlockers(jobId: string, excludeQueueId?: number): SyncQueueItem[] {
+  return getUnsyncedItemsIncludingBackoff().filter(p => {
+    if (p.id === excludeQueueId || !PDF_CRITICAL_TABLES.includes(p.table_name)) return false;
+    // A sibling report request is a 'jobs' item but not data to wait for.
+    if (p.operation === SyncOperation.ReportGenerate) return false;
+    // A jobs row's own record_id IS the job id.
+    if (p.table_name === 'jobs') return p.record_id === jobId;
+    if (TABLES_WITH_JOB_ID.includes(p.table_name)) {
+      const row = getRecord<{ job_id?: string }>(p.table_name, p.record_id);
+      if (row?.job_id) return row.job_id === jobId;
+    }
+    // 'assets' has no job_id of its own; also the fallback for a row the
+    // local lookup couldn't resolve (e.g. a Delete, whose row is gone).
+    return (p.payload ?? '').includes(`"${jobId}"`);
+  });
+}
+
+const BLOCKER_LABELS: Record<string, string> = {
+  signatures: 'the signature',
+  jobs: 'the job status',
+  inspection_photos: 'photos',
+  job_assets: 'inspection results',
+  defects: 'defects',
+  assets: 'assets',
+};
+
+/**
+ * Plain-English answer to "why hasn't my report started?" for the report
+ * screen, or null once the request has actually left this device (from
+ * then on the report service's own status is the answer). Names the
+ * blocker that's actually failing, with its last error, when there is one —
+ * an upload that keeps failing used to look identical to a slow server.
+ */
+export function describeReportWait(jobId: string): string | null {
+  const stillQueued = getUnsyncedItemsIncludingBackoff().some((i) => {
+    if (i.operation !== SyncOperation.ReportGenerate) return false;
+    try { return (JSON.parse(i.payload ?? '{}') as { jobId?: string }).jobId === jobId; } catch { return false; }
+  });
+  if (!stillQueued) return null;
+  const blockers = getReportBlockers(jobId);
+  if (blockers.length === 0) return 'Sending the report request…';
+  const failing = blockers.find((b) => (b.retry_count ?? 0) > 0 && b.last_error);
+  if (failing) {
+    const label = BLOCKER_LABELS[failing.table_name] ?? failing.table_name;
+    return `Waiting for ${label} to upload — the last attempt failed: ${failing.last_error}`;
+  }
+  const label = BLOCKER_LABELS[blockers[0].table_name] ?? blockers[0].table_name;
+  return `Uploading ${blockers.length} change${blockers.length === 1 ? '' : 's'} first (${label})…`;
 }
 
 /**
@@ -2337,12 +2400,29 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // etc.), so this device's own signature would be silently thrown
         // away while the technician sees "Signature Saved". Same policy and
         // remap approach as the job_assets conflict just above.
+        //
+        // FIX (signature disappearing → "Signature Required" → re-sign): this
+        // used to end by deleting this device's local row outright and
+        // leaving the canonical one to "the next pull". Until that pull ran,
+        // the job had NO local signature at all — Report Summary / Job
+        // Detail showed "Signature Required" right after the technician had
+        // signed, and re-signing just hit this same conflict again. Now the
+        // winning row is written locally straight away under the server id.
+        //
+        // FIX (signature wiped on every device): the usual way a second row
+        // exists is "Continue Working" — it queues a Delete for the old
+        // signature, and the re-sign queues an Insert. If that Delete hadn't
+        // reached the server yet (in retry backoff after a network blip),
+        // this handler adopted the old row by UPDATEing the NEW signature
+        // into it… and then the still-queued Delete ran and erased it,
+        // with deletion_log spreading the loss to every device. Any such
+        // earlier Delete is now retired the moment its row is adopted.
         if (error?.code === '23505' && item.table_name === 'signatures') {
           const { data: existing } = await supabase
             .from('signatures')
-            .select('id, signed_at')
+            .select('*')
             .eq('job_id', payload.job_id as string)
-            .maybeSingle();
+            .maybeSingle<Record<string, string | number | boolean | null>>();
 
           if (existing) {
             // FIX: same self-retry case as the job_assets conflict handler
@@ -2355,32 +2435,50 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
             if (existing.id === item.record_id) {
               if (__DEV__) console.log(`[SiteTrack Sync] signatures insert for job ${payload.job_id} already applied server-side (dropped-response retry) — no-op`);
             } else {
+              const existingId = existing.id as string;
               const localTime = payload.signed_at ? new Date(payload.signed_at as string).getTime() : 0;
-              const serverTime = existing.signed_at ? new Date(existing.signed_at).getTime() : 0;
+              const serverTime = existing.signed_at ? new Date(existing.signed_at as string).getTime() : 0;
+              // The row this job should end up with locally, under the
+              // server's id: this device's signature if it won and the
+              // UPDATE landed, otherwise whatever the server already holds.
+              let canonical: Record<string, string | number | boolean | null> = existing;
               if (localTime > serverTime) {
                 const { id: _localId, ...updatePayload } = payload;
-                const updateResult = await supabase.from('signatures').update(updatePayload).eq('id', existing.id);
+                const updateResult = await supabase.from('signatures').update(updatePayload).eq('id', existingId);
                 if (updateResult.error) {
+                  // Not adopted — leave the item failing so it retries,
+                  // rather than marking it handled and losing this
+                  // device's signature. The local row is untouched.
                   console.warn('[SiteTrack Sync] signatures conflict resolution UPDATE failed:', updateResult.error.message);
-                } else if (__DEV__) {
-                  console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: this device's later signature applied to row ${existing.id}`);
+                  throw new Error(`signatures conflict UPDATE failed: ${updateResult.error.message}`);
+                }
+                canonical = { ...(payload as Record<string, string | number | boolean | null>), id: existingId };
+                const retired = supersedeEarlierDeletes('signatures', existingId, item.id);
+                if (__DEV__) {
+                  console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: this device's later signature applied to row ${existingId}` +
+                    (retired ? ` (retired ${retired} stale delete(s) queued for it)` : ''));
                 }
               } else if (__DEV__) {
-                console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: server row ${existing.id} is already the more recent signature, discarding this device's older one`);
+                console.log(`[SiteTrack Sync] signatures conflict for job ${payload.job_id}: server row ${existingId} is already the more recent signature, discarding this device's older one`);
               }
-              remapSyncQueueRecordId('signatures', item.record_id, existing.id);
+              remapSyncQueueRecordId('signatures', item.record_id, existingId);
               for (const p of pending) {
                 if (p.id === item.id || p.table_name !== 'signatures' || p.record_id !== item.record_id) continue;
-                p.record_id = existing.id;
+                p.record_id = existingId;
                 try {
                   const pPayload = JSON.parse(p.payload) as Record<string, unknown>;
                   if (pPayload.id === item.record_id) {
-                    pPayload.id = existing.id;
+                    pPayload.id = existingId;
                     p.payload = JSON.stringify(pPayload);
                   }
                 } catch { /* leave payload untouched if unparsable */ }
               }
+              // Swap the local orphan for the canonical row. Delete first:
+              // the local table has job_id UNIQUE, so writing the canonical
+              // row while the orphan still holds this job_id would fail.
               deleteRecord('signatures', item.record_id);
+              upsertRecord('signatures', canonical);
+              _liveOnChange?.('signatures');
             }
           }
           error = null; // handled — don't fall through to the generic error path
@@ -2558,59 +2656,23 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         // stale jobs row — the exact same "edit didn't make it into the
         // PDF" bug the getUnsyncedItemsIncludingBackoff fix closed for
         // job_assets/defects, just left open for the jobs table itself.
-        const PDF_CRITICAL_TABLES = ['jobs', 'assets', 'job_assets', 'defects', 'signatures', 'inspection_photos'];
-        // Tables whose local row carries its own job_id column — look this up
-        // fresh from SQLite rather than trusting the queued payload to contain
-        // it. Several call sites (e.g. editing an existing defect's
-        // description/severity in inspectionStore.ts, or appending a photo to
-        // defects.photos) queue partial UPDATE payloads carrying only the
-        // changed fields, which never re-includes job_id. That silently
-        // defeated the plain substring search below for exactly those edits —
-        // report generation would run before they'd actually synced, producing
-        // a PDF that looked unchanged even though the technician had just made
-        // a change. The local row's job_id is always current and authoritative
-        // regardless of what happens to be in any one queued payload.
-        const TABLES_WITH_JOB_ID = ['job_assets', 'defects', 'signatures', 'inspection_photos'];
-        // FIX: was getPendingSyncItems(), which hides anything currently
-        // sitting out a retry backoff (next_retry_at in the future) after a
-        // transient push failure. That let this check see "nothing pending"
-        // and proceed to generate against stale server data even though a
-        // real edit for this job hadn't actually reached Supabase yet — see
-        // getUnsyncedItemsIncludingBackoff's own comment in lib/database.ts.
-        const allPendingNow = getUnsyncedItemsIncludingBackoff();
-        const blockers = allPendingNow.filter(p => {
-          if (p.id === item.id || !PDF_CRITICAL_TABLES.includes(p.table_name)) return false;
-          // A sibling report_generate request (queueReportGeneration already
-          // dedupes these, so this is a narrow edge case, not the normal
-          // path) is itself a 'jobs'-table item now that 'jobs' is in
-          // PDF_CRITICAL_TABLES — it isn't DATA this report needs to wait
-          // for, so it must never count as a blocker.
-          if (p.operation === SyncOperation.ReportGenerate) return false;
-          // A jobs row's own record_id IS the job id — no job_id column to
-          // look up and no payload to search, unlike every other table here.
-          if (p.table_name === 'jobs') return p.record_id === reportJobId;
-          if (TABLES_WITH_JOB_ID.includes(p.table_name)) {
-            const row = getRecord<{ job_id?: string }>(p.table_name, p.record_id);
-            if (row?.job_id) return row.job_id === reportJobId;
-          }
-          // 'assets' has no job_id of its own (it belongs to a property, not a
-          // job) — a pending asset insert only matters for this report once
-          // it's linked via job_assets, which the branch above already catches.
-          // Also the fallback for any row the local lookup couldn't resolve.
-          return (p.payload ?? '').includes(`"${reportJobId}"`);
-        });
+        const blockers = getReportBlockers(reportJobId, item.id);
         if (blockers.length > 0) {
           if (__DEV__) console.warn(
-            `[Sync] report_generate for ${reportJobId} deferred — ${blockers.length} item(s) still pending:`,
+            `[Sync] report_generate for ${reportJobId} waiting — ${blockers.length} item(s) still pending:`,
             blockers.map(b => `${b.table_name}/${b.operation}`).join(', ')
           );
-          // Soft retry: increment counter so it runs next cycle AFTER blockers complete.
-          // The retry limit is MAX_SYNC_RETRIES; a deferral should not permanently fail
-          // this item, so we cap the synthetic error at limit-1.
-          if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
-            incrementSyncRetry(item.id, `Deferred: ${blockers.length} data item(s) pending`, MAX_SYNC_RETRIES);
-          }
-          continue; // skip to next queue item — come back next cycle
+          // FIX (a 15-asset report taking minutes, or never starting): this
+          // used to call incrementSyncRetry — the FAILURE path — which puts
+          // the request on exponential backoff (1, 2, 4, 8 min) every time
+          // it found a blocker. "Your photos are still uploading" isn't a
+          // failure, but each deferral hid the request from the queue for
+          // longer, and useReportGeneration's 20s nudges couldn't reach it.
+          // Now it just waits: no backoff, no retry spent, re-checked on the
+          // very next push pass — which runs as soon as the blockers
+          // themselves push (schedulePushSoon) or the screen nudges.
+          deferSyncItem(item.id, `Waiting for ${blockers.length} change(s) to upload first`);
+          continue;
         }
 
         const session = useAuthStore.getState().session;

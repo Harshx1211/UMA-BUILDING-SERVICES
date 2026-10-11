@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import NetInfo from '@react-native-community/netinfo';
 import { queueReportGeneration, pollReportStatus, getOrRefreshReportUrl } from '@/lib/pdfGenerator';
-import { runSync } from '@/lib/sync';
+import { runSync, describeReportWait } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
 
 const POLL_MS = 5_000;
@@ -30,6 +30,9 @@ export function useReportGeneration(
   const [elapsedS, setElapsedS] = useState(0);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // What the request is still waiting on before it leaves this device
+  // (see describeReportWait) — null once it's been sent.
+  const [waitingOn, setWaitingOn] = useState<string | null>(null);
 
   const startedAtMs  = useRef<number | null>(null);
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -93,6 +96,7 @@ export function useReportGeneration(
 
     const check = async () => {
       if (!isMounted.current) return;
+      setWaitingOn(describeReportWait(id));
       let result;
       try {
         result = await pollReportStatus(id);
@@ -127,6 +131,7 @@ export function useReportGeneration(
 
       if (result.status === 'completed') {
         stop();
+        setWaitingOn(null);
         setStatus('completed');
         setPdfUrl(result.pdfUrl);
         const now = new Date().toISOString();
@@ -140,6 +145,7 @@ export function useReportGeneration(
 
       if (result.status === 'failed') {
         stop();
+        setWaitingOn(null);
         setStatus('failed');
         setError(result.error);
         if (!notifiedRef.current) {
@@ -339,5 +345,5 @@ export function useReportGeneration(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, opts?.hasExistingReport, opts?.forceOnMount]);
 
-  return { status, elapsedS, pdfUrl, error, generate, loadExisting, stopPolling: stop };
+  return { status, elapsedS, pdfUrl, error, waitingOn, generate, loadExisting, stopPolling: stop };
 }
