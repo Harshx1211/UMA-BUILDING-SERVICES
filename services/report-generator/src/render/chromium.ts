@@ -52,6 +52,15 @@ export async function launchBrowser(): Promise<Browser> {
       '--disable-extensions',
       '--hide-scrollbars',
       '--mute-audio',
+      // PERF: nothing here ever needs a profile, updates, sync or network
+      // services of its own — skip that start-up work. --no-zygote drops the
+      // extra pre-fork helper process (only valid with --no-sandbox, above).
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-default-apps',
+      '--disable-sync',
     ],
   });
 }

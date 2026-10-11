@@ -5,6 +5,7 @@ import { db } from './supabaseClient';
 import { AuthError, assertOwnsJob, verifyAccessToken } from './auth';
 import { tryAcquireLock, markGenerationResult, getGenerationStatus } from './generation/lock';
 import { generateReport, renderReportPdf } from './generation/pipeline';
+import { warmUpPdfjs } from './pdf/pageMarkers';
 import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
 
@@ -387,6 +388,9 @@ process.on('unhandledRejection', (reason) => {
 
 const server = app.listen(config.port, () => {
   console.log(`report-generator listening on :${config.port}`);
+  // Start-up warm-up — see warmUpPdfjs. Cheap, and runs while Cloud Run's
+  // start-up CPU boost is still in effect.
+  warmUpPdfjs();
 });
 
 /**

@@ -19,17 +19,17 @@ export async function uploadReport(
     .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
   if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
-  const { data: signedData, error: signErr } = await db.storage
-    .from(config.reportBucket)
-    .createSignedUrl(storagePath, 60 * 60);
+  // Independent of each other once the file is up — one round trip, not two.
+  const [{ data: signedData, error: signErr }, { error: jobErr }] = await Promise.all([
+    db.storage.from(config.reportBucket).createSignedUrl(storagePath, 60 * 60),
+    // Without this the PDF exists but nothing points to it — the app would
+    // never find the report it just waited for.
+    db.from('jobs').update({ report_url: storagePath }).eq('id', jobId),
+  ]);
+  if (jobErr) throw new Error(`Saving the report location failed: ${jobErr.message}`);
   if (signErr || !signedData?.signedUrl) {
     throw new Error(`Signed URL failed: ${signErr?.message ?? 'unknown error'}`);
   }
-
-  // Without this the PDF exists but nothing points to it — the app would
-  // never find the report it just waited for.
-  const { error: jobErr } = await db.from('jobs').update({ report_url: storagePath }).eq('id', jobId);
-  if (jobErr) throw new Error(`Saving the report location failed: ${jobErr.message}`);
 
   return { storagePath, signedUrl: signedData.signedUrl };
 }

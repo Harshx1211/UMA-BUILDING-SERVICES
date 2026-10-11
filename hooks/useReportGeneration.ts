@@ -5,7 +5,9 @@ import { queueReportGeneration, pollReportStatus, getOrRefreshReportUrl } from '
 import { runSync, describeReportWait } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
 
-const POLL_MS = 5_000;
+// Was 5s — with generation itself now down to seconds, a 5s poll could
+// add up to 5s of pure waiting after the PDF was already done.
+const POLL_MS = 2_500;
 // How often to nudge the sync engine while a generation is in flight — see
 // the nudgeRef comment below for why this exists.
 const SYNC_NUDGE_MS = 20_000;

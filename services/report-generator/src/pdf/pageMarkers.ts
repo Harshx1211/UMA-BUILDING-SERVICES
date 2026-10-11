@@ -59,6 +59,13 @@ export interface MarkerScanResult {
   totalPages: number;
 }
 
+/** Loads pdfjs ahead of the first report. Its first import costs ~2s (a
+ * large ESM bundle) — paid at instance start-up instead of inside the first
+ * technician's report on every fresh instance. Never throws. */
+export function warmUpPdfjs(): void {
+  import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => {});
+}
+
 export async function findMarkerPages(pdfBuffer: Buffer, keys: string[]): Promise<MarkerScanResult> {
   // Dynamic import: pdfjs-dist ships ESM-only, this project compiles to
   // CommonJS — a static import would become a `require()` that fails.

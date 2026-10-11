@@ -101,7 +101,18 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   const started = Date.now();
   const timer = new StageTimer();
 
-  const data = await fetchReportData(db, jobId);
+  // PERF: start Chromium now so its launch — the slowest single step on a
+  // freshly started instance — overlaps the data fetch instead of following
+  // it. Never rejects (renderReportPdf falls back to its own launch).
+  const browserPromise = launchBrowser().catch(() => undefined);
+
+  let data: Awaited<ReturnType<typeof fetchReportData>>;
+  try {
+    data = await fetchReportData(db, jobId);
+  } catch (err) {
+    void browserPromise.then((b) => b?.close().catch(() => {}));
+    throw err;
+  }
   timer.lap('fetch');
 
   // Fetched inside fetchReportData (in the same concurrent round as
@@ -109,7 +120,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   // rather than producing a report with every category label missing.
   const assetTypesByValue = data.assetTypesByValue;
 
-  const { pdf, chunkCount } = await renderReportPdf(data, assetTypesByValue, timer);
+  const { pdf, chunkCount } = await renderReportPdf(data, assetTypesByValue, timer, browserPromise);
 
   const { storagePath, signedUrl } = await uploadReport(db, jobId, pdf);
   timer.lap('upload');
@@ -134,6 +145,8 @@ export async function renderReportPdf(
   data: ReportData,
   assetTypesByValue: Map<string, AssetTypeDefinition>,
   timer: StageTimer = new StageTimer(),
+  /** An already-launching browser (see generateReport); launched here if omitted. */
+  browserPromise?: Promise<Browser | undefined>,
 ): Promise<{ pdf: Buffer; chunkCount: number }> {
   const defectsByAsset = new Map<string, Defect[]>();
   for (const d of data.defects) {
@@ -202,7 +215,8 @@ export async function renderReportPdf(
 
   // One browser for both passes (see convertHtmlToPdf's sharedBrowser note).
   // If launching it fails, each pass just launches its own as before.
-  const browser = await launchBrowser().catch(() => undefined);
+  const browser = await (browserPromise ?? launchBrowser().catch(() => undefined));
+  timer.lap('browser');
   let finalBuffer: Buffer;
   try {
     let draftMarkers: Map<string, number>;
