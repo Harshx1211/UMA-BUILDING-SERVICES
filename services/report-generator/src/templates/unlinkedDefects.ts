@@ -15,8 +15,6 @@ export function renderUnlinkedDefects(
 
   return `<div class="page">
   <div class="section-bar">General Defects (Not Linked to a Specific Asset)</div>
-  <div class="card" style="padding:10px 12px">
-    ${unlinked.map((d) => renderDefectCard(d, photosByDefect, signedPhotoUrls, null, fullResPhotoUrls)).join('')}
-  </div>
+  ${unlinked.map((d) => renderDefectCard(d, photosByDefect, signedPhotoUrls, null, fullResPhotoUrls)).join('')}
 </div>`;
 }

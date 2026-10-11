@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, stagedPhotoSection } from './helpers';
+import { esc, pill, stagedPhotoSection } from './helpers';
 import { Defect, InspectionPhoto, Quote } from '../types';
 
 /**
@@ -40,25 +40,24 @@ export function renderRepairs(
         (i) => `
         <tr>
           <td>${esc(i.item_name ?? i.inventory_item?.name ?? 'Item')}</td>
-          <td style="text-align:right">${i.quantity}</td>
+          <td class="num">${i.quantity}</td>
         </tr>`,
       )
       .join('');
+    const body = stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls)
+      + (itemRows ? `
+        <table style="margin-top:8px">
+          <thead><tr><th>Parts / Labour</th><th style="width:20%;text-align:right">Quantity</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>` : '');
 
     return `
-      <div class="card" style="margin-top:10px">
-        <div style="padding:10px 12px;border-bottom:1px solid ${COLORS.BORDER};display:flex;justify-content:space-between">
-          <span style="font-weight:700;white-space:pre-line">${esc(defect.description)}</span>
-          <span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT}">RESOLVED</span>
+      <div class="asset-card keep" style="margin-top:8px">
+        <div class="asset-head" style="border-left-color:${COLORS.GREEN_TEXT}">
+          <span class="asset-title pre">${esc(defect.description)}</span>
+          ${pill('Resolved', COLORS.PILL.pass)}
         </div>
-        <div style="padding:10px 12px">
-          ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls)}
-          ${itemRows ? `
-            <table style="margin-top:8px">
-              <thead><tr><th>Parts / Labour</th><th style="text-align:right">Quantity</th></tr></thead>
-              <tbody>${itemRows}</tbody>
-            </table>` : ''}
-        </div>
+        ${body ? `<div class="asset-body">${body}</div>` : ''}
       </div>`;
   });
 

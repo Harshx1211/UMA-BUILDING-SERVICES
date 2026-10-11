@@ -1,13 +1,14 @@
 import { COLORS } from './theme';
-import { esc, fmtCurrency, fmtDateTime, photoRow, resultPill, stagedPhotoSection } from './helpers';
+import { esc, fmtCurrency, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
 /**
- * Renders one bounded chunk of the Asset Inspection Log. Each asset row shows
- * its reference/location/status + thumbnails; a FAIL or NOT_TESTED-with-a-reason
- * row expands inline into a colored defect card for any defects linked to that
- * asset, matching the reference report's per-asset defect layout.
+ * Renders one bounded chunk of the Asset Inspection Log. Each asset is one
+ * card — a header strip (reference + type, result pill, an edge coloured by
+ * result) over its details, photos, remarks and the defect cards linked to
+ * it — so it's unmistakable where one asset ends and the next begins, even
+ * with several near-identical assets back to back.
  */
 export function renderAssetLogChunk(
   chunk: AssetLogChunk,
@@ -18,33 +19,21 @@ export function renderAssetLogChunk(
   fullResPhotoUrls: Map<string, string>,
 ): string {
   let lastCategory: string | null = null;
-  // FIX: tracks whether the row about to render is the first one under a
-  // freshly-opened <table> (right below the Asset/Location/Status header) —
-  // every OTHER asset row in that same table got literally zero separation
-  // from the one before it (padding:0, border-top:none, unconditionally),
-  // so with more than one asset in a category (e.g. three near-identical
-  // "BGA, MCP or Manual Call Point" entries back-to-back) it was genuinely
-  // hard to tell where one asset's photos/notes/defect cards ended and the
-  // next asset's row began.
-  let isFirstRowOfTable = true;
   const parts: string[] = [];
 
   for (const row of chunk.rows) {
     if (row.categoryLabel !== lastCategory) {
       // Close the previous category's table before opening a new one — leaving
-      // it open (the actual bug here) produces invalid nested <table> markup
-      // that browsers "recover" from by silently reordering rows, which is what
-      // caused headers/rows to visually scramble in the first preview.
+      // it open produces invalid nested <table> markup that browsers "recover"
+      // from by silently reordering rows.
       if (lastCategory !== null) parts.push(`</tbody></table>`);
       const suffix = row.isFirstInCategory ? '' : ' (continued)';
       // Category heading inside <thead> — see theme.ts (.cat-head): repeats
       // on every page the category spans, never stranded on its own.
-      parts.push(`<table class="card cat-table"><thead>`
-        + `<tr class="cat-head"><th colspan="3" class="cat-th">${esc(row.categoryLabel)}${suffix}</th></tr>`
-        + `<tr><th style="width:55%">Asset</th><th style="width:30%">Location</th><th style="width:15%;text-align:right">Status</th></tr>`
+      parts.push(`<table class="cat-table"><thead>`
+        + `<tr class="cat-head"><th class="cat-th">${esc(row.categoryLabel)}${suffix}</th></tr>`
         + `</thead><tbody>`);
       lastCategory = row.categoryLabel;
-      isFirstRowOfTable = true;
     }
 
     const { asset } = row;
@@ -52,67 +41,45 @@ export function renderAssetLogChunk(
 
     // A defect's photo carries BOTH asset_id and defect_id, so
     // photosByAsset/photosByDefect are NOT mutually exclusive — the same
-    // row can appear in both maps. Untagged (stage === null) photos still
-    // render once here at the asset level, exactly as before this feature
-    // existed. A STAGED (before/after) photo belongs to its own defect's
-    // card instead (see renderDefectCard below) — excluded here so it
-    // doesn't also render a second time, undifferentiated, on the asset row.
+    // row can appear in both maps. Untagged (stage === null) photos render
+    // once here at the asset level. A STAGED (before/after) photo belongs to
+    // its own defect's card instead (see renderDefectCard below) — excluded
+    // here so it doesn't also render a second time on the asset itself.
     const photos = (photosByAsset.get(asset.id) ?? []).filter((p) => !(p.defect_id && p.stage));
 
-    // An asset's info, photos, and defect cards used to be 3 sibling <tr>
-    // elements — theme.ts's `tr { break-inside: avoid }` protects each ONE
-    // individually, but nothing stops a page break landing BETWEEN them,
-    // which is exactly what split an asset's info from its own defect card
-    // across a page boundary in the first real test. Nesting all three in a
-    // sub-table inside a single outer <tr> makes break-inside:avoid protect
-    // the whole record as one atomic unit — explicit widths on both the
-    // outer <thead> and this inner table keep the columns aligned since
-    // they're otherwise two independently auto-sized tables.
-    // First asset under a header needs no extra separation (the header
-    // itself already does that job); every asset after it gets real
-    // breathing room plus a clearly visible divider, not just whatever
-    // hairline its own first inner row happened to inherit.
-    //
-    // FIX: the divider was 2px in COLORS.BORDER (#E2E8F0) — a very light
-    // gray that all but disappears against the page's white background,
-    // especially with 3+ near-identical assets back to back (e.g. several
-    // "BGA, MCP or Manual Call Point" entries in a row). Darkened to SLATE
-    // and thickened so consecutive assets are unmistakably separated at a
-    // glance, not just technically separated in the markup.
-    // Softened from a 3px slate rule (read as heavy black bars between
-    // every asset) to 2px light slate plus more breathing room — still an
-    // unmistakable boundary between near-identical consecutive assets.
-    // FIX: only padding-top was set for later rows, so they kept the
-    // cell's default side padding — every asset after the first in a
-    // category sat indented, with narrower defect cards, than the first.
-    const wrapperStyle = isFirstRowOfTable
-      ? 'padding:0;border-top:none'
-      : `padding:16px 0 0;border-top:2px solid ${COLORS.MUTED_LIGHT}`;
-    isFirstRowOfTable = false;
+    const details = [
+      asset.variant,
+      asset.serial_number ? `S/N: ${asset.serial_number}` : null,
+      asset.location_on_site ? `Location ${asset.location_on_site}` : null,
+    ]
+      .filter(Boolean)
+      .map(esc)
+      .join(' &middot; ');
 
     // assets.description ("Asset Notes") is intentionally not printed
     // (owner's decision, 2026-10-11): it's the technician's standing note
     // about the asset and stays in the app only. Remarks (this visit's
     // technician_notes) still print.
+    const body = [
+      details ? `<div class="asset-detail">${details}</div>` : '',
+      photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls),
+      asset.technician_notes ? renderRemarks(asset.technician_notes) : '',
+      assetDefects
+        .map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection, fullResPhotoUrls, false))
+        .join(''),
+    ].join('');
+
+    const edge = COLORS.RESULT_EDGE[asset.result ?? 'not_tested'] ?? COLORS.MUTED;
+    // The whole asset is one table row, so theme.ts's `tr { break-inside:
+    // avoid }` keeps its details, photos and defect cards on one page.
     parts.push(`
-      <tr>
-        <td colspan="3" style="${wrapperStyle}">
-          <table style="width:100%"><tbody>
-            <tr>
-              <td style="width:55%;border-top:none">
-                <div style="font-weight:700">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</div>
-                ${asset.variant ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">${esc(asset.variant)}</div>` : ''}
-                ${asset.serial_number ? `<div style="font-size:9.5px;color:${COLORS.MUTED}">S/N: ${esc(asset.serial_number)}</div>` : ''}
-              </td>
-              <td style="width:30%;border-top:none">${esc(asset.location_on_site) || '—'}</td>
-              <td style="width:15%;text-align:right;border-top:none">${resultPill(asset.result)}</td>
-            </tr>
-            ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}</td></tr>` : ''}
-            ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Remarks')}</td></tr>` : ''}
-            ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection, fullResPhotoUrls, false)).join('')}</td></tr>` : ''}
-          </tbody></table>
-        </td>
-      </tr>`);
+      <tr><td class="asset-cell"><div class="asset-card">
+        <div class="asset-head" style="border-left-color:${edge}">
+          <span class="asset-title">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</span>
+          ${resultPill(asset.result)}
+        </div>
+        ${body ? `<div class="asset-body">${body}</div>` : ''}
+      </div></td></tr>`);
   }
   if (lastCategory !== null) parts.push(`</tbody></table>`);
 
@@ -120,27 +87,12 @@ export function renderAssetLogChunk(
 }
 
 /**
- * FIX: was a plain gray flex row labeled just "Note" — inconsistent with
- * the mobile app, which calls this same field (job_assets.technician_notes)
- * "Remarks" everywhere (the asset screen's card title, the audit
- * Timeline's field label). Restyled to match the report's own defect-card
- * visual language (left accent bar + padded body) instead of a bare box, so
- * it reads as a considered part of the report rather than a debug dump —
- * label above the text (not squeezed alongside it) and a lightly italicised
- * note body to visually mark it as commentary, distinct from the factual
- * rows around it.
- *
- * Takes an explicit label so it can serve other note types too.
+ * This visit's remarks (job_assets.technician_notes — "Remarks" in the
+ * mobile app too): a bold label run into the italic note, one compact line
+ * for the usual short remark.
  */
-function renderTechnicianNote(note: string, label: string): string {
-  return `
-    <div class="defect-card" style="background:${COLORS.SURFACE};border:1px solid ${COLORS.BORDER}">
-      <div class="defect-bar" style="background:${COLORS.MUTED_LIGHT}"></div>
-      <div class="defect-body">
-        <div style="font-weight:700;color:${COLORS.SLATE};font-size:8.5px;text-transform:uppercase;letter-spacing:0.5px">${esc(label)}</div>
-        <div style="margin-top:4px;color:${COLORS.BLACK};font-size:10px;line-height:1.45;font-style:italic;white-space:pre-line">${esc(note)}</div>
-      </div>
-    </div>`;
+function renderRemarks(note: string): string {
+  return `<div class="remark"><span class="remark-label">Remarks:</span> <span class="pre">${esc(note)}</span></div>`;
 }
 
 // AS1851-2012 Clause 1.5.6's own wording — a non-conformance is explicitly
@@ -165,37 +117,30 @@ export function renderDefectCard(
   fullResPhotoUrls?: Map<string, string>,
   // True (default) for renderUnlinkedDefects, whose defects have no asset
   // and so no sibling asset-level photo row anywhere — their untagged
-  // photos must render here or nowhere. assetLogChunk's OWN call below
-  // passes false: every defect it renders always has an asset row directly
-  // above it that already shows untagged photos (see stagedPhotoSection's
-  // own comment on why photosByAsset/photosByDefect overlap).
+  // photos must render here or nowhere. assetLogChunk's OWN call above
+  // passes false: every defect it renders always has an asset directly
+  // above it that already shows untagged photos.
   includeUntaggedPhotos = true,
 ): string {
   const sev = COLORS.SEVERITY[defect.severity] ?? COLORS.SEVERITY.non_conformance;
   const badgeLabel = SEVERITY_BADGE[defect.severity] ?? defect.severity;
   const photos = photosByDefect.get(defect.id) ?? [];
-  const quoteBadge = defect.quote_price != null
-    ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Quote: ${fmtCurrency(defect.quote_price)}</span>`
-    : '';
-  // Purely informational — a technician's on-the-spot fix, independent of
-  // status/quote (mobile never gets to touch either of those). Renders
-  // alongside the quote pill rather than replacing it: a defect can be
-  // resolved on site AND still have an earlier quote on record.
-  const resolvedBadge = defect.resolved_on_site
-    ? `<span class="pill" style="background:${COLORS.GREEN_BG};color:${COLORS.GREEN_TEXT};margin-left:6px">Resolved on site</span>`
-    : '';
+  // "Resolved on site" is purely informational — a technician's on-the-spot
+  // fix, independent of status/quote. Shown alongside the quote rather than
+  // replacing it: a defect can be resolved on site AND have a quote on record.
+  const tags = [
+    defect.quote_price != null ? pill(`Quote: ${esc(fmtCurrency(defect.quote_price))}`, COLORS.PILL.quote) : '',
+    defect.resolved_on_site ? pill('Resolved on site', COLORS.PILL.pass) : '',
+  ].join('');
 
   return `
-    <div class="defect-card" style="background:${sev.bg};border:1px solid ${sev.border}">
-      <div class="defect-bar" style="background:${sev.text}"></div>
-      <div class="defect-body">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-weight:700;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
-          <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)}</span>
-        </div>
-        <div style="margin-top:4px;white-space:pre-line">${esc(defect.description)}</div>
-        ${quoteBadge}${resolvedBadge}
-        ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls, includeUntaggedPhotos)}
+    <div class="defect" style="background:${sev.bg};border-color:${sev.border};border-left-color:${sev.accent}">
+      <div class="defect-top">
+        <span class="defect-title" style="color:${sev.title}">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
+        <span class="defect-time">Logged ${fmtDateTime(defect.created_at)}</span>
       </div>
+      <div class="defect-desc">${esc(defect.description)}</div>
+      ${tags ? `<div class="tags">${tags}</div>` : ''}
+      ${stagedPhotoSection(photos, signedPhotoUrls, fullResPhotoUrls, includeUntaggedPhotos)}
     </div>`;
 }

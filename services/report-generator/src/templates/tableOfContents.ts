@@ -18,7 +18,7 @@ export function renderTableOfContents(
   const row = (e: TocSectionEntry) => `
       <tr>
         <td>${esc(e.label)}</td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums">${pageLabel(e)}</td>
+        <td class="num">${pageLabel(e)}</td>
       </tr>`;
 
   const categoryRows = categoryEntries.map(row).join('');
@@ -26,15 +26,17 @@ export function renderTableOfContents(
 
   return `
   <div class="page">
-    <div class="section-bar">Report Index</div>
-    <table class="card">
-      <thead><tr><th>Asset Inspection Log</th><th style="text-align:right">Pages</th></tr></thead>
+    <div class="title" style="margin-bottom:16px">Report Index</div>
+    <div class="section-bar">Asset Inspection Log</div>
+    <table>
+      <thead><tr><th>Category</th><th style="width:20%;text-align:right">Pages</th></tr></thead>
       <tbody>${categoryRows || '<tr><td colspan="2">No assets recorded</td></tr>'}</tbody>
     </table>
 
     ${tailRows ? `
-    <div class="section-bar" style="margin-top:18px">Other Sections</div>
-    <table class="card">
+    <div class="section-bar" style="margin-top:20px">Other Sections</div>
+    <table>
+      <thead><tr><th>Section</th><th style="width:20%;text-align:right">Pages</th></tr></thead>
       <tbody>${tailRows}</tbody>
     </table>` : ''}
   </div>`;

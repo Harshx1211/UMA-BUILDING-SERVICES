@@ -18,10 +18,7 @@ export function renderSignoff(data: ReportData): string {
   // hasn't set one (companies.accreditations is nullable) just omits the row
   // rather than showing a blank "—" line every time.
   const accreditationsRow = company.accreditations
-    ? `
-    <div class="card" style="margin-top:6px;padding:8px 12px;font-size:9px;color:${COLORS.MUTED}">
-      <strong style="color:${COLORS.SLATE}">Company Accreditations:</strong> ${esc(company.accreditations)}
-    </div>`
+    ? `<div style="margin-top:4px"><strong>Company accreditations:</strong> ${esc(company.accreditations)}</div>`
     : '';
 
   const rows = timeLogUsers
@@ -68,43 +65,38 @@ export function renderSignoff(data: ReportData): string {
     ? ''
     : clientUnavailable
       ? `<span style="font-style:italic;color:${COLORS.MUTED}">Client unavailable to sign</span>`
-      : `<img src="${esc(signature.signature_url)}" style="max-height:44px" alt="signature" />`;
+      : `<img src="${esc(signature.signature_url)}" alt="signature" />`;
 
   const hasRealTechSignature = signature?.tech_signature_url && signature.tech_signature_url !== 'UNAVAILABLE';
-  const techSignoff = hasRealTechSignature
+  const techBox = hasRealTechSignature
     ? `
-    <div class="card" style="margin-top:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:9px;color:${COLORS.MUTED};text-transform:uppercase;font-weight:700">Technician Signature</span>
-      <img src="${esc(signature!.tech_signature_url)}" style="max-height:36px" alt="signature" />
+    <div class="sign-box">
+      <span class="label">Technician Signature</span>
+      <div class="sig-area"><img src="${esc(signature!.tech_signature_url)}" alt="signature" /></div>
     </div>`
     : '';
 
-  const clientSignoff = signature
+  const clientBox = signature
     ? `
-    <div class="card" style="margin-top:14px;padding:12px 14px">
-      <div style="font-size:9.5px;color:${COLORS.MUTED};text-transform:uppercase;font-weight:700;margin-bottom:6px">Client Sign-off</div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-weight:700">${esc(signature.signed_by_name)}</div>
-          <div style="font-size:9.5px;color:${COLORS.MUTED}">${fmtDate(signature.signed_at)}</div>
-        </div>
-        ${clientSigCell}
-      </div>
+    <div class="sign-box">
+      <span class="label">Client Sign-off</span>
+      <div class="sig-area">${clientSigCell}</div>
+      <div class="value strong">${esc(signature.signed_by_name)}</div>
+      <div class="sub">${fmtDate(signature.signed_at)}</div>
     </div>`
     : '';
 
   return `<div class="page">
   <div class="section-bar">Sign-off</div>
-  <div class="card" style="padding:10px 12px;font-size:9.5px;color:${COLORS.SLATE}">
+  <div class="panel statement">
     Maintenance has been carried out in accordance with applicable fire safety compliance
     requirements for the relevant jurisdiction.
+    ${accreditationsRow}
   </div>
-  ${accreditationsRow}
-  <table class="card" style="margin-top:10px">
+  <table style="margin-top:10px">
     <thead><tr><th>Technician</th><th>Date/Time</th><th>Accreditations</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="3">No time logged against this job</td></tr>`}</tbody>
   </table>
-  ${techSignoff}
-  ${clientSignoff}
+  ${techBox || clientBox ? `<div class="sign-grid">${techBox}${clientBox}</div>` : ''}
 </div>`;
 }

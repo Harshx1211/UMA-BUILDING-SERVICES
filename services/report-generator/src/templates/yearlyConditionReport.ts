@@ -1,7 +1,11 @@
 import { COLORS } from './theme';
-import { esc, fmtDate, infoCell } from './helpers';
+import { esc, field, fmtDate } from './helpers';
 import { groupByCategory, AS1851_SECTIONS } from '../data/categoryGrouping';
 import { AssetTypeDefinition, ReportData } from '../types';
+
+// SIZE: the tick is drawn, not typed — the report font has no check-mark
+// glyph, so "&#10003;" pulled in a whole extra fallback font just for it.
+const CHECK_SVG = `<svg width="8" height="8" viewBox="0 0 10 10"><path d="M1.5 5.3 4 7.8 8.7 2.3" fill="none" stroke="${COLORS.WHITE}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 // AS1851 Appendix E's sample template uses a numeric "Type" column for the three
 // Clause 1.5.6 classifications. The standard doesn't fix these numbers to a name
@@ -9,10 +13,6 @@ import { AssetTypeDefinition, ReportData } from '../types';
 // the classifications themselves are always listed. If you have the literal
 // Appendix E sample to check this numbering against, flag it and this can be
 // corrected in one place.
-// SIZE: drawn, not typed — the report font has no check-mark glyph, so
-// "&#10003;" pulled in a whole extra fallback font just for it.
-const CHECK_SVG = `<svg width="9" height="9" viewBox="0 0 10 10"><path d="M1.5 5.3 4 7.8 8.7 2.3" fill="none" stroke="${COLORS.GREEN_TEXT}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
 const TYPE_LABEL: Record<string, { type: number; label: string }> = {
   critical: { type: 1, label: 'Critical Defect' },
   non_critical: { type: 2, label: 'Non-critical Defect' },
@@ -42,17 +42,15 @@ export function renderYearlyConditionReport(
     categoryGroups.map((g) => g.officialSection).filter((n): n is number => n != null),
   );
 
-  const checklistRows = Object.entries(AS1851_SECTIONS)
+  const checklist = Object.entries(AS1851_SECTIONS)
     .map(([num, name]) => {
       const n = Number(num);
       const checked = coveredSections.has(n);
       return `
-        <tr>
-          <td style="width:30px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1.5px solid ${COLORS.SLATE};border-radius:3px">${checked ? CHECK_SVG : ''}</span>
-          </td>
-          <td>Section ${n} &mdash; ${esc(name)}</td>
-        </tr>`;
+        <div class="esm-item">
+          <span class="tick-box${checked ? ' on' : ''}">${checked ? CHECK_SVG : ''}</span>
+          <span>Section ${n} &mdash; ${esc(name)}</span>
+        </div>`;
     })
     .join('');
 
@@ -72,58 +70,59 @@ export function renderYearlyConditionReport(
     .map((d) => {
       const t = typeOf(d);
       const section = sectionOf(d);
+      const color = (COLORS.SEVERITY[d.severity] ?? COLORS.SEVERITY.non_conformance).accent;
       return `
         <tr>
-          <td style="text-align:center;font-weight:700">${t.type}</td>
-          <td>${esc(t.label)}</td>
+          <td style="text-align:center"><span class="type-badge" style="background:${color}">${t.type}</span></td>
+          <td style="font-weight:700;color:${color}">${esc(t.label)}</td>
           <td>${section != null ? `Section ${section}` : '&mdash;'}</td>
-          <td style="white-space:pre-line">${esc(d.description)}</td>
+          <td class="pre">${esc(d.description)}</td>
         </tr>`;
     })
     .join('');
 
+  const address = [property?.address, property?.suburb, property?.state, property?.postcode].filter(Boolean).join(', ');
+  const technicians = assignedUsers.map((u) => u.full_name).join(', ') || null;
+
   return `<div class="page">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <div style="font-size:16px;font-weight:700;color:${COLORS.NAVY}">Yearly Condition Report</div>
-    <div style="font-size:9.5px;color:${COLORS.MUTED}">AS 1851-2012 Appendix E</div>
+  <div class="title-row">
+    <div class="title" style="font-size:16px">Yearly Condition Report</div>
+    <span class="label" style="margin:0">AS 1851-2012 Appendix E</span>
   </div>
 
-  <div class="section-bar">Report Details</div>
-  <div class="card info-row" style="display:flex">
-    ${infoCell('Report No.', reportId)}
-    ${infoCell('Period', fmtDate(dateOfService))}
-    ${infoCell('Site', property?.name)}
-    ${infoCell('Address', [property?.address, property?.suburb, property?.state, property?.postcode].filter(Boolean).join(', '))}
+  <div class="panel fields keep" style="grid-template-columns:1fr 1fr 1fr 2fr">
+    ${field('Report No.', reportId, { strong: true })}
+    ${field('Period', fmtDate(dateOfService))}
+    ${field('Site', property?.name)}
+    ${field('Address', address)}
   </div>
 
   <div class="section-bar" style="margin-top:16px">Essential Safety Measures Covered</div>
-  <table class="card">
-    <tbody>${checklistRows}</tbody>
-  </table>
+  <div class="panel esm keep">${checklist}</div>
 
   <div class="section-bar" style="margin-top:16px">System Defects and Non-conformances</div>
-  <table class="card">
-    <thead><tr><th style="width:40px">Type</th><th>Classification</th><th>AS 1851 Section</th><th>Description</th></tr></thead>
+  <table>
+    <thead><tr><th style="width:7%;text-align:center">Type</th><th style="width:19%">Classification</th><th style="width:16%">AS 1851 Section</th><th>Description</th></tr></thead>
     <tbody>${defectRows || `<tr><td colspan="4">No defects or non-conformances recorded</td></tr>`}</tbody>
   </table>
 
   <!-- Kept together: two short closing blocks, never split from their
        headings or from each other. -->
   <div class="keep">
-  <div class="section-bar" style="margin-top:16px">Compliance Statement</div>
-  <div class="card" style="padding:10px 12px;font-size:9.5px;color:${COLORS.SLATE}">
-    The essential safety measures listed above have been serviced for the period stated in
-    accordance with AS 1851-2012 and are considered fit for service, except where a defect
-    or non-conformance is recorded in the table above.
-  </div>
+    <div class="section-bar" style="margin-top:16px">Compliance Statement</div>
+    <div class="panel statement">
+      The essential safety measures listed above have been serviced for the period stated in
+      accordance with AS 1851-2012 and are considered fit for service, except where a defect
+      or non-conformance is recorded in the table above.
+    </div>
 
-  <div class="section-bar" style="margin-top:16px">Service Provider Details</div>
-  <div class="card info-row" style="display:flex">
-    ${infoCell('Company', company.name)}
-    ${infoCell('Address', company.address)}
-    ${infoCell('Phone', company.phone)}
-    ${infoCell('Technician' + (assignedUsers.length !== 1 ? 's' : ''), assignedUsers.map((u) => u.full_name).join(', ') || null)}
-  </div>
+    <div class="section-bar" style="margin-top:16px">Service Provider Details</div>
+    <div class="panel fields" style="grid-template-columns:1fr 2fr 1fr 1fr">
+      ${field('Company', company.name, { strong: true })}
+      ${field('Address', company.address)}
+      ${field('Phone', company.phone)}
+      ${field('Technician' + (assignedUsers.length !== 1 ? 's' : ''), technicians, { strong: true })}
+    </div>
   </div>
 </div>`;
 }

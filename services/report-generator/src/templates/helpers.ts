@@ -52,11 +52,29 @@ export function fmtCurrency(v: number | null | undefined): string {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(Number(v));
 }
 
+type PillColors = { bg: string; text: string; border: string };
+
+/** A small rounded status tag. `label` must already be safe HTML. */
+export function pill(label: string, c: PillColors): string {
+  return `<span class="pill" style="background:${c.bg};color:${c.text};border-color:${c.border}">${label}</span>`;
+}
+
 export function resultPill(result: 'pass' | 'fail' | 'not_tested' | null): string {
   const key = result ?? 'not_tested';
   const label = key === 'pass' ? 'PASS' : key === 'fail' ? 'FAIL' : 'N/T';
-  const c = COLORS.PILL[key];
-  return `<span class="pill" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${label}</span>`;
+  return pill(label, COLORS.PILL[key]);
+}
+
+/** A labelled value (Job Details, Report Details, Service Provider Details):
+ * small grey label above, value below, optional grey second line. */
+export function field(
+  label: string,
+  value: string | null | undefined,
+  opts: { strong?: boolean; sub?: string | null } = {},
+): string {
+  return `<div><span class="label">${esc(label)}</span>`
+    + `<div class="value${opts.strong ? ' strong' : ''}">${esc(value) || '&mdash;'}</div>`
+    + `${opts.sub ? `<div class="sub">${esc(opts.sub)}</div>` : ''}</div>`;
 }
 
 /**
@@ -87,34 +105,34 @@ export function photoTag(photo: InspectionPhoto, signedUrls: Map<string, string>
   return linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener noreferrer">${img}</a>` : img;
 }
 
-export function photoRow(photos: InspectionPhoto[], signedUrls: Map<string, string>, max = 6, fullResUrls?: Map<string, string>): string {
+/** A row of thumbnails, at most `max` of them plus a "+N more" count.
+ * `small` prints them at 80px (defect evidence) instead of 110px. */
+export function photoRow(
+  photos: InspectionPhoto[],
+  signedUrls: Map<string, string>,
+  max = 4,
+  fullResUrls?: Map<string, string>,
+  small = false,
+): string {
   if (photos.length === 0) return '';
-  const shown = photos.slice(0, max);
-  const tags = shown.map((p) => photoTag(p, signedUrls, fullResUrls)).join('');
-  const more = photos.length > max
-    ? `<span style="font-size:9px;color:${COLORS.MUTED};align-self:center;margin-left:4px">+${photos.length - max}</span>`
-    : '';
-  return `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">${tags}${more}</div>`;
+  const tags = photos.slice(0, max).map((p) => photoTag(p, signedUrls, fullResUrls)).join('');
+  const more = photos.length > max ? `<span class="more">+${photos.length - max} more</span>` : '';
+  return `<div class="photos${small ? ' sm' : ''}">${tags}${more}</div>`;
 }
 
-/** One labelled Before/After photo row — same thumbnails as photoRow, with
- * a small uppercase caption above so a defect card's fix evidence reads as
- * "this is what it looked like before / after", not an undifferentiated
- * photo dump. Used only by stagedPhotoSection below. */
+/** One labelled Before/After column — "this is what it looked like before /
+ * after", not an undifferentiated photo dump. Used only by
+ * stagedPhotoSection below. */
 function labeledPhotoRow(label: string, photos: InspectionPhoto[], signedUrls: Map<string, string>, fullResUrls?: Map<string, string>): string {
-  return `
-    <div style="margin-top:6px">
-      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.4px">${label} Photos</div>
-      ${photoRow(photos, signedUrls, 6, fullResUrls)}
-    </div>`;
+  return `<div><span class="label">${label} Photos</span>${photoRow(photos, signedUrls, 6, fullResUrls, true)}</div>`;
 }
 
 /**
- * Renders a defect's photos split by stage: labelled "Before"/"After" rows
- * for anything tagged that way, plus a plain untagged row (identical to the
- * old bare photoRow output) for every photo with no stage — i.e. every
- * photo captured before this feature existed, or via the standalone
- * "Log New Defect" flow, which still doesn't ask for before/after.
+ * Renders a defect's photos split by stage: Before and After side by side
+ * (they wrap onto two lines when there are too many to fit), plus a plain
+ * row for every photo with no stage — i.e. every photo captured before
+ * this feature existed, or via the standalone "Log New Defect" flow, which
+ * still doesn't ask for before/after.
  *
  * `includeUntagged` defaults to true (renderRepairs/renderUnlinkedDefects'
  * defects have no sibling asset-level row anywhere, so this is the only
@@ -122,29 +140,19 @@ function labeledPhotoRow(label: string, photos: InspectionPhoto[], signedUrls: M
  * false explicitly for its own per-asset defect cards, since a defect
  * rendered there ALWAYS has an asset row directly above it that already
  * shows every untagged photo (a defect's photo carries both asset_id and
- * defect_id, so photosByAsset/photosByDefect are not mutually exclusive —
- * see assetLogChunk.ts's own comment). Without this, every legacy/untagged
- * defect photo rendered twice — once at the asset level, once again here —
- * caught by test/templates.smoketest.ts's photo-appears-once assertion.
+ * defect_id, so photosByAsset/photosByDefect are not mutually exclusive).
+ * Without this, every legacy/untagged defect photo rendered twice — caught
+ * by test/templates.smoketest.ts's photo-appears-once assertion.
  */
 export function stagedPhotoSection(photos: InspectionPhoto[], signedUrls: Map<string, string>, fullResUrls?: Map<string, string>, includeUntagged = true): string {
   if (photos.length === 0) return '';
   const before = photos.filter((p) => p.stage === 'before');
   const after = photos.filter((p) => p.stage === 'after');
   const untagged = includeUntagged ? photos.filter((p) => p.stage == null) : [];
-  return [
+  const columns = [
     before.length ? labeledPhotoRow('Before', before, signedUrls, fullResUrls) : '',
     after.length ? labeledPhotoRow('After', after, signedUrls, fullResUrls) : '',
-    untagged.length ? photoRow(untagged, signedUrls, 6, fullResUrls) : '',
   ].join('');
-}
-
-/** A labelled value cell for the info-strip rows used on cover.ts and
- * yearlyConditionReport.ts (Report Details / Service Provider Details etc). */
-export function infoCell(label: string, value: string | null | undefined): string {
-  return `
-    <div style="flex:1;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
-      <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${esc(label)}</div>
-      <div style="font-size:11px;font-weight:700">${esc(value) || '—'}</div>
-    </div>`;
+  return (columns ? `<div class="staged">${columns}</div>` : '')
+    + (untagged.length ? photoRow(untagged, signedUrls, 6, fullResUrls, true) : '');
 }

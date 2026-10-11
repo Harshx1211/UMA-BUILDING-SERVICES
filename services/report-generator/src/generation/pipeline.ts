@@ -16,7 +16,7 @@ import { renderRepairs } from '../templates/repairs';
 import { renderYearlyConditionReport } from '../templates/yearlyConditionReport';
 import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
-import { BASE_STYLE, COLORS } from '../templates/theme';
+import { BASE_STYLE } from '../templates/theme';
 import { uploadReport } from '../storage';
 import { StageTimer } from './stageTimer';
 
@@ -70,9 +70,10 @@ function wrapSection({ key, html, breakBefore, keep }: Section): string {
   if (key) {
     const bar = breakBefore ? null : FIRST_BAR.exec(body);
     if (bar) {
-      // Inside the bar, painted in the bar's own navy: invisible, zero height.
+      // Inside the heading: zero height, so it can't move anything. Only
+      // the measuring pass carries markers (the delivered pass strips them).
       const at = bar.index + bar[0].length;
-      body = body.slice(0, at) + markerHtml(key, COLORS.NAVY) + body.slice(at);
+      body = body.slice(0, at) + markerHtml(key) + body.slice(at);
     } else {
       // A section that starts on a fresh page: its top IS the page top.
       topMarker = markerHtml(key);
@@ -305,7 +306,10 @@ export async function renderReportPdf(
     // native header/footer numbering can't be trusted mid-pass-1-vs-2, so
     // this still draws the correct final "Page X of Y" once everything is
     // settled, same as before.
-    output = await stampPageNumbers(finalBuffer);
+    output = await stampPageNumbers(finalBuffer, {
+      left: [data.company.name, `Service Report ${data.reportId}`].filter(Boolean).join(' · '),
+      right: data.job.property?.name ?? '',
+    });
     timer.lap('stamp');
     // Ghostscript pass — mainly stream/image optimization now; the big win
     // (deduplicate 14 separate font subsets) no longer applies since there's
