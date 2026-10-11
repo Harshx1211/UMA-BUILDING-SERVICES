@@ -182,6 +182,12 @@ export async function convertHtmlToPdf(
           right: '0in',
         },
         printBackground: true,
+        // SIZE: Chromium tags the PDF for screen readers by default — a
+        // structure element for every text run (1,243 objects on a 16-page
+        // report) plus a marked-content wrapper around each run in every
+        // page's drawing stream. Measured as the largest single block of
+        // the file; nothing visible depends on it.
+        tagged: false,
         displayHeaderFooter: hasHeaderFooter,
         headerTemplate: opts.headerTemplateHtml ?? '<div></div>',
         footerTemplate: opts.footerTemplateHtml ?? '<div></div>',

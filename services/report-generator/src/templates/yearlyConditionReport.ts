@@ -9,6 +9,10 @@ import { AssetTypeDefinition, ReportData } from '../types';
 // the classifications themselves are always listed. If you have the literal
 // Appendix E sample to check this numbering against, flag it and this can be
 // corrected in one place.
+// SIZE: drawn, not typed — the report font has no check-mark glyph, so
+// "&#10003;" pulled in a whole extra fallback font just for it.
+const CHECK_SVG = `<svg width="9" height="9" viewBox="0 0 10 10"><path d="M1.5 5.3 4 7.8 8.7 2.3" fill="none" stroke="${COLORS.GREEN_TEXT}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 const TYPE_LABEL: Record<string, { type: number; label: string }> = {
   critical: { type: 1, label: 'Critical Defect' },
   non_critical: { type: 2, label: 'Non-critical Defect' },
@@ -45,7 +49,7 @@ export function renderYearlyConditionReport(
       return `
         <tr>
           <td style="width:30px">
-            <span style="display:inline-block;width:14px;height:14px;border:1.5px solid ${COLORS.SLATE};border-radius:3px;text-align:center;line-height:13px;font-weight:900;color:${COLORS.GREEN_TEXT}">${checked ? '&#10003;' : ''}</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1.5px solid ${COLORS.SLATE};border-radius:3px">${checked ? CHECK_SVG : ''}</span>
           </td>
           <td>Section ${n} &mdash; ${esc(name)}</td>
         </tr>`;
@@ -53,14 +57,24 @@ export function renderYearlyConditionReport(
     .join('');
 
   const assetsById = new Map(assets.map((a) => [a.id, a]));
-  const defectRows = defects
+  const typeOf = (d: (typeof defects)[number]) => TYPE_LABEL[d.severity] ?? { type: 3, label: d.severity };
+  const sectionOf = (d: (typeof defects)[number]) =>
+    (d.asset_id ? assetsById.get(d.asset_id)?.categoryOfficialSection : undefined) ?? null;
+  // FIX: rows came out in whatever order the database returned them, so
+  // critical defects were scattered through the table. Most severe first,
+  // then by AS 1851 section (none last), then in the order they were logged.
+  const sortedDefects = [...defects].sort((a, b) =>
+    typeOf(a).type - typeOf(b).type
+    || (sectionOf(a) ?? Infinity) - (sectionOf(b) ?? Infinity)
+    || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
+  );
+  const defectRows = sortedDefects
     .map((d) => {
-      const t = TYPE_LABEL[d.severity] ?? { type: 3, label: d.severity };
-      const asset = d.asset_id ? assetsById.get(d.asset_id) : undefined;
-      const section = asset?.categoryOfficialSection;
+      const t = typeOf(d);
+      const section = sectionOf(d);
       return `
         <tr>
-          <td style="text-align:center;font-weight:800">${t.type}</td>
+          <td style="text-align:center;font-weight:700">${t.type}</td>
           <td>${esc(t.label)}</td>
           <td>${section != null ? `Section ${section}` : '&mdash;'}</td>
           <td style="white-space:pre-line">${esc(d.description)}</td>
@@ -70,7 +84,7 @@ export function renderYearlyConditionReport(
 
   return `<div class="page">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <div style="font-size:16px;font-weight:900;color:${COLORS.NAVY}">Yearly Condition Report</div>
+    <div style="font-size:16px;font-weight:700;color:${COLORS.NAVY}">Yearly Condition Report</div>
     <div style="font-size:9.5px;color:${COLORS.MUTED}">AS 1851-2012 Appendix E</div>
   </div>
 

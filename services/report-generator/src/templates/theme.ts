@@ -56,6 +56,10 @@ export const BASE_STYLE = `
      with short rows (the Yearly Condition Report's defects table) ran
      right under "Page X of Y". */
   @page { size: A4; }
+  /* SIZE: bold is font-weight 700 only, everywhere. The report font has a
+     single bold face, so 600/800/900 all drew the same glyphs — but Chromium
+     embedded a separate copy of that face for each weight asked for (four
+     copies of Liberation Sans Bold on the server). */
   * { box-sizing: border-box; }
   body {
     font-family: Helvetica, Arial, sans-serif;
@@ -66,7 +70,7 @@ export const BASE_STYLE = `
   }
   .page { padding: 28px 32px; }
   .section-bar {
-    background: ${COLORS.NAVY}; color: #fff; font-weight: 800; font-size: 11px;
+    background: ${COLORS.NAVY}; color: #fff; font-weight: 700; font-size: 11px;
     letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px;
     border-radius: 4px 4px 0 0;
   }
@@ -76,7 +80,7 @@ export const BASE_STYLE = `
   }
   .pill {
     display: inline-block; padding: 3px 10px; border-radius: 999px;
-    font-size: 10px; font-weight: 800; letter-spacing: 0.3px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
   }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 9.5px; font-weight: 700; color: ${COLORS.SLATE}; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 10px; background: ${COLORS.BORDER_LIGHT}; }
@@ -119,7 +123,7 @@ export const BASE_STYLE = `
   .cat-table { margin-top: 24px; border-radius: 6px; }
   .cat-head th {
     position: relative;
-    background: ${COLORS.NAVY}; color: #fff; font-weight: 800; font-size: 11px;
+    background: ${COLORS.NAVY}; color: #fff; font-weight: 700; font-size: 11px;
     letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px;
   }
   /* Short blocks (e.g. the sign-off) that must stay on one page. */

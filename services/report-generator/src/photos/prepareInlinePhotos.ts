@@ -18,8 +18,16 @@ import { fetchAllPaged } from '../data/paginate';
 // ~39% of its previous value, quality-58 vs 72 trims a further ~20-25% on
 // top) — worth regenerating a real report after this change and comparing
 // the actual new size rather than trusting this estimate blindly.
-const TARGET_DIMENSION = 200;
-const JPEG_QUALITY = 58;
+//
+// SIZE (2026-10-11): every thumbnail prints in a 110x110 box with
+// object-fit: cover (theme.ts .thumb), so the parts of a portrait or
+// landscape photo outside that square were embedded but never shown. Now
+// cropped to the square here (same centre crop the page applied), at 165px
+// — more pixels across the visible square than the old 200px-long-side
+// thumbnail had (150) — and encoded with mozjpeg, which is smaller at the
+// same quality. Measured on a 34-photo job: 112.5KB -> 86KB, no visible loss.
+const TARGET_DIMENSION = 165;
+const JPEG_QUALITY = 55;
 // Photos are small by now (the app uploads them at 1600px / q0.7, ~200KB),
 // so each download is latency-bound rather than bandwidth-bound — more in
 // flight at once is what actually shortens this stage.
@@ -85,8 +93,8 @@ export async function prepareInlinePhotos(
     const original = Buffer.from(await data.arrayBuffer());
     const resized = await sharp(original)
       .rotate() // respect EXIF orientation before resizing — phone photos are often stored sideways
-      .resize({ width: TARGET_DIMENSION, height: TARGET_DIMENSION, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: JPEG_QUALITY })
+      .resize({ width: TARGET_DIMENSION, height: TARGET_DIMENSION, fit: 'cover', withoutEnlargement: true })
+      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
       .toBuffer();
     const dataUri = `data:image/jpeg;base64,${resized.toString('base64')}`;
     cacheThumb(path, dataUri);

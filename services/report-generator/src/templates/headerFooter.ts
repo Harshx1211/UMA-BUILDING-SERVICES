@@ -12,11 +12,13 @@ import { Company } from '../types';
  * deliberately left out here — pdf/stampPageNumbers.ts draws the correct
  * "Page X of Y" onto every page after the final pass, once the real total is
  * known. Font size must be set explicitly here — the browser default for
- * header/footer content is tiny.
+ * header/footer content is tiny. So must the font: left to the default, the
+ * footer drew in a different font (DejaVu Sans on the server) that was
+ * embedded in every report just for these two lines.
  */
 export function buildFooterTemplate(company: Company): string {
   return `
-    <div style="width:100%;font-size:8px;padding:0 32px;display:flex;justify-content:space-between;align-items:center;color:#94A3B8;-webkit-print-color-adjust:exact">
+    <div style="width:100%;font-family:Helvetica, Arial, sans-serif;font-size:8px;padding:0 32px;display:flex;justify-content:space-between;align-items:center;color:#94A3B8;-webkit-print-color-adjust:exact">
       <div>${[company.name ? esc(company.name) : '', company.abn ? `ABN: ${esc(company.abn)}` : ''].filter(Boolean).join(' &middot; ')}</div>
       <div>${[company.phone ? esc(company.phone) : '', company.contact_email ? esc(company.contact_email) : ''].filter(Boolean).join(' &middot; ')}</div>
     </div>`;

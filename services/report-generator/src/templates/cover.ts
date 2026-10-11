@@ -27,19 +27,23 @@ import { AssetTypeDefinition } from '../types';
 // Access notes and the general site note are deliberately NOT printed (owner's
 // decision, 2026-10-11) — they're working information for technicians and
 // stay in the app; only the safety-relevant hazard note goes on the report.
+// SIZE: drawn, not typed — the report font has no warning-sign glyph, so
+// "&#9888;" pulled in a whole extra fallback font just for it.
+const HAZARD_SVG = `<svg width="11" height="10" viewBox="0 0 11 10"><path d="M5.5 0.8 10.3 9.2H0.7Z" fill="none" stroke="${COLORS.RED_TEXT_DARK}" stroke-width="1.2" stroke-linejoin="round"/><path d="M5.5 3.6V6" stroke="${COLORS.RED_TEXT_DARK}" stroke-width="1.2" stroke-linecap="round"/><circle cx="5.5" cy="7.6" r="0.65" fill="${COLORS.RED_TEXT_DARK}"/></svg>`;
+
 function renderSiteNotes(property: Property | null | undefined, jobNotes: string | null): string {
   const rows: string[] = [];
   if (property?.hazard_notes) {
     rows.push(`
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.RED_BG};border:1px solid ${COLORS.RED_BORDER};border-radius:8px;margin-top:10px">
-        <div style="font-weight:800;color:${COLORS.RED_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">&#9888; Site Hazard</div>
+        <div style="font-weight:700;color:${COLORS.RED_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0;display:flex;align-items:center;gap:4px">${HAZARD_SVG}Site Hazard</div>
         <div style="color:${COLORS.RED_TEXT_DARK};font-size:10.5px;white-space:pre-line">${esc(property.hazard_notes)}</div>
       </div>`);
   }
   if (jobNotes) {
     rows.push(`
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.SURFACE};border:1px solid ${COLORS.BORDER};border-radius:8px;margin-top:10px">
-        <div style="font-weight:800;color:${COLORS.SLATE};font-size:10px;text-transform:uppercase;flex-shrink:0">Field Notes</div>
+        <div style="font-weight:700;color:${COLORS.SLATE};font-size:10px;text-transform:uppercase;flex-shrink:0">Field Notes</div>
         <div style="color:${COLORS.BLACK};font-size:10.5px;white-space:pre-line">${esc(jobNotes)}</div>
       </div>`);
   }
@@ -79,7 +83,7 @@ function overallStatus(
 function statTile(value: number, label: string, color: string, bg: string): string {
   return `
     <div style="flex:1;background:${bg};border-radius:8px;padding:10px 12px;text-align:center">
-      <div style="font-size:20px;font-weight:900;color:${color};line-height:1.1">${value}</div>
+      <div style="font-size:20px;font-weight:700;color:${color};line-height:1.1">${value}</div>
       <div style="font-size:9px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">${label}</div>
     </div>`;
 }
@@ -148,12 +152,12 @@ export function renderCover(
           ? `<img src="${esc(company.logo_url)}" alt="" style="height:36px;width:auto;object-fit:contain" />`
           : ''}
         <div>
-          <div style="font-size:18px;font-weight:900;color:${COLORS.NAVY}">${esc(company.name ?? 'Company Name')}</div>
+          <div style="font-size:18px;font-weight:700;color:${COLORS.NAVY}">${esc(company.name ?? 'Company Name')}</div>
           ${company.abn ? `<div style="font-size:9px;color:${COLORS.MUTED}">ABN: ${esc(company.abn)}</div>` : ''}
         </div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:16px;font-weight:800;color:${COLORS.ORANGE}">Service Report ${esc(reportId)}</div>
+        <div style="font-size:16px;font-weight:700;color:${COLORS.ORANGE}">Service Report ${esc(reportId)}</div>
       </div>
     </div>
 
@@ -161,7 +165,7 @@ export function renderCover(
     <div class="card info-row" style="display:flex">
       <div style="flex:1.6;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
         <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Property</div>
-        <div style="font-size:11px;font-weight:600">${esc(property?.name) || '—'}</div>
+        <div style="font-size:11px;font-weight:700">${esc(property?.name) || '—'}</div>
         ${addressLine ? `<div style="font-size:9.5px;color:${COLORS.SLATE};margin-top:2px">${esc(addressLine)}</div>` : ''}
       </div>
       ${infoCell('Site Contact', property?.site_contact_name)}
@@ -173,7 +177,7 @@ export function renderCover(
 
     <div class="section-bar" style="margin-top:18px">Inspection Summary</div>
     <div class="card" style="padding:14px 16px">
-      <div style="padding:9px 12px;border-radius:8px;background:${status.bg};border:1px solid ${status.border};color:${status.color};font-weight:800;font-size:11px">
+      <div style="padding:9px 12px;border-radius:8px;background:${status.bg};border:1px solid ${status.border};color:${status.color};font-weight:700;font-size:11px">
         ${esc(status.text)}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">

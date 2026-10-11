@@ -341,7 +341,8 @@ console.log('OK: assetLogChunk shows the "Resolved on site" pill only for the de
 // (2-14) but should only tick exactly those three, and must never fabricate
 // a "Section 15" checkbox anywhere in the page.
 const ycrHtml = docs.find(([name]) => name === 'yearlyConditionReport')![1];
-const checkedCount = (ycrHtml.match(/&#10003;/g) ?? []).length;
+// The tick is an inline SVG check-mark path (see CHECK_SVG), one per ticked Section.
+const checkedCount = (ycrHtml.match(/<path d="M1.5 5.3 /g) ?? []).length;
 if (checkedCount !== 3) {
   throw new Error(`FAIL: yearlyConditionReport — expected exactly 3 ticked Sections (6, 9, 10), found ${checkedCount}`);
 }

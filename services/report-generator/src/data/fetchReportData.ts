@@ -5,6 +5,7 @@ import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
 import { prepareFullResUrls } from '../photos/prepareFullResUrls';
 import { config } from '../config';
 import type { StageTimer } from '../generation/stageTimer';
+import { shrinkSignature } from '../photos/shrinkSignature';
 import {
   Asset,
   AssetTypeDefinition,
@@ -103,6 +104,12 @@ export async function fetchReportData(
   const company = check(companyRes, 'company details');
   const assetTypeDefRows = check(assetTypeRes, 'asset type definitions');
   const signature = check(signatureRes, 'signature');
+  // Shrunk to print size alongside the rest of the photo work (see
+  // shrinkSignature) — never fails.
+  const signaturePrep = Promise.all([
+    shrinkSignature(signature?.signature_url as string | null | undefined),
+    shrinkSignature(signature?.tech_signature_url as string | null | undefined),
+  ]);
   const jobTechRows = check(jobTechRes, 'assigned technicians');
   const assetTypesByValue = new Map<string, AssetTypeDefinition>(
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
@@ -196,6 +203,7 @@ export async function fetchReportData(
   }
 
   const [signedPhotoUrls, fullResPhotoUrls] = await photoPrep;
+  const [clientSignatureUrl, techSignatureUrl] = await signaturePrep;
   // Whatever photo work was still outstanding once the queries finished —
   // the part of photo prep that actually added to the wait.
   timer?.lap('photos');
@@ -242,7 +250,9 @@ export async function fetchReportData(
     photosByDefect,
     signedPhotoUrls,
     fullResPhotoUrls,
-    signature: (signature ?? null) as Signature | null,
+    signature: (signature
+      ? { ...signature, signature_url: clientSignatureUrl, tech_signature_url: techSignatureUrl }
+      : null) as Signature | null,
     assignedUsers,
     timeLogUsers,
     approvedQuote,
