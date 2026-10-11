@@ -65,6 +65,58 @@ export async function launchBrowser(): Promise<Browser> {
   });
 }
 
+// ── Spare browser ───────────────────────────────────────────────────────
+// PERF: launching Chromium was the slowest single step of a report on Cloud
+// Run (~3.5s of an ~8s report, measured), so one is launched AHEAD of the
+// next report — at start-up, while /prepare warms a job's photos, and after
+// each report finishes — and the next report takes it ready-made. Each
+// browser still renders exactly ONE report and is then closed, so the
+// "clean process, all memory handed back" guarantee above still holds; the
+// only cost is one idle Chromium (no pages, well under 100MB) on the instance.
+let spare: Promise<Browser | undefined> | null = null;
+
+/**
+ * Makes sure a spare browser is launched or launching. Resolves when it's
+ * ready (or its launch failed). Never rejects. Callers await it inside a
+ * request that's still open, so Cloud Run keeps the CPU allocated while
+ * Chromium starts.
+ */
+export function prepareSpareBrowser(): Promise<void> {
+  if (!spare) {
+    const launching: Promise<Browser | undefined> = launchBrowser().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn(`[chromium] spare browser launch failed: ${err instanceof Error ? err.message : err}`);
+      if (spare === launching) spare = null;
+      return undefined;
+    });
+    spare = launching;
+  }
+  return spare.then(() => undefined);
+}
+
+/**
+ * The spare browser (waiting for it if it's still launching), otherwise a
+ * fresh launch. The caller owns it and must close it. Never rejects —
+ * undefined means the launch failed, and each render pass then launches its
+ * own (see convertHtmlToPdf).
+ */
+export async function takeBrowser(): Promise<Browser | undefined> {
+  const pending = spare;
+  spare = null;
+  const ready = pending ? await pending : undefined;
+  if (ready?.connected) return ready;
+  if (ready) await ready.close().catch(() => {});
+  return launchBrowser().catch(() => undefined);
+}
+
+/** Closes the spare, if any (shutdown). */
+export async function closeSpareBrowser(): Promise<void> {
+  const pending = spare;
+  spare = null;
+  const ready = pending ? await pending : undefined;
+  await ready?.close().catch(() => {});
+}
+
 export interface ConvertOptions {
   headerTemplateHtml?: string;
   footerTemplateHtml?: string;

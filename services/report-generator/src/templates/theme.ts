@@ -49,7 +49,13 @@ export const COLORS = {
 /** Shared <style> block — every template (cover/asset-log-chunk/repairs/signoff)
  * includes this so a single Gotenberg-merged PDF looks visually consistent. */
 export const BASE_STYLE = `
-  @page { margin: 0; size: A4; }
+  /* Page MARGINS come only from the renderer (render/chromium.ts: 0.15in top,
+     0.75in bottom for the footer band). FIX: this also declared
+     "margin: 0", and Chromium laid pages out with that zero margin while
+     still drawing the footer in the renderer's margin — so a page filled
+     with short rows (the Yearly Condition Report's defects table) ran
+     right under "Page X of Y". */
+  @page { size: A4; }
   * { box-sizing: border-box; }
   body {
     font-family: Helvetica, Arial, sans-serif;

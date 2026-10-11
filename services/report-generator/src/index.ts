@@ -6,6 +6,7 @@ import { AuthError, assertOwnsJob, verifyAccessToken, fetchCaller } from './auth
 import { tryAcquireLock, markGenerationResult, getGenerationStatus } from './generation/lock';
 import { generateReport, renderReportPdf } from './generation/pipeline';
 import { warmUpPdfjs } from './pdf/pageMarkers';
+import { closeSpareBrowser, prepareSpareBrowser } from './render/chromium';
 import { warmJobThumbnails } from './photos/prepareInlinePhotos';
 import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
@@ -216,7 +217,12 @@ app.post('/prepare', route(async (req, res) => {
   preparing.add(jobId);
   const started = Date.now();
   try {
-    const photos = await warmJobThumbnails(db, jobId, config.photoBucket);
+    // The next report's browser too (render/chromium.ts) — started here,
+    // while this request holds the CPU, rather than when they tap Generate.
+    const [photos] = await Promise.all([
+      warmJobThumbnails(db, jobId, config.photoBucket),
+      prepareSpareBrowser(),
+    ]);
     console.log(`[prepare] job=${jobId} photos=${photos} took=${Date.now() - started}ms`);
     return res.json({ status: 'ready', photos });
   } finally {
@@ -346,6 +352,10 @@ app.post('/internal/run', route(async (req, res) => {
   res.status(200).setHeader('Content-Type', 'text/plain');
   res.write('started\n');
   await runGeneration(jobId);
+  // Ready a browser for the next report (a technician often regenerates —
+  // draft, fix a defect, final) while this request still holds the CPU. The
+  // report's status is already written, so nobody waits on this.
+  if (!shuttingDown) await prepareSpareBrowser();
   res.end('done\n');
 }));
 
@@ -448,6 +458,10 @@ const server = app.listen(config.port, () => {
   // Start-up warm-up — see warmUpPdfjs. Cheap, and runs while Cloud Run's
   // start-up CPU boost is still in effect.
   warmUpPdfjs();
+  // Usually a request is what started this instance, so the CPU is
+  // allocated while the spare launches — and a report arriving now takes
+  // the already-launching browser instead of starting from nothing.
+  void prepareSpareBrowser();
 });
 
 /**
@@ -463,6 +477,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   console.log(`[shutdown] ${signal} received — ${inFlight.size} generation(s) in flight`);
   server.close();
+  void closeSpareBrowser();
 
   const deadline = Date.now() + SHUTDOWN_GRACE_MS;
   while (inFlight.size > 0 && Date.now() < deadline) {

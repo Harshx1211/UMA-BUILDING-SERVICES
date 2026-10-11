@@ -3,7 +3,7 @@ import { config } from '../config';
 import { fetchReportData } from '../data/fetchReportData';
 import { buildAssetLogChunksByCategory } from '../data/chunking';
 import { TocSectionEntry, rangesFromMarkers } from '../data/tableOfContents';
-import { convertHtmlToPdf, launchBrowser } from '../render/chromium';
+import { convertHtmlToPdf, launchBrowser, takeBrowser } from '../render/chromium';
 import type { Browser } from 'puppeteer-core';
 import { stampPageNumbers } from '../pdf/stampPageNumbers';
 import { optimizePdf } from '../pdf/optimizePdf';
@@ -110,10 +110,11 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
   const started = Date.now();
   const timer = new StageTimer();
 
-  // PERF: start Chromium now so its launch — the slowest single step on a
-  // freshly started instance — overlaps the data fetch instead of following
-  // it. Never rejects (renderReportPdf falls back to its own launch).
-  const browserPromise = launchBrowser().catch(() => undefined);
+  // PERF: the spare browser launched ahead of time (render/chromium.ts) —
+  // or, if there isn't one, a launch started now so it overlaps the data
+  // fetch instead of following it. Never rejects (renderReportPdf falls back
+  // to its own launch).
+  const browserPromise = takeBrowser();
 
   let data: Awaited<ReturnType<typeof fetchReportData>>;
   try {
