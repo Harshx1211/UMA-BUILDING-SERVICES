@@ -265,7 +265,7 @@ export default function ReportSummaryScreen() {
   // pattern properties/[id].tsx already uses correctly.
   // Start waking the report service now, while the technician reviews this
   // summary — see warmUpReportService.
-  useFocusEffect(useCallback(() => { loadData(); warmUpReportService(); }, [loadData]));
+  useFocusEffect(useCallback(() => { loadData(); if (jobId) warmUpReportService(jobId); }, [loadData, jobId]));
 
   // This summary reads job_assets/defects/signature directly (not through a
   // store), so — unlike the job's own status — none of it refreshes live on

@@ -6,6 +6,7 @@ import { AuthError, assertOwnsJob, verifyAccessToken, fetchCaller } from './auth
 import { tryAcquireLock, markGenerationResult, getGenerationStatus } from './generation/lock';
 import { generateReport, renderReportPdf } from './generation/pipeline';
 import { warmUpPdfjs } from './pdf/pageMarkers';
+import { warmJobThumbnails } from './photos/prepareInlinePhotos';
 import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
 
@@ -48,6 +49,25 @@ function allowGenerate(userId: string): boolean {
   generateLog.set(userId, recent);
   return true;
 }
+
+// POST /prepare is cheap per call but triggered from screens the
+// technician opens, so it gets its own (more generous) budget, separate
+// from report generation's.
+const PREPARE_LIMIT = 30;
+const prepareLog = new Map<string, number[]>();
+function allowPrepare(userId: string): boolean {
+  const now = Date.now();
+  const recent = (prepareLog.get(userId) ?? []).filter((t) => now - t < GENERATE_WINDOW_MS);
+  if (recent.length >= PREPARE_LIMIT) {
+    prepareLog.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  prepareLog.set(userId, recent);
+  return true;
+}
+// Jobs whose thumbnails are being prepared right now — one at a time each.
+const preparing = new Set<string>();
 
 // Jobs whose generation is running in THIS process right now. Generation is
 // fire-and-forget after the 202 (see POST /generate-report), so without this
@@ -169,6 +189,39 @@ app.post('/generate-report', route(async (req, res) => {
   // report_generation_status for the client to discover via polling, never
   // left to become an unhandled rejection.
   void runGeneration(jobId);
+}));
+
+/**
+ * Prepares a job's photo thumbnails ahead of generation (see
+ * warmJobThumbnails). The app calls this when the technician reaches the
+ * sign-off / report summary screens; by the time they tap Generate the slow
+ * part of photo handling is already done on this instance. Same auth and
+ * ownership checks as generation. Returns nothing but a count — it only
+ * warms a cache. Held open until finished so Cloud Run keeps the CPU
+ * allocated (the app doesn't wait on it).
+ */
+app.post('/prepare', route(async (req, res) => {
+  const { jobId } = req.body ?? {};
+  if (!jobId || typeof jobId !== 'string') {
+    return res.status(400).json({ error: 'jobId is required' });
+  }
+  const userId = await authorize(req, res, jobId);
+  if (!userId) return;
+  if (!allowPrepare(userId)) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+  if (shuttingDown) return res.status(503).end();
+  if (preparing.has(jobId)) return res.status(202).json({ status: 'already preparing' });
+
+  preparing.add(jobId);
+  const started = Date.now();
+  try {
+    const photos = await warmJobThumbnails(db, jobId, config.photoBucket);
+    console.log(`[prepare] job=${jobId} photos=${photos} took=${Date.now() - started}ms`);
+    return res.json({ status: 'ready', photos });
+  } finally {
+    preparing.delete(jobId);
+  }
 }));
 
 /**

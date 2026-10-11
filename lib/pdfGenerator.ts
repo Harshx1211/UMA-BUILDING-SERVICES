@@ -124,6 +124,8 @@ export function hasReportUrl(jobId: string): boolean {
 
 let lastWarmUpAt = 0;
 const WARM_UP_INTERVAL_MS = 5 * 60_000;
+const lastPrepareAt = new Map<string, number>();
+const PREPARE_INTERVAL_MS = 3 * 60_000;
 
 /**
  * Wakes the report service ahead of time. It scales to zero after ~15 idle
@@ -134,10 +136,28 @@ const WARM_UP_INTERVAL_MS = 5 * 60_000;
  * the time they generate. Fire-and-forget, at most once per 5 minutes; a
  * failure (offline, etc.) changes nothing — generation still waits for
  * /health itself.
+ *
+ * With a jobId (and a session), it goes further: POST /prepare asks the
+ * service to build that job's photo thumbnails now, while the technician is
+ * still signing off — the slowest part of generation is then already done
+ * when they tap Generate (the PDF embeds small thumbnails; each one links to
+ * the full-quality original). At most once per job every 3 minutes.
  */
-export function warmUpReportService(): void {
+export function warmUpReportService(jobId?: string): void {
   const url = process.env.EXPO_PUBLIC_REPORT_SERVICE_URL;
-  if (!url || Date.now() - lastWarmUpAt < WARM_UP_INTERVAL_MS) return;
+  if (!url) return;
+  const token = useAuthStore.getState().session?.access_token;
+  if (jobId && token) {
+    if (Date.now() - (lastPrepareAt.get(jobId) ?? 0) < PREPARE_INTERVAL_MS) return;
+    lastPrepareAt.set(jobId, Date.now());
+    fetch(`${url}/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jobId }),
+    }).catch(() => { lastPrepareAt.delete(jobId); });
+    return;
+  }
+  if (Date.now() - lastWarmUpAt < WARM_UP_INTERVAL_MS) return;
   lastWarmUpAt = Date.now();
   fetch(`${url}/health`).catch(() => { lastWarmUpAt = 0; });
 }

@@ -92,7 +92,7 @@ export default function SignatureScreen() {
     if (!id) return;
     // Signing comes right before generating the report — wake the report
     // service now so it's up by then (see warmUpReportService).
-    warmUpReportService();
+    warmUpReportService(id);
     const job = getJobById<{ status: string }>(id);
     setJobLocked(job?.status === JobStatus.Completed || job?.status === JobStatus.Cancelled);
 

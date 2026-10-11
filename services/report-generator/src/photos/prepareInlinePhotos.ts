@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 import { mapWithConcurrency } from '../concurrency';
 import { InspectionPhoto } from '../types';
+import { fetchAllPaged } from '../data/paginate';
 
 // Small enough to embed inline without meaningfully bloating the HTML, large
 // enough to actually make out a defect — the printed thumbnail is 110px.
@@ -117,6 +118,21 @@ export async function prepareInlinePhotos(
   }
 
   return inline;
+}
+
+/**
+ * Builds (and caches) the inline thumbnails for every photo on a job ahead
+ * of time — POST /prepare calls this while the technician is still signing
+ * off, so generation later finds them already in thumbCache instead of
+ * downloading and resizing every original at the moment they tap Generate.
+ * Returns how many photos the job has.
+ */
+export async function warmJobThumbnails(db: SupabaseClient, jobId: string, bucket: string): Promise<number> {
+  const photos = await fetchAllPaged<InspectionPhoto>(db, () =>
+    db.from('inspection_photos').select('id, photo_url').eq('job_id', jobId),
+  );
+  if (photos.length > 0) await prepareInlinePhotos(db, photos, bucket);
+  return photos.length;
 }
 
 export function extractObjectPath(photoUrl: string, bucket: string): string | null {
