@@ -95,4 +95,23 @@ export const BASE_STYLE = `
      onto a fresh page instead, producing worse blank-space gaps than the
      row-level split it's meant to prevent. */
   tr, .defect-card { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Sections now flow one after another instead of each starting a fresh
+     page (that left most pages of a small job half empty — 17 pages for 17
+     assets). Two things keep the flow tidy: */
+  /* 1. A section heading never ends a page on its own. */
+  .section-bar { break-after: avoid; page-break-after: avoid; position: relative; }
+  /* 2. Asset-log category headings live INSIDE the table's <thead>, which
+     Chromium repeats on every page the table spans — so a category that
+     runs onto a second page is still labelled there, and its heading can't
+     be stranded at the bottom of a page away from its first asset. */
+  thead { display: table-header-group; }
+  .cat-table { margin-top: 16px; border-radius: 6px; }
+  .cat-head th {
+    position: relative;
+    background: ${COLORS.NAVY}; color: #fff; font-weight: 800; font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px;
+  }
+  /* Short blocks (e.g. the sign-off) that must stay on one page. */
+  .keep { break-inside: avoid; page-break-inside: avoid; }
 `;

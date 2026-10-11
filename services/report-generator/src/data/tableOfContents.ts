@@ -20,6 +20,11 @@ export function rangesFromMarkers(
   entries: Array<{ key: string; label: string }>,
   markerPages: Map<string, number>,
   nextStartPage: number,
+  /** Per-key "starts at the top of its page" (see pageMarkers.ts). Omitted =
+   * every section starts on a fresh page (the old behaviour). */
+  startsAtTop?: Map<string, boolean>,
+  /** Same, for whatever comes after this whole sequence. */
+  nextStartsAtTop = true,
 ): TocSectionEntry[] {
   return entries.map((entry, i) => {
     const startPage = markerPages.get(entry.key);
@@ -30,6 +35,13 @@ export function rangesFromMarkers(
     if (followingStart == null) {
       throw new Error(`Internal error: no measured page position for section "${entries[i + 1].key}"`);
     }
-    return { label: entry.label, startPage, endPage: followingStart - 1 };
+    // A following section that starts mid-page shares that page with this
+    // one, so this one ends there; one that starts on a fresh page means
+    // this one ended on the page before.
+    const followingAtTop = i + 1 < entries.length
+      ? (startsAtTop?.get(entries[i + 1].key) ?? true)
+      : nextStartsAtTop;
+    const endPage = Math.max(startPage, followingAtTop ? followingStart - 1 : followingStart);
+    return { label: entry.label, startPage, endPage };
   });
 }

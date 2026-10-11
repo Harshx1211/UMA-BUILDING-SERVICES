@@ -33,29 +33,50 @@ export async function verifyAccessToken(db: SupabaseClient, authHeader: string |
   }
   const token = authHeader.slice('Bearer '.length);
 
-  const { data, error } = await db.auth.getUser(token);
-  if (error || !data.user) {
+  // PERF: getClaims verifies the token's signature and expiry locally
+  // against the project's published signing keys (JWKS, cached) — this
+  // project signs with asymmetric ES256 keys — instead of a network round
+  // trip to Supabase Auth on every request (each 2.5s status poll included).
+  // Same choice as the admin portal (admin/src/lib/supabase-server.ts). A
+  // legacy HS256 token can't be verified locally and getClaims falls back to
+  // asking Auth itself. Deactivation and suspension are still enforced on
+  // every request by assertOwnsJob, from the database.
+  const { data, error } = await db.auth.getClaims(token);
+  const sub = data?.claims?.sub;
+  if (error || !sub) {
     throw new AuthError('Invalid or expired token', 401);
   }
-  return data.user.id;
+  return sub;
 }
 
 /** Throws AuthError(403) if the caller's company doesn't own the job. */
+/** The caller's account row, as assertOwnsJob needs it — fetched by the
+ * caller so it can run alongside the job lookup instead of after it. */
+export type CallerRow = {
+  data: { company_id: string | null; is_active: boolean | null; companies: unknown } | null;
+  error: { message: string } | null;
+};
+
+export function fetchCaller(db: SupabaseClient, userId: string): PromiseLike<CallerRow> {
+  return db
+    .from('users')
+    .select('company_id, is_active, companies(subscription_status)')
+    .eq('id', userId)
+    .single() as unknown as PromiseLike<CallerRow>;
+}
+
 export async function assertOwnsJob(
   db: SupabaseClient,
   userId: string,
   jobCompanyId: string,
+  prefetched?: CallerRow,
 ): Promise<void> {
   // FIX: this only compared company ids. This service uses the service role,
   // so the database's own "deactivated user / suspended company gets
   // nothing" rule (get_user_company_id, 20261010060000) never applies here —
   // a deactivated technician's still-valid login could keep generating and
   // downloading the company's reports. Checked explicitly instead.
-  const { data: caller, error } = await db
-    .from('users')
-    .select('company_id, is_active, companies(subscription_status)')
-    .eq('id', userId)
-    .single();
+  const { data: caller, error } = prefetched ?? await fetchCaller(db, userId);
 
   if (error || !caller) {
     throw new AuthError('Caller account not found', 403);

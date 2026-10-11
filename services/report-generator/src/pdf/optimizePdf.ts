@@ -37,7 +37,15 @@ const execFileAsync = promisify(execFile);
  * a bigger-than-ideal report is a much smaller problem than a report that
  * fails to generate at all.
  */
+// PERF: below this the pass isn't worth its time. Photos are already
+// 200px/q58 JPEGs and Chromium subsets the one font, so a typical report
+// (a few hundred KB) has almost nothing left to shrink — but the pass cost
+// ~3s on every report on Cloud Run. Large sites (MBs of photos and objects)
+// still get it, where it saves real size.
+const MIN_BYTES_TO_OPTIMIZE = 2 * 1024 * 1024;
+
 export async function optimizePdf(input: Buffer): Promise<Buffer> {
+  if (input.length < MIN_BYTES_TO_OPTIMIZE) return input;
   let dir: string | null = null;
   try {
     dir = await mkdtemp(path.join(tmpdir(), 'report-optimize-'));

@@ -4,6 +4,7 @@ import { parseCategory } from './categoryGrouping';
 import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
 import { prepareFullResUrls } from '../photos/prepareFullResUrls';
 import { config } from '../config';
+import type { StageTimer } from '../generation/stageTimer';
 import {
   Asset,
   AssetTypeDefinition,
@@ -40,7 +41,11 @@ export type FetchedReportData = ReportData & {
   assetTypesByValue: Map<string, AssetTypeDefinition>;
 };
 
-export async function fetchReportData(db: SupabaseClient, jobId: string): Promise<FetchedReportData> {
+export async function fetchReportData(
+  db: SupabaseClient,
+  jobId: string,
+  timer?: StageTimer,
+): Promise<FetchedReportData> {
   const { data: job, error: jobErr } = await db
     .from('jobs')
     .select('*, property:properties(*), assigned_user:users(*)')
@@ -94,6 +99,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
         .eq('job_id', jobId),
     ]);
 
+  timer?.lap('queries');
   const company = check(companyRes, 'company details');
   const assetTypeDefRows = check(assetTypeRes, 'asset type definitions');
   const signature = check(signatureRes, 'signature');
@@ -145,6 +151,7 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
         )
       : Promise.resolve([] as JobUser[]),
   ]);
+  timer?.lap('assets');
   const actionedByNameById = new Map<string, string>();
   for (const u of actionedByUsers ?? []) actionedByNameById.set(u.id, u.full_name);
 
@@ -189,6 +196,9 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
   }
 
   const [signedPhotoUrls, fullResPhotoUrls] = await photoPrep;
+  // Whatever photo work was still outstanding once the queries finished —
+  // the part of photo prep that actually added to the wait.
+  timer?.lap('photos');
   const usersById = new Map<string, JobUser>((extraUsers ?? []).map((u: JobUser) => [u.id, u]));
 
   const sessionsFor = (uid: string) => timeLogs.filter((t) => t.user_id === uid);

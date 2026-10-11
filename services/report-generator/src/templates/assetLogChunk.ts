@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, fmtCurrency, fmtDateTime, fmtRelativeDays, photoRow, resultPill, stagedPhotoSection } from './helpers';
+import { esc, fmtCurrency, fmtDateTime, photoRow, resultPill, stagedPhotoSection } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -37,8 +37,12 @@ export function renderAssetLogChunk(
       // caused headers/rows to visually scramble in the first preview.
       if (lastCategory !== null) parts.push(`</tbody></table>`);
       const suffix = row.isFirstInCategory ? '' : ' (continued)';
-      parts.push(`<div class="section-bar" style="margin-top:14px">${esc(row.categoryLabel)}${suffix}</div>`);
-      parts.push(`<table class="card"><thead><tr><th style="width:55%">Asset</th><th style="width:30%">Location</th><th style="width:15%;text-align:right">Status</th></tr></thead><tbody>`);
+      // Category heading inside <thead> — see theme.ts (.cat-head): repeats
+      // on every page the category spans, never stranded on its own.
+      parts.push(`<table class="card cat-table"><thead>`
+        + `<tr class="cat-head"><th colspan="3" class="cat-th">${esc(row.categoryLabel)}${suffix}</th></tr>`
+        + `<tr><th style="width:55%">Asset</th><th style="width:30%">Location</th><th style="width:15%;text-align:right">Status</th></tr>`
+        + `</thead><tbody>`);
       lastCategory = row.categoryLabel;
       isFirstRowOfTable = true;
     }
@@ -75,9 +79,12 @@ export function renderAssetLogChunk(
     // "BGA, MCP or Manual Call Point" entries in a row). Darkened to SLATE
     // and thickened so consecutive assets are unmistakably separated at a
     // glance, not just technically separated in the markup.
+    // Softened from a 3px slate rule (read as heavy black bars between
+    // every asset) to 2px light slate plus more breathing room — still an
+    // unmistakable boundary between near-identical consecutive assets.
     const wrapperStyle = isFirstRowOfTable
       ? 'padding:0;border-top:none'
-      : `padding-top:18px;border-top:3px solid ${COLORS.SLATE}`;
+      : `padding-top:16px;border-top:2px solid ${COLORS.MUTED_LIGHT}`;
     isFirstRowOfTable = false;
 
     parts.push(`
@@ -183,7 +190,7 @@ export function renderDefectCard(
       <div class="defect-body">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span style="font-weight:800;color:${sev.text};text-transform:uppercase;font-size:9.5px">${esc(badgeLabel)}${defect.defect_code ? ` &middot; ${esc(defect.defect_code.toUpperCase())}` : ''}${officialSection != null ? ` &middot; AS 1851-2012 Section ${officialSection}` : ''}</span>
-          <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)} &middot; ${esc(fmtRelativeDays(defect.created_at))}</span>
+          <span style="font-size:9px;color:${COLORS.MUTED}">Logged ${fmtDateTime(defect.created_at)}</span>
         </div>
         <div style="margin-top:4px;white-space:pre-line">${esc(defect.description)}</div>
         ${quoteBadge}${resolvedBadge}

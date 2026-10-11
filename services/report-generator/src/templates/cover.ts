@@ -58,6 +58,44 @@ function renderSiteNotes(property: Property | null | undefined, jobNotes: string
 }
 
 /**
+ * The one-line answer a building manager looks for first. Worded around what
+ * was RECORDED on this visit, never as a compliance certification — that's
+ * the Yearly Condition Report's formal statement, not a cover-page banner.
+ */
+function overallStatus(
+  counts: { fail: number; notTested: number },
+  severity: { critical: number; non_critical: number; non_conformance: number },
+): { text: string; color: string; bg: string; border: string } {
+  const red = { color: COLORS.RED_TEXT_DARK, bg: COLORS.SEVERITY.critical.bg, border: COLORS.RED_BORDER };
+  const amber = { color: COLORS.AMBER_TEXT, bg: COLORS.AMBER_BG, border: COLORS.AMBER_BORDER };
+  const green = { color: COLORS.GREEN_TEXT_DARK, bg: '#F0FDF4', border: COLORS.GREEN_BORDER };
+  const slate = { color: COLORS.SLATE, bg: COLORS.SURFACE, border: COLORS.BORDER };
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (severity.critical > 0) {
+    return { ...red, text: `Action required — ${plural(severity.critical, 'critical defect', 'critical defects')} recorded` };
+  }
+  if (counts.fail > 0 || severity.non_critical > 0) {
+    const n = severity.non_critical || counts.fail;
+    return { ...amber, text: `Repairs recommended — ${plural(n, 'defect', 'defects')} recorded` };
+  }
+  if (severity.non_conformance > 0) {
+    return { ...amber, text: `${plural(severity.non_conformance, 'non-conformance', 'non-conformances')} noted — no defects recorded` };
+  }
+  if (counts.notTested > 0) {
+    return { ...slate, text: `No defects recorded — ${plural(counts.notTested, 'asset', 'assets')} not tested` };
+  }
+  return { ...green, text: 'All assets passed — no defects recorded' };
+}
+
+function statTile(value: number, label: string, color: string, bg: string): string {
+  return `
+    <div style="flex:1;background:${bg};border-radius:8px;padding:10px 12px;text-align:center">
+      <div style="font-size:20px;font-weight:900;color:${color};line-height:1.1">${value}</div>
+      <div style="font-size:9px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.4px;margin-top:2px">${label}</div>
+    </div>`;
+}
+
+/**
  * Cover page. Adapted from the reference report's grid to fields SiteTrack
  * actually has — there's no "Client"/"Task"/"Authorisation ref" concept in this
  * schema, so we use Property / Site Contact / Job Reference / Date of Service
@@ -85,10 +123,6 @@ export function renderCover(
     assetTypesByValue,
   );
 
-  const scopeRows = categoryGroups
-    .map((g) => `<li>${esc(g.label)} (${g.items.length})</li>`)
-    .join('');
-
   // Servicing summary: category -> asset type -> quantity
   const servicingRows = categoryGroups
     .flatMap((g) => {
@@ -105,11 +139,17 @@ export function renderCover(
     })
     .join('');
 
-  const tiles = [
-    { label: 'Critical Defects', count: severityCounts.critical, color: COLORS.SEVERITY.critical.text, bg: COLORS.SEVERITY.critical.bg },
-    { label: 'Non-critical Defects', count: severityCounts.non_critical, color: COLORS.SEVERITY.non_critical.text, bg: COLORS.SEVERITY.non_critical.bg },
-    { label: 'Non-conformances', count: severityCounts.non_conformance, color: COLORS.SEVERITY.non_conformance.text, bg: COLORS.SEVERITY.non_conformance.bg },
-  ];
+  const resultCounts = { pass: 0, fail: 0, notTested: 0 };
+  for (const a of assets) {
+    if (a.result === 'pass') resultCounts.pass++;
+    else if (a.result === 'fail') resultCounts.fail++;
+    else resultCounts.notTested++;
+  }
+  const status = overallStatus(resultCounts, severityCounts);
+
+  const addressLine = [property?.address, property?.suburb, property?.state, property?.postcode]
+    .filter(Boolean)
+    .join(', ');
 
   return `
   <div class="page">
@@ -130,7 +170,11 @@ export function renderCover(
 
     <div class="section-bar">Job Details</div>
     <div class="card" style="display:flex">
-      ${infoCell('Property', property?.name)}
+      <div style="flex:1.6;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
+        <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Property</div>
+        <div style="font-size:11px;font-weight:600">${esc(property?.name) || '—'}</div>
+        ${addressLine ? `<div style="font-size:9.5px;color:${COLORS.SLATE};margin-top:2px">${esc(addressLine)}</div>` : ''}
+      </div>
       ${infoCell('Site Contact', property?.site_contact_name)}
       ${infoCell('Job Reference', reportId)}
       ${infoCell('Date of Service', fmtDate(dateOfService))}
@@ -138,20 +182,27 @@ export function renderCover(
 
     ${renderSiteNotes(property, job.notes)}
 
+    <div class="section-bar" style="margin-top:18px">Inspection Summary</div>
+    <div class="card" style="padding:14px 16px">
+      <div style="padding:9px 12px;border-radius:8px;background:${status.bg};border:1px solid ${status.border};color:${status.color};font-weight:800;font-size:11px">
+        ${esc(status.text)}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        ${statTile(assets.length, 'Assets inspected', COLORS.NAVY, COLORS.BORDER_LIGHT)}
+        ${statTile(resultCounts.pass, 'Passed', COLORS.GREEN_TEXT, '#F0FDF4')}
+        ${statTile(resultCounts.fail, 'Failed', COLORS.RED_TEXT, COLORS.SEVERITY.critical.bg)}
+        ${statTile(resultCounts.notTested, 'Not tested', COLORS.SLATE, COLORS.SURFACE)}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        ${statTile(severityCounts.critical, 'Critical defects', COLORS.SEVERITY.critical.text, COLORS.SEVERITY.critical.bg)}
+        ${statTile(severityCounts.non_critical, 'Non-critical defects', COLORS.SEVERITY.non_critical.text, COLORS.SEVERITY.non_critical.bg)}
+        ${statTile(severityCounts.non_conformance, 'Non-conformances', COLORS.SEVERITY.non_conformance.text, COLORS.SEVERITY.non_conformance.bg)}
+      </div>
+    </div>
+
+    <!-- FIX: a bulleted "Scope of Works" list used to sit above a "Servicing
+         Summary" table listing the same services again — one table now. -->
     <div class="section-bar" style="margin-top:18px">Scope of Works</div>
-    <div class="card" style="padding:12px 16px">
-      <ul style="margin:0;padding-left:18px">${scopeRows || '<li>No assets in scope</li>'}</ul>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:16px">
-      ${tiles.map((t) => `
-        <div style="flex:1;background:${t.bg};border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:22px;font-weight:900;color:${t.color}">${t.count}</div>
-          <div style="font-size:9.5px;font-weight:700;color:${t.color}">${t.label}</div>
-        </div>`).join('')}
-    </div>
-
-    <div class="section-bar" style="margin-top:18px">Servicing Summary</div>
     <table class="card">
       <thead><tr><th>Service</th><th>Asset</th><th style="text-align:right">Quantity</th></tr></thead>
       <tbody>${servicingRows || '<tr><td colspan="3">No assets recorded</td></tr>'}</tbody>

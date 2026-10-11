@@ -16,8 +16,11 @@ import { renderRepairs } from '../templates/repairs';
 import { renderYearlyConditionReport } from '../templates/yearlyConditionReport';
 import { renderSignoff } from '../templates/signoff';
 import { buildFooterTemplate, EMPTY_HEADER_TEMPLATE } from '../templates/headerFooter';
-import { BASE_STYLE } from '../templates/theme';
+import { BASE_STYLE, COLORS } from '../templates/theme';
 import { uploadReport } from '../storage';
+import { StageTimer } from './stageTimer';
+
+export { StageTimer };
 import { AssetTypeDefinition, Defect, ReportData } from '../types';
 
 export class ReportGenerationError extends Error {}
@@ -33,19 +36,6 @@ export interface PipelineResult {
   timings: string;
 }
 
-/** Records how long each pipeline stage took, in order. */
-export class StageTimer {
-  private last = Date.now();
-  private readonly parts: string[] = [];
-  lap(stage: string): void {
-    const now = Date.now();
-    this.parts.push(`${stage}=${now - this.last}ms`);
-    this.last = now;
-  }
-  toString(): string {
-    return this.parts.join(' ');
-  }
-}
 
 // Human-facing labels for the tail sections' Index entries — the internal
 // keys below are just marker/lookup keys, not display text.
@@ -61,16 +51,35 @@ interface Section {
    * see categorySections below for why only the first chunk needs one. */
   key?: string;
   html: string;
+  /** Keep the whole section on one page (e.g. the sign-off). */
+  keep?: boolean;
   /** False only for the very first section (the cover) — every section
    * after it starts on a fresh page, matching what merging separately-
    * rendered PDFs used to do unconditionally. */
   breakBefore: boolean;
 }
 
-function wrapSection({ key, html, breakBefore }: Section): string {
-  const marker = key ? markerHtml(key) : '';
-  const style = breakBefore ? ' style="break-before:page"' : '';
-  return `<div${style}>${marker}${html}</div>`;
+// The first heading bar of a section — a page-break can never separate it
+// from the section's own content (theme.ts), so it's the one reliable place
+// to anchor the section's page marker.
+const FIRST_BAR = /<(?:div|th)[^>]*class="(?:section-bar|cat-th)"[^>]*>/;
+
+function wrapSection({ key, html, breakBefore, keep }: Section): string {
+  let body = html;
+  let topMarker = '';
+  if (key) {
+    const bar = breakBefore ? null : FIRST_BAR.exec(body);
+    if (bar) {
+      // Inside the bar, painted in the bar's own navy: invisible, zero height.
+      const at = bar.index + bar[0].length;
+      body = body.slice(0, at) + markerHtml(key, COLORS.NAVY) + body.slice(at);
+    } else {
+      // A section that starts on a fresh page: its top IS the page top.
+      topMarker = markerHtml(key);
+    }
+  }
+  const style = `position:relative${breakBefore ? ';break-before:page' : ''}`;
+  return `<div${keep ? ' class="keep"' : ''} style="${style}">${topMarker}${body}</div>`;
 }
 
 /**
@@ -108,12 +117,11 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 
   let data: Awaited<ReturnType<typeof fetchReportData>>;
   try {
-    data = await fetchReportData(db, jobId);
+    data = await fetchReportData(db, jobId, timer);
   } catch (err) {
     void browserPromise.then((b) => b?.close().catch(() => {}));
     throw err;
   }
-  timer.lap('fetch');
 
   // Fetched inside fetchReportData (in the same concurrent round as
   // everything else) and checked there — a failed read aborts generation
@@ -191,17 +199,25 @@ export async function renderReportPdf(
   // position, just their own page-break to keep chunk boundaries where they
   // were before (each used to be a separately-merged PDF, always starting a
   // fresh page).
+  // Only the asset log as a whole starts on a fresh page (after the
+  // Index); categories then flow one after another. FIX: every category used
+  // to start a new page — a small job came out as 17 mostly-empty pages for
+  // 17 assets. Each asset block still never splits (theme.ts).
   const categorySections: Section[] = categoryLogs.flatMap((cat, catIndex) =>
     cat.chunks.map((chunk, chunkIndex): Section => ({
       key: chunkIndex === 0 ? categoryEntries[catIndex].key : undefined,
       html: renderAssetLogChunk(chunk, defectsByAsset, data.photosByAsset, data.photosByDefect, data.signedPhotoUrls, data.fullResPhotoUrls),
-      breakBefore: true,
+      breakBefore: catIndex === 0 && chunkIndex === 0,
     })),
   );
+  // The Yearly Condition Report is a formal appendix — it keeps its own
+  // fresh page. Additional observations, repairs and the sign-off flow on,
+  // and the sign-off is kept in one piece.
   const tailSections: Section[] = tailDocs.map((doc, i): Section => ({
     key: tailEntries[i].key,
     html: doc.html,
-    breakBefore: true,
+    keep: doc.key === 'signoff',
+    breakBefore: doc.key === 'yearly_condition_report',
   }));
 
   // ── Pass 1: render with a placeholder Index — same real row labels, dummy
@@ -221,6 +237,7 @@ export async function renderReportPdf(
   try {
     let draftMarkers: Map<string, number>;
     let draftTotalPages: number;
+    let draftAtTop: Map<string, boolean>;
     try {
       const draftDoc = buildDocument([
         { html: renderCover(data, assetTypesByValue), breakBefore: false },
@@ -235,6 +252,12 @@ export async function renderReportPdf(
       timer.lap('markers');
       draftMarkers = scan.pages;
       draftTotalPages = scan.totalPages;
+      draftAtTop = scan.atTop;
+      // A section with a forced page break starts at the top by definition
+      // (the scan can't always tell — e.g. a title precedes its first bar).
+      for (const s of [...categorySections, ...tailSections]) {
+        if (s.key && s.breakBefore) draftAtTop.set(s.key, true);
+      }
     } catch (err) {
       throw new ReportGenerationError(
         `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
@@ -242,8 +265,9 @@ export async function renderReportPdf(
     }
 
     const firstTailStart = tailEntries.length > 0 ? draftMarkers.get(tailEntries[0].key) : undefined;
-    const categoryRanges = rangesFromMarkers(categoryEntries, draftMarkers, firstTailStart ?? draftTotalPages + 1);
-    const tailRanges = rangesFromMarkers(tailEntries, draftMarkers, draftTotalPages + 1);
+    const firstTailAtTop = tailEntries.length > 0 ? (draftAtTop.get(tailEntries[0].key) ?? true) : true;
+    const categoryRanges = rangesFromMarkers(categoryEntries, draftMarkers, firstTailStart ?? draftTotalPages + 1, draftAtTop, firstTailAtTop);
+    const tailRanges = rangesFromMarkers(tailEntries, draftMarkers, draftTotalPages + 1, draftAtTop, true);
 
     // ── Pass 2: same document, real Index in place of the placeholder. The
     // asset-log/tail section HTML is byte-for-byte identical to pass 1, so

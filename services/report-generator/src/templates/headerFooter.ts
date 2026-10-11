@@ -17,8 +17,8 @@ import { Company } from '../types';
 export function buildFooterTemplate(company: Company): string {
   return `
     <div style="width:100%;font-size:8px;padding:0 32px;display:flex;justify-content:space-between;align-items:center;color:#94A3B8;-webkit-print-color-adjust:exact">
-      <div>${esc(company.name ?? '')}${company.abn ? ` &middot; ABN: ${esc(company.abn)}` : ''}</div>
-      <div>${esc(company.phone ?? '')}${company.contact_email ? ` &middot; ${esc(company.contact_email)}` : ''}</div>
+      <div>${[company.name ? esc(company.name) : '', company.abn ? `ABN: ${esc(company.abn)}` : ''].filter(Boolean).join(' &middot; ')}</div>
+      <div>${[company.phone ? esc(company.phone) : '', company.contact_email ? esc(company.contact_email) : ''].filter(Boolean).join(' &middot; ')}</div>
     </div>`;
 }
 

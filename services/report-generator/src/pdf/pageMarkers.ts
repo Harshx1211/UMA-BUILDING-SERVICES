@@ -36,7 +36,20 @@ const MARKER_SUFFIX = '__';
  * ~1px vertical footprint is identical on every section, so it doesn't
  * throw off page breaks relative to each other.
  */
-export function markerHtml(key: string): string {
+export function markerHtml(key: string, color = '#ffffff'): string {
+  // FIX: was a 6px-tall block in normal flow. Two problems once sections
+  // stopped each starting a fresh page: (1) the marker could be left behind
+  // at the bottom of a page when its section's first block moved to the
+  // next one (the Index then pointed a page early — "Sign-off: Pages
+  // 13–14" for a sign-off entirely on page 14); (2) pass 1 had the markers'
+  // height and pass 2 (markers stripped) didn't, so pagination could differ
+  // between the pass that measures and the pass that's delivered. Now it's
+  // absolutely positioned (no height, no effect on layout) and placed INSIDE
+  // the section's own heading bar by the pipeline (see wrapSection), painted
+  // in the bar's own colour so it's invisible but still a real text paint
+  // that pdfjs can find. text-transform/letter-spacing pinned: the bars are
+  // uppercase + letter-spaced, which would turn "c1" into "C1" (or split
+  // it with spaces) and the token would never match.
   // White-on-white, not opacity:0 — confirmed by direct testing that
   // Chromium's print-to-PDF genuinely skips painting (not just visually
   // hiding) content with opacity:0 or a zero-height clipped box: neither
@@ -47,7 +60,7 @@ export function markerHtml(key: string): string {
   // operation matching the report's own white page background (theme.ts's
   // BASE_STYLE sets no background-color, so it's the default), which
   // Chromium has no reason to optimize away.
-  return `<div style="color:#ffffff;font-size:6px;line-height:6px;margin:0;padding:0">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</div>`;
+  return `<span style="position:absolute;left:2px;top:0;color:${color};font-size:6px;line-height:6px;white-space:nowrap;text-transform:none;letter-spacing:0;font-weight:400">${MARKER_PREFIX}${key}${MARKER_SUFFIX}</span>`;
 }
 
 export interface MarkerScanResult {
@@ -57,6 +70,26 @@ export interface MarkerScanResult {
    * rather than guessing a fallback position. */
   pages: Map<string, number>;
   totalPages: number;
+  /** True when nothing visible sits above the section's marker on its page
+   * — i.e. the section starts at the top of a fresh page. With sections
+   * flowing continuously, that's what tells the Index whether the previous
+   * section ends on the page before or shares this one. */
+  atTop: Map<string, boolean>;
+}
+
+type TextItem = { str?: string; transform?: number[] };
+
+function startsAtTop(items: TextItem[], markerToken: string): boolean {
+  const marker = items.find((it) => it.str?.includes(markerToken));
+  const markerY = marker?.transform?.[5];
+  if (markerY == null) return false; // split across items — assume it shares the page
+  // PDF y grows upward: anything visible with a larger y is above the marker.
+  return !items.some((it) =>
+    it !== marker
+    && !!it.str?.trim()
+    && !it.str.includes(MARKER_PREFIX)
+    && (it.transform?.[5] ?? -Infinity) > markerY + 2,
+  );
 }
 
 /** Loads pdfjs ahead of the first report. Its first import costs ~2s (a
@@ -81,6 +114,7 @@ export async function findMarkerPages(pdfBuffer: Buffer, keys: string[]): Promis
 
   const remaining = new Set(keys);
   const found = new Map<string, number>();
+  const atTop = new Map<string, boolean>();
 
   for (let pageNum = 1; pageNum <= doc.numPages && remaining.size > 0; pageNum++) {
     const page = await doc.getPage(pageNum);
@@ -90,6 +124,7 @@ export async function findMarkerPages(pdfBuffer: Buffer, keys: string[]): Promis
     for (const key of remaining) {
       if (pageText.includes(`${MARKER_PREFIX}${key}${MARKER_SUFFIX}`)) {
         found.set(key, pageNum);
+        atTop.set(key, startsAtTop(textContent.items as TextItem[], `${MARKER_PREFIX}${key}`));
       }
     }
     for (const key of found.keys()) remaining.delete(key);
@@ -98,5 +133,5 @@ export async function findMarkerPages(pdfBuffer: Buffer, keys: string[]): Promis
 
   const totalPages = doc.numPages;
   await doc.destroy();
-  return { pages: found, totalPages };
+  return { pages: found, totalPages, atTop };
 }

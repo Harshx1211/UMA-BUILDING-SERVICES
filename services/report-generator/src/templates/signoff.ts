@@ -38,7 +38,9 @@ export function renderSignoff(data: ReportData): string {
         <tr>
           <td>${esc(t.user.full_name)}</td>
           <td>${fmtDateTime(t.firstClockIn)}${
-            t.lastClockOut
+            // A range only when it's actually a range — the no-time-log
+            // fallback uses the same moment for both ends.
+            t.lastClockOut && fmtDateTime(t.lastClockOut) !== fmtDateTime(t.firstClockIn)
               ? ` &ndash; ${fmtDateTime(t.lastClockOut)}`
               : t.hasRealSession
                 ? ' (session open)'
@@ -92,7 +94,7 @@ export function renderSignoff(data: ReportData): string {
     : '';
 
   return `<div class="page">
-  <div class="section-bar">Signoff</div>
+  <div class="section-bar">Sign-off</div>
   <div class="card" style="padding:10px 12px;font-size:9.5px;color:${COLORS.SLATE}">
     Maintenance has been carried out in accordance with applicable fire safety compliance
     requirements for the relevant jurisdiction.

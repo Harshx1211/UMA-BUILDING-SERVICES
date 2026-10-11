@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { config } from './config';
 import { db } from './supabaseClient';
-import { AuthError, assertOwnsJob, verifyAccessToken } from './auth';
+import { AuthError, assertOwnsJob, verifyAccessToken, fetchCaller } from './auth';
 import { tryAcquireLock, markGenerationResult, getGenerationStatus } from './generation/lock';
 import { generateReport, renderReportPdf } from './generation/pipeline';
 import { warmUpPdfjs } from './pdf/pageMarkers';
@@ -90,12 +90,16 @@ async function authorize(req: express.Request, res: express.Response, jobId: str
   }
 
   try {
-    const { data: job, error: jobErr } = await db.from('jobs').select('company_id').eq('id', jobId).single();
+    // Independent lookups — run together rather than one after the other.
+    const [{ data: job, error: jobErr }, caller] = await Promise.all([
+      db.from('jobs').select('company_id').eq('id', jobId).single(),
+      fetchCaller(db, userId),
+    ]);
     if (jobErr || !job) {
       res.status(404).json({ error: 'Job not found' });
       return null;
     }
-    await assertOwnsJob(db, userId, job.company_id);
+    await assertOwnsJob(db, userId, job.company_id, caller);
     return userId;
   } catch (err) {
     const status = err instanceof AuthError ? err.status : 500;

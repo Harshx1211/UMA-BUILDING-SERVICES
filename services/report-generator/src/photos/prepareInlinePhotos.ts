@@ -22,7 +22,28 @@ const JPEG_QUALITY = 58;
 // Photos are small by now (the app uploads them at 1600px / q0.7, ~200KB),
 // so each download is latency-bound rather than bandwidth-bound — more in
 // flight at once is what actually shortens this stage.
-const DOWNLOAD_CONCURRENCY = 10;
+const DOWNLOAD_CONCURRENCY = 24;
+
+/**
+ * Finished thumbnails, by storage path, kept on this instance. A technician
+ * typically regenerates a report several times (draft, fix a defect,
+ * final), and every run used to download and resize the same originals
+ * again. Photo paths are random UUIDs that are never overwritten with
+ * different content, so a cached thumbnail can never go stale. Bounded:
+ * ~3000 thumbnails of ~10-20KB is a few tens of MB at most, and the oldest
+ * entries are evicted first.
+ */
+const THUMB_CACHE_MAX = 3000;
+const thumbCache = new Map<string, string>();
+
+function cacheThumb(path: string, dataUri: string): void {
+  thumbCache.delete(path);
+  thumbCache.set(path, dataUri);
+  if (thumbCache.size > THUMB_CACHE_MAX) {
+    const oldest = thumbCache.keys().next().value;
+    if (oldest !== undefined) thumbCache.delete(oldest);
+  }
+}
 
 /**
  * Resizes every photo down to a small inline JPEG data URI, instead of
@@ -56,6 +77,8 @@ export async function prepareInlinePhotos(
     .filter((p): p is { id: string; path: string } => p.path != null);
 
   const resizeOne = async (path: string): Promise<string> => {
+    const cached = thumbCache.get(path);
+    if (cached) return cached;
     const { data, error } = await db.storage.from(bucket).download(path);
     if (error || !data) throw new Error(error?.message ?? 'empty download');
     const original = Buffer.from(await data.arrayBuffer());
@@ -64,7 +87,9 @@ export async function prepareInlinePhotos(
       .resize({ width: TARGET_DIMENSION, height: TARGET_DIMENSION, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: JPEG_QUALITY })
       .toBuffer();
-    return `data:image/jpeg;base64,${resized.toString('base64')}`;
+    const dataUri = `data:image/jpeg;base64,${resized.toString('base64')}`;
+    cacheThumb(path, dataUri);
+    return dataUri;
   };
 
   await mapWithConcurrency(withPaths, DOWNLOAD_CONCURRENCY, async ({ id, path }) => {
