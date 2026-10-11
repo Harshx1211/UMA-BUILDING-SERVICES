@@ -9,6 +9,12 @@ import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
 
 const app = express();
+// Every response here is a live, per-user answer (mostly /report-status,
+// polled every 5s). With Express's default ETags the app's HTTP stack sent
+// conditional requests and got 304 Not Modified with an empty body, which
+// the client couldn't use. Never let these be cached or revalidated.
+app.set('etag', false);
+app.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 // Don't advertise the framework (X-Powered-By: Express) to scanners.
 app.disable('x-powered-by');
 // Bodies here are tiny ({ jobId }) — cap them well below Express's 100kb default.
