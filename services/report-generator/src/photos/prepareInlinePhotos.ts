@@ -19,7 +19,10 @@ import { InspectionPhoto } from '../types';
 // the actual new size rather than trusting this estimate blindly.
 const TARGET_DIMENSION = 200;
 const JPEG_QUALITY = 58;
-const DOWNLOAD_CONCURRENCY = 6;
+// Photos are small by now (the app uploads them at 1600px / q0.7, ~200KB),
+// so each download is latency-bound rather than bandwidth-bound — more in
+// flight at once is what actually shortens this stage.
+const DOWNLOAD_CONCURRENCY = 10;
 
 /**
  * Resizes every photo down to a small inline JPEG data URI, instead of

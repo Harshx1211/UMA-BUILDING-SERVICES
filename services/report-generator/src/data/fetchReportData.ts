@@ -34,7 +34,13 @@ function check<T>(result: { data: T; error: { message: string } | null }, what: 
   return result.data;
 }
 
-export async function fetchReportData(db: SupabaseClient, jobId: string): Promise<ReportData> {
+export type FetchedReportData = ReportData & {
+  /** asset_type value -> definition (company's own + global). Returned so
+   * the pipeline doesn't fetch the exact same rows a second time. */
+  assetTypesByValue: Map<string, AssetTypeDefinition>;
+};
+
+export async function fetchReportData(db: SupabaseClient, jobId: string): Promise<FetchedReportData> {
   const { data: job, error: jobErr } = await db
     .from('jobs')
     .select('*, property:properties(*), assigned_user:users(*)')
@@ -42,57 +48,105 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     .single();
   if (jobErr || !job) throw new JobNotFoundError(`Job ${jobId} not found`);
 
-  const [jobAssets, defects, photos, timeLogs, quotes] = await Promise.all([
-    fetchAllPaged<JobAsset>(db, () => db.from('job_assets').select('*').eq('job_id', jobId)),
-    fetchAllPaged<Defect>(db, () => db.from('defects').select('*').eq('job_id', jobId)),
-    fetchAllPaged<InspectionPhoto>(db, () =>
-      db.from('inspection_photos').select('*').eq('job_id', jobId),
-    ),
-    fetchAllPaged<TimeLog>(db, () => db.from('time_logs').select('*').eq('job_id', jobId)),
-    fetchAllPaged<Quote & { items: Quote['items'] }>(db, () =>
+  // PERF: everything below depends only on the job row, not on each other —
+  // one round of concurrent requests instead of ~8 back-to-back ones. Photo
+  // preparation (download + resize every photo — by far the slowest part of
+  // the whole fetch) starts the moment the photo list arrives and overlaps
+  // all the other queries, instead of waiting until they'd all finished.
+  const photosPromise = fetchAllPaged<InspectionPhoto>(db, () =>
+    db.from('inspection_photos').select('*').eq('job_id', jobId),
+  );
+  // Independent of each other (one downloads+resizes originals, the other
+  // just signs URLs for them) — run concurrently.
+  const photoPrep = photosPromise.then((list) =>
+    Promise.all([
+      prepareInlinePhotos(db, list, config.photoBucket),
+      prepareFullResUrls(db, list, config.photoBucket),
+    ]),
+  );
+  // Awaited further down; this only stops an early failure elsewhere from
+  // also surfacing as an unhandled rejection of this promise.
+  photoPrep.catch(() => {});
+
+  const [jobAssets, defects, photos, timeLogs, quotes, companyRes, assetTypeRes, signatureRes, jobTechRes] =
+    await Promise.all([
+      fetchAllPaged<JobAsset>(db, () => db.from('job_assets').select('*').eq('job_id', jobId)),
+      fetchAllPaged<Defect>(db, () => db.from('defects').select('*').eq('job_id', jobId)),
+      photosPromise,
+      fetchAllPaged<TimeLog>(db, () => db.from('time_logs').select('*').eq('job_id', jobId)),
+      fetchAllPaged<Quote & { items: Quote['items'] }>(db, () =>
+        db
+          .from('quotes')
+          .select('*, items:quote_items(*, inventory_item:inventory_items(name))')
+          .eq('job_id', jobId),
+      ),
+      db.from('companies').select('*').eq('id', job.company_id).single(),
       db
-        .from('quotes')
-        .select('*, items:quote_items(*, inventory_item:inventory_items(name))')
+        .from('asset_type_definitions')
+        .select('value, label, full_label, inspection_routine')
+        .or(`company_id.eq.${job.company_id},company_id.is.null`),
+      db.from('signatures').select('*').eq('job_id', jobId).maybeSingle(),
+      // The assigned crew — a flat list, no primary (see job_technicians
+      // migration).
+      db
+        .from('job_technicians')
+        .select('user:users(id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry)')
         .eq('job_id', jobId),
-    ),
-  ]);
+    ]);
 
-  const company = check(
-    await db.from('companies').select('*').eq('id', job.company_id).single(),
-    'company details',
-  );
-
-  // Only fetch assets that actually have a job_assets row for THIS job — fetching
-  // every property asset (the original bug) makes out-of-scope assets show as N/T.
-  const assetIds = [...new Set(jobAssets.map((ja) => ja.asset_id).filter(Boolean))];
-  const assets =
-    assetIds.length > 0
-      ? await fetchAllByIds<Asset>(assetIds, (batch) => db.from('assets').select('*').in('id', batch))
-      : [];
-
-  const assetTypeDefRows = check(
-    await db
-      .from('asset_type_definitions')
-      .select('value, label, full_label, inspection_routine')
-      .or(`company_id.eq.${job.company_id},company_id.is.null`),
-    'asset type definitions',
-  );
+  const company = check(companyRes, 'company details');
+  const assetTypeDefRows = check(assetTypeRes, 'asset type definitions');
+  const signature = check(signatureRes, 'signature');
+  const jobTechRows = check(jobTechRes, 'assigned technicians');
   const assetTypesByValue = new Map<string, AssetTypeDefinition>(
     (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
   );
 
+  // Falls back to the legacy single assigned_user for any job whose
+  // job_technicians rows haven't been created (created before that feature).
+  const assignedUsers: JobUser[] =
+    jobTechRows && jobTechRows.length > 0
+      ? ((jobTechRows as unknown as { user: JobUser | null }[]).map((r) => r.user).filter(Boolean) as JobUser[])
+      : job.assigned_user
+        ? [job.assigned_user as JobUser]
+        : [];
+  const assignedUserIds = new Set(assignedUsers.map((u) => u.id));
+
+  // Only fetch assets that actually have a job_assets row for THIS job — fetching
+  // every property asset (the original bug) makes out-of-scope assets show as N/T.
+  const assetIds = [...new Set(jobAssets.map((ja) => ja.asset_id).filter(Boolean))];
   // Resolve actioned_by -> name for every technician who's touched this
   // job's assets, independent of the current crew (job_technicians) — a
   // job_assets row's actioned_by should still be attributable even if that
   // tech is later removed from the job's assignment.
   const actionedByIds = [...new Set(jobAssets.map((ja) => ja.actioned_by).filter((id): id is string => !!id))];
+  // One row per distinct technician who worked this job: every assigned
+  // technician first, plus anyone else who logged time (time-tracking is
+  // optional, so time_logs alone can't be the source of who worked it).
+  const extraUserIds = [...new Set(timeLogs.map((t) => t.user_id))].filter((id) => !assignedUserIds.has(id));
+
+  // Second (and last) round — these three depend on the first round's
+  // results but not on each other.
+  const [assets, actionedByUsers, extraUsers] = await Promise.all([
+    assetIds.length > 0
+      ? fetchAllByIds<Asset>(assetIds, (batch) => db.from('assets').select('*').in('id', batch))
+      : Promise.resolve([] as Asset[]),
+    actionedByIds.length > 0
+      ? fetchAllByIds<{ id: string; full_name: string }>(actionedByIds, (batch) =>
+          db.from('users').select('id, full_name').in('id', batch),
+        )
+      : Promise.resolve([] as { id: string; full_name: string }[]),
+    extraUserIds.length > 0
+      ? fetchAllByIds<JobUser>(extraUserIds, (batch) =>
+          db
+            .from('users')
+            .select('id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry')
+            .in('id', batch),
+        )
+      : Promise.resolve([] as JobUser[]),
+  ]);
   const actionedByNameById = new Map<string, string>();
-  if (actionedByIds.length > 0) {
-    const actionedByUsers = await fetchAllByIds<{ id: string; full_name: string }>(actionedByIds, (batch) =>
-      db.from('users').select('id, full_name').in('id', batch),
-    );
-    for (const u of actionedByUsers ?? []) actionedByNameById.set(u.id, u.full_name);
-  }
+  for (const u of actionedByUsers ?? []) actionedByNameById.set(u.id, u.full_name);
 
   // Merge job_assets result onto each asset — pick the most recently actioned
   // match, not just the first array hit (a job can accumulate multiple
@@ -134,59 +188,8 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     }
   }
 
-  // Independent of each other (one downloads+resizes originals, the other
-  // just signs URLs for them) — run concurrently rather than doubling the
-  // wait by awaiting them one after another.
-  const [signedPhotoUrls, fullResPhotoUrls] = await Promise.all([
-    prepareInlinePhotos(db, photos, config.photoBucket),
-    prepareFullResUrls(db, photos, config.photoBucket),
-  ]);
-
-  const signature = check(
-    await db.from('signatures').select('*').eq('job_id', jobId).maybeSingle(),
-    'signature',
-  );
-
-  // The assigned crew — a flat list, no primary (see job_technicians
-  // migration). Falls back to the legacy single assigned_user for any job
-  // whose job_technicians rows haven't been created (created before this
-  // feature existed).
-  const jobTechRows = check(
-    await db
-      .from('job_technicians')
-      .select('user:users(id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry)')
-      .eq('job_id', jobId),
-    'assigned technicians',
-  );
-  const assignedUsers: JobUser[] =
-    jobTechRows && jobTechRows.length > 0
-      ? ((jobTechRows as unknown as { user: JobUser | null }[]).map((r) => r.user).filter(Boolean) as JobUser[])
-      : job.assigned_user
-        ? [job.assigned_user as JobUser]
-        : [];
-  const assignedUserIds = new Set(assignedUsers.map((u) => u.id));
-
-  // One row per distinct technician who worked this job. Time-tracking
-  // (clocking in/out) is a separate, optional feature from actually
-  // performing the inspection — a job with no time_logs rows (tech never
-  // clocked in) still has whoever's assigned recorded via job_technicians.
-  // Relying on time_logs alone meant a job with no time entries showed NO
-  // technician at all on the signoff, which is what "tech details not
-  // reflecting" was — always include every assigned technician first, then
-  // any additional technicians who logged time (matching the user's
-  // confirmed "everyone who worked it" decision as a supplement).
-  const userIds = [...new Set(timeLogs.map((t) => t.user_id))];
-  const extraUserIds = userIds.filter((id) => !assignedUserIds.has(id));
-  let usersById = new Map<string, JobUser>();
-  if (extraUserIds.length > 0) {
-    const users = await fetchAllByIds<JobUser>(extraUserIds, (batch) =>
-      db
-        .from('users')
-        .select('id, full_name, fpas_number, fpas_class, fpas_expiry, state_license, state_license_expiry')
-        .in('id', batch),
-    );
-    usersById = new Map<string, JobUser>((users ?? []).map((u: JobUser) => [u.id, u]));
-  }
+  const [signedPhotoUrls, fullResPhotoUrls] = await photoPrep;
+  const usersById = new Map<string, JobUser>((extraUsers ?? []).map((u: JobUser) => [u.id, u]));
 
   const sessionsFor = (uid: string) => timeLogs.filter((t) => t.user_id === uid);
   const rangeFor = (sessions: TimeLog[]): { firstClockIn: string; lastClockOut: string | null } | null => {
@@ -235,5 +238,6 @@ export async function fetchReportData(db: SupabaseClient, jobId: string): Promis
     approvedQuote,
     reportId,
     dateOfService,
+    assetTypesByValue,
   };
 }

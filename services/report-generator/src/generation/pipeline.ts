@@ -3,7 +3,8 @@ import { config } from '../config';
 import { fetchReportData } from '../data/fetchReportData';
 import { buildAssetLogChunksByCategory } from '../data/chunking';
 import { TocSectionEntry, rangesFromMarkers } from '../data/tableOfContents';
-import { convertHtmlToPdf } from '../render/chromium';
+import { convertHtmlToPdf, launchBrowser } from '../render/chromium';
+import type { Browser } from 'puppeteer-core';
 import { stampPageNumbers } from '../pdf/stampPageNumbers';
 import { optimizePdf } from '../pdf/optimizePdf';
 import { markerHtml, findMarkerPages } from '../pdf/pageMarkers';
@@ -27,6 +28,23 @@ export interface PipelineResult {
   assetCount: number;
   chunkCount: number;
   durationMs: number;
+  /** Per-stage wall-clock breakdown, e.g. "fetch=1200ms pass1=900ms …" —
+   * logged with every generation so a slow report shows WHERE it was slow. */
+  timings: string;
+}
+
+/** Records how long each pipeline stage took, in order. */
+export class StageTimer {
+  private last = Date.now();
+  private readonly parts: string[] = [];
+  lap(stage: string): void {
+    const now = Date.now();
+    this.parts.push(`${stage}=${now - this.last}ms`);
+    this.last = now;
+  }
+  toString(): string {
+    return this.parts.join(' ');
+  }
 }
 
 // Human-facing labels for the tail sections' Index entries — the internal
@@ -72,40 +90,29 @@ function buildDocument(sections: Section[]): string {
 <body>${sections.map(wrapSection).join('')}</body></html>`;
 }
 
-async function convertCombined(html: string, footerTemplate: string): Promise<Buffer> {
+async function convertCombined(html: string, footerTemplate: string, browser?: Browser): Promise<Buffer> {
   return convertHtmlToPdf(html, 'combined_report', {
     headerTemplateHtml: EMPTY_HEADER_TEMPLATE,
     footerTemplateHtml: footerTemplate,
-  });
+  }, browser);
 }
 
 export async function generateReport(db: SupabaseClient, jobId: string): Promise<PipelineResult> {
   const started = Date.now();
+  const timer = new StageTimer();
 
   const data = await fetchReportData(db, jobId);
+  timer.lap('fetch');
 
-  // FIX: this used to destructure only `data`, discarding `error` — a
-  // transient failure on this one query (unrelated to fetchReportData just
-  // above, which already succeeded) silently produced an EMPTY lookup map
-  // instead of aborting generation. Every category/asset label across the
-  // cover page's Scope of Works, every asset-log category header, and the
-  // Yearly Condition Report's compliance checklist all key off this map —
-  // a materially wrong AS1851 compliance PDF would have been generated and
-  // delivered with no failure surfaced anywhere in the pipeline.
-  const { data: assetTypeDefRows, error: assetTypeDefError } = await db
-    .from('asset_type_definitions')
-    .select('value, label, full_label, inspection_routine')
-    .or(`company_id.eq.${data.job.company_id},company_id.is.null`);
-  if (assetTypeDefError) {
-    throw new ReportGenerationError(`Failed to load asset type definitions: ${assetTypeDefError.message}`);
-  }
-  const assetTypesByValue = new Map<string, AssetTypeDefinition>(
-    (assetTypeDefRows ?? []).map((t: AssetTypeDefinition) => [t.value, t]),
-  );
+  // Fetched inside fetchReportData (in the same concurrent round as
+  // everything else) and checked there — a failed read aborts generation
+  // rather than producing a report with every category label missing.
+  const assetTypesByValue = data.assetTypesByValue;
 
-  const { pdf, chunkCount } = await renderReportPdf(data, assetTypesByValue);
+  const { pdf, chunkCount } = await renderReportPdf(data, assetTypesByValue, timer);
 
   const { storagePath, signedUrl } = await uploadReport(db, jobId, pdf);
+  timer.lap('upload');
 
   return {
     storagePath,
@@ -113,6 +120,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
     assetCount: data.assets.length,
     chunkCount,
     durationMs: Date.now() - started,
+    timings: timer.toString(),
   };
 }
 
@@ -125,6 +133,7 @@ export async function generateReport(db: SupabaseClient, jobId: string): Promise
 export async function renderReportPdf(
   data: ReportData,
   assetTypesByValue: Map<string, AssetTypeDefinition>,
+  timer: StageTimer = new StageTimer(),
 ): Promise<{ pdf: Buffer; chunkCount: number }> {
   const defectsByAsset = new Map<string, Defect[]>();
   for (const d of data.defects) {
@@ -191,51 +200,63 @@ export async function renderReportPdf(
   const placeholderCategoryEntries: TocSectionEntry[] = categoryEntries.map((e) => ({ label: e.label, startPage: 1, endPage: 1 }));
   const placeholderTailEntries: TocSectionEntry[] = tailEntries.map((e) => ({ label: e.label, startPage: 1, endPage: 1 }));
 
-  let draftMarkers: Map<string, number>;
-  let draftTotalPages: number;
-  try {
-    const draftDoc = buildDocument([
-      { html: renderCover(data, assetTypesByValue), breakBefore: false },
-      { key: 'idx', html: renderTableOfContents(placeholderCategoryEntries, placeholderTailEntries), breakBefore: true },
-      ...categorySections,
-      ...tailSections,
-    ]);
-    const draftBuffer = await convertCombined(draftDoc, footerTemplate);
-    const scan = await findMarkerPages(draftBuffer, allMarkerKeys);
-    draftMarkers = scan.pages;
-    draftTotalPages = scan.totalPages;
-  } catch (err) {
-    throw new ReportGenerationError(
-      `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-    );
-  }
-
-  const firstTailStart = tailEntries.length > 0 ? draftMarkers.get(tailEntries[0].key) : undefined;
-  const categoryRanges = rangesFromMarkers(categoryEntries, draftMarkers, firstTailStart ?? draftTotalPages + 1);
-  const tailRanges = rangesFromMarkers(tailEntries, draftMarkers, draftTotalPages + 1);
-
-  // ── Pass 2: same document, real Index in place of the placeholder. The
-  // asset-log/tail section HTML is byte-for-byte identical to pass 1, so
-  // their internal pagination is unaffected — only the Index's own content
-  // changes. Markers are dropped entirely here — this is the document that
-  // actually gets delivered, and it never needs to re-measure itself, so
-  // there's no reason for the (invisible-but-copy/paste-visible) marker
-  // text to exist in what a client could select or run through a text
-  // extractor.
-  const stripMarkers = (sections: Section[]): Section[] => sections.map((s) => ({ ...s, key: undefined }));
+  // One browser for both passes (see convertHtmlToPdf's sharedBrowser note).
+  // If launching it fails, each pass just launches its own as before.
+  const browser = await launchBrowser().catch(() => undefined);
   let finalBuffer: Buffer;
   try {
-    const finalDoc = buildDocument([
-      { html: renderCover(data, assetTypesByValue), breakBefore: false },
-      { html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
-      ...stripMarkers(categorySections),
-      ...stripMarkers(tailSections),
-    ]);
-    finalBuffer = await convertCombined(finalDoc, footerTemplate);
-  } catch (err) {
-    throw new ReportGenerationError(
-      `Rendering the final report failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
-    );
+    let draftMarkers: Map<string, number>;
+    let draftTotalPages: number;
+    try {
+      const draftDoc = buildDocument([
+        { html: renderCover(data, assetTypesByValue), breakBefore: false },
+        { key: 'idx', html: renderTableOfContents(placeholderCategoryEntries, placeholderTailEntries), breakBefore: true },
+        ...categorySections,
+        ...tailSections,
+      ]);
+      timer.lap('html');
+      const draftBuffer = await convertCombined(draftDoc, footerTemplate, browser);
+      timer.lap('pass1');
+      const scan = await findMarkerPages(draftBuffer, allMarkerKeys);
+      timer.lap('markers');
+      draftMarkers = scan.pages;
+      draftTotalPages = scan.totalPages;
+    } catch (err) {
+      throw new ReportGenerationError(
+        `Rendering failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    const firstTailStart = tailEntries.length > 0 ? draftMarkers.get(tailEntries[0].key) : undefined;
+    const categoryRanges = rangesFromMarkers(categoryEntries, draftMarkers, firstTailStart ?? draftTotalPages + 1);
+    const tailRanges = rangesFromMarkers(tailEntries, draftMarkers, draftTotalPages + 1);
+
+    // ── Pass 2: same document, real Index in place of the placeholder. The
+    // asset-log/tail section HTML is byte-for-byte identical to pass 1, so
+    // their internal pagination is unaffected — only the Index's own content
+    // changes. Markers are dropped entirely here — this is the document that
+    // actually gets delivered, and it never needs to re-measure itself, so
+    // there's no reason for the (invisible-but-copy/paste-visible) marker
+    // text to exist in what a client could select or run through a text
+    // extractor.
+    const stripMarkers = (sections: Section[]): Section[] => sections.map((s) => ({ ...s, key: undefined }));
+    try {
+      const finalDoc = buildDocument([
+        { html: renderCover(data, assetTypesByValue), breakBefore: false },
+        { html: renderTableOfContents(categoryRanges, tailRanges), breakBefore: true },
+        ...stripMarkers(categorySections),
+        ...stripMarkers(tailSections),
+      ]);
+      finalBuffer = await convertCombined(finalDoc, footerTemplate, browser);
+      timer.lap('pass2');
+    } catch (err) {
+      throw new ReportGenerationError(
+        `Rendering the final report failed, report generation aborted: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+  } finally {
+    if (browser) await browser.close().catch(() => {});
   }
 
   let output: Buffer;
@@ -246,10 +267,12 @@ export async function renderReportPdf(
     // this still draws the correct final "Page X of Y" once everything is
     // settled, same as before.
     output = await stampPageNumbers(finalBuffer);
+    timer.lap('stamp');
     // Ghostscript pass — mainly stream/image optimization now; the big win
     // (deduplicate 14 separate font subsets) no longer applies since there's
     // only ever one subset to begin with. Fails open if unavailable.
     output = await optimizePdf(output);
+    timer.lap('ghostscript');
   } catch (err) {
     throw new ReportGenerationError(
       `Post-processing the rendered report failed, report generation aborted: ${err instanceof Error ? err.message : err}`,

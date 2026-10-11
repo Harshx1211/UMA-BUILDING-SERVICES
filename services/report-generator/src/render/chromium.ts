@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import puppeteer, { Browser } from 'puppeteer-core';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { config } from '../config';
 
 export class RenderError extends Error {}
@@ -36,7 +36,7 @@ async function withRetries<T>(label: string, attempts: number, fn: () => Promise
  * is handed back the moment it finishes — which matters on a scale-to-zero
  * instance sized for exactly one big report at a time.
  */
-async function launchBrowser(): Promise<Browser> {
+export async function launchBrowser(): Promise<Browser> {
   return puppeteer.launch({
     executablePath: config.chromiumPath,
     headless: true,
@@ -78,16 +78,30 @@ export interface ConvertOptions {
  * silently drops content; if every attempt fails, this throws and the whole
  * report generation aborts with a clear error (see generation/pipeline.ts).
  */
-export async function convertHtmlToPdf(html: string, label: string, opts: ConvertOptions = {}): Promise<Buffer> {
+export async function convertHtmlToPdf(
+  html: string,
+  label: string,
+  opts: ConvertOptions = {},
+  // PERF: a browser to render in, shared across the pipeline's two passes —
+  // each launch costs seconds inside Cloud Run's sandbox, and paying it once
+  // per report instead of once per pass is the cheap half of that. Still
+  // fresh per REPORT (see launchBrowser's comment). A retry after a failure
+  // never trusts the shared one again — it launches its own clean browser.
+  sharedBrowser?: Browser,
+): Promise<Buffer> {
+  let attempt = 0;
   return withRetries(`convert(${label})`, config.chunkRetryAttempts, async () => {
+    attempt++;
     const dir = await mkdtemp(path.join(tmpdir(), 'report-render-'));
+    const useShared = attempt === 1 && !!sharedBrowser && sharedBrowser.connected;
     let browser: Browser | null = null;
+    let page: Page | null = null;
     try {
       const htmlPath = path.join(dir, 'index.html');
       await writeFile(htmlPath, html, 'utf8');
 
-      browser = await launchBrowser();
-      const page = await browser.newPage();
+      browser = useShared ? sharedBrowser! : await launchBrowser();
+      page = await browser.newPage();
       page.setDefaultTimeout(config.renderTimeoutMs);
       await page.emulateMediaType('print');
       // 'load' waits for every <img> — inline photos plus the few remote
@@ -114,7 +128,9 @@ export async function convertHtmlToPdf(html: string, label: string, opts: Conver
       });
       return Buffer.from(pdf);
     } finally {
-      if (browser) await browser.close().catch(() => {});
+      // A shared browser belongs to the caller — only close our own page.
+      if (useShared) await page?.close().catch(() => {});
+      else if (browser) await browser.close().catch(() => {});
       await rm(dir, { recursive: true, force: true }).catch(() => {});
     }
   });

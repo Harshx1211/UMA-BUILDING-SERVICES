@@ -209,7 +209,7 @@ async function runGeneration(jobId: string): Promise<void> {
     const result = await generateReport(db, jobId);
     await markGenerationResult(db, jobId, 'completed');
     console.log(
-      `[generate-report] job=${jobId} assets=${result.assetCount} chunks=${result.chunkCount} took=${result.durationMs}ms`,
+      `[generate-report] job=${jobId} assets=${result.assetCount} chunks=${result.chunkCount} took=${result.durationMs}ms (${result.timings})`,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Report generation failed';
