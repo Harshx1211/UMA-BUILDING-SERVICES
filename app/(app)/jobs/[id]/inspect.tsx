@@ -24,7 +24,7 @@ import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
 import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
-import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto } from '@/lib/database';
+import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto, openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
 import { useAuthStore } from '@/store/authStore';
@@ -620,7 +620,26 @@ export default function AssetInspectionScreen() {
     }
   };
 
+  // Same Completed/Cancelled lock inspectionStore.updateAssetResult applies
+  // to recording a result. FIX: cloning and deleting assets had no lock at
+  // all — on a job that had been completed (or cancelled) while this screen
+  // was open, Delete still removed the asset's result and defects out from
+  // under a finished report, and Clone still added assets to the property.
+  const isJobLocked = useCallback((): boolean => {
+    const status = jobId ? getJobById<{ status: string }>(jobId)?.status : undefined;
+    if (status === JobStatus.Completed || status === JobStatus.Cancelled) {
+      Toast.show({
+        type: 'info',
+        text1: status === JobStatus.Completed ? 'Job already completed' : 'Job cancelled',
+        text2: status === JobStatus.Completed ? 'Tap "Continue Working" on the job screen to make changes.' : 'This job can no longer be edited.',
+      });
+      return true;
+    }
+    return false;
+  }, [jobId]);
+
   const handleClone = useCallback((assetToClone: AssetWithResult) => {
+    if (isJobLocked()) return;
     try {
       const newId = generateUUID();
       const now = new Date().toISOString();
@@ -656,7 +675,7 @@ export default function AssetInspectionScreen() {
       console.error('Failed to clone asset:', err);
       Toast.show({ type: 'error', text1: 'Failed to clone asset' });
     }
-  }, [jobId, store]);
+  }, [jobId, store, isJobLocked]);
 
   const handleDelete = useCallback((assetToDelete: AssetWithResult) => {
     showConfirm({
@@ -669,66 +688,72 @@ export default function AssetInspectionScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            if (isJobLocked()) return;
             try {
-              // BUG-N5 FIX: Clean up ALL related rows before soft-deleting the asset.
-              // Without this, the deleted asset's inspection result + photos still appear
-              // in getAssetsWithJobResults (LEFT JOIN on job_assets) and in the PDF.
+              // One transaction for the whole cascade below — an app kill
+              // part-way must not leave a half-deleted asset (photos gone but
+              // its result still counted, or a queue entry missing).
+              openDatabase().withTransactionSync(() => {
+                // BUG-N5 FIX: Clean up ALL related rows before soft-deleting the asset.
+                // Without this, the deleted asset's inspection result + photos still appear
+                // in getAssetsWithJobResults (LEFT JOIN on job_assets) and in the PDF.
 
-              // 1. Cancel/delete all inspection_photos for this asset in this job
-              if (jobId) {
-                const assetPhotos = queryRecords<{ id: string; photo_url: string }>(
-                  'inspection_photos', { job_id: jobId, asset_id: assetToDelete.id }
-                );
-                for (const p of assetPhotos) {
-                  deleteRecord('inspection_photos', p.id);
-                  recordDeletedPhoto(p.id);
-                  if (p.photo_url.startsWith('https://')) {
-                    // FIX: job_id included so lib/sync.ts's report-generation
-                    // blocker check can see this pending Delete via its
-                    // payload substring fallback (the local row is always
-                    // gone by the time that check runs).
-                    addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
-                      id: p.id, photo_url: p.photo_url, job_id: jobId,
-                    });
-                  } else {
-                    cancelPendingPhotoUpload(p.id);
+                // 1. Cancel/delete all inspection_photos for this asset in this job
+                if (jobId) {
+                  const assetPhotos = queryRecords<{ id: string; photo_url: string }>(
+                    'inspection_photos', { job_id: jobId, asset_id: assetToDelete.id }
+                  );
+                  for (const p of assetPhotos) {
+                    deleteRecord('inspection_photos', p.id);
+                    recordDeletedPhoto(p.id);
+                    if (p.photo_url.startsWith('https://')) {
+                      // FIX: job_id included so lib/sync.ts's report-generation
+                      // blocker check can see this pending Delete via its
+                      // payload substring fallback (the local row is always
+                      // gone by the time that check runs).
+                      addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+                        id: p.id, photo_url: p.photo_url, job_id: jobId,
+                      });
+                    } else {
+                      cancelPendingPhotoUpload(p.id);
+                    }
+                  }
+
+                  // 2. Delete any defects logged against this asset for this job.
+                  // FIX: previously not cleaned up at all — getDefectsForJob has
+                  // no dependency on a job_assets row existing, so removing an
+                  // asset from the checklist left its defect(s) still surfacing
+                  // in the Defects list and in the generated compliance report,
+                  // for an asset the technician explicitly removed. (Their
+                  // photos are already covered by step 1 above, which deletes
+                  // every inspection_photos row for this job+asset regardless
+                  // of defect_id.)
+                  const assetDefects = queryRecords<{ id: string }>(
+                    'defects', { job_id: jobId, asset_id: assetToDelete.id }
+                  );
+                  for (const d of assetDefects) {
+                    deleteRecord('defects', d.id);
+                    addToSyncQueue('defects', d.id, SyncOperation.Delete, { id: d.id, job_id: jobId });
+                  }
+                  if (assetDefects.length > 0) {
+                    useDefectsStore.getState().loadDefects(jobId);
+                  }
+
+                  // 3. Delete the job_asset (inspection result) row for this asset
+                  const jobAssetRows = queryRecords<{ id: string }>(
+                    'job_assets', { job_id: jobId, asset_id: assetToDelete.id }
+                  );
+                  for (const ja of jobAssetRows) {
+                    deleteRecord('job_assets', ja.id);
+                    addToSyncQueue('job_assets', ja.id, SyncOperation.Delete, { id: ja.id, job_id: jobId });
                   }
                 }
 
-                // 2. Delete any defects logged against this asset for this job.
-                // FIX: previously not cleaned up at all — getDefectsForJob has
-                // no dependency on a job_assets row existing, so removing an
-                // asset from the checklist left its defect(s) still surfacing
-                // in the Defects list and in the generated compliance report,
-                // for an asset the technician explicitly removed. (Their
-                // photos are already covered by step 1 above, which deletes
-                // every inspection_photos row for this job+asset regardless
-                // of defect_id.)
-                const assetDefects = queryRecords<{ id: string }>(
-                  'defects', { job_id: jobId, asset_id: assetToDelete.id }
-                );
-                for (const d of assetDefects) {
-                  deleteRecord('defects', d.id);
-                  addToSyncQueue('defects', d.id, SyncOperation.Delete, { id: d.id, job_id: jobId });
-                }
-                if (assetDefects.length > 0) {
-                  useDefectsStore.getState().loadDefects(jobId);
-                }
-
-                // 3. Delete the job_asset (inspection result) row for this asset
-                const jobAssetRows = queryRecords<{ id: string }>(
-                  'job_assets', { job_id: jobId, asset_id: assetToDelete.id }
-                );
-                for (const ja of jobAssetRows) {
-                  deleteRecord('job_assets', ja.id);
-                  addToSyncQueue('job_assets', ja.id, SyncOperation.Delete, { id: ja.id, job_id: jobId });
-                }
-              }
-
-              // 4. Soft-delete the asset by setting status = decommissioned
-              const payload = { status: AssetStatus.Decommissioned, updated_at: new Date().toISOString() };
-              updateRecord('assets', assetToDelete.id, payload);
-              addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
+                // 4. Soft-delete the asset by setting status = decommissioned
+                const payload = { status: AssetStatus.Decommissioned, updated_at: new Date().toISOString() };
+                updateRecord('assets', assetToDelete.id, payload);
+                addToSyncQueue('assets', assetToDelete.id, SyncOperation.Update, payload);
+              });
 
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Toast.show({ type: 'success', text1: 'Asset deleted' });
@@ -742,12 +767,13 @@ export default function AssetInspectionScreen() {
         },
       ],
     });
-  }, [jobId, store]);
+  }, [jobId, store, isJobLocked]);
 
   // Bulk-marking a whole unit only ever makes sense for "couldn't access it" —
   // Pass/Fail require actually inspecting each asset individually, so Not
   // Tested is the only option here, not a 3-way choice.
   const handleBulkMark = useCallback((label: string, assetIds: string[]) => {
+    if (isJobLocked()) return;
     // FIX: warn explicitly when this would touch already-Failed assets —
     // updateAssetResult only auto-deletes a still-Open defect (an
     // already-quoted/repaired/monitoring one survives), but an Open Fail
@@ -768,7 +794,7 @@ export default function AssetInspectionScreen() {
         { text: 'Mark Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
       ],
     });
-  }, [store]);
+  }, [store, isJobLocked]);
 
   const renderItem = useCallback(({ item, index }: { item: ListRow; index: number }) => {
     if (item.kind === 'header') {

@@ -286,305 +286,319 @@ export const useInspectionStore = create<InspectionState>((set, get) => ({
         actioned_by: userId || null,
       };
 
-      // Field-level audit Timeline — one row per SAVE (not per changed
-      // field). `asset` still holds the OLD values here, right up until
-      // upsertRecord below writes the new ones.
-      const AUDITED_JOB_ASSET_FIELDS = ['result', 'checklist_data', 'is_compliant', 'defect_reason', 'technician_notes', 'internal_notes'] as const;
-      const jobAssetChanges = AUDITED_JOB_ASSET_FIELDS
-        .map((field) => ({ field, old: (asset as unknown as Record<string, unknown>)[field] ?? null, new: jobAssetPayload[field] ?? null }))
-        .filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
-      logFieldAudit('job_assets', jobAssetId, currentJobId, companyId, userId || null, jobAssetChanges);
-
-      upsertRecord('job_assets', jobAssetPayload);
-
-      // Purge any duplicate rows for this asset+job that have a different id.
-      // These can accumulate from rapid taps before the first save completes.
-      try {
-        const db = openDatabase();
-        db.runSync(
-          `DELETE FROM job_assets WHERE job_id = ? AND asset_id = ? AND id != ?`,
-          [currentJobId, assetId, jobAssetId],
-        );
-      } catch { /* non-fatal */ }
-
-      const syncOp = isExistingRecord ? SyncOperation.Update : SyncOperation.Insert;
-      addToSyncQueue('job_assets', jobAssetId, syncOp, jobAssetPayload);
-
-
-      // ── Photo reconciliation ────────────────────────────────────────────────
-      // `photos` is the FINAL desired set of URIs the user left in the modal.
-      // We diff it against what is currently in SQLite:
-      //   • Deleted photos  → remove from SQLite immediately.
-      //                       If the photo was already uploaded (https://) → also
-      //                       queue a Supabase DB row delete + Storage binary delete.
-      //                       If still local (file://) → cancel the pending
-      //                       photo_upload task so it never reaches Supabase.
-      //   • Kept photos     → leave as-is (preserve upload state).
-      //   • New photos      → insert into SQLite and queue for upload.
-      if (photos !== undefined) {
-        const existingRows = queryRecords<{ id: string; photo_url: string }>(
-          'inspection_photos',
-          { job_id: currentJobId, asset_id: assetId },
-        );
-
-        const desiredUrlSet  = new Set(photos);
-        const existingUrlSet = new Set(existingRows.map(r => r.photo_url));
-
-        // ── Deletions ────────────────────────────────────────────────────────
-        for (const row of existingRows) {
-          if (!desiredUrlSet.has(row.photo_url)) {
-            // 1. Remove from local SQLite immediately
-            deleteRecord('inspection_photos', row.id);
-
-            // 2. Permanently record in tombstone — survives retries/reinstalls
-            recordDeletedPhoto(row.id);
-
-            if (row.photo_url.startsWith('https://')) {
-              // Photo is already in Supabase — queue a delete for both the DB row
-              // and the Storage binary (sync.ts _pushQueue handles both).
-              // FIX: job_id included so lib/sync.ts's report-generation
-              // blocker check can see this pending Delete via its payload
-              // substring fallback — the row is already gone locally by the
-              // time that check runs, so a bare {id, photo_url} payload gave
-              // it nothing to match this job against.
-              addToSyncQueue('inspection_photos', row.id, SyncOperation.Delete, {
-                id: row.id,
-                photo_url: row.photo_url,
-                job_id: currentJobId,
-              });
-            } else {
-              // Photo only exists locally (file:// URI, not yet uploaded).
-              // Cancel the pending photo_upload task so it is never sent to Supabase.
-              // No Supabase row exists yet, so no DB delete is needed.
-              cancelPendingPhotoUpload(row.id);
-            }
-          }
-        }
-
-        // ── Insertions ────────────────────────────────────────────────────────
-        const newPhotoUris = photos.filter(uri => !existingUrlSet.has(uri));
-
-        for (const uri of newPhotoUris) {
-          const photoId = generateUUID();
-          const photoObj = {
-            id: photoId,
-            job_id: currentJobId,
-            asset_id: assetId,
-            defect_id: null as string | null,
-            photo_url: uri,
-            // FIX: Store the original file:// URI so offline PDF generation can
-            // fall back to the local copy after photo_url is replaced with https://.
-            local_uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : null,
-            caption: null,
-            uploaded_at: new Date().toISOString(),
-            uploaded_by: userId,
-          };
-          insertRecord('inspection_photos', photoObj as Record<string, string | number | boolean | null>);
-          queuePhotoUpload(uri, currentJobId, assetId, photoId, undefined);
-        }
-      }
-
-      // ── Auto-delete defect when asset passes / not-tested ─
-      // If the previous result was Fail and the new result is Pass or NotTested,
-      // an OPEN defect is no longer valid — remove it automatically. A defect
-      // that has already progressed past Open (quoted/repaired/monitoring —
-      // i.e. someone has actually actioned it) is a real historical record
-      // and must survive a later re-inspection finding the asset now passes;
-      // it's deliberately NOT filtered back out here.
-      // A3 FIX: Also cancel/delete the defect's associated inspection_photos so
-      // they don't get uploaded as orphaned rows in Supabase.
-      // FIX: this used to delete EVERY Open defect on the asset, not just the
-      // one being reverted — so an unrelated Remark logged earlier on this
-      // same asset (Remarks are explicitly supported on Pass/N-T assets,
-      // independent of the Fail/Open-defect this block exists to clean up)
-      // got silently deleted, photos included, the moment the technician
-      // changed their mind about an unrelated Fail. Scope to the specific
-      // defect matching this asset's own (pre-write) defect_reason — the
-      // same content-match relationship the display layer and
-      // reconcileJobAssetOnDefectDelete already rely on to identify "the
-      // Fail's defect" — so a Remark with a different description is never
-      // touched by reverting an unrelated result.
-      if (result !== InspectionResult.Fail) {
-        const staleDefects = asset.defect_reason
-          ? queryRecords<{ id: string; description: string }>('defects', {
-              job_id: currentJobId,
-              asset_id: assetId,
-              status: DefectStatus.Open,
-            }).filter((d) => d.description === asset.defect_reason)
-          : [];
-        for (const stale of staleDefects) {
-          // Cancel associated photos first
-          const stalePhotos = queryRecords<{ id: string; photo_url: string }>(
-            'inspection_photos', { defect_id: stale.id }
-          );
-          for (const p of stalePhotos) {
-            deleteRecord('inspection_photos', p.id);
-            recordDeletedPhoto(p.id);
-            if (p.photo_url.startsWith('https://')) {
-              // FIX: job_id included — see the equivalent fix a few lines up
-              // in this same function for why (report-generation blocker
-              // check's payload substring fallback).
-              addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
-                id: p.id, photo_url: p.photo_url, job_id: currentJobId,
-              });
-            } else {
-              cancelPendingPhotoUpload(p.id);
-            }
-          }
-          deleteRecord('defects', stale.id);
-          addToSyncQueue('defects', stale.id, SyncOperation.Delete, { id: stale.id, job_id: currentJobId });
-        }
-        if (staleDefects.length > 0) {
-          // Refresh defects store so the badge and list update immediately
-          useDefectsStore.getState().loadDefects(currentJobId);
-        }
-      }
-
-      // ── Defect auto-create / update ───────────────────────
       // Tracks whichever defect this call touches, so it can be returned to
       // the caller — see the interface's own comment on why.
       let touchedDefectId: string | null = null;
-      if (result === InspectionResult.Fail && defectReason) {
-        // FIX: this used to unconditionally look up "any defect already on
-        // this asset" and merge into it — so failing an asset that already
-        // carried an UNRELATED defect (logged earlier via the standalone
-        // Defects screen against an asset that wasn't Fail yet) silently
-        // overwrote that defect's description/severity/price with the new
-        // Fail reason, permanently losing the original record. The asset
-        // screen now passes forceNewDefect for a fresh Pass/N-T -> Fail
-        // transition specifically so this always creates an independent
-        // defect instead — the technician's own deliberate "Edit" on an
-        // existing defect card still goes through the merge branch below
-        // exactly as before (forceNewDefect is never set for that path).
-        const existingDefects = forceNewDefect ? [] : queryRecords<{
-          id: string; description: string; severity: string; status: string;
-          defect_code: string | null; quote_price: number | null;
-        }>('defects', {
-          job_id: currentJobId,
-          asset_id: assetId,
-        });
 
-        if (existingDefects.length === 0) {
-          const defectId = generateUUID();
-          touchedDefectId = defectId;
-          const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
+      // FIX (results silently never reaching the server): everything from
+      // here to the in-memory update is SQLite-only and synchronous, but it
+      // used to be ~10 independent autocommit writes — the result row, its
+      // sync_queue entry, photo rows + upload tasks, the defect + its queue
+      // entry, audit rows. An app kill part-way (flat battery, the OS
+      // reclaiming memory mid-inspection) could leave e.g. the job_assets
+      // row saved locally with NO queue entry, so the screen showed the
+      // result while it never synced — or a Fail with no defect. One
+      // transaction: all of it lands, or none of it does (same pattern as
+      // jobsStore.updateJobStatus / defectsStore).
+      openDatabase().withTransactionSync(() => {
+        // Field-level audit Timeline — one row per SAVE (not per changed
+        // field). `asset` still holds the OLD values here, right up until
+        // upsertRecord below writes the new ones.
+        const AUDITED_JOB_ASSET_FIELDS = ['result', 'checklist_data', 'is_compliant', 'defect_reason', 'technician_notes', 'internal_notes'] as const;
+        const jobAssetChanges = AUDITED_JOB_ASSET_FIELDS
+          .map((field) => ({ field, old: (asset as unknown as Record<string, unknown>)[field] ?? null, new: jobAssetPayload[field] ?? null }))
+          .filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+        logFieldAudit('job_assets', jobAssetId, currentJobId, companyId, userId || null, jobAssetChanges);
 
-          // FIX: photos are deliberately NOT linked to a specific defect —
-          // they live purely on the asset (inspection_photos.asset_id),
-          // shown once in the asset's own Photos section and once in the
-          // PDF's asset-level photo row. This used to back-fill defect_id
-          // onto every unlinked photo for this asset and copy them into
-          // defects.photos, which made the SAME photo also show up under
-          // the defect card (in-app) and, in the report, under whichever
-          // rendering path checked defect_id first — a form of the same
-          // "photo association" the report's own asset/defect split was
-          // built to avoid duplicating.
-          const defectPayload: Record<string, string | number | null> = {
-            id: defectId,
+        upsertRecord('job_assets', jobAssetPayload);
+
+        // Purge any duplicate rows for this asset+job that have a different id.
+        // These can accumulate from rapid taps before the first save completes.
+        try {
+          const db = openDatabase();
+          db.runSync(
+            `DELETE FROM job_assets WHERE job_id = ? AND asset_id = ? AND id != ?`,
+            [currentJobId, assetId, jobAssetId],
+          );
+        } catch { /* non-fatal */ }
+
+        const syncOp = isExistingRecord ? SyncOperation.Update : SyncOperation.Insert;
+        addToSyncQueue('job_assets', jobAssetId, syncOp, jobAssetPayload);
+
+
+        // ── Photo reconciliation ────────────────────────────────────────────────
+        // `photos` is the FINAL desired set of URIs the user left in the modal.
+        // We diff it against what is currently in SQLite:
+        //   • Deleted photos  → remove from SQLite immediately.
+        //                       If the photo was already uploaded (https://) → also
+        //                       queue a Supabase DB row delete + Storage binary delete.
+        //                       If still local (file://) → cancel the pending
+        //                       photo_upload task so it never reaches Supabase.
+        //   • Kept photos     → leave as-is (preserve upload state).
+        //   • New photos      → insert into SQLite and queue for upload.
+        if (photos !== undefined) {
+          const existingRows = queryRecords<{ id: string; photo_url: string }>(
+            'inspection_photos',
+            { job_id: currentJobId, asset_id: assetId },
+          );
+
+          const desiredUrlSet  = new Set(photos);
+          const existingUrlSet = new Set(existingRows.map(r => r.photo_url));
+
+          // ── Deletions ────────────────────────────────────────────────────────
+          for (const row of existingRows) {
+            if (!desiredUrlSet.has(row.photo_url)) {
+              // 1. Remove from local SQLite immediately
+              deleteRecord('inspection_photos', row.id);
+
+              // 2. Permanently record in tombstone — survives retries/reinstalls
+              recordDeletedPhoto(row.id);
+
+              if (row.photo_url.startsWith('https://')) {
+                // Photo is already in Supabase — queue a delete for both the DB row
+                // and the Storage binary (sync.ts _pushQueue handles both).
+                // FIX: job_id included so lib/sync.ts's report-generation
+                // blocker check can see this pending Delete via its payload
+                // substring fallback — the row is already gone locally by the
+                // time that check runs, so a bare {id, photo_url} payload gave
+                // it nothing to match this job against.
+                addToSyncQueue('inspection_photos', row.id, SyncOperation.Delete, {
+                  id: row.id,
+                  photo_url: row.photo_url,
+                  job_id: currentJobId,
+                });
+              } else {
+                // Photo only exists locally (file:// URI, not yet uploaded).
+                // Cancel the pending photo_upload task so it is never sent to Supabase.
+                // No Supabase row exists yet, so no DB delete is needed.
+                cancelPendingPhotoUpload(row.id);
+              }
+            }
+          }
+
+          // ── Insertions ────────────────────────────────────────────────────────
+          const newPhotoUris = photos.filter(uri => !existingUrlSet.has(uri));
+
+          for (const uri of newPhotoUris) {
+            const photoId = generateUUID();
+            const photoObj = {
+              id: photoId,
+              job_id: currentJobId,
+              asset_id: assetId,
+              defect_id: null as string | null,
+              photo_url: uri,
+              // FIX: Store the original file:// URI so offline PDF generation can
+              // fall back to the local copy after photo_url is replaced with https://.
+              local_uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : null,
+              caption: null,
+              uploaded_at: new Date().toISOString(),
+              uploaded_by: userId,
+            };
+            insertRecord('inspection_photos', photoObj as Record<string, string | number | boolean | null>);
+            queuePhotoUpload(uri, currentJobId, assetId, photoId, undefined);
+          }
+        }
+
+        // ── Auto-delete defect when asset passes / not-tested ─
+        // If the previous result was Fail and the new result is Pass or NotTested,
+        // an OPEN defect is no longer valid — remove it automatically. A defect
+        // that has already progressed past Open (quoted/repaired/monitoring —
+        // i.e. someone has actually actioned it) is a real historical record
+        // and must survive a later re-inspection finding the asset now passes;
+        // it's deliberately NOT filtered back out here.
+        // A3 FIX: Also cancel/delete the defect's associated inspection_photos so
+        // they don't get uploaded as orphaned rows in Supabase.
+        // FIX: this used to delete EVERY Open defect on the asset, not just the
+        // one being reverted — so an unrelated Remark logged earlier on this
+        // same asset (Remarks are explicitly supported on Pass/N-T assets,
+        // independent of the Fail/Open-defect this block exists to clean up)
+        // got silently deleted, photos included, the moment the technician
+        // changed their mind about an unrelated Fail. Scope to the specific
+        // defect matching this asset's own (pre-write) defect_reason — the
+        // same content-match relationship the display layer and
+        // reconcileJobAssetOnDefectDelete already rely on to identify "the
+        // Fail's defect" — so a Remark with a different description is never
+        // touched by reverting an unrelated result.
+        if (result !== InspectionResult.Fail) {
+          const staleDefects = asset.defect_reason
+            ? queryRecords<{ id: string; description: string }>('defects', {
+                job_id: currentJobId,
+                asset_id: assetId,
+                status: DefectStatus.Open,
+              }).filter((d) => d.description === asset.defect_reason)
+            : [];
+          for (const stale of staleDefects) {
+            // Cancel associated photos first
+            const stalePhotos = queryRecords<{ id: string; photo_url: string }>(
+              'inspection_photos', { defect_id: stale.id }
+            );
+            for (const p of stalePhotos) {
+              deleteRecord('inspection_photos', p.id);
+              recordDeletedPhoto(p.id);
+              if (p.photo_url.startsWith('https://')) {
+                // FIX: job_id included — see the equivalent fix a few lines up
+                // in this same function for why (report-generation blocker
+                // check's payload substring fallback).
+                addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+                  id: p.id, photo_url: p.photo_url, job_id: currentJobId,
+                });
+              } else {
+                cancelPendingPhotoUpload(p.id);
+              }
+            }
+            deleteRecord('defects', stale.id);
+            addToSyncQueue('defects', stale.id, SyncOperation.Delete, { id: stale.id, job_id: currentJobId });
+          }
+          if (staleDefects.length > 0) {
+            // Refresh defects store so the badge and list update immediately
+            useDefectsStore.getState().loadDefects(currentJobId);
+          }
+        }
+
+        // ── Defect auto-create / update ───────────────────────
+        if (result === InspectionResult.Fail && defectReason) {
+          // FIX: this used to unconditionally look up "any defect already on
+          // this asset" and merge into it — so failing an asset that already
+          // carried an UNRELATED defect (logged earlier via the standalone
+          // Defects screen against an asset that wasn't Fail yet) silently
+          // overwrote that defect's description/severity/price with the new
+          // Fail reason, permanently losing the original record. The asset
+          // screen now passes forceNewDefect for a fresh Pass/N-T -> Fail
+          // transition specifically so this always creates an independent
+          // defect instead — the technician's own deliberate "Edit" on an
+          // existing defect card still goes through the merge branch below
+          // exactly as before (forceNewDefect is never set for that path).
+          const existingDefects = forceNewDefect ? [] : queryRecords<{
+            id: string; description: string; severity: string; status: string;
+            defect_code: string | null; quote_price: number | null;
+          }>('defects', {
             job_id: currentJobId,
             asset_id: assetId,
-            property_id: asset.property_id,
-            company_id: companyId,
-            description: defectReason,
-            severity: resolvedSeverity,
-            status: DefectStatus.Open,
-            photos: '[]',
-            created_at: new Date().toISOString(),
-            defect_code: defectCode ?? null,
-            quote_price: quotePrice ?? null,
-          };
-          insertRecord('defects', defectPayload);
-          addToSyncQueue('defects', defectId, SyncOperation.Insert, defectPayload);
+          });
 
-          // FIX: this path bypasses defectsStore.addDefect (which already
-          // logs this synthetic entry) — without it, every asset's FIRST
-          // defect (the vast majority of all defects, created here rather
-          // than through the "additional defect" flow) showed an
-          // permanently empty Timeline no matter how many times it was
-          // later edited.
-          logFieldAudit('defects', defectId, currentJobId, companyId, userId || null, [
-            { field: '_created', old: null, new: 'defect created' },
-          ]);
+          if (existingDefects.length === 0) {
+            const defectId = generateUUID();
+            touchedDefectId = defectId;
+            const resolvedSeverity = severity ?? DefectSeverity.NonCritical;
 
-          // Refresh defects store so the badge updates immediately
-          useDefectsStore.getState().loadDefects(currentJobId);
-        } else {
-          // Update existing defect description/severity/code/price and reconcile photos
-          // FIX: previously always `existingDefects[0]` — no ordering, no
-          // identity check. The instant an asset carried more than one
-          // defect, this could silently update the wrong one (see this
-          // function's own primaryDefectId param comment). Prefer the
-          // caller's own already-known primary defect id; fall back to
-          // content-matching against this asset's OLD defect_reason (the
-          // same relationship the display layer already uses); only fall
-          // back to [0] for callers that pass neither, so a genuinely
-          // single defect on the asset is never skipped.
-          const existing =
-            (primaryDefectId ? existingDefects.find((d) => d.id === primaryDefectId) : undefined) ??
-            (asset.defect_reason ? existingDefects.find((d) => d.description === asset.defect_reason) : undefined) ??
-            existingDefects[0];
-          const existingId = existing.id;
-          touchedDefectId = existingId;
-          // FIX: a defect already moved past Open (Quoted/Monitoring/Repaired
-          // — e.g. an admin actioned it from the web dashboard while the
-          // technician was still on site) kept that status forever even when
-          // its description was rewritten out from under it here, so a
-          // "Repaired" defect could end up describing an entirely different,
-          // still-unresolved problem with no indication anything changed.
-          // Only reset to Open when the description actually changed — a
-          // notes-only resave (handleSaveNote passes the asset's own
-          // unchanged defect_reason back through here) must not silently
-          // un-resolve an already-actioned defect.
-          const descriptionChanged = existing.description !== defectReason;
-          const updates: Record<string, string | number | null> = {
-            description: defectReason,
-            severity: severity ?? DefectSeverity.NonCritical,
-            updated_at: new Date().toISOString(),
-            ...(descriptionChanged ? { status: DefectStatus.Open } : {}),
-            // FIX: defect_code/quote_price used to be unconditionally
-            // included (defectCode ?? null / quotePrice ?? null) — that
-            // fixed an earlier bug where re-picking a code appeared to save
-            // but silently didn't persist, but it introduced a new one: a
-            // technician re-saving this defect for an unrelated reason
-            // (editing severity, fixing a typo) unconditionally re-sent
-            // whatever code/price their form loaded when it opened,
-            // clobbering a price an admin may have set in the meantime.
-            // `undefined` here (vs. a real value or explicit `null`) means
-            // "the caller never touched this field" — DefectFieldsCard's
-            // codeOrPriceChanged flag is what makes that distinction, see
-            // its own comment. Only include the key at all when the caller
-            // actually passed something, so an omitted field is left alone
-            // by updateRecord's partial SET instead of being overwritten.
-            ...(defectCode !== undefined ? { defect_code: defectCode } : {}),
-            ...(quotePrice !== undefined ? { quote_price: quotePrice } : {}),
-          };
+            // FIX: photos are deliberately NOT linked to a specific defect —
+            // they live purely on the asset (inspection_photos.asset_id),
+            // shown once in the asset's own Photos section and once in the
+            // PDF's asset-level photo row. This used to back-fill defect_id
+            // onto every unlinked photo for this asset and copy them into
+            // defects.photos, which made the SAME photo also show up under
+            // the defect card (in-app) and, in the report, under whichever
+            // rendering path checked defect_id first — a form of the same
+            // "photo association" the report's own asset/defect split was
+            // built to avoid duplicating.
+            const defectPayload: Record<string, string | number | null> = {
+              id: defectId,
+              job_id: currentJobId,
+              asset_id: assetId,
+              property_id: asset.property_id,
+              company_id: companyId,
+              description: defectReason,
+              severity: resolvedSeverity,
+              status: DefectStatus.Open,
+              photos: '[]',
+              created_at: new Date().toISOString(),
+              defect_code: defectCode ?? null,
+              quote_price: quotePrice ?? null,
+            };
+            insertRecord('defects', defectPayload);
+            addToSyncQueue('defects', defectId, SyncOperation.Insert, defectPayload);
 
-          // FIX: photos are deliberately NOT copied onto defect.photos or
-          // linked via defect_id — see the matching comment in the create
-          // branch above. They stay purely asset-scoped.
+            // FIX: this path bypasses defectsStore.addDefect (which already
+            // logs this synthetic entry) — without it, every asset's FIRST
+            // defect (the vast majority of all defects, created here rather
+            // than through the "additional defect" flow) showed an
+            // permanently empty Timeline no matter how many times it was
+            // later edited.
+            logFieldAudit('defects', defectId, currentJobId, companyId, userId || null, [
+              { field: '_created', old: null, new: 'defect created' },
+            ]);
 
-          updateRecord('defects', existingId, updates);
-          addToSyncQueue('defects', existingId, SyncOperation.Update, updates);
+            // Refresh defects store so the badge updates immediately
+            useDefectsStore.getState().loadDefects(currentJobId);
+          } else {
+            // Update existing defect description/severity/code/price and reconcile photos
+            // FIX: previously always `existingDefects[0]` — no ordering, no
+            // identity check. The instant an asset carried more than one
+            // defect, this could silently update the wrong one (see this
+            // function's own primaryDefectId param comment). Prefer the
+            // caller's own already-known primary defect id; fall back to
+            // content-matching against this asset's OLD defect_reason (the
+            // same relationship the display layer already uses); only fall
+            // back to [0] for callers that pass neither, so a genuinely
+            // single defect on the asset is never skipped.
+            const existing =
+              (primaryDefectId ? existingDefects.find((d) => d.id === primaryDefectId) : undefined) ??
+              (asset.defect_reason ? existingDefects.find((d) => d.description === asset.defect_reason) : undefined) ??
+              existingDefects[0];
+            const existingId = existing.id;
+            touchedDefectId = existingId;
+            // FIX: a defect already moved past Open (Quoted/Monitoring/Repaired
+            // — e.g. an admin actioned it from the web dashboard while the
+            // technician was still on site) kept that status forever even when
+            // its description was rewritten out from under it here, so a
+            // "Repaired" defect could end up describing an entirely different,
+            // still-unresolved problem with no indication anything changed.
+            // Only reset to Open when the description actually changed — a
+            // notes-only resave (handleSaveNote passes the asset's own
+            // unchanged defect_reason back through here) must not silently
+            // un-resolve an already-actioned defect.
+            const descriptionChanged = existing.description !== defectReason;
+            const updates: Record<string, string | number | null> = {
+              description: defectReason,
+              severity: severity ?? DefectSeverity.NonCritical,
+              updated_at: new Date().toISOString(),
+              ...(descriptionChanged ? { status: DefectStatus.Open } : {}),
+              // FIX: defect_code/quote_price used to be unconditionally
+              // included (defectCode ?? null / quotePrice ?? null) — that
+              // fixed an earlier bug where re-picking a code appeared to save
+              // but silently didn't persist, but it introduced a new one: a
+              // technician re-saving this defect for an unrelated reason
+              // (editing severity, fixing a typo) unconditionally re-sent
+              // whatever code/price their form loaded when it opened,
+              // clobbering a price an admin may have set in the meantime.
+              // `undefined` here (vs. a real value or explicit `null`) means
+              // "the caller never touched this field" — DefectFieldsCard's
+              // codeOrPriceChanged flag is what makes that distinction, see
+              // its own comment. Only include the key at all when the caller
+              // actually passed something, so an omitted field is left alone
+              // by updateRecord's partial SET instead of being overwritten.
+              ...(defectCode !== undefined ? { defect_code: defectCode } : {}),
+              ...(quotePrice !== undefined ? { quote_price: quotePrice } : {}),
+            };
 
-          // FIX: this path bypasses defectsStore.updateDefect (which already
-          // does both of these) — without them, editing an asset's primary
-          // defect (a) never appeared in its own Timeline and (b) showed
-          // stale pre-edit data immediately after saving, since nothing
-          // reloaded defectsStore until the technician left and returned to
-          // this screen.
-          const changes = [
-            { field: 'description', old: existing.description ?? null, new: updates.description },
-            { field: 'severity',    old: existing.severity ?? null,    new: updates.severity },
-            { field: 'defect_code', old: existing.defect_code ?? null, new: updates.defect_code },
-            { field: 'quote_price', old: existing.quote_price ?? null, new: updates.quote_price },
-            ...(descriptionChanged ? [{ field: 'status', old: existing.status ?? null, new: DefectStatus.Open as string }] : []),
-          ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
-          if (changes.length > 0) {
-            logFieldAudit('defects', existingId, currentJobId, companyId, userId || null, changes);
+            // FIX: photos are deliberately NOT copied onto defect.photos or
+            // linked via defect_id — see the matching comment in the create
+            // branch above. They stay purely asset-scoped.
+
+            updateRecord('defects', existingId, updates);
+            addToSyncQueue('defects', existingId, SyncOperation.Update, updates);
+
+            // FIX: this path bypasses defectsStore.updateDefect (which already
+            // does both of these) — without them, editing an asset's primary
+            // defect (a) never appeared in its own Timeline and (b) showed
+            // stale pre-edit data immediately after saving, since nothing
+            // reloaded defectsStore until the technician left and returned to
+            // this screen.
+            const changes = [
+              { field: 'description', old: existing.description ?? null, new: updates.description },
+              { field: 'severity',    old: existing.severity ?? null,    new: updates.severity },
+              { field: 'defect_code', old: existing.defect_code ?? null, new: updates.defect_code },
+              { field: 'quote_price', old: existing.quote_price ?? null, new: updates.quote_price },
+              ...(descriptionChanged ? [{ field: 'status', old: existing.status ?? null, new: DefectStatus.Open as string }] : []),
+            ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+            if (changes.length > 0) {
+              logFieldAudit('defects', existingId, currentJobId, companyId, userId || null, changes);
+            }
+            useDefectsStore.getState().loadDefects(currentJobId);
           }
-          useDefectsStore.getState().loadDefects(currentJobId);
         }
-      }
+
+      });
 
       // ── Update in-memory state ─────────────────────────────
       // Set in-memory photos to exactly what is currently in SQLite after reconciliation.

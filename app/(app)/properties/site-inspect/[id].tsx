@@ -28,7 +28,7 @@ import { ScreenHeader, FilterPills, Button, showConfirm } from '@/components/ui'
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { InspectionResult, SyncOperation, JobStatus, Priority, DefectSeverity, JobType, DefectStatus } from '@/constants/Enums';
 import {
-  getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue, logFieldAudit,
+  getRecord, getAssetsForProperty, upsertRecord, addToSyncQueue, logFieldAudit, openDatabase,
 } from '@/lib/database';
 import type { RecordData } from '@/lib/database';
 import type { Property, Asset } from '@/types';
@@ -422,76 +422,83 @@ export default function SiteInspectScreen() {
         notes: 'On-site inspection form submitted via SiteTrack mobile app.',
         created_at: now, updated_at: now,
       };
-      upsertRecord('jobs', jobPayload as RecordData);
-      addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
+      // Everything below is one commit — an app kill part-way must never
+      // leave a half-built job (some assets with no result row, a Fail with
+      // no defect, a job with no crew assignment).
+      openDatabase().withTransactionSync(() => {
+        upsertRecord('jobs', jobPayload as RecordData);
+        addToSyncQueue('jobs', jobId, SyncOperation.Insert, jobPayload as RecordData);
 
-      // 1b. Assign the creating technician via job_technicians (the real,
-      // flat assignment list — assigned_to above is kept only as the
-      // legacy fallback column other code still reads).
-      const jobTechId = generateUUID();
-      const jobTechPayload = { id: jobTechId, job_id: jobId, user_id: user.id, created_at: now };
-      upsertRecord('job_technicians', jobTechPayload as RecordData);
-      addToSyncQueue('job_technicians', jobTechId, SyncOperation.Insert, jobTechPayload as RecordData);
+        // 1b. Assign the creating technician via job_technicians (the real,
+        // flat assignment list — assigned_to above is kept only as the
+        // legacy fallback column other code still reads).
+        const jobTechId = generateUUID();
+        const jobTechPayload = { id: jobTechId, job_id: jobId, user_id: user.id, created_at: now };
+        upsertRecord('job_technicians', jobTechPayload as RecordData);
+        addToSyncQueue('job_technicians', jobTechId, SyncOperation.Insert, jobTechPayload as RecordData);
 
-      // 2. Save job_assets records
-      // DECISION #2: assets the tech did not explicitly inspect are auto-marked
-      // as not_tested. Never silently skip them — a missing record = missing compliance data.
-      for (const asset of assets) {
-        const r = results[asset.id];
-        const resolvedResult = r?.result ?? InspectionResult.NotTested;
-        const jaId = generateUUID();
-        const jaPayload = {
-          id: jaId, job_id: jobId, asset_id: asset.id,
-          result: resolvedResult, checklist_data: null,
-          is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
-          defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
-          technician_notes: null, actioned_at: now, actioned_by: user.id,
-        };
-        upsertRecord('job_assets', jaPayload as RecordData);
-        addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
-
-        // FIX: this quick on-site flow created job_assets/defects rows with
-        // no audit logging at all — every other write path (inspect tab,
-        // defect edit modals) logs via logFieldAudit, so a job created here
-        // showed a permanently empty Timeline instead of flagging the gap.
-        const jaChanges = [
-          { field: 'result', old: null, new: jaPayload.result },
-          { field: 'is_compliant', old: null, new: jaPayload.is_compliant },
-          { field: 'defect_reason', old: null, new: jaPayload.defect_reason },
-        ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
-        logFieldAudit('job_assets', jaId, jobId, user.company_id ?? null, user.id ?? null, jaChanges);
-
-        // 3. Auto-create defect if failed with reason
-        if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
-          const dId = generateUUID();
-          const dPayload = {
-            id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
-            // FIX: severity was hardcoded to Non-Critical regardless of what
-            // the technician actually found — now reflects the Critical
-            // toggle above (still defaults to Non-Critical, unchanged for
-            // the common case). `status` was also a bare 'open' string
-            // literal — imported enum used instead, same reasoning as
-            // job_type above.
-            description: r.defectReason.trim(), severity: r.severity,
-            status: DefectStatus.Open, photos: '[]', created_at: now,
+        // 2. Save job_assets records
+        // DECISION #2: assets the tech did not explicitly inspect are auto-marked
+        // as not_tested. Never silently skip them — a missing record = missing compliance data.
+        for (const asset of assets) {
+          const r = results[asset.id];
+          const resolvedResult = r?.result ?? InspectionResult.NotTested;
+          const jaId = generateUUID();
+          const jaPayload = {
+            id: jaId, job_id: jobId, asset_id: asset.id,
+            result: resolvedResult, checklist_data: null,
+            is_compliant: resolvedResult === InspectionResult.Pass ? 1 : 0,
+            defect_reason: resolvedResult === InspectionResult.Fail ? (r?.defectReason || null) : null,
+            technician_notes: null, actioned_at: now, actioned_by: user.id,
           };
-          upsertRecord('defects', dPayload as RecordData);
-          addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
+          upsertRecord('job_assets', jaPayload as RecordData);
+          addToSyncQueue('job_assets', jaId, SyncOperation.Insert, jaPayload as RecordData);
 
-          // Same synthetic "_created" entry addDefect logs elsewhere — a
-          // defect's Timeline should say when it first appeared, not just
-          // show later edits.
-          logFieldAudit('defects', dId, jobId, user.company_id ?? null, user.id ?? null, [
-            { field: '_created', old: null, new: 'defect created' },
-          ]);
+          // FIX: this quick on-site flow created job_assets/defects rows with
+          // no audit logging at all — every other write path (inspect tab,
+          // defect edit modals) logs via logFieldAudit, so a job created here
+          // showed a permanently empty Timeline instead of flagging the gap.
+          const jaChanges = [
+            { field: 'result', old: null, new: jaPayload.result },
+            { field: 'is_compliant', old: null, new: jaPayload.is_compliant },
+            { field: 'defect_reason', old: null, new: jaPayload.defect_reason },
+          ].filter((c) => JSON.stringify(c.old) !== JSON.stringify(c.new));
+          logFieldAudit('job_assets', jaId, jobId, user.company_id ?? null, user.id ?? null, jaChanges);
+
+          // 3. Auto-create defect if failed with reason
+          if (resolvedResult === InspectionResult.Fail && r?.defectReason?.trim()) {
+            const dId = generateUUID();
+            const dPayload = {
+              id: dId, job_id: jobId, asset_id: asset.id, property_id: property.id,
+              // FIX: severity was hardcoded to Non-Critical regardless of what
+              // the technician actually found — now reflects the Critical
+              // toggle above (still defaults to Non-Critical, unchanged for
+              // the common case). `status` was also a bare 'open' string
+              // literal — imported enum used instead, same reasoning as
+              // job_type above.
+              description: r.defectReason.trim(), severity: r.severity,
+              status: DefectStatus.Open, photos: '[]', created_at: now,
+            };
+            upsertRecord('defects', dPayload as RecordData);
+            addToSyncQueue('defects', dId, SyncOperation.Insert, dPayload as RecordData);
+
+            // Same synthetic "_created" entry addDefect logs elsewhere — a
+            // defect's Timeline should say when it first appeared, not just
+            // show later edits.
+            logFieldAudit('defects', dId, jobId, user.company_id ?? null, user.id ?? null, [
+              { field: '_created', old: null, new: 'defect created' },
+            ]);
+          }
         }
-      }
 
-      // 4. Update property compliance
-      const compliance = counts.failed > 0 ? 'non_compliant' : 'compliant';
-      upsertRecord('properties', { id: property.id, compliance_status: compliance, updated_at: now });
-      addToSyncQueue('properties', property.id, SyncOperation.Update,
-        { compliance_status: compliance, updated_at: now });
+      });
+      // Property compliance is NOT written here any more. FIX: this used to
+      // set it from this walk-through's own fail count before the job was
+      // even signed off — so abandoning at the signature step left the
+      // property marked "compliant", and any other unresolved defect on the
+      // property was ignored. Completing the job (the signature screen's
+      // ?autoComplete=1 -> jobsStore.updateJobStatus) recomputes it from
+      // every result AND open defect, the same as the main job flow.
 
       Toast.show({
         type: 'success',
@@ -511,7 +518,7 @@ export default function SiteInspectScreen() {
       savingRef.current = false;
       setIsSaving(false);
     }
-  }, [property, user, assets, results, counts, navigateAway]);
+  }, [property, user, assets, results, navigateAway]);
 
   const handleBackPress = useCallback(() => {
     if (!hasProgress) return false; // let navigation proceed normally

@@ -14,6 +14,7 @@ import {
 } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { queuePhotoUpload } from '@/lib/photoUpload';
+import { assertJobEditable } from '@/lib/jobLock';
 import { generateUUID } from '@/utils/uuid';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getValidLocalUri } from '@/utils/fileHelpers';
@@ -60,6 +61,10 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   addPhoto: (photoData) => {
     try {
+      // FIX: photos had no job lock at all — the Job Photos tab and camera
+      // sheet could add or delete evidence on a completed (signed, reported)
+      // or cancelled job. Same rule as defects/results; see lib/jobLock.ts.
+      assertJobEditable(photoData.job_id);
       const id = generateUUID();
       const newPhoto: InspectionPhoto = {
         ...photoData,
@@ -104,6 +109,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       const localUri = dbPhoto?.local_uri ?? get().photos.find(p => p.id === photoId)?.local_uri;
       const jobId = dbPhoto?.job_id ?? get().photos.find(p => p.id === photoId)?.job_id;
       const defectId = dbPhoto?.defect_id ?? get().photos.find(p => p.id === photoId)?.defect_id;
+      assertJobEditable(jobId);
 
       // FIX: deleting a photo of a logged defect left no trace anywhere —
       // for a compliance product, "evidence of a real defect quietly
@@ -170,6 +176,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
   updateCaption: (photoId, caption) => {
     try {
+      assertJobEditable(getRecord<{ job_id: string | null }>('inspection_photos', photoId)?.job_id);
       updateRecord('inspection_photos', photoId, { caption });
       addToSyncQueue('inspection_photos', photoId, SyncOperation.Update, { caption });
       set((state) => ({

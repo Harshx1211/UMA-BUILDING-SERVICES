@@ -4,7 +4,6 @@ import type { Defect } from '@/types';
 import {
   getDefectsForJob,
   getAllDefects,
-  getJobById,
   getRecord,
   insertRecord,
   updateRecord,
@@ -17,9 +16,10 @@ import {
   reconcileJobAssetOnDefectDelete,
   openDatabase,
 } from '@/lib/database';
-import { DefectStatus, SyncOperation, JobStatus, PhotoStage } from '@/constants/Enums';
+import { DefectStatus, SyncOperation, PhotoStage } from '@/constants/Enums';
 import { generateUUID } from '@/utils/uuid';
 import { queuePhotoUpload } from '@/lib/photoUpload';
+import { assertJobEditable } from '@/lib/jobLock';
 import { useAuthStore } from '@/store/authStore';
 import { syncNow } from '@/lib/sync';
 
@@ -55,7 +55,6 @@ interface DefectsState {
     afterPhotos?: string[];
   }) => string | null;
   updateDefect: (defectId: string, updates: Partial<Defect>) => void;
-  updateDefectStatus: (defectId: string, status: DefectStatus) => void;
   deleteDefect: (defectId: string) => void;
   /** Adds a photo to an ALREADY-EXISTING defect — the one gap `addDefect`'s
    * own photo handling doesn't cover (it only ever attaches photos at
@@ -76,27 +75,10 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'An unexpected error occurred.';
 }
 
-// ─── Helper — reject any write against a locked job ────────
-// FIX: addDefect already enforced "a completed/cancelled job's report is
-// final" (the same invariant store/inspectionStore.ts's updateAssetResult
-// uses) but updateDefect/updateDefectStatus/deleteDefect never checked this
-// at all. Concretely reachable via asset/[assetId].tsx's leave-without-
-// saving flush, which calls updateDefect on an in-progress additional-defect
-// edit with no awareness the job locked mid-edit — that silently mutated a
-// defect behind a report already treated as final. Looks the job up fresh
-// via getRecord rather than trusting an in-memory `defects` array entry,
-// since not every screen that calls these (e.g. defects/[defectId].tsx)
-// necessarily keeps this defect inside useDefectsStore's own list.
-function assertJobEditable(jobId: string | undefined | null): void {
-  if (!jobId) return;
-  const job = getJobById<{ status: string }>(jobId);
-  if (job?.status === JobStatus.Completed) {
-    throw new Error('This job is completed — tap "Continue Working" to make changes.');
-  }
-  if (job?.status === JobStatus.Cancelled) {
-    throw new Error('This job has been cancelled and can no longer be edited.');
-  }
-}
+// Locked-job guard lives in lib/jobLock.ts (shared with photosStore).
+// FIX history: addDefect already enforced it, but updateDefect/deleteDefect
+// never did — reachable via asset/[assetId].tsx's leave-without-saving flush
+// editing a defect behind a report already treated as final.
 
 // ─── Helper — normalise photos from SQLite JSON string ────
 function normaliseDefects(records: Defect[]): Defect[] {
@@ -366,41 +348,6 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
     }
   },
 
-  updateDefectStatus: (defectId, status) => {
-    try {
-      // FIX: same missing job-lock check as updateDefect — see
-      // assertJobEditable's own comment.
-      const currentRow = getRecord<{ job_id: string }>('defects', defectId);
-      assertJobEditable(currentRow?.job_id);
-
-      const oldRow = get().defects.find((d) => d.id === defectId);
-      const companyId = useAuthStore.getState().user?.company_id ?? null;
-      const dbUpdates = { status, updated_at: new Date().toISOString(), company_id: companyId };
-      // FIX: same atomicity gap as addDefect's insert above.
-      openDatabase().withTransactionSync(() => {
-        updateRecord('defects', defectId, dbUpdates);
-        addToSyncQueue('defects', defectId, SyncOperation.Update, dbUpdates);
-      });
-
-      if (oldRow && oldRow.status !== status) {
-        const userId = useAuthStore.getState().user?.id ?? null;
-        logFieldAudit('defects', defectId, oldRow.job_id, companyId, userId, [
-          { field: 'status', old: oldRow.status, new: status },
-        ]);
-      }
-
-      set((state) => ({
-        defects: state.defects.map((d) =>
-          d.id === defectId ? { ...d, status } : d
-        ),
-      }));
-      syncNow();
-    } catch (err: unknown) {
-      console.error('[DefectsStore] updateDefectStatus error:', err);
-      set({ error: errorMessage(err) });
-    }
-  },
-
   deleteDefect: (defectId) => {
     try {
       set({ isSaving: true, error: null });
@@ -429,20 +376,25 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
       const defectPhotos = queryRecords<{ id: string; photo_url: string; job_id: string }>(
         'inspection_photos', { defect_id: defectId }
       );
-      for (const p of defectPhotos) {
-        deleteRecord('inspection_photos', p.id);
-        recordDeletedPhoto(p.id);
-        if (p.photo_url.startsWith('https://')) {
-          // FIX: job_id included so lib/sync.ts's report-generation blocker
-          // check can see this pending Delete — its local-row lookup can
-          // never resolve for a Delete (the row's gone by now), so it falls
-          // back to a substring search over the payload, which a bare
-          // {id, photo_url} payload gave it nothing to match.
-          addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
-            id: p.id,
-            photo_url: p.photo_url,
-            job_id: p.job_id,
-          });
+      // Photos + the defect itself as one commit (an app kill part-way must
+      // not delete photos but leave the defect, or drop a queued delete).
+      // reconcileJobAssetOnDefectDelete below runs its own transaction, so
+      // it stays outside this one — expo-sqlite can't nest them.
+      openDatabase().withTransactionSync(() => {
+        for (const p of defectPhotos) {
+          deleteRecord('inspection_photos', p.id);
+          recordDeletedPhoto(p.id);
+          if (p.photo_url.startsWith('https://')) {
+            // FIX: job_id included so lib/sync.ts's report-generation blocker
+            // check can see this pending Delete — its local-row lookup can
+            // never resolve for a Delete (the row's gone by now), so it falls
+            // back to a substring search over the payload, which a bare
+            // {id, photo_url} payload gave it nothing to match.
+            addToSyncQueue('inspection_photos', p.id, SyncOperation.Delete, {
+              id: p.id,
+              photo_url: p.photo_url,
+              job_id: p.job_id,
+      });
         } else {
           cancelPendingPhotoUpload(p.id);
         }
@@ -450,6 +402,7 @@ export const useDefectsStore = create<DefectsState>((set, get) => ({
 
       deleteRecord('defects', defectId);
       addToSyncQueue('defects', defectId, SyncOperation.Delete, { id: defectId, job_id: defectRow?.job_id ?? null });
+      });
 
       set((state) => ({
         defects: state.defects.filter((d) => d.id !== defectId),
