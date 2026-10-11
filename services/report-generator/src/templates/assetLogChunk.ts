@@ -87,6 +87,10 @@ export function renderAssetLogChunk(
       : `padding-top:16px;border-top:2px solid ${COLORS.MUTED_LIGHT}`;
     isFirstRowOfTable = false;
 
+    // assets.description ("Asset Notes") is intentionally not printed
+    // (owner's decision, 2026-10-11): it's the technician's standing note
+    // about the asset and stays in the app only. Remarks (this visit's
+    // technician_notes) still print.
     parts.push(`
       <tr>
         <td colspan="3" style="${wrapperStyle}">
@@ -101,7 +105,6 @@ export function renderAssetLogChunk(
               <td style="width:15%;text-align:right;border-top:none">${resultPill(asset.result)}</td>
             </tr>
             ${photos.length > 0 ? `<tr><td colspan="3" style="padding-top:0;border-top:none">${photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls)}</td></tr>` : ''}
-            ${asset.description ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.description, 'Asset Notes')}</td></tr>` : ''}
             ${asset.technician_notes ? `<tr><td colspan="3" style="padding-top:6px;border-top:none">${renderTechnicianNote(asset.technician_notes, 'Remarks')}</td></tr>` : ''}
             ${assetDefects.length > 0 ? `<tr><td colspan="3" style="padding:0;border-top:none">${assetDefects.map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection, fullResPhotoUrls, false)).join('')}</td></tr>` : ''}
           </tbody></table>
@@ -124,12 +127,7 @@ export function renderAssetLogChunk(
  * note body to visually mark it as commentary, distinct from the factual
  * rows around it.
  *
- * FIX: now also used for assets.description ("Condition, age, notes..." on
- * EditAssetModal) — a real, technician-entered field about the physical
- * asset itself that had never been wired into the report at all (same class
- * of bug as jobs.notes/"Field Notes" — captured, never rendered). Takes an
- * explicit label so the two stay visually distinct: this asset's standing
- * condition/age notes vs. this one visit's inspection note.
+ * Takes an explicit label so it can serve other note types too.
  */
 function renderTechnicianNote(note: string, label: string): string {
   return `

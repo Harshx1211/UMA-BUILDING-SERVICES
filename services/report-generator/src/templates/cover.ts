@@ -24,6 +24,9 @@ import { AssetTypeDefinition } from '../types';
  * notes above it — this one is this specific visit's own note, not a
  * standing fact about the site.
  */
+// Access notes and the general site note are deliberately NOT printed (owner's
+// decision, 2026-10-11) — they're working information for technicians and
+// stay in the app; only the safety-relevant hazard note goes on the report.
 function renderSiteNotes(property: Property | null | undefined, jobNotes: string | null): string {
   const rows: string[] = [];
   if (property?.hazard_notes) {
@@ -31,20 +34,6 @@ function renderSiteNotes(property: Property | null | undefined, jobNotes: string
       <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.RED_BG};border:1px solid ${COLORS.RED_BORDER};border-radius:8px;margin-top:10px">
         <div style="font-weight:800;color:${COLORS.RED_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">&#9888; Site Hazard</div>
         <div style="color:${COLORS.RED_TEXT_DARK};font-size:10.5px;white-space:pre-line">${esc(property.hazard_notes)}</div>
-      </div>`);
-  }
-  if (property?.access_notes) {
-    rows.push(`
-      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.AMBER_BG};border:1px solid ${COLORS.AMBER_BORDER};border-radius:8px;margin-top:10px">
-        <div style="font-weight:800;color:${COLORS.AMBER_TEXT};font-size:10px;text-transform:uppercase;flex-shrink:0">Access</div>
-        <div style="color:${COLORS.AMBER_TEXT};font-size:10.5px;white-space:pre-line">${esc(property.access_notes)}</div>
-      </div>`);
-  }
-  if (property?.site_note) {
-    rows.push(`
-      <div style="display:flex;gap:8px;padding:10px 12px;background:${COLORS.GREEN_BG};border:1px solid ${COLORS.GREEN_BORDER};border-radius:8px;margin-top:10px">
-        <div style="font-weight:800;color:${COLORS.GREEN_TEXT_DARK};font-size:10px;text-transform:uppercase;flex-shrink:0">Site Note</div>
-        <div style="color:${COLORS.GREEN_TEXT_DARK};font-size:10.5px;white-space:pre-line">${esc(property.site_note)}</div>
       </div>`);
   }
   if (jobNotes) {
