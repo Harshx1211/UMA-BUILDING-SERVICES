@@ -92,7 +92,7 @@ export function renderAssetLogChunk(
  * for the usual short remark.
  */
 function renderRemarks(note: string): string {
-  return `<div class="remark"><span class="remark-label">Remarks:</span> <span class="pre">${esc(note)}</span></div>`;
+  return `<div class="remark"><span class="remark-label">Remarks:</span> <span class="pre">${esc(stripPrices(note))}</span></div>`;
 }
 
 // AS1851-2012 Clause 1.5.6's own wording — a non-conformance is explicitly

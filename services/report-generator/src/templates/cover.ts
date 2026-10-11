@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, field, fmtDate } from './helpers';
+import { esc, field, fmtDate, stripPrices } from './helpers';
 import { groupByCategory } from '../data/categoryGrouping';
 import { AssetTypeDefinition, Company, Property, ReportData } from '../types';
 
@@ -26,13 +26,13 @@ function renderSiteNotes(property: Property | null | undefined, jobNotes: string
     rows.push(`
       <div class="banner" style="background:${COLORS.RED_BG};border-color:${COLORS.RED_BORDER};border-left-color:${COLORS.RED_TEXT};color:${COLORS.RED_TEXT_DARK}">
         ${warningIcon(COLORS.RED_TEXT_DARK)}
-        <div><span class="banner-label">SITE HAZARD:</span><span class="pre">${esc(property.hazard_notes)}</span></div>
+        <div><span class="banner-label">SITE HAZARD:</span><span class="pre">${esc(stripPrices(property.hazard_notes))}</span></div>
       </div>`);
   }
   if (jobNotes) {
     rows.push(`
       <div class="banner" style="background:${COLORS.SURFACE};border-color:${COLORS.BORDER};border-left-color:${COLORS.MUTED};color:${COLORS.SLATE}">
-        <div><span class="banner-label" style="color:${COLORS.NAVY}">FIELD NOTES:</span><span class="pre">${esc(jobNotes)}</span></div>
+        <div><span class="banner-label" style="color:${COLORS.NAVY}">FIELD NOTES:</span><span class="pre">${esc(stripPrices(jobNotes))}</span></div>
       </div>`);
   }
   return rows.join('');

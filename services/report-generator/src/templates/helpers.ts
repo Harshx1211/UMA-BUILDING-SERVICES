@@ -61,17 +61,20 @@ export function fmtCurrency(v: number | null | undefined): string {
 // descriptions are cleaned here, at print time; the stored text (which
 // technicians quote from) is never changed.
 
-// "$135", "$1,350.00", "AU$90", "@$150" — plus any GST / rate wording around it.
-const GST = String.raw`(?:\s*(?:\+|plus\s+|inc\.?\s*|incl\.?\s*|ex\.?\s*|excl\.?\s*)GST)`;
+// "$135", "$1,350.00", "AU$90", "AUD 150", "@$150", "135$", "90 dollars" —
+// plus any GST / rate wording around it.
+const GST = String.raw`(?:\s*(?:\+\s*|plus\s+|inc\.?\s*|incl\.?\s*|ex\.?\s*|excl\.?\s*)GST)`;
 const RATE = String.raw`(?:\s*(?:\/\s*h(?:r|our)?|p\/\s*h(?:r)?|per\s+hour|per\s+hr|an?\s+hour|ea|each)\b)`;
-const AMOUNT = String.raw`@?\s*(?:AU|A)?\$\s?\d[\d,]*(?:\.\d{1,2})?${GST}?${RATE}?${GST}?`;
+const NUM = String.raw`\d[\d,]*(?:\.\d{1,2})?`;
+const MONEY = String.raw`(?:@?\s*(?:AUD\s?\$?|AU\$|A\$|\$)\s?${NUM}|${NUM}\s?(?:\$|AUD\b|dollars?\b))`;
+const AMOUNT = String.raw`${MONEY}${GST}?${RATE}?${GST}?`;
 // Wording that only exists to introduce the price goes with it.
 const LEAD_IN = String.raw`(?:\b(?:at\s+(?:an?\s+)?(?:additional|extra)(?:\s+cost)?(?:\s+of)?|at\s+a\s+cost\s+of|costing|for)\s*)?`;
 // After a comparison the sentence still needs an object: "exceeds $400" ->
 // "exceeds the agreed limit".
 const COMPARED = new RegExp(String.raw`\b(exceeds?|over|above|under|below|up\s+to|more\s+than|less\s+than)\s+${AMOUNT}`, 'gi');
 const PRICE = new RegExp(String.raw`\s*${LEAD_IN}${AMOUNT}`, 'gi');
-const HAS_PRICE = /\$\s?\d/;
+const HAS_PRICE = /\$\s?\d|\d\s?\$|\bAUD\b|\d\s+dollars?\b/i;
 
 export function stripPrices(text: string): string;
 export function stripPrices(text: string | null | undefined): string | null | undefined;
@@ -90,6 +93,7 @@ export function stripPrices(text: string | null | undefined): string | null | un
     .replace(/[ \t]+([.,;:)])/g, '$1')
     .replace(/([.,;:])(?=[.,;:])/g, '')                // ",." -> "."
     .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]*[,;:][ \t]*$/gm, '')               // "Replaced seal," -> "Replaced seal"
     .replace(/[ \t]+$/gm, '')
     .trim();
 }
