@@ -75,7 +75,7 @@ export function renderYearlyConditionReport(
   </div>
 
   <div class="section-bar">Report Details</div>
-  <div class="card" style="display:flex">
+  <div class="card info-row" style="display:flex">
     ${infoCell('Report No.', reportId)}
     ${infoCell('Period', fmtDate(dateOfService))}
     ${infoCell('Site', property?.name)}
@@ -93,6 +93,9 @@ export function renderYearlyConditionReport(
     <tbody>${defectRows || `<tr><td colspan="4">No defects or non-conformances recorded</td></tr>`}</tbody>
   </table>
 
+  <!-- Kept together: two short closing blocks, never split from their
+       headings or from each other. -->
+  <div class="keep">
   <div class="section-bar" style="margin-top:16px">Compliance Statement</div>
   <div class="card" style="padding:10px 12px;font-size:9.5px;color:${COLORS.SLATE}">
     The essential safety measures listed above have been serviced for the period stated in
@@ -101,11 +104,12 @@ export function renderYearlyConditionReport(
   </div>
 
   <div class="section-bar" style="margin-top:16px">Service Provider Details</div>
-  <div class="card" style="display:flex">
+  <div class="card info-row" style="display:flex">
     ${infoCell('Company', company.name)}
     ${infoCell('Address', company.address)}
     ${infoCell('Phone', company.phone)}
     ${infoCell('Technician' + (assignedUsers.length !== 1 ? 's' : ''), assignedUsers.map((u) => u.full_name).join(', ') || null)}
+  </div>
   </div>
 </div>`;
 }

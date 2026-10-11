@@ -458,10 +458,9 @@ const server = app.listen(config.port, () => {
   // Start-up warm-up — see warmUpPdfjs. Cheap, and runs while Cloud Run's
   // start-up CPU boost is still in effect.
   warmUpPdfjs();
-  // Usually a request is what started this instance, so the CPU is
-  // allocated while the spare launches — and a report arriving now takes
-  // the already-launching browser instead of starting from nothing.
-  void prepareSpareBrowser();
+  // No spare browser launched here: outside a request Cloud Run throttles
+  // the CPU and the launch timed out (30s). /prepare and the end of each
+  // report launch it inside a held-open request instead.
 });
 
 /**

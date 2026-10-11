@@ -82,9 +82,12 @@ export function renderAssetLogChunk(
     // Softened from a 3px slate rule (read as heavy black bars between
     // every asset) to 2px light slate plus more breathing room — still an
     // unmistakable boundary between near-identical consecutive assets.
+    // FIX: only padding-top was set for later rows, so they kept the
+    // cell's default side padding — every asset after the first in a
+    // category sat indented, with narrower defect cards, than the first.
     const wrapperStyle = isFirstRowOfTable
       ? 'padding:0;border-top:none'
-      : `padding-top:16px;border-top:2px solid ${COLORS.MUTED_LIGHT}`;
+      : `padding:16px 0 0;border-top:2px solid ${COLORS.MUTED_LIGHT}`;
     isFirstRowOfTable = false;
 
     // assets.description ("Asset Notes") is intentionally not printed
@@ -113,7 +116,7 @@ export function renderAssetLogChunk(
   }
   if (lastCategory !== null) parts.push(`</tbody></table>`);
 
-  return `<div class="page">${parts.join('')}</div>`;
+  return `<div class="log">${parts.join('')}</div>`;
 }
 
 /**

@@ -112,7 +112,11 @@ export const BASE_STYLE = `
      runs onto a second page is still labelled there, and its heading can't
      be stranded at the bottom of a page away from its first asset. */
   thead { display: table-header-group; }
-  .cat-table { margin-top: 16px; border-radius: 6px; }
+  /* The asset log flows category after category, so it has side padding
+     only — FIX: each chunk carried a full .page's 28px top AND bottom, which
+     stacked into ~85px of blank space between consecutive categories. */
+  .log { padding: 0 32px; }
+  .cat-table { margin-top: 24px; border-radius: 6px; }
   .cat-head th {
     position: relative;
     background: ${COLORS.NAVY}; color: #fff; font-weight: 800; font-size: 11px;
@@ -120,4 +124,11 @@ export const BASE_STYLE = `
   }
   /* Short blocks (e.g. the sign-off) that must stay on one page. */
   .keep { break-inside: avoid; page-break-inside: avoid; }
+  /* A row of label/value cells (Job Details, Report Details, Service
+     Provider Details). FIX: as a flex row it could split across pages with
+     every label on one page and every value on the next. Each cell draws
+     its own right-hand divider; the last one sits against the card's own
+     border, which doubled it. */
+  .info-row { break-inside: avoid; page-break-inside: avoid; }
+  .info-row > div:last-child { border-right: none !important; }
 `;

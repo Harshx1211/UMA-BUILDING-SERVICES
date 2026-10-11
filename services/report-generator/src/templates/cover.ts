@@ -158,7 +158,7 @@ export function renderCover(
     </div>
 
     <div class="section-bar">Job Details</div>
-    <div class="card" style="display:flex">
+    <div class="card info-row" style="display:flex">
       <div style="flex:1.6;padding:12px 14px;border-right:1px solid ${COLORS.BORDER}">
         <div style="font-size:8.5px;font-weight:700;color:${COLORS.MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Property</div>
         <div style="font-size:11px;font-weight:600">${esc(property?.name) || '—'}</div>
@@ -177,7 +177,7 @@ export function renderCover(
         ${esc(status.text)}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        ${statTile(assets.length, 'Assets inspected', COLORS.NAVY, COLORS.BORDER_LIGHT)}
+        ${statTile(assets.length, 'Total assets', COLORS.NAVY, COLORS.BORDER_LIGHT)}
         ${statTile(resultCounts.pass, 'Passed', COLORS.GREEN_TEXT, '#F0FDF4')}
         ${statTile(resultCounts.fail, 'Failed', COLORS.RED_TEXT, COLORS.SEVERITY.critical.bg)}
         ${statTile(resultCounts.notTested, 'Not tested', COLORS.SLATE, COLORS.SURFACE)}

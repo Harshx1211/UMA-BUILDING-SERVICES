@@ -68,8 +68,8 @@ export async function launchBrowser(): Promise<Browser> {
 // ── Spare browser ───────────────────────────────────────────────────────
 // PERF: launching Chromium was the slowest single step of a report on Cloud
 // Run (~3.5s of an ~8s report, measured), so one is launched AHEAD of the
-// next report — at start-up, while /prepare warms a job's photos, and after
-// each report finishes — and the next report takes it ready-made. Each
+// next report — while /prepare warms a job's photos, and after each report
+// finishes — and the next report takes it ready-made. Each
 // browser still renders exactly ONE report and is then closed, so the
 // "clean process, all memory handed back" guarantee above still holds; the
 // only cost is one idle Chromium (no pages, well under 100MB) on the instance.
