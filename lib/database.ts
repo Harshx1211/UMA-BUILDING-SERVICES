@@ -2547,6 +2547,38 @@ export function recordDeletedPhoto(photoId: string): void {
  * Used by the sync pull to skip tombstoned rows, preventing
  * deleted photos from reappearing after reinstall.
  */
+/**
+ * Ids in `tableName` that this device has deleted locally but whose Delete
+ * hasn't reached the server yet (still queued — synced = 0). A pull or a
+ * Realtime event must not bring those rows back in the meantime.
+ *
+ * FIX (signature resurrected, then lost on the server): "Continue Working"
+ * deletes the job's signature locally and queues the server delete. Opening
+ * the job straight after re-pulled its signatures — the server still had
+ * the old row — so the deleted signature reappeared on the device, the
+ * Report screen counted it as signed and completed the job, and then the
+ * queued delete landed: no signature on the server, and every completion
+ * attempt refused ("Cannot complete job: no signature has been captured
+ * yet") while the report screen waited forever.
+ *
+ * Deletes that failed permanently (synced = -1, e.g. the server refusing to
+ * delete a completed job's signature) don't count: the server kept that
+ * row, so it should come back.
+ */
+export function getPendingDeleteIds(tableName: string): Set<string> {
+  try {
+    const db = openDatabase();
+    const rows = db.getAllSync<{ record_id: string }>(
+      `SELECT record_id FROM sync_queue WHERE table_name = ? AND operation = ? AND synced = 0`,
+      [tableName, SyncOperation.Delete],
+    );
+    return new Set(rows.map(r => r.record_id));
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] getPendingDeleteIds(${tableName}) error:`, err);
+    return new Set();
+  }
+}
+
 export function getDeletedPhotoIds(): Set<string> {
   try {
     const db = openDatabase();

@@ -24,7 +24,8 @@ import {
   updateSyncQueuePayload,
   applyRemoteDeletion,
   hasTerminalInsertFailure,
-  // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI
+  // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI,
+  getPendingDeleteIds,
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
@@ -949,6 +950,9 @@ export function subscribeToJobLive(jobId: string, onChange: (table: JobLiveChang
   // this table, so there's nothing local this could clobber — plain upsert,
   // same as job_technicians/time_logs above.
   const applySignature = (row: Record<string, unknown>) => {
+    // Never resurrect a signature this device has deleted and not yet
+    // pushed (see getPendingDeleteIds).
+    if (getPendingDeleteIds('signatures').has(row.id as string)) return;
     upsertRecord('signatures', row as Record<string, string | number | boolean | null>);
     _liveOnChange?.('signatures');
   };
@@ -1964,6 +1968,9 @@ async function _pullRelated(
     } else if (table === 'property_notebook_items') {
       tombstoneIds = getDeletedNotebookItemIds();
     }
+    // Any table: rows this device deleted but hasn't pushed the delete for
+    // yet stay deleted until it lands (see getPendingDeleteIds).
+    for (const id of getPendingDeleteIds(table)) tombstoneIds.add(id);
 
     // Collect rows to upsert after applying all local-override logic.
     // We build the list first, then call upsertRecordBulk() which wraps the
@@ -2547,6 +2554,20 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           // device happened to sync last." Matters most for jobs/defects since
           // multiple crew members (job_technicians) can share one job offline.
           error = (await _guardedUpdate(item.table_name, item.record_id, payload, 'updated_at')).error;
+        } else if (item.table_name === 'signatures' && payload.job_id) {
+          // A re-sign is queued as an Update when the device already holds
+          // a signature row — but that row may no longer exist on the server
+          // (deleted by a re-open that landed in between). A plain UPDATE
+          // then matches nothing and "succeeds", the signature never
+          // arrives, and the job can't be completed. The payload is always
+          // the full signature, so re-create the row instead.
+          const result = await supabase.from('signatures').update(payload).eq('id', item.record_id).select('id');
+          if (!result.error && (result.data?.length ?? 0) === 0) {
+            console.warn(`[SiteTrack Sync] signature ${item.record_id} no longer on the server — re-creating it from this device's copy`);
+            error = (await supabase.from('signatures').insert({ ...payload, id: item.record_id })).error;
+          } else {
+            error = result.error;
+          }
         } else {
           const result = await supabase
             .from(item.table_name)
