@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns';
 import express from 'express';
 import { config } from './config';
 import { db } from './supabaseClient';
@@ -26,6 +27,36 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '10kb' }));
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
+/**
+ * Slow-request diagnostics. The first status checks of a generation have
+ * repeatedly taken 3-14s (once ~60s), then everything runs in well under a
+ * second — so something on the first Supabase calls after a quiet spell
+ * stalls. Any request over SLOW_REQUEST_MS logs where its time went (steps
+ * recorded in res.locals.timings), and if it's still running at that mark,
+ * how long a fresh DNS lookup of the Supabase host takes right then — to
+ * tell slow name resolution apart from a slow database/auth response.
+ */
+const SLOW_REQUEST_MS = 1_500;
+const SUPABASE_HOST = new URL(config.supabaseUrl).hostname;
+app.use((req, res, next) => {
+  const started = Date.now();
+  const timings: Record<string, number> = {};
+  res.locals.timings = timings;
+  const probe = setTimeout(() => {
+    const t0 = Date.now();
+    dnsLookup(SUPABASE_HOST, () => { timings.dnsNow = Date.now() - t0; });
+  }, SLOW_REQUEST_MS);
+  res.on('finish', () => {
+    clearTimeout(probe);
+    const took = Date.now() - started;
+    if (took < SLOW_REQUEST_MS || req.path.startsWith('/internal/')) return;
+    const steps = Object.entries(timings).map(([k, v]) => `${k}=${v}ms`).join(' ');
+    const dns = took >= SLOW_REQUEST_MS && timings.dnsNow === undefined ? ' dnsNow=still-pending' : '';
+    console.warn(`[slow-request] ${req.method} ${req.path} status=${res.statusCode} took=${took}ms ${steps}${dns}`);
+  });
   next();
 });
 
@@ -132,9 +163,13 @@ const route = (fn: AsyncHandler): express.RequestHandler => (req, res, next) => 
 /** Shared by both endpoints: verify the token, then that the caller's company owns the job. */
 /** Returns the caller's user id when allowed; null when it has already sent the error response. */
 async function authorize(req: express.Request, res: express.Response, jobId: string): Promise<string | null> {
+  const timings = res.locals.timings as Record<string, number> | undefined;
+  let mark = Date.now();
   let userId: string;
   try {
     userId = await verifyAccessToken(db, req.headers.authorization);
+    if (timings) timings.token = Date.now() - mark;
+    mark = Date.now();
   } catch (err) {
     const status = err instanceof AuthError ? err.status : 401;
     res.status(status).json({ error: err instanceof Error ? err.message : 'Unauthorized' });
@@ -147,6 +182,7 @@ async function authorize(req: express.Request, res: express.Response, jobId: str
       db.from('jobs').select('company_id').eq('id', jobId).single(),
       fetchCaller(db, userId),
     ]);
+    if (timings) timings.lookups = Date.now() - mark;
     if (jobErr || !job) {
       res.status(404).json({ error: 'Job not found' });
       return null;
@@ -428,7 +464,9 @@ app.get('/report-status', route(async (req, res) => {
 
   if (!(await authorize(req, res, jobId))) return; // authorize() already sent the response
 
+  const statusStarted = Date.now();
   const status = await getGenerationStatus(db, jobId);
+  (res.locals.timings as Record<string, number>).status = Date.now() - statusStarted;
 
   // updatedAt on completed/failed lets the app tell the PREVIOUS run's result
   // (still sitting in this row the moment a technician taps Generate again,

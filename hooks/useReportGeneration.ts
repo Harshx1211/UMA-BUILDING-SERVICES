@@ -125,9 +125,16 @@ export function useReportGeneration(
 
       if (result.status === 'generating') {
         setStatus('generating');
-        startedAtMs.current = result.startedAt
-          ? new Date(result.startedAt).getTime()
-          : (startedAtMs.current ?? Date.now());
+        // Count from whichever came first: the tap on this device, or a
+        // generation that was already running (started from another screen
+        // or device). FIX: this always jumped to the server's start time —
+        // after the ~20-30s spent uploading this device's changes first, the
+        // timer fell back from ~28s to ~2s mid-wait, which looked like the
+        // generation had restarted.
+        const serverStart = result.startedAt ? new Date(result.startedAt).getTime() : null;
+        startedAtMs.current = serverStart != null && startedAtMs.current != null
+          ? Math.min(startedAtMs.current, serverStart)
+          : (serverStart ?? startedAtMs.current ?? Date.now());
         return;
       }
 
