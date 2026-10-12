@@ -198,4 +198,12 @@ SELECT '20260922010000_fix_job_technicians_cross_tenant_leak',
                            AND qual ILIKE '%company_id%')
             THEN 'OK' ELSE 'MISSING' END
 
+UNION ALL
+SELECT '20261012000000_protect_completed_job_signature',
+       'a completed job''s signature cannot be deleted (trigger on signatures)',
+       CASE WHEN EXISTS (SELECT 1 FROM pg_trigger
+                         WHERE tgname='trg_protect_completed_job_signature'
+                           AND tgrelid='public.signatures'::regclass AND NOT tgisinternal)
+            THEN 'OK' ELSE 'MISSING' END
+
 ORDER BY migration;

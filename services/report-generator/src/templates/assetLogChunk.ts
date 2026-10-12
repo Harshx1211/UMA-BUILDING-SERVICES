@@ -62,7 +62,7 @@ export function renderAssetLogChunk(
     // technician_notes) still print.
     const body = [
       details ? `<div class="asset-detail">${details}</div>` : '',
-      photoRow(photos, signedPhotoUrls, 4, fullResPhotoUrls),
+      photoRow(photos, signedPhotoUrls, fullResPhotoUrls),
       asset.technician_notes ? renderRemarks(asset.technician_notes) : '',
       assetDefects
         .map((defect) => renderDefectCard(defect, photosByDefect, signedPhotoUrls, row.officialSection, fullResPhotoUrls, false))

@@ -192,7 +192,6 @@ export const BASE_STYLE = `
      side; every thumbnail still opens the full-resolution original. */
   .photos.sm { margin-top: 3px; }
   .photos.sm .thumb, .photos.sm .thumb-missing { width: 80px; height: 80px; }
-  .more { font-size: 11px; font-weight: 700; color: ${C.MUTED}; padding: 0 4px; }
   .staged { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
 
   /* ── Defect card ─────────────────────────────────────────────────────── */

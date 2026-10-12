@@ -151,26 +151,27 @@ export function photoTag(photo: InspectionPhoto, signedUrls: Map<string, string>
   return linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener noreferrer">${img}</a>` : img;
 }
 
-/** A row of thumbnails, at most `max` of them plus a "+N more" count.
+/** Every photo, as thumbnails that wrap onto as many rows as needed (six
+ * 110px thumbnails fit across an asset card). FIX: only the first 4 (6 for
+ * before/after) used to print, with a bare "+N more" — evidence photos
+ * silently missing from the report, with nothing to tap to see them.
  * `small` prints them at 80px (defect evidence) instead of 110px. */
 export function photoRow(
   photos: InspectionPhoto[],
   signedUrls: Map<string, string>,
-  max = 4,
   fullResUrls?: Map<string, string>,
   small = false,
 ): string {
   if (photos.length === 0) return '';
-  const tags = photos.slice(0, max).map((p) => photoTag(p, signedUrls, fullResUrls)).join('');
-  const more = photos.length > max ? `<span class="more">+${photos.length - max} more</span>` : '';
-  return `<div class="photos${small ? ' sm' : ''}">${tags}${more}</div>`;
+  const tags = photos.map((p) => photoTag(p, signedUrls, fullResUrls)).join('');
+  return `<div class="photos${small ? ' sm' : ''}">${tags}</div>`;
 }
 
 /** One labelled Before/After column — "this is what it looked like before /
  * after", not an undifferentiated photo dump. Used only by
  * stagedPhotoSection below. */
 function labeledPhotoRow(label: string, photos: InspectionPhoto[], signedUrls: Map<string, string>, fullResUrls?: Map<string, string>): string {
-  return `<div><span class="label">${label} Photos</span>${photoRow(photos, signedUrls, 6, fullResUrls, true)}</div>`;
+  return `<div><span class="label">${label} Photos</span>${photoRow(photos, signedUrls, fullResUrls, true)}</div>`;
 }
 
 /**
@@ -200,5 +201,5 @@ export function stagedPhotoSection(photos: InspectionPhoto[], signedUrls: Map<st
     after.length ? labeledPhotoRow('After', after, signedUrls, fullResUrls) : '',
   ].join('');
   return (columns ? `<div class="staged">${columns}</div>` : '')
-    + (untagged.length ? photoRow(untagged, signedUrls, 6, fullResUrls, true) : '');
+    + (untagged.length ? photoRow(untagged, signedUrls, fullResUrls, true) : '');
 }
