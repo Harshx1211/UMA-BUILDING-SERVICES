@@ -41,4 +41,7 @@ export const config = {
   // Optional override of this service's own public URL; normally derived
   // from the incoming request's Host header.
   selfUrl: process.env.SELF_URL ?? '',
+  // Signs the short photo links in reports (photos/photoLinks.ts). Unset =
+  // reports fall back to signed storage URLs, as before.
+  photoLinkSecret: process.env.PHOTO_LINK_SECRET ?? '',
 } as const;

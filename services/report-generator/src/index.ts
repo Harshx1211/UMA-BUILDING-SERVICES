@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { config } from './config';
 import { db } from './supabaseClient';
@@ -8,6 +8,8 @@ import { generateReport, renderReportPdf } from './generation/pipeline';
 import { warmUpPdfjs } from './pdf/pageMarkers';
 import { closeSpareBrowser, prepareSpareBrowser } from './render/chromium';
 import { warmJobThumbnails } from './photos/prepareInlinePhotos';
+import { verifyPhotoLinkToken } from './photos/photoLinks';
+import { loadPhotoView, photoPageCsp, renderPhotoMessagePage, renderPhotoPage } from './photos/photoPage';
 import { signExistingReport } from './storage';
 import { buildSyntheticReport } from './diagnostics/synthetic';
 
@@ -69,6 +71,35 @@ function allowPrepare(userId: string): boolean {
 }
 // Jobs whose thumbnails are being prepared right now — one at a time each.
 const preparing = new Set<string>();
+
+// The public photo page (GET /p/:token) is opened by whoever holds a
+// report, not a signed-in user — so it's budgeted per client address
+// instead: plenty for flicking through a report's photos, not for scraping.
+const PHOTO_PAGE_LIMIT = 120;
+const PHOTO_PAGE_WINDOW_MS = 60_000;
+const photoPageLog = new Map<string, number[]>();
+function allowPhotoPage(key: string): boolean {
+  const now = Date.now();
+  if (photoPageLog.size > 5_000) {
+    for (const [k, hits] of photoPageLog) {
+      if (hits.every((t) => now - t >= PHOTO_PAGE_WINDOW_MS)) photoPageLog.delete(k);
+    }
+  }
+  const recent = (photoPageLog.get(key) ?? []).filter((t) => now - t < PHOTO_PAGE_WINDOW_MS);
+  if (recent.length >= PHOTO_PAGE_LIMIT) {
+    photoPageLog.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  photoPageLog.set(key, recent);
+  return true;
+}
+// Cloud Run's front end appends the real client address as the LAST
+// X-Forwarded-For entry; anything before it was supplied by the client.
+function clientAddress(req: express.Request): string {
+  const parts = (req.get('x-forwarded-for') ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  return parts.at(-1) ?? req.socket.remoteAddress ?? 'unknown';
+}
 
 // Jobs whose generation is running in THIS process right now. Generation is
 // fire-and-forget after the 202 (see POST /generate-report), so without this
@@ -190,6 +221,36 @@ app.post('/generate-report', route(async (req, res) => {
   // report_generation_status for the client to discover via polling, never
   // left to become an unhandled rejection.
   void runGeneration(jobId);
+}));
+
+/**
+ * The page a report's photo thumbnail opens — the full-resolution photo
+ * with a Close button (see photos/photoLinks.ts and photos/photoPage.ts).
+ * No sign-in: the signed token in the link IS the permission, exactly as
+ * the signed storage URL it replaces was. Checked on every open, so a
+ * deleted photo or a deactivated company's photos stop opening.
+ */
+app.get('/p/:token', route(async (req, res) => {
+  const nonce = randomBytes(16).toString('base64');
+  res.set({
+    'Content-Security-Policy': photoPageCsp(nonce),
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+    'X-Robots-Tag': 'noindex, nofollow',
+  });
+  res.type('html');
+  if (!allowPhotoPage(clientAddress(req))) {
+    return res.status(429).send(renderPhotoMessagePage('Too many photos opened at once. Please wait a minute and try again.', nonce));
+  }
+  const photoId = verifyPhotoLinkToken(String(req.params.token ?? ''));
+  const view = photoId ? await loadPhotoView(db, photoId) : ({ kind: 'gone' } as const);
+  if (view.kind === 'gone') {
+    return res.status(404).send(renderPhotoMessagePage('This photo is no longer available.', nonce));
+  }
+  if (view.kind === 'error') {
+    return res.status(503).send(renderPhotoMessagePage("The photo couldn't be loaded just now. Please try again in a moment.", nonce));
+  }
+  return res.send(renderPhotoPage(view, nonce));
 }));
 
 /**

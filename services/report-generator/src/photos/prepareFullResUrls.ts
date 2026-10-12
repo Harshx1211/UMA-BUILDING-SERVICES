@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { InspectionPhoto } from '../types';
 import { extractObjectPath } from './prepareInlinePhotos';
+import { canLinkPhoto, photoLinkUrl, photoLinksEnabled } from './photoLinks';
 
 // A completed job's report is a compliance record technicians and clients
 // keep on file indefinitely, not something re-opened within the hour — a
@@ -30,9 +31,20 @@ export async function prepareFullResUrls(
   bucket: string,
 ): Promise<Map<string, string>> {
   const urls = new Map<string, string>();
-  const withPaths = photos
+  let withPaths = photos
     .map((p) => ({ id: p.id, path: extractObjectPath(p.photo_url, bucket) }))
     .filter((p): p is { id: string; path: string } => p.path != null);
+
+  // Short links to this service's photo page (see photoLinks.ts) — no
+  // storage request needed. Only photos that can't take one (non-uuid id,
+  // or the feature not configured) fall through to signed storage URLs.
+  if (photoLinksEnabled()) {
+    withPaths = withPaths.filter((p) => {
+      if (!canLinkPhoto(p.id)) return true;
+      urls.set(p.id, photoLinkUrl(p.id));
+      return false;
+    });
+  }
 
   if (withPaths.length === 0) return urls;
 
