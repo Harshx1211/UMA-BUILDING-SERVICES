@@ -64,6 +64,46 @@ export function formatAssetSubtitle(assetType: string, variant?: string | null):
   return variant || null;
 }
 
+// ─── Area pairs (Common Area / Unit) ──────────────────────────────────────────
+
+/**
+ * Asset types that are the same kind of asset, serviced under a different
+ * AS 1851 routine depending on where they are. Kept as separate catalogue
+ * types (the report groups by routine), but the add/edit pickers show one
+ * tile and an area switch (components/inspections/AreaSwitch.tsx).
+ * Only fire doors today; add a pair here if another type gets split.
+ */
+const AREA_PAIRS: ReadonlyArray<{ common: string; unit: string; name: string }> = [
+  { common: 'Fire Door (CA)', unit: 'Fire Door (SOU)', name: 'Fire Door' },
+];
+
+export function areaPairOf(typeValue: string | null | undefined) {
+  if (!typeValue) return null;
+  return AREA_PAIRS.find((p) => p.common === typeValue || p.unit === typeValue) ?? null;
+}
+
+export function areaOf(typeValue: string): 'common' | 'unit' | null {
+  const pair = areaPairOf(typeValue);
+  return !pair ? null : pair.common === typeValue ? 'common' : 'unit';
+}
+
+/** The type the picker tile stands for: a pair's common-area type. */
+export function pickerValueOf(typeValue: string): string {
+  return areaPairOf(typeValue)?.common ?? typeValue;
+}
+
+/** Catalogue types for a picker: one tile per pair (the unit half hidden
+ * whenever its common-area half is there to stand for both). */
+export function pickerTypes<Ty extends { value: string }>(types: ReadonlyArray<Ty>): Ty[] {
+  const values = new Set(types.map((t) => t.value));
+  return types.filter((t) => !AREA_PAIRS.some((p) => p.unit === t.value && values.has(p.common)));
+}
+
+/** A picker tile's label: a pair's plain name ("Fire Door"), else the type's own label. */
+export function pickerLabelOf(type: { value: string; label: string }): string {
+  return areaPairOf(type.value)?.name ?? type.label;
+}
+
 // ─── formatRelativeDays ───────────────────────────────────────────────────────
 
 /**

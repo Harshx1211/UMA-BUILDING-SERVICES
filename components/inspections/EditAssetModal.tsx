@@ -14,6 +14,8 @@ import { updateRecord, addToSyncQueue, queryRecords, deleteRecord, upsertRecord,
 import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
+import { AreaSwitch } from '@/components/inspections/AreaSwitch';
+import { formatAssetName, formatAssetSubtitle, pickerLabelOf, pickerTypes, pickerValueOf } from '@/utils/assetHelpers';
 import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
 
@@ -153,6 +155,8 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   // the picker right away, one with variants stays open for that pick.
   const handleTypeSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Re-tapping the tile of the current area pair keeps its area choice.
+    if (pickerValueOf(selectedType) === value) value = selectedType;
     setSelectedType(value);
     setSelectedVariant('');
     setVariantSearch('');
@@ -278,9 +282,9 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                       <MaterialCommunityIcons name={(typeDef?.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']) ?? 'help-circle-outline'} size={20} color="#fff" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.typeSummaryLabel, { color: C.text }]} numberOfLines={1}>{typeDef?.label ?? selectedType}</Text>
-                      {selectedVariant ? (
-                        <Text style={[s.typeSummarySub, { color: C.textTertiary }]} numberOfLines={1}>{selectedVariant}</Text>
+                      <Text style={[s.typeSummaryLabel, { color: C.text }]} numberOfLines={1}>{formatAssetName(selectedType, selectedVariant)}</Text>
+                      {formatAssetSubtitle(selectedType, selectedVariant) ? (
+                        <Text style={[s.typeSummarySub, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetSubtitle(selectedType, selectedVariant)}</Text>
                       ) : null}
                     </View>
                     <MaterialCommunityIcons name="pencil-outline" size={16} color={C.textTertiary} />
@@ -291,8 +295,8 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                       Fixing a mistake? Pick the correct type — past inspection history keeps the wording it was recorded with.
                     </Text>
                     <View style={s.typeChipWrap}>
-                      {assetTypes.map(t => {
-                        const selected = selectedType === t.value;
+                      {pickerTypes(assetTypes).map(t => {
+                        const selected = pickerValueOf(selectedType) === t.value;
                         return (
                           <TouchableOpacity
                             key={t.value}
@@ -300,10 +304,14 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                             style={[s.typeChip, { borderColor: selected ? t.color : C.border, backgroundColor: selected ? t.color + '18' : C.backgroundTertiary }]}
                           >
                             <MaterialCommunityIcons name={t.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']} size={14} color={selected ? t.color : C.textSecondary} style={{ marginRight: 5 }} />
-                            <Text style={[s.typeChipTxt, { color: selected ? t.color : C.textSecondary }]} numberOfLines={1}>{t.label}</Text>
+                            <Text style={[s.typeChipTxt, { color: selected ? t.color : C.textSecondary }]} numberOfLines={1}>{pickerLabelOf(t)}</Text>
                           </TouchableOpacity>
                         );
                       })}
+                    </View>
+
+                    <View style={{ marginTop: 12 }}>
+                      <AreaSwitch value={selectedType} availableTypes={assetTypes} onChange={setSelectedType} />
                     </View>
 
                     {variants.length > 0 && (

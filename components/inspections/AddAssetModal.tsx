@@ -16,6 +16,8 @@ import { upsertRecord, addToSyncQueue, queryRecords } from '@/lib/database';
 import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
+import { AreaSwitch } from '@/components/inspections/AreaSwitch';
+import { formatAssetName, formatAssetSubtitle, pickerLabelOf, pickerTypes, pickerValueOf } from '@/utils/assetHelpers';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
@@ -139,7 +141,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   // A type with no variants advances to Details immediately.
   const handleTypeSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (selectedType === value) {
+    // A tile can stand for an area pair (Fire Door = Common Area + Unit), so
+    // compare by tile, not by the exact type currently selected.
+    if (pickerValueOf(selectedType) === value) {
       // Tapping the already-expanded type again collapses it.
       setSelectedType('');
       setSelectedVariant('');
@@ -248,7 +252,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const stepTitle = step === 'type' ? 'Select Asset Type' : 'Asset Details';
 
   const stepSub = step === 'type' ? 'What kind of asset is this?'
-    : selectedVariant ? `${selectedType} — ${selectedVariant}` : selectedType;
+    : [formatAssetName(selectedType, selectedVariant), formatAssetSubtitle(selectedType, selectedVariant)].filter(Boolean).join(' — ');
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -307,8 +311,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             )}
             <View style={s.typeGrid}>
-              {assetTypes.map(t => {
-                const isExpanded = selectedType === t.value && t.variants.length > 0;
+              {pickerTypes(assetTypes).map(t => {
+                const isExpanded = pickerValueOf(selectedType) === t.value && t.variants.length > 0;
                 return (
                   <Card
                     key={t.value}
@@ -325,7 +329,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                       }]}>
                         <MaterialCommunityIcons name={t.icon} size={24} color={isExpanded ? T.textOnPrimary : t.color} />
                       </View>
-                      <Text style={[s.typeLabel, { color: isExpanded ? t.color : C.text }]}>{t.label}</Text>
+                      <Text style={[s.typeLabel, { color: isExpanded ? t.color : C.text }]}>{pickerLabelOf(t)}</Text>
                       <MaterialCommunityIcons
                         name={isExpanded ? 'chevron-up' : 'chevron-down'}
                         size={18}
@@ -396,6 +400,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
+            {/* Common Area / Unit — only for area-split types (fire doors) */}
+            <AreaSwitch value={selectedType} availableTypes={assetTypes} onChange={setSelectedType} />
+
             {/* Inspection Routine (read-only) */}
             {routine ? (
               <View style={s.routineRow}>
