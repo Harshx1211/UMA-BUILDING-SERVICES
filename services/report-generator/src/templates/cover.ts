@@ -106,7 +106,7 @@ export function renderCover(
   const severityCounts = { critical: 0, non_critical: 0, non_conformance: 0 };
   for (const d of defects) severityCounts[d.severity]++;
 
-  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue);
+  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue, (a) => a.area);
 
   // Scope of works: one row per category + asset type, with its quantity.
   const servicingRows = categoryGroups

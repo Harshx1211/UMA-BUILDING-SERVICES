@@ -44,64 +44,56 @@ export function formatAssetType(assetType: string): string {
  * it's an exit door it should say exit door"). Other assets keep their type
  * as the name (an extinguisher's variant is a size, not a name).
  */
-const DOOR_AREAS: Record<string, string> = {
-  'Fire Door (CA)': 'Common Area',
-  'Fire Door (SOU)': 'Sole Occupancy Unit',
-};
+const DOOR_TYPES = new Set(['Fire Door (CA)', 'Fire Door (SOU)']);
 
 export function isDoorType(assetType: string | null | undefined): boolean {
-  return !!assetType && assetType in DOOR_AREAS;
+  return !!assetType && DOOR_TYPES.has(assetType);
 }
 
 /** The asset's name: a door's kind (its variant), otherwise its type. */
 export function formatAssetName(assetType: string, variant?: string | null): string {
-  return isDoorType(assetType) && variant ? variant : formatAssetType(assetType);
+  if (isDoorType(assetType)) return variant || 'Fire Door';
+  return formatAssetType(assetType);
 }
 
-/** The line under the name: a door's type and area, otherwise the variant. */
-export function formatAssetSubtitle(assetType: string, variant?: string | null): string | null {
-  if (isDoorType(assetType)) return variant ? formatAssetType(assetType) : null;
-  return variant || null;
+/** The line under the name: a door's type and area ("Fire Door · Unit
+ * (SOU)"); otherwise the variant, plus "Unit (SOU)" for anything in a unit. */
+export function formatAssetSubtitle(assetType: string, variant?: string | null, area?: string | null): string | null {
+  const inUnit = areaOf({ area, asset_type: assetType }) === 'unit';
+  if (isDoorType(assetType)) {
+    return [variant ? 'Fire Door' : null, AREA_LABEL[inUnit ? 'unit' : 'common']].filter(Boolean).join(' · ');
+  }
+  return [variant || null, inUnit ? AREA_LABEL.unit : null].filter(Boolean).join(' · ') || null;
 }
 
-// ─── Area pairs (Common Area / Unit) ──────────────────────────────────────────
+// ─── Area (Common Area / Unit) ────────────────────────────────────────────────
+
+export type AssetArea = 'common' | 'unit';
+
+export const AREA_LABEL: Record<AssetArea, string> = {
+  common: 'Common Area',
+  unit: 'Unit (SOU)',
+};
+
+/** An asset's area, defaulting to Common Area for anything unset. The
+ * retired "Fire Door (SOU)" type (migration 20261013020000 moved its doors
+ * onto Fire Door + unit) still reads as a unit if a stale row turns up. */
+export function areaOf(asset: { area?: string | null; asset_type?: string | null }): AssetArea {
+  if (asset.area === 'unit' || asset.asset_type === 'Fire Door (SOU)') return 'unit';
+  return 'common';
+}
 
 /**
- * Asset types that are the same kind of asset, serviced under a different
- * AS 1851 routine depending on where they are. Kept as separate catalogue
- * types (the report groups by routine), but the add/edit pickers show one
- * tile and an area switch (components/inspections/AreaSwitch.tsx).
- * Only fire doors today; add a pair here if another type gets split.
+ * The inspection routine an asset is serviced under: its type's unit
+ * routine when it's inside a unit and the type has one, otherwise the
+ * normal one. Same rule as the PDF report (categoryGrouping.ts there).
  */
-const AREA_PAIRS: ReadonlyArray<{ common: string; unit: string; name: string }> = [
-  { common: 'Fire Door (CA)', unit: 'Fire Door (SOU)', name: 'Fire Door' },
-];
-
-export function areaPairOf(typeValue: string | null | undefined) {
-  if (!typeValue) return null;
-  return AREA_PAIRS.find((p) => p.common === typeValue || p.unit === typeValue) ?? null;
-}
-
-export function areaOf(typeValue: string): 'common' | 'unit' | null {
-  const pair = areaPairOf(typeValue);
-  return !pair ? null : pair.common === typeValue ? 'common' : 'unit';
-}
-
-/** The type the picker tile stands for: a pair's common-area type. */
-export function pickerValueOf(typeValue: string): string {
-  return areaPairOf(typeValue)?.common ?? typeValue;
-}
-
-/** Catalogue types for a picker: one tile per pair (the unit half hidden
- * whenever its common-area half is there to stand for both). */
-export function pickerTypes<Ty extends { value: string }>(types: ReadonlyArray<Ty>): Ty[] {
-  const values = new Set(types.map((t) => t.value));
-  return types.filter((t) => !AREA_PAIRS.some((p) => p.unit === t.value && values.has(p.common)));
-}
-
-/** A picker tile's label: a pair's plain name ("Fire Door"), else the type's own label. */
-export function pickerLabelOf(type: { value: string; label: string }): string {
-  return areaPairOf(type.value)?.name ?? type.label;
+export function effectiveRoutine(
+  typeDef: { inspectionRoutine?: string | null; unitInspectionRoutine?: string | null } | null | undefined,
+  area: AssetArea,
+): string {
+  if (area === 'unit' && typeDef?.unitInspectionRoutine) return typeDef.unitInspectionRoutine;
+  return typeDef?.inspectionRoutine || 'Other';
 }
 
 // ─── formatRelativeDays ───────────────────────────────────────────────────────

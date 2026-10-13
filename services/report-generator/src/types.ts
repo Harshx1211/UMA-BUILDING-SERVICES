@@ -75,6 +75,10 @@ export interface Asset {
   property_id: string;
   asset_type: string;
   variant: string | null;
+  /** Common Area or inside a Unit (SOU) — picks the unit routine for types
+   * that have one (data/categoryGrouping.ts). Null on rows from before the
+   * column existed = Common Area. */
+  area?: 'common' | 'unit' | null;
   asset_ref: string | null;
   location_on_site: string | null;
   serial_number: string | null;
@@ -169,6 +173,8 @@ export interface AssetTypeDefinition {
   label: string;
   full_label: string;
   inspection_routine: string;
+  /** Routine used instead for assets inside a unit (SOU); null = none. */
+  unit_inspection_routine?: string | null;
 }
 
 /** Everything the templates need, fully assembled and ready to render. */

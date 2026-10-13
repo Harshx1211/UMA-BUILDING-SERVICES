@@ -1748,6 +1748,25 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '52')`);
   }
 
+  if (currentVersion < 53) {
+    // Common Area / Unit (SOU) on every asset, and the optional routine a
+    // type is serviced under inside a unit — mirrors server migration
+    // 20261013020000_asset_area.sql.
+    for (const sql of [
+      `ALTER TABLE assets ADD COLUMN area TEXT NOT NULL DEFAULT 'common';`,
+      `ALTER TABLE asset_type_definitions ADD COLUMN unit_inspection_routine TEXT;`,
+    ]) {
+      try {
+        db.runSync(sql);
+      } catch (err: unknown) {
+        if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 53: column already present or failed:', err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 53: added assets.area, asset_type_definitions.unit_inspection_routine');
+    currentVersion = 53;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '53')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }
@@ -2576,6 +2595,24 @@ export function getPendingDeleteIds(tableName: string): Set<string> {
   } catch (err) {
     console.error(`[UMA BUILDING SERVICES DB] getPendingDeleteIds(${tableName}) error:`, err);
     return new Set();
+  }
+}
+
+/**
+ * After a full catalogue pull (which only fetches ACTIVE rows): marks any
+ * local row the server didn't return as inactive. FIX: a type or code
+ * switched off in the admin portal used to stay active on every device
+ * that wasn't connected to Realtime at that moment — it kept appearing in
+ * the pickers forever (e.g. the retired "Fire Door (SOU)" type).
+ */
+export function deactivateCatalogueRowsExcept(tableName: 'asset_type_definitions' | 'defect_codes', activeIds: string[]): void {
+  try {
+    const db = openDatabase();
+    if (activeIds.length === 0) return; // never wipe a catalogue on an empty/failed pull
+    const placeholders = activeIds.map(() => '?').join(', ');
+    db.runSync(`UPDATE ${tableName} SET is_active = 0 WHERE is_active = 1 AND id NOT IN (${placeholders})`, activeIds);
+  } catch (err) {
+    console.error(`[UMA BUILDING SERVICES DB] deactivateCatalogueRowsExcept(${tableName}) error:`, err);
   }
 }
 

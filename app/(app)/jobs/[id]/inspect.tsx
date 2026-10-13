@@ -23,7 +23,7 @@ import { cardShadow } from '@/components/ui/Card';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
-import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle, effectiveRoutine, areaOf } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto, openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -138,7 +138,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetName(asset.asset_type, asset.variant)}</Text>
-              {formatAssetSubtitle(asset.asset_type, asset.variant) ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{formatAssetSubtitle(asset.asset_type, asset.variant)}</Text> : null}
+              {formatAssetSubtitle(asset.asset_type, asset.variant, asset.area) ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{formatAssetSubtitle(asset.asset_type, asset.variant, asset.area)}</Text> : null}
               <View style={s.assetLocationRow}>
                 <MaterialCommunityIcons name="map-marker-outline" size={12} color={C.primary} />
                 <Text style={[s.assetLocation, { color: C.text }]} numberOfLines={1}>
@@ -426,11 +426,13 @@ export default function AssetInspectionScreen() {
   // asset_type -> inspection_routine, e.g. "10 - Portable and Wheeled Fire
   // Extinguishers (Annual)" — the same category grouping the PDF report
   // uses, resolved client-side here for the Routines filter/group.
-  const routineByType = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const t of catalogueAssetTypes) m.set(t.value, t.inspectionRoutine || 'Other');
-    return m;
-  }, [catalogueAssetTypes]);
+  const typeByValue = useMemo(() => new Map(catalogueAssetTypes.map(t => [t.value, t])), [catalogueAssetTypes]);
+  // An asset's own routine: its type's unit routine when it's inside a unit
+  // (and the type has one), otherwise the normal one — same as the PDF.
+  const routineOf = useCallback(
+    (a: AssetWithResult) => effectiveRoutine(typeByValue.get(a.asset_type), areaOf(a)),
+    [typeByValue],
+  );
 
   // Tags don't change per inspection tap (only via Edit Asset), so only
   // re-derive when the asset SET changes — not on every store.assets update.
@@ -461,9 +463,9 @@ export default function AssetInspectionScreen() {
 
   const routineOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const a of store.assets) set.add(routineByType.get(a.asset_type) || 'Other');
+    for (const a of store.assets) set.add(routineOf(a));
     return [ALL, ...Array.from(set).sort()];
-  }, [store.assets, routineByType]);
+  }, [store.assets, routineOf]);
 
   const assetTypeOptions = useMemo(() => {
     const set = new Set<string>();
@@ -502,7 +504,7 @@ export default function AssetInspectionScreen() {
       case 'Remaining': list = list.filter(a => a.result === null); break;
     }
 
-    if (routineFilter.length > 0) list = list.filter(a => routineFilter.includes(routineByType.get(a.asset_type) || 'Other'));
+    if (routineFilter.length > 0) list = list.filter(a => routineFilter.includes(routineOf(a)));
     if (assetTypeFilter.length > 0) list = list.filter(a => assetTypeFilter.includes(formatAssetType(a.asset_type)));
     if (locationFilter.length > 0) list = list.filter(a => a.location_on_site != null && locationFilter.includes(a.location_on_site));
     if (tagFilter.length > 0) list = list.filter(a => (tagsByAssetId.get(a.id) ?? []).some(t => tagFilter.includes(t)));
@@ -526,7 +528,7 @@ export default function AssetInspectionScreen() {
     });
 
     return list;
-  }, [store.assets, filter, search, routineFilter, assetTypeFilter, locationFilter, tagFilter, routineByType, tagsByAssetId, sortBy, sortAsc]);
+  }, [store.assets, filter, search, routineFilter, assetTypeFilter, locationFilter, tagFilter, routineOf, tagsByAssetId, sortBy, sortAsc]);
 
   // Grouped-by-routine rows for the FlatList, when that's selected — a
   // synthetic header row interleaved with assets, not a SectionList, so the
@@ -534,7 +536,7 @@ export default function AssetInspectionScreen() {
   const listData = useMemo((): ListRow[] => {
     if (groupBy === 'asset') return filteredAssets.map(asset => ({ kind: 'asset', asset }));
     const keyFor = groupBy === 'routine'
-      ? (asset: AssetWithResult) => routineByType.get(asset.asset_type) || 'Other'
+      ? (asset: AssetWithResult) => routineOf(asset)
       : (asset: AssetWithResult) => asset.location_on_site || 'Unassigned';
     const buckets = new Map<string, AssetWithResult[]>();
     for (const asset of filteredAssets) {
@@ -554,7 +556,7 @@ export default function AssetInspectionScreen() {
       for (const asset of items) rows.push({ kind: 'asset', asset });
     }
     return rows;
-  }, [filteredAssets, groupBy, routineByType]);
+  }, [filteredAssets, groupBy, routineOf]);
 
   // Decision #2: mark all uninspected assets as not_tested before completing.
   // Chunked with a setTimeout yield between batches so a large site (500+

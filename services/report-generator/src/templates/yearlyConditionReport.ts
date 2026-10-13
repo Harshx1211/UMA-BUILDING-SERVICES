@@ -37,7 +37,7 @@ export function renderYearlyConditionReport(
   const { job, company, assets, defects, reportId, dateOfService, assignedUsers } = data;
   const property = job.property;
 
-  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue);
+  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue, (a) => a.area);
   const coveredSections = new Set(
     categoryGroups.map((g) => g.officialSection).filter((n): n is number => n != null),
   );

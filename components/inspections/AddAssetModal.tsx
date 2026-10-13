@@ -17,7 +17,7 @@ import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { formatAssetName, formatAssetSubtitle, pickerLabelOf, pickerTypes, pickerValueOf } from '@/utils/assetHelpers';
+import { effectiveRoutine, formatAssetName, formatAssetSubtitle, type AssetArea } from '@/utils/assetHelpers';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
@@ -39,6 +39,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [step, setStep]               = useState<Step>('type');
   const [selectedType, setSelectedType] = useState('');
   const [selectedVariant, setSelectedVariant] = useState('');
+  // Common Area / Unit (SOU) — see AreaSwitch. Reset whenever the type changes.
+  const [area, setArea] = useState<AssetArea>('common');
   const [variantSearch, setVariantSearch] = useState('');
 
   // ── Details fields ────────────────────────────────────────────
@@ -78,7 +80,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   // ── Derived ───────────────────────────────────────────────────
   const typeDef  = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
   const variants  = useMemo(() => typeDef?.variants ?? [], [typeDef]);
-  const routine   = useMemo(() => typeDef?.inspectionRoutine ?? '', [typeDef]);
+  const routine   = useMemo(() => (typeDef ? effectiveRoutine(typeDef, area) : ''), [typeDef, area]);
 
   const filteredVariants = useMemo(() => {
     let arr = variants;
@@ -141,9 +143,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   // A type with no variants advances to Details immediately.
   const handleTypeSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // A tile can stand for an area pair (Fire Door = Common Area + Unit), so
-    // compare by tile, not by the exact type currently selected.
-    if (pickerValueOf(selectedType) === value) {
+    setArea('common');
+    if (selectedType === value) {
       // Tapping the already-expanded type again collapses it.
       setSelectedType('');
       setSelectedVariant('');
@@ -218,6 +219,9 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           property_id:      propertyId,
           asset_type:       selectedType,
           variant:          selectedVariant || null,
+          // Only meaningful for types with a unit routine; everything else
+          // is recorded as Common Area.
+          area:             typeDef?.unitInspectionRoutine ? area : 'common',
           asset_ref:        assetRef.trim() || null,
           description:      notes.trim() || null,
           location_on_site: effectiveLocation.trim(),
@@ -252,7 +256,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const stepTitle = step === 'type' ? 'Select Asset Type' : 'Asset Details';
 
   const stepSub = step === 'type' ? 'What kind of asset is this?'
-    : [formatAssetName(selectedType, selectedVariant), formatAssetSubtitle(selectedType, selectedVariant)].filter(Boolean).join(' — ');
+    : [formatAssetName(selectedType, selectedVariant), formatAssetSubtitle(selectedType, selectedVariant, typeDef?.unitInspectionRoutine ? area : 'common')].filter(Boolean).join(' — ');
 
   // ─────────────────────────────────────────────────────────────
   return (
@@ -311,8 +315,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               </View>
             )}
             <View style={s.typeGrid}>
-              {pickerTypes(assetTypes).map(t => {
-                const isExpanded = pickerValueOf(selectedType) === t.value && t.variants.length > 0;
+              {assetTypes.map(t => {
+                const isExpanded = selectedType === t.value && t.variants.length > 0;
                 return (
                   <Card
                     key={t.value}
@@ -329,7 +333,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                       }]}>
                         <MaterialCommunityIcons name={t.icon} size={24} color={isExpanded ? T.textOnPrimary : t.color} />
                       </View>
-                      <Text style={[s.typeLabel, { color: isExpanded ? t.color : C.text }]}>{pickerLabelOf(t)}</Text>
+                      <Text style={[s.typeLabel, { color: isExpanded ? t.color : C.text }]}>{t.label}</Text>
                       <MaterialCommunityIcons
                         name={isExpanded ? 'chevron-up' : 'chevron-down'}
                         size={18}
@@ -400,8 +404,8 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-            {/* Common Area / Unit — only for area-split types (fire doors) */}
-            <AreaSwitch value={selectedType} availableTypes={assetTypes} onChange={setSelectedType} />
+            {/* Common Area / Unit — only for types with a unit routine */}
+            <AreaSwitch typeDef={typeDef} area={area} onChange={setArea} />
 
             {/* Inspection Routine (read-only) */}
             {routine ? (

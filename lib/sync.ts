@@ -26,6 +26,7 @@ import {
   hasTerminalInsertFailure,
   // retryAllFailedSyncItems is reserved for a future "Retry All" button in the UI,
   getPendingDeleteIds,
+  deactivateCatalogueRowsExcept,
 } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { SYNC_INTERVAL_MS, LAST_SYNCED_KEY, LAST_DELETION_LOG_ID_KEY, LAST_NOTIFICATION_PULL_KEY, PHOTO_BUCKET, DOCUMENT_BUCKET } from '@/constants/Config';
@@ -1823,7 +1824,7 @@ async function _pullCatalogueTables(): Promise<void> {
     supabase.from('inventory_items').select('*'),
     supabase
       .from('asset_type_definitions')
-      .select('id,company_id,value,label,full_label,icon,color,inspection_routine,variants,is_active,sort_order,created_at,updated_at')
+      .select('id,company_id,value,label,full_label,icon,color,inspection_routine,unit_inspection_routine,variants,is_active,sort_order,created_at,updated_at')
       .eq('is_active', true),
     supabase
       .from('defect_codes')
@@ -1853,6 +1854,7 @@ async function _pullCatalogueTables(): Promise<void> {
         ...row, variants, is_active: 1,
       } as Record<string, string | number | boolean | null>);
     }
+    deactivateCatalogueRowsExcept('asset_type_definitions', assetTypeDefs.map((r) => r.id as string));
     if (__DEV__ && assetTypeDefs.length > 0)
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${assetTypeDefs.length} asset_type_definitions`);
   }
@@ -1863,6 +1865,7 @@ async function _pullCatalogueTables(): Promise<void> {
         ...row, is_active: 1,
       } as Record<string, string | number | boolean | null>);
     }
+    deactivateCatalogueRowsExcept('defect_codes', defectCodes.map((r) => r.id as string));
     if (__DEV__ && defectCodes.length > 0)
       console.log(`[UMA BUILDING SERVICES Sync] PULL: upserted ${defectCodes.length} defect_codes`);
   }

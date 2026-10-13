@@ -48,7 +48,7 @@ export function buildAssetLogChunksByCategory(
   assetTypesByValue: Map<string, AssetTypeDefinition>,
   maxPerChunk: number,
 ): CategoryAssetLog[] {
-  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue);
+  const categoryGroups = groupByCategory(assets, (a) => a.asset_type, assetTypesByValue, (a) => a.area);
 
   return categoryGroups.map((group) => {
     const sorted = [...group.items].sort((a, b) => {

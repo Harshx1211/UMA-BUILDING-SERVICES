@@ -51,6 +51,7 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
       const rows = db.getAllSync<{
         value: string; label: string; full_label: string;
         icon: string; color: string; inspection_routine: string; variants: string;
+        unit_inspection_routine: string | null;
       }>(`SELECT * FROM asset_type_definitions WHERE is_active = 1 ${scope} ORDER BY sort_order ASC`, scopeArgs);
 
       if (rows.length > 0) {
@@ -63,6 +64,7 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
             icon:              r.icon as IconName,
             color:             r.color,
             inspectionRoutine: r.inspection_routine,
+            unitInspectionRoutine: r.unit_inspection_routine ?? null,
             variants:          (() => { try { return JSON.parse(r.variants); } catch { return []; } })(),
           });
         }

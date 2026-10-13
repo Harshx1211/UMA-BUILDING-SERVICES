@@ -29,6 +29,10 @@ export interface AssetTypeDefinition {
   color: string;
   /** Inspection routine auto-assigned when this type is selected */
   inspectionRoutine: string;
+  /** Routine used instead when the asset is inside a unit (SOU) — only set
+   * for types serviced separately there. Its presence is what shows the
+   * "Common Area | Unit (SOU)" choice when adding/editing an asset. */
+  unitInspectionRoutine?: string | null;
   /** Sub-variants available for this asset type */
   variants: string[];
 }
@@ -122,6 +126,7 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
     icon: 'smoke-detector',
     color: '#DC2626',
     inspectionRoutine: '06 - Fire Detection (Devices) (Annual)',
+    unitInspectionRoutine: '06 - Fire Detection (Devices - SOU) (Annual)',
     variants: [
       'ASE (Alarm Monitoring)',
       'Beam Detector',
@@ -149,41 +154,12 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
 
   {
     value: 'Fire Door (CA)',
-    label: 'Fire Door\nCommon Area',
-    fullLabel: 'Fire Door - Common Area',
+    label: 'Fire\nDoor',
+    fullLabel: 'Fire Door',
     icon: 'door',
     color: '#8B5CF6',
     inspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - Common) (Annual)',
-    variants: [
-      'Automatic Door',
-      'Exit Door - Double Even Pair',
-      'Exit Door - Double Uneven Pair',
-      'Exit Door - Single',
-      'Fire Door - Double Even Pair',
-      'Fire Door - Double Uneven Pair',
-      'Fire Door - Single',
-      'Fire Door - Single Double Action',
-      'Fire Safety Door',
-      'Smoke & Fire Door - Single',
-      'Smoke Door - Double Even Pair',
-      'Smoke Door - Double Uneven Pair',
-      'Smoke Door - Single',
-      'Smoke Door - Single Double Action',
-      'Solid Core Doorset - Double',
-      'Solid Core Doorset - Single',
-    ],
-  },
-  // Doors in a Sole Occupancy Unit are serviced under their own routine
-  // ("12 - Passive Fire ... - SOU"), separate from common-area doors — so
-  // they're their own type, as in Uptick. See utils/assetHelpers.ts for
-  // how doors are named (by their kind, e.g. "Exit Door - Single").
-  {
-    value: 'Fire Door (SOU)',
-    label: 'Fire Door\nSOU (Unit)',
-    fullLabel: 'Fire Door - Sole Occupancy Unit',
-    icon: 'door',
-    color: '#8B5CF6',
-    inspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - SOU) (Annual)',
+    unitInspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - SOU) (Annual)',
     variants: [
       'Automatic Door',
       'Exit Door - Double Even Pair',
@@ -211,6 +187,7 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
     icon: 'fire-extinguisher',
     color: '#EF4444',
     inspectionRoutine: '10 - Portable and Wheeled Fire Extinguishers (Annual)',
+    unitInspectionRoutine: '10 - Portable and Wheeled Fire Extinguishers - SOU (Annual)',
     variants: [
       'Air/Water 9.0 L',
       'CO2 2.0 kg',

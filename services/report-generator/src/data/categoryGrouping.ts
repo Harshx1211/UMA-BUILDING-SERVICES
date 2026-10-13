@@ -66,16 +66,33 @@ export const OTHER_CATEGORY_LABEL = 'Other';
  * the reference report's per-category grouping without requiring every asset type
  * to have an official AS1851 number.
  */
+/**
+ * The routine an asset is serviced under: its type's unit routine when the
+ * asset is inside a unit (SOU) and the type has one, otherwise the normal
+ * routine. Same rule as the app (utils/assetHelpers.ts effectiveRoutine).
+ * The retired "Fire Door (SOU)" type reads as a unit door.
+ */
+export function routineFor(
+  typeValue: string,
+  area: string | null | undefined,
+  assetTypesByValue: Map<string, AssetTypeDefinition>,
+): string {
+  const inUnit = area === 'unit' || typeValue === 'Fire Door (SOU)';
+  const typeDef = assetTypesByValue.get(typeValue) ?? (typeValue === 'Fire Door (SOU)' ? assetTypesByValue.get('Fire Door (CA)') : undefined);
+  if (inUnit && typeDef?.unit_inspection_routine) return typeDef.unit_inspection_routine;
+  return typeDef?.inspection_routine ?? 'General Inspection';
+}
+
 export function groupByCategory<T>(
   items: T[],
   getAssetTypeValue: (item: T) => string,
   assetTypesByValue: Map<string, AssetTypeDefinition>,
+  getArea: (item: T) => string | null | undefined = () => null,
 ): Array<{ label: string; number: number | null; officialSection: number | null; items: T[] }> {
   const groups = new Map<string, { label: string; number: number | null; officialSection: number | null; items: T[] }>();
 
   for (const item of items) {
-    const typeDef = assetTypesByValue.get(getAssetTypeValue(item));
-    const parsed = parseCategory(typeDef?.inspection_routine ?? 'General Inspection');
+    const parsed = parseCategory(routineFor(getAssetTypeValue(item), getArea(item), assetTypesByValue));
     const key = parsed.number != null ? `n:${parsed.number}:${parsed.label}` : `o:${parsed.label}`;
     if (!groups.has(key)) {
       groups.set(key, { label: parsed.label, number: parsed.number, officialSection: parsed.officialSection, items: [] });
@@ -84,7 +101,9 @@ export function groupByCategory<T>(
   }
 
   return [...groups.values()].sort((a, b) => {
-    if (a.number != null && b.number != null) return a.number - b.number;
+    // Same section number (e.g. 12 Common and 12 SOU): by name, so the
+    // order is stable — "Common" before "SOU".
+    if (a.number != null && b.number != null) return a.number - b.number || a.label.localeCompare(b.label);
     if (a.number != null) return -1; // numbered categories always sort before "Other"
     if (b.number != null) return 1;
     return a.label.localeCompare(b.label);

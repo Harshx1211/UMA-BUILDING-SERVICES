@@ -15,7 +15,7 @@ import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { formatAssetName, formatAssetSubtitle, pickerLabelOf, pickerTypes, pickerValueOf } from '@/utils/assetHelpers';
+import { areaOf, formatAssetName, formatAssetSubtitle, type AssetArea } from '@/utils/assetHelpers';
 import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
 
@@ -67,6 +67,10 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const effectiveLocation = addingNewLocation ? generatedLocation : location;
 
   const typeDef = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
+  // Common Area / Unit (SOU) — see AreaSwitch. Only types with a unit
+  // routine can be in a unit; any other type is saved as Common Area.
+  const [area, setArea] = useState<AssetArea>('common');
+  const effectiveArea: AssetArea = typeDef?.unitInspectionRoutine ? area : 'common';
   const variants = useMemo(() => typeDef?.variants ?? [], [typeDef]);
   const filteredVariants = useMemo(() => {
     let arr = variants;
@@ -90,6 +94,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       setUnitNo('');
       setSelectedType(asset.asset_type);
       setSelectedVariant(asset.variant || '');
+      setArea(areaOf(asset));
       setTypeEditing(false);
       setVariantSearch('');
 
@@ -128,6 +133,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const isDirty = !!asset && (
     selectedType !== asset.asset_type ||
     (selectedVariant || null) !== (asset.variant || null) ||
+    effectiveArea !== areaOf(asset) ||
     effectiveLocation.trim() !== (asset.location_on_site || '') ||
     assetRef.trim() !== (asset.asset_ref || '') ||
     serialNumber.trim() !== (asset.serial_number || '') ||
@@ -155,8 +161,6 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   // the picker right away, one with variants stays open for that pick.
   const handleTypeSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Re-tapping the tile of the current area pair keeps its area choice.
-    if (pickerValueOf(selectedType) === value) value = selectedType;
     setSelectedType(value);
     setSelectedVariant('');
     setVariantSearch('');
@@ -209,6 +213,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       const payload = {
         asset_type: selectedType,
         variant: selectedVariant || null,
+        area: effectiveArea,
         location_on_site: effectiveLocation.trim(),
         asset_ref: assetRef.trim() || null,
         serial_number: serialNumber.trim() || null,
@@ -283,8 +288,8 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.typeSummaryLabel, { color: C.text }]} numberOfLines={1}>{formatAssetName(selectedType, selectedVariant)}</Text>
-                      {formatAssetSubtitle(selectedType, selectedVariant) ? (
-                        <Text style={[s.typeSummarySub, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetSubtitle(selectedType, selectedVariant)}</Text>
+                      {formatAssetSubtitle(selectedType, selectedVariant, effectiveArea) ? (
+                        <Text style={[s.typeSummarySub, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetSubtitle(selectedType, selectedVariant, effectiveArea)}</Text>
                       ) : null}
                     </View>
                     <MaterialCommunityIcons name="pencil-outline" size={16} color={C.textTertiary} />
@@ -295,8 +300,8 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                       Fixing a mistake? Pick the correct type — past inspection history keeps the wording it was recorded with.
                     </Text>
                     <View style={s.typeChipWrap}>
-                      {pickerTypes(assetTypes).map(t => {
-                        const selected = pickerValueOf(selectedType) === t.value;
+                      {assetTypes.map(t => {
+                        const selected = selectedType === t.value;
                         return (
                           <TouchableOpacity
                             key={t.value}
@@ -304,14 +309,10 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                             style={[s.typeChip, { borderColor: selected ? t.color : C.border, backgroundColor: selected ? t.color + '18' : C.backgroundTertiary }]}
                           >
                             <MaterialCommunityIcons name={t.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']} size={14} color={selected ? t.color : C.textSecondary} style={{ marginRight: 5 }} />
-                            <Text style={[s.typeChipTxt, { color: selected ? t.color : C.textSecondary }]} numberOfLines={1}>{pickerLabelOf(t)}</Text>
+                            <Text style={[s.typeChipTxt, { color: selected ? t.color : C.textSecondary }]} numberOfLines={1}>{t.label}</Text>
                           </TouchableOpacity>
                         );
                       })}
-                    </View>
-
-                    <View style={{ marginTop: 12 }}>
-                      <AreaSwitch value={selectedType} availableTypes={assetTypes} onChange={setSelectedType} />
                     </View>
 
                     {variants.length > 0 && (
@@ -357,6 +358,9 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                   </View>
                 )}
               </View>
+
+              {/* Common Area / Unit — only for types with a unit routine */}
+              <AreaSwitch typeDef={typeDef} area={area} onChange={setArea} />
 
               {/* Location */}
               <View style={s.field}>

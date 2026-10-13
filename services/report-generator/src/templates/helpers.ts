@@ -102,23 +102,27 @@ export function stripPrices(text: string | null | undefined): string | null | un
 // with the area they serve in the detail line — the way Uptick shows them
 // and the way the app now does (utils/assetHelpers.ts there). Other assets
 // keep their type as the name.
-const DOOR_AREAS: Record<string, string> = {
-  'Fire Door (CA)': 'Common Area',
-  'Fire Door (SOU)': 'Sole Occupancy Unit',
-};
+const DOOR_TYPES = new Set(['Fire Door (CA)', 'Fire Door (SOU)']);
+
+type AssetLike = { asset_ref?: string | null; asset_type?: string | null; variant?: string | null; area?: string | null };
+
+function inUnit(asset: AssetLike): boolean {
+  return asset.area === 'unit' || asset.asset_type === 'Fire Door (SOU)';
+}
 
 /** "002 - Exit Door - Single" for a door, "FE-001 - Fire Extinguishers - Portable" otherwise. */
-export function assetDisplayName(asset: { asset_ref?: string | null; asset_type?: string | null; variant?: string | null }): string {
+export function assetDisplayName(asset: AssetLike): string {
   const type = asset.asset_type ?? 'Asset';
-  const name = DOOR_AREAS[type] && asset.variant ? asset.variant : type;
+  const name = DOOR_TYPES.has(type) ? (asset.variant || 'Fire Door') : type;
   return `${asset.asset_ref ? `${asset.asset_ref} - ` : ''}${name}`;
 }
 
-/** What goes first in the detail line: a door's area, otherwise the variant. */
-export function assetKind(asset: { asset_type?: string | null; variant?: string | null }): string | null {
-  const area = asset.asset_type ? DOOR_AREAS[asset.asset_type] : undefined;
-  if (area) return `Fire Door · ${area}`;
-  return asset.variant ?? null;
+/** What goes first in the detail line: a door's type and area; otherwise
+ * the variant, plus "Unit (SOU)" for anything inside a unit. */
+export function assetKind(asset: AssetLike): string | null {
+  const area = inUnit(asset) ? 'Unit (SOU)' : 'Common Area';
+  if (asset.asset_type && DOOR_TYPES.has(asset.asset_type)) return `Fire Door · ${area}`;
+  return [asset.variant, inUnit(asset) ? area : null].filter(Boolean).join(' · ') || null;
 }
 
 type PillColors = { bg: string; text: string; border: string };

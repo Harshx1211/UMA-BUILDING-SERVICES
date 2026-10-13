@@ -4,50 +4,43 @@ import { Text } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
-import { areaPairOf, areaOf } from '@/utils/assetHelpers';
+import { AREA_LABEL, type AssetArea } from '@/utils/assetHelpers';
 
 /**
- * "Common Area | Unit (SOU)" choice for asset types that are serviced under
- * a different AS 1851 routine depending on where they are — today only fire
- * doors ("12 - Passive Fire ... - Common" vs "... - SOU"). The two are
- * separate catalogue types underneath, but the add/edit pickers show ONE
- * "Fire Door" tile and this switch instead of two near-identical tiles.
- *
- * Renders nothing for any other type, or if the company's catalogue lacks
- * either half of the pair.
+ * "Where is it?  Common Area | Unit (SOU)" — shown when adding or editing an
+ * asset whose type is serviced under a separate routine inside units (the
+ * type has a unit routine in the catalogue: pre-filled for fire doors, fire
+ * detection devices and extinguishers; admins can set it on any type in the
+ * admin portal's Catalogue). Renders nothing for any other type.
  */
 export function AreaSwitch({
-  value,
-  availableTypes,
+  typeDef,
+  area,
   onChange,
 }: {
-  value: string;
-  availableTypes: ReadonlyArray<{ value: string }>;
-  onChange: (typeValue: string) => void;
+  typeDef: { unitInspectionRoutine?: string | null } | null | undefined;
+  area: AssetArea;
+  onChange: (area: AssetArea) => void;
 }) {
   const C = useColors();
-  const pair = areaPairOf(value);
-  if (!pair) return null;
-  const has = (v: string) => availableTypes.some((t) => t.value === v);
-  if (!has(pair.common) || !has(pair.unit)) return null;
+  if (!typeDef?.unitInspectionRoutine) return null;
 
-  const current = areaOf(value);
-  const option = (area: 'common' | 'unit', label: string) => {
-    const selected = current === area;
+  const option = (value: AssetArea) => {
+    const selected = area === value;
     return (
       <TouchableOpacity
-        key={area}
+        key={value}
         onPress={() => {
           if (selected) return;
           Haptics.selectionAsync();
-          onChange(pair[area]);
+          onChange(value);
         }}
         style={[s.segment, selected && { backgroundColor: C.primary }]}
         accessibilityRole="radio"
         accessibilityState={{ selected }}
         activeOpacity={0.8}
       >
-        <Text style={[s.segmentTxt, { color: selected ? T.textOnPrimary : C.textSecondary }]}>{label}</Text>
+        <Text style={[s.segmentTxt, { color: selected ? T.textOnPrimary : C.textSecondary }]}>{AREA_LABEL[value]}</Text>
       </TouchableOpacity>
     );
   };
@@ -56,11 +49,11 @@ export function AreaSwitch({
     <View style={s.wrap}>
       <Text style={[s.label, { color: C.text }]}>Where is it?</Text>
       <View style={[s.track, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]} accessibilityRole="radiogroup">
-        {option('common', 'Common Area')}
-        {option('unit', 'Unit (SOU)')}
+        {option('common')}
+        {option('unit')}
       </View>
       <Text style={[s.hint, { color: C.textTertiary }]}>
-        Common-area doors and doors inside a unit are serviced under separate AS 1851 routines.
+        Items inside a unit (SOU) are serviced and reported under their own routine.
       </Text>
     </View>
   );

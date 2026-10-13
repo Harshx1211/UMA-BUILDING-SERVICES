@@ -89,7 +89,7 @@ export async function fetchReportData(
       db.from('companies').select('*').eq('id', job.company_id).single(),
       db
         .from('asset_type_definitions')
-        .select('value, label, full_label, inspection_routine')
+        .select('value, label, full_label, inspection_routine, unit_inspection_routine')
         .or(`company_id.eq.${job.company_id},company_id.is.null`),
       db.from('signatures').select('*').eq('job_id', jobId).maybeSingle(),
       // The assigned crew — a flat list, no primary (see job_technicians

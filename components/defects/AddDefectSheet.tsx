@@ -278,7 +278,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               <View style={{ flex: 1, gap: 3 }}>
                 <Text style={[s.assetName, { color: active ? C.accent : C.text }]} numberOfLines={1}>
                   {formatAssetName(a.asset_type, a.variant)}
-                  {formatAssetSubtitle(a.asset_type, a.variant) ? ` — ${formatAssetSubtitle(a.asset_type, a.variant)}` : ''}
+                  {formatAssetSubtitle(a.asset_type, a.variant, a.area) ? ` — ${formatAssetSubtitle(a.asset_type, a.variant, a.area)}` : ''}
                 </Text>
                 <View style={s.assetMetaRow}>
                   {a.location_on_site && (

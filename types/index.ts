@@ -80,8 +80,11 @@ export interface Asset {
   company_id: string | null;
   property_id: string;
   asset_type: string;
-  /** Sub-variant of the asset type (e.g. 'DCP AB(E) 4.5KG') */
+  /** Sub-variant of the asset type (e.g. 'DCP AB(E) 4.5 kg') */
   variant: string | null;
+  /** Common Area or inside a Unit (SOU) — decides the routine for types
+   * that have a unit routine (utils/assetHelpers.ts effectiveRoutine). */
+  area?: 'common' | 'unit' | null;
   /** Short technician reference number (e.g. '001', '040') */
   asset_ref: string | null;
   description: string | null;
