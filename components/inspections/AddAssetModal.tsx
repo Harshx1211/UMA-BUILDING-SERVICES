@@ -17,7 +17,7 @@ import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { effectiveRoutine, formatAssetName, formatAssetSubtitle, type AssetArea } from '@/utils/assetHelpers';
+import { effectiveRoutine, formatAssetName, formatAssetSubtitle, nextAssetRefs, refPrefixOf, type AssetArea } from '@/utils/assetHelpers';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
@@ -212,6 +212,14 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     const today = now.slice(0, 10);
     try {
       const created: Asset[] = [];
+      // Left empty, every new asset gets the next reference for its type at
+      // this property (FE-008, FE-009...) — two assets of the same type
+      // never print as identical cards. A typed reference is kept as is.
+      const autoRefs = assetRef.trim() ? [] : nextAssetRefs(
+        queryRecords<{ asset_ref: string | null }>('assets', { property_id: propertyId }).map(r => r.asset_ref),
+        refPrefixOf(typeDef, selectedType),
+        quantity,
+      );
       for (let i = 0; i < quantity; i++) {
         const id = generateUUID();
         const payload = {
@@ -222,7 +230,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
           // Only meaningful for types with a unit routine; everything else
           // is recorded as Common Area.
           area:             typeDef?.unitInspectionRoutine ? area : 'common',
-          asset_ref:        assetRef.trim() || null,
+          asset_ref:        assetRef.trim() || autoRefs[i] || null,
           description:      notes.trim() || null,
           location_on_site: effectiveLocation.trim(),
           serial_number:    quantity === 1 && serialNumber.trim() ? serialNumber.trim() : null,
@@ -554,7 +562,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
                   <TextInput
                     style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
-                    placeholder="Reference code..."
+                    placeholder={selectedType ? `Leave empty for ${nextAssetRefs(queryRecords<{ asset_ref: string | null }>('assets', { property_id: propertyId }).map(r => r.asset_ref), refPrefixOf(typeDef, selectedType), 1)[0]}${quantity > 1 ? ' onwards' : ''}` : 'Reference code...'}
                     placeholderTextColor={C.textTertiary}
                     value={assetRef}
                     onChangeText={setAssetRef}

@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config';
-import { assetDisplayName } from '../templates/helpers';
+import { assetDisplayName, formatLocation } from '../templates/helpers';
 import { extractObjectPath } from './prepareInlinePhotos';
 
 /**
@@ -64,7 +64,7 @@ export async function loadPhotoView(db: SupabaseClient, photoId: string): Promis
     kind: 'ok',
     title: asset ? assetDisplayName(asset) : 'Inspection photo',
     stage: photo.stage === 'before' || photo.stage === 'after' ? photo.stage : null,
-    location: asset?.location_on_site ?? null,
+    location: formatLocation(asset?.location_on_site),
     imageUrl: view.data.signedUrl,
     downloadUrl: download.data?.signedUrl ?? null,
   };

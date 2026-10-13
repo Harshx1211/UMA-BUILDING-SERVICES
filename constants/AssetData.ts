@@ -21,8 +21,10 @@ export interface AssetTypeDefinition {
   value: string;
   /** Short display label for grid tiles */
   label: string;
-  /** Full label as shown in the "Type" heading of Edit Asset form */
+  /** Display name (Australian standard wording) — cards, headings, report */
   fullLabel: string;
+  /** Prefix for automatic asset references, e.g. 'FE' -> FE-001 */
+  refPrefix?: string | null;
   /** MaterialCommunityIcons icon name */
   icon: IconName;
   /** Hex accent colour for the tile and icon */
@@ -43,7 +45,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'BGA, MCP or Manual Call Point',
     label: 'MCP /\nCall Point',
-    fullLabel: 'BGA, MCP or Manual Call Point',
+    fullLabel: 'Manual Call Point (MCP / BGA)',
+    refPrefix: 'MCP',
     icon: 'alarm-light',
     color: '#7C3AED',
     inspectionRoutine: 'Access Control System (Annual)',
@@ -55,7 +58,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Emergency - Exit Signs',
     label: 'Exit\nSigns',
-    fullLabel: 'Emergency - Exit Signs',
+    fullLabel: 'Exit Sign',
+    refPrefix: 'EXIT',
     icon: 'exit-run',
     color: '#059669',
     inspectionRoutine: '15 - Emergency escape lighting and exit signs (Annual)',
@@ -82,7 +86,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Emergency - Lighting',
     label: 'Emergency\nLighting',
-    fullLabel: 'Emergency - Lighting',
+    fullLabel: 'Emergency Light',
+    refPrefix: 'EL',
     icon: 'lightning-bolt',
     color: '#F59E0B',
     inspectionRoutine: '15 - Emergency escape lighting and exit signs (Annual)',
@@ -122,7 +127,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Fire Detection Devices (MCP, Detector, strobe, Flow Switch)',
     label: 'Fire\nDetection',
-    fullLabel: 'Fire Detection Devices (MCP, Detector, strobe, Flow Switch)',
+    fullLabel: 'Fire Detection Device',
+    refPrefix: 'FD',
     icon: 'smoke-detector',
     color: '#DC2626',
     inspectionRoutine: '06 - Fire Detection (Devices) (Annual)',
@@ -156,6 +162,7 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
     value: 'Fire Door (CA)',
     label: 'Fire\nDoor',
     fullLabel: 'Fire Door',
+    refPrefix: 'FDR',
     icon: 'door',
     color: '#8B5CF6',
     inspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - Common) (Annual)',
@@ -183,7 +190,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Fire Extinguishers - Portable',
     label: 'Fire\nExtinguisher',
-    fullLabel: 'Fire Extinguishers - Portable',
+    fullLabel: 'Portable Fire Extinguisher',
+    refPrefix: 'FE',
     icon: 'fire-extinguisher',
     color: '#EF4444',
     inspectionRoutine: '10 - Portable and Wheeled Fire Extinguishers (Annual)',
@@ -214,7 +222,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Fire Hose Reels',
     label: 'Hose\nReels',
-    fullLabel: 'Fire Hose Reels',
+    fullLabel: 'Fire Hose Reel',
+    refPrefix: 'FHR',
     icon: 'pipe',
     color: '#0891B2',
     inspectionRoutine: '09 - Fire Hose Reels (Annual)',
@@ -234,6 +243,7 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
     value: 'Fire Hydrant System',
     label: 'Fire\nHydrant',
     fullLabel: 'Fire Hydrant System',
+    refPrefix: 'FH',
     icon: 'pipe-valve',
     color: '#B91C1C',
     inspectionRoutine: '04 - Fire Hydrant Systems (Annual - Valves)',
@@ -252,7 +262,8 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
   {
     value: 'Fire Sprinkler System - Wet Pipe',
     label: 'Sprinkler\nSystem',
-    fullLabel: 'Fire Sprinkler System - Wet Pipe',
+    fullLabel: 'Fire Sprinkler System (Wet Pipe)',
+    refPrefix: 'FSS',
     icon: 'water',
     color: '#2563EB',
     inspectionRoutine: '02 - Automatic Fire Sprinkler Systems (Annual Flow)',

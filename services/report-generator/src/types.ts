@@ -79,6 +79,10 @@ export interface Asset {
    * that have one (data/categoryGrouping.ts). Null on rows from before the
    * column existed = Common Area. */
   area?: 'common' | 'unit' | null;
+  /** The type's display name from the catalogue (full_label), set in
+   * fetchReportData — "Portable Fire Extinguisher" for the stored type
+   * "Fire Extinguishers - Portable". */
+  type_label?: string | null;
   asset_ref: string | null;
   location_on_site: string | null;
   serial_number: string | null;

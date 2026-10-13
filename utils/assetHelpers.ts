@@ -19,8 +19,19 @@ export { getAssetTypeIcon } from '@/constants/AssetData';
  *   'fire_extinguisher'                     → 'Fire Extinguisher'
  *   'My Custom Asset'                       → 'My Custom Asset'
  */
+// Display names from the company's own catalogue (admins can edit them),
+// registered by store/catalogueStore.ts whenever it loads. Falls back to the
+// built-in list for anything not in it.
+let catalogueNames = new Map<string, string>();
+export function registerCatalogueNames(names: Map<string, string>): void {
+  catalogueNames = names;
+}
+
 export function formatAssetType(assetType: string): string {
   if (!assetType) return '';
+
+  const fromCatalogue = catalogueNames.get(assetType);
+  if (fromCatalogue) return fromCatalogue;
 
   // If it's a known official type, return its fullLabel
   if (ASSET_TYPE_MAP[assetType]) {
@@ -94,6 +105,34 @@ export function effectiveRoutine(
 ): string {
   if (area === 'unit' && typeDef?.unitInspectionRoutine) return typeDef.unitInspectionRoutine;
   return typeDef?.inspectionRoutine || 'Other';
+}
+
+// ─── Automatic asset references ───────────────────────────────────────────────
+
+/** A type's reference prefix: the catalogue's (FE, FD, FDR...), otherwise
+ * the initials of its name ("Smoke Damper" -> "SD"), otherwise "AST". */
+export function refPrefixOf(typeDef: { refPrefix?: string | null; fullLabel?: string | null } | null | undefined, typeValue: string): string {
+  const set = typeDef?.refPrefix?.trim();
+  if (set) return set.toUpperCase();
+  const words = (typeDef?.fullLabel || typeValue).replace(/\(.*?\)/g, ' ').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const initials = words.map((w) => w[0]).join('').toUpperCase().slice(0, 4);
+  return initials || 'AST';
+}
+
+/**
+ * The next `count` references for a prefix at one property, after the
+ * highest number already used there: ["FE-008", "FE-009"]. Three digits
+ * minimum, matching the existing FE-001 convention. A technician's own
+ * reference is always kept as typed — this only fills an empty one.
+ */
+export function nextAssetRefs(existingRefs: ReadonlyArray<string | null | undefined>, prefix: string, count: number): string[] {
+  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`, 'i');
+  let max = 0;
+  for (const ref of existingRefs) {
+    const m = ref ? pattern.exec(ref.trim()) : null;
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return Array.from({ length: count }, (_, i) => `${prefix}-${String(max + i + 1).padStart(3, '0')}`);
 }
 
 // ─── formatRelativeDays ───────────────────────────────────────────────────────

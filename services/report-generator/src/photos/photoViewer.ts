@@ -293,7 +293,7 @@ const SCRIPT = `
 function header(title: string, stage: Stage, location: string | null, downloadUrl: string | null): string {
   const parts: string[] = [];
   if (stage) parts.push(`<span class="stage">${stage === 'before' ? 'Before' : 'After'}</span>`);
-  if (location) parts.push(`${ICON.pin}<span>Location ${esc(location)}</span>`);
+  if (location) parts.push(`${ICON.pin}<span>${esc(location)}</span>`);
   const meta = parts.length ? `<div class="meta">${parts.join('<span class="dot">&middot;</span>')}</div>` : '';
   const download = downloadUrl
     ? `<a class="btn outline dl" href="${esc(downloadUrl)}" rel="noopener noreferrer" aria-label="Download photo">${ICON.download}<span class="lbl">Download</span></a>`

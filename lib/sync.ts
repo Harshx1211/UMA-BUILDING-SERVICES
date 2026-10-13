@@ -1824,7 +1824,7 @@ async function _pullCatalogueTables(): Promise<void> {
     supabase.from('inventory_items').select('*'),
     supabase
       .from('asset_type_definitions')
-      .select('id,company_id,value,label,full_label,icon,color,inspection_routine,unit_inspection_routine,variants,is_active,sort_order,created_at,updated_at')
+      .select('id,company_id,value,label,full_label,icon,color,inspection_routine,unit_inspection_routine,ref_prefix,variants,is_active,sort_order,created_at,updated_at')
       .eq('is_active', true),
     supabase
       .from('defect_codes')

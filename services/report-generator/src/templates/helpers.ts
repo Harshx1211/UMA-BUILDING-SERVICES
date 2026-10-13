@@ -104,7 +104,29 @@ export function stripPrices(text: string | null | undefined): string | null | un
 // keep their type as the name.
 const DOOR_TYPES = new Set(['Fire Door (CA)', 'Fire Door (SOU)']);
 
-type AssetLike = { asset_ref?: string | null; asset_type?: string | null; variant?: string | null; area?: string | null };
+type AssetLike = {
+  asset_ref?: string | null;
+  asset_type?: string | null;
+  type_label?: string | null;
+  variant?: string | null;
+  area?: string | null;
+};
+
+/**
+ * A structured location code ("1-1-2", "2-CR") written out for a client:
+ * "Tower 1 · Floor 1 · Unit 2", "Tower 2 · CR". The app shows the same
+ * codes compactly ("T1 · F1 · U2"); a report reader shouldn't need to know
+ * the code. Free-text locations are returned unchanged.
+ */
+export function formatLocation(location: string | null | undefined): string | null {
+  if (!location) return null;
+  const parts = location.split('-').map((p) => p.trim());
+  const structured = parts.length >= 2 && parts.length <= 3
+    && parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
+  if (!structured) return location;
+  if (parts.length === 3) return `Tower ${parts[0]} · Floor ${parts[1]} · Unit ${parts[2]}`;
+  return `Tower ${parts[0]} · ${parts[1]}`;
+}
 
 function inUnit(asset: AssetLike): boolean {
   return asset.area === 'unit' || asset.asset_type === 'Fire Door (SOU)';
@@ -113,7 +135,7 @@ function inUnit(asset: AssetLike): boolean {
 /** "002 - Exit Door - Single" for a door, "FE-001 - Fire Extinguishers - Portable" otherwise. */
 export function assetDisplayName(asset: AssetLike): string {
   const type = asset.asset_type ?? 'Asset';
-  const name = DOOR_TYPES.has(type) ? (asset.variant || 'Fire Door') : type;
+  const name = DOOR_TYPES.has(type) ? (asset.variant || asset.type_label || 'Fire Door') : (asset.type_label || type);
   return `${asset.asset_ref ? `${asset.asset_ref} - ` : ''}${name}`;
 }
 

@@ -11,6 +11,7 @@ import type { ComponentProps } from 'react';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { useAuthStore } from '@/store/authStore';
+import { registerCatalogueNames } from '@/utils/assetHelpers';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -52,6 +53,7 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
         value: string; label: string; full_label: string;
         icon: string; color: string; inspection_routine: string; variants: string;
         unit_inspection_routine: string | null;
+        ref_prefix: string | null;
       }>(`SELECT * FROM asset_type_definitions WHERE is_active = 1 ${scope} ORDER BY sort_order ASC`, scopeArgs);
 
       if (rows.length > 0) {
@@ -65,10 +67,12 @@ export const useCatalogueStore = create<CatalogueState>((set, get) => ({
             color:             r.color,
             inspectionRoutine: r.inspection_routine,
             unitInspectionRoutine: r.unit_inspection_routine ?? null,
+            refPrefix:         r.ref_prefix ?? null,
             variants:          (() => { try { return JSON.parse(r.variants); } catch { return []; } })(),
           });
         }
         set({ assetTypes: Array.from(typesMap.values()) });
+        registerCatalogueNames(new Map(Array.from(typesMap.values()).map((t) => [t.value, t.fullLabel])));
       }
 
       // ── Defect Codes ─────────────────────────────────────

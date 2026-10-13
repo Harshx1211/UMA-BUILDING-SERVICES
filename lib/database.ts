@@ -1767,6 +1767,18 @@ export function initializeSchema(): void {
     db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '53')`);
   }
 
+  if (currentVersion < 54) {
+    // Reference prefix per asset type (FE, FD, FDR...) for automatic asset
+    // references — mirrors server migration 20261013030000.
+    try {
+      db.runSync(`ALTER TABLE asset_type_definitions ADD COLUMN ref_prefix TEXT;`);
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[UMA BUILDING SERVICES DB] Migration 54: column already present or failed:', err instanceof Error ? err.message : String(err));
+    }
+    currentVersion = 54;
+    db.runSync(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '54')`);
+  }
+
   // Seed inventory from Uptick defect codes on first run
   seedInventoryFromDefectCodes();
 }

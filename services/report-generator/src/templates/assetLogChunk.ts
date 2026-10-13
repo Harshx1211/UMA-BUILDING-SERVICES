@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { assetDisplayName, assetKind, esc, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection, stripPrices } from './helpers';
+import { assetDisplayName, assetKind, esc, formatLocation, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection, stripPrices } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -50,7 +50,7 @@ export function renderAssetLogChunk(
     const details = [
       assetKind(asset),
       asset.serial_number ? `S/N: ${asset.serial_number}` : null,
-      asset.location_on_site ? `Location ${asset.location_on_site}` : null,
+      formatLocation(asset.location_on_site),
     ]
       .filter(Boolean)
       .map(esc)

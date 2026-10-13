@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAllByIds, fetchAllPaged } from './paginate';
-import { parseCategory } from './categoryGrouping';
+import { parseCategory, routineFor } from './categoryGrouping';
 import { prepareInlinePhotos } from '../photos/prepareInlinePhotos';
 import { prepareFullResUrls } from '../photos/prepareFullResUrls';
 import { config } from '../config';
@@ -173,9 +173,12 @@ export async function fetchReportData(
       return bMs - aMs;
     })[0];
     const typeDef = assetTypesByValue.get(asset.asset_type);
-    const parsed = parseCategory(typeDef?.inspection_routine ?? 'General Inspection');
+    // FIX: the asset's own routine (its unit routine when it's in a unit),
+    // not always the type's normal one — same rule as the grouping.
+    const parsed = parseCategory(routineFor(asset.asset_type, asset.area, assetTypesByValue));
     return {
       ...asset,
+      type_label: typeDef?.full_label || null,
       result: latest?.result ?? null,
       defect_reason: latest?.defect_reason ?? null,
       technician_notes: latest?.technician_notes ?? null,

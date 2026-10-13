@@ -23,7 +23,7 @@ import { cardShadow } from '@/components/ui/Card';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
-import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle, effectiveRoutine, areaOf } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle, effectiveRoutine, areaOf, nextAssetRefs, refPrefixOf } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto, openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -655,7 +655,13 @@ export default function AssetInspectionScreen() {
         asset_type: assetToClone.asset_type,
         variant: assetToClone.variant,
         area: assetToClone.area ?? 'common',
-        asset_ref: null,
+        // Next reference for its type at this property (FE-009...), so the
+        // copy never prints identically to the original.
+        asset_ref: nextAssetRefs(
+          queryRecords<{ asset_ref: string | null }>('assets', { property_id: assetToClone.property_id }).map(r => r.asset_ref),
+          refPrefixOf(typeByValue.get(assetToClone.asset_type), assetToClone.asset_type),
+          1,
+        )[0],
         description: assetToClone.description,
         location_on_site: assetToClone.location_on_site,
         serial_number: null,
