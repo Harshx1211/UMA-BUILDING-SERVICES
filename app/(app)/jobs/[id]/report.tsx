@@ -24,7 +24,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card, showConfirm } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatAssetName } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
 import { warmUpReportService } from '@/lib/pdfGenerator';
@@ -46,7 +46,7 @@ type JobWithProperty = {
 };
 
 type ReportAsset = {
-  id: string; asset_type: string; location_on_site: string | null;
+  id: string; asset_type: string; variant?: string | null; location_on_site: string | null;
   result: string | null; defect_reason: string | null;
   technician_notes: string | null; is_compliant: number | boolean;
   actioned_at: string | null; actioned_by_name: string | null;
@@ -118,7 +118,7 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
       </View>
       <View style={s.assetMiddle}>
         <Text style={[s.assetName, { color: C.text }]}>
-          <MaterialCommunityIcons name={getAssetTypeIcon(asset.asset_type)} size={14} color={C.textSecondary} /> {formatAssetType(asset.asset_type)}
+          <MaterialCommunityIcons name={getAssetTypeIcon(asset.asset_type)} size={14} color={C.textSecondary} /> {formatAssetName(asset.asset_type, asset.variant)}
         </Text>
         {asset.location_on_site ? (
           <Text style={[s.assetLoc, { color: C.textSecondary }]}>

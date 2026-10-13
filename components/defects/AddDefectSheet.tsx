@@ -13,7 +13,7 @@ import { useColors } from '@/hooks/useColors';
 import { DefectSeverity } from '@/constants/Enums';
 import { useDefectsStore } from '@/store/defectsStore';
 import { getAssetsForProperty } from '@/lib/database';
-import { formatAssetType, getAssetTypeIcon } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
@@ -277,8 +277,8 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               </View>
               <View style={{ flex: 1, gap: 3 }}>
                 <Text style={[s.assetName, { color: active ? C.accent : C.text }]} numberOfLines={1}>
-                  {formatAssetType(a.asset_type)}
-                  {a.variant ? ` — ${a.variant}` : ''}
+                  {formatAssetName(a.asset_type, a.variant)}
+                  {formatAssetSubtitle(a.asset_type, a.variant) ? ` — ${formatAssetSubtitle(a.asset_type, a.variant)}` : ''}
                 </Text>
                 <View style={s.assetMetaRow}>
                   {a.location_on_site && (

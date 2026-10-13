@@ -149,11 +149,42 @@ export const ASSET_TYPES: AssetTypeDefinition[] = [
 
   {
     value: 'Fire Door (CA)',
-    label: 'Fire\nDoor',
-    fullLabel: 'Fire Door (CA)',
+    label: 'Fire Door\nCommon Area',
+    fullLabel: 'Fire Door - Common Area',
     icon: 'door',
     color: '#8B5CF6',
     inspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - Common) (Annual)',
+    variants: [
+      'Automatic Door',
+      'Exit Door - Double Even pair',
+      'Exit Door - Double Uneven pair',
+      'Exit Door - Single',
+      'Fire Door - Double Even pair',
+      'Fire Door - Double Uneven pair',
+      'Fire Door - Single',
+      'Fire Door - Single Double Action',
+      'Fire Safety Door',
+      'Smoke & Fire Door - Single',
+      'Smoke Door - Double Even Pair',
+      'Smoke Door - Double Uneven pair',
+      'Smoke Door - Single',
+      'Smoke Door - Single Double Action',
+      'Smoke Door - Uneven Pair',
+      'Solid Core Doorset - Double',
+      'Solid Core Doorset - Single',
+    ],
+  },
+  // Doors in a Sole Occupancy Unit are serviced under their own routine
+  // ("12 - Passive Fire ... - SOU"), separate from common-area doors — so
+  // they're their own type, as in Uptick. See utils/assetHelpers.ts for
+  // how doors are named (by their kind, e.g. "Exit Door - Single").
+  {
+    value: 'Fire Door (SOU)',
+    label: 'Fire Door\nSOU (Unit)',
+    fullLabel: 'Fire Door - Sole Occupancy Unit',
+    icon: 'door',
+    color: '#8B5CF6',
+    inspectionRoutine: '12 - Passive Fire (Hinged and Pivoted Doorsets - SOU) (Annual)',
     variants: [
       'Automatic Door',
       'Exit Door - Double Even pair',

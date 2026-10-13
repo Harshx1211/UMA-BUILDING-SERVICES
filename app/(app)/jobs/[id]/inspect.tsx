@@ -23,7 +23,7 @@ import { cardShadow } from '@/components/ui/Card';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
-import { formatAssetType, getAssetTypeIcon, formatLocationCode } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto, openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -137,8 +137,8 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               <MaterialCommunityIcons name={assetIconName(asset.asset_type)} size={22} color={C.textSecondary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
-              {asset.variant ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{asset.variant}</Text> : null}
+              <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>{formatAssetName(asset.asset_type, asset.variant)}</Text>
+              {formatAssetSubtitle(asset.asset_type, asset.variant) ? <Text style={[s.assetVariant, { color: C.textSecondary }]} numberOfLines={1}>{formatAssetSubtitle(asset.asset_type, asset.variant)}</Text> : null}
               <View style={s.assetLocationRow}>
                 <MaterialCommunityIcons name="map-marker-outline" size={12} color={C.primary} />
                 <Text style={[s.assetLocation, { color: C.text }]} numberOfLines={1}>
@@ -237,7 +237,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <TouchableOpacity style={s.menuBackdrop} activeOpacity={1} onPress={() => setMenuOpen(false)}>
           <View style={[s.menuSheet, { backgroundColor: C.surface }]}>
-            <Text style={[s.menuTitle, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetType(asset.asset_type)}</Text>
+            <Text style={[s.menuTitle, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetName(asset.asset_type, asset.variant)}</Text>
             <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onClone(asset); }}>
               <MaterialCommunityIcons name="content-copy" size={19} color={C.textSecondary} />
               <Text style={[s.menuRowTxt, { color: C.text }]}>Clone Asset</Text>

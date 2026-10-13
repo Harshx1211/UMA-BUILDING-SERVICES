@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config';
-import { esc } from '../templates/helpers';
+import { assetDisplayName } from '../templates/helpers';
 import { extractObjectPath } from './prepareInlinePhotos';
 
 /**
@@ -40,7 +40,7 @@ export async function loadPhotoView(db: SupabaseClient, photoId: string): Promis
   const [companyRes, assetRes] = await Promise.all([
     db.from('companies').select('subscription_status').eq('id', photo.company_id).maybeSingle(),
     photo.asset_id
-      ? db.from('assets').select('asset_ref, asset_type, location_on_site').eq('id', photo.asset_id).maybeSingle()
+      ? db.from('assets').select('asset_ref, asset_type, variant, location_on_site').eq('id', photo.asset_id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
   if (companyRes.error) return { kind: 'error' };
@@ -59,10 +59,10 @@ export async function loadPhotoView(db: SupabaseClient, photoId: string): Promis
   ]);
   if (view.error || !view.data?.signedUrl) return { kind: 'error' };
 
-  const asset = assetRes.data as { asset_ref: string | null; asset_type: string | null; location_on_site: string | null } | null;
+  const asset = assetRes.data as { asset_ref: string | null; asset_type: string | null; variant: string | null; location_on_site: string | null } | null;
   return {
     kind: 'ok',
-    title: asset ? `${asset.asset_ref ? `${asset.asset_ref} - ` : ''}${asset.asset_type ?? 'Asset'}` : 'Inspection photo',
+    title: asset ? assetDisplayName(asset) : 'Inspection photo',
     stage: photo.stage === 'before' || photo.stage === 'after' ? photo.stage : null,
     location: asset?.location_on_site ?? null,
     imageUrl: view.data.signedUrl,

@@ -36,7 +36,7 @@ import { DefectFieldsCard, DefectFieldsValue, DefectPhotosDraft } from '@/compon
 import DefectCard from '@/components/defects/DefectCard';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
-import { formatAssetType, formatLocationCode, formatRelativeDays } from '@/utils/assetHelpers';
+import { formatAssetType, formatLocationCode, formatRelativeDays, formatAssetName } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
 import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
@@ -883,7 +883,7 @@ export default function AssetDetailScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: C.background }]}>
-      <ScreenHeader title={formatAssetType(asset.asset_type)} subtitle={location} showBack fallbackHref="/jobs" />
+      <ScreenHeader title={formatAssetName(asset.asset_type, asset.variant)} subtitle={location} showBack fallbackHref="/jobs" />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}

@@ -98,6 +98,29 @@ export function stripPrices(text: string | null | undefined): string | null | un
     .trim();
 }
 
+// Doors are named by their kind (the variant, e.g. "Exit Door - Single"),
+// with the area they serve in the detail line — the way Uptick shows them
+// and the way the app now does (utils/assetHelpers.ts there). Other assets
+// keep their type as the name.
+const DOOR_AREAS: Record<string, string> = {
+  'Fire Door (CA)': 'Common Area',
+  'Fire Door (SOU)': 'Sole Occupancy Unit',
+};
+
+/** "002 - Exit Door - Single" for a door, "FE-001 - Fire Extinguishers - Portable" otherwise. */
+export function assetDisplayName(asset: { asset_ref?: string | null; asset_type?: string | null; variant?: string | null }): string {
+  const type = asset.asset_type ?? 'Asset';
+  const name = DOOR_AREAS[type] && asset.variant ? asset.variant : type;
+  return `${asset.asset_ref ? `${asset.asset_ref} - ` : ''}${name}`;
+}
+
+/** What goes first in the detail line: a door's area, otherwise the variant. */
+export function assetKind(asset: { asset_type?: string | null; variant?: string | null }): string | null {
+  const area = asset.asset_type ? DOOR_AREAS[asset.asset_type] : undefined;
+  if (area) return `Fire Door · ${area}`;
+  return asset.variant ?? null;
+}
+
 type PillColors = { bg: string; text: string; border: string };
 
 /** A small rounded status tag. `label` must already be safe HTML. */

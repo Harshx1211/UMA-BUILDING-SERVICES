@@ -13,7 +13,7 @@ import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
-import { formatAssetType } from '@/utils/assetHelpers';
+import { formatAssetType, formatAssetName } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
@@ -165,7 +165,7 @@ export default function AssetDetailScreen() {
         {/* ── ASSET HEADER ─────────────── */}
         <ScreenHeader
           eyebrow="ASSET RECORD"
-          title={formatAssetType(asset.asset_type)}
+          title={formatAssetName(asset.asset_type, asset.variant)}
           subtitle={asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No barcode'}
           showBack={true}
           rightComponent={

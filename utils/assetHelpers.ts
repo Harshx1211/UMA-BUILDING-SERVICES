@@ -34,6 +34,36 @@ export function formatAssetType(assetType: string): string {
     .join(' ');
 }
 
+// ─── formatAssetName / formatAssetSubtitle ────────────────────────────────────
+
+/**
+ * Door types, by the area they serve. Doors are named by what they ARE —
+ * "Exit Door - Single", "Fire Door - Double Even pair" (the variant) — with
+ * the type underneath, the way Uptick shows them. Users found every door
+ * reading "Fire Door (CA)" with its real kind in small print confusing ("if
+ * it's an exit door it should say exit door"). Other assets keep their type
+ * as the name (an extinguisher's variant is a size, not a name).
+ */
+const DOOR_AREAS: Record<string, string> = {
+  'Fire Door (CA)': 'Common Area',
+  'Fire Door (SOU)': 'Sole Occupancy Unit',
+};
+
+export function isDoorType(assetType: string | null | undefined): boolean {
+  return !!assetType && assetType in DOOR_AREAS;
+}
+
+/** The asset's name: a door's kind (its variant), otherwise its type. */
+export function formatAssetName(assetType: string, variant?: string | null): string {
+  return isDoorType(assetType) && variant ? variant : formatAssetType(assetType);
+}
+
+/** The line under the name: a door's type and area, otherwise the variant. */
+export function formatAssetSubtitle(assetType: string, variant?: string | null): string | null {
+  if (isDoorType(assetType)) return variant ? formatAssetType(assetType) : null;
+  return variant || null;
+}
+
 // ─── formatRelativeDays ───────────────────────────────────────────────────────
 
 /**

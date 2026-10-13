@@ -1,5 +1,5 @@
 import { COLORS } from './theme';
-import { esc, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection, stripPrices } from './helpers';
+import { assetDisplayName, assetKind, esc, fmtDateTime, pill, photoRow, resultPill, stagedPhotoSection, stripPrices } from './helpers';
 import { AssetLogChunk } from '../data/chunking';
 import { Defect, InspectionPhoto } from '../types';
 
@@ -48,7 +48,7 @@ export function renderAssetLogChunk(
     const photos = (photosByAsset.get(asset.id) ?? []).filter((p) => !(p.defect_id && p.stage));
 
     const details = [
-      asset.variant,
+      assetKind(asset),
       asset.serial_number ? `S/N: ${asset.serial_number}` : null,
       asset.location_on_site ? `Location ${asset.location_on_site}` : null,
     ]
@@ -75,7 +75,7 @@ export function renderAssetLogChunk(
     parts.push(`
       <tr><td class="asset-cell"><div class="asset-card">
         <div class="asset-head" style="border-left-color:${edge}">
-          <span class="asset-title">${esc(asset.asset_ref ? `${asset.asset_ref} - ` : '')}${esc(asset.asset_type)}</span>
+          <span class="asset-title">${esc(assetDisplayName(asset))}</span>
           ${resultPill(asset.result)}
         </div>
         ${body ? `<div class="asset-body">${body}</div>` : ''}
