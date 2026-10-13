@@ -24,7 +24,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ScreenHeader, Button, SectionHeader, Card, showConfirm } from '@/components/ui';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { formatAssetType, getAssetTypeIcon, formatAssetName } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatAssetName, formatLocationCode } from '@/utils/assetHelpers';
 import { DefectSeverity, JobStatus } from '@/constants/Enums';
 import { useJobsStore } from '@/store/jobsStore';
 import { warmUpReportService } from '@/lib/pdfGenerator';
@@ -123,7 +123,7 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
         {asset.location_on_site ? (
           <Text style={[s.assetLoc, { color: C.textSecondary }]}>
             <MaterialCommunityIcons name="map-marker-outline" size={10} color={C.textSecondary} />{' '}
-            {asset.location_on_site}
+            {formatLocationCode(asset.location_on_site)}
           </Text>
         ) : null}
         {asset.actioned_by_name ? (

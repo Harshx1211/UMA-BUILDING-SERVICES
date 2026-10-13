@@ -32,7 +32,7 @@ import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { DefectSeverity, DefectStatus, JobStatus, PhotoStage } from '@/constants/Enums';
 import { findDefectCode } from '@/constants/DefectCodes';
-import { formatAssetType } from '@/utils/assetHelpers';
+import { formatAssetType, formatLocationCode, formatLocationFull } from '@/utils/assetHelpers';
 import { T } from '@/constants/Colors';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -219,7 +219,7 @@ export default function DefectDetailScreen() {
       <ScreenHeader
         eyebrow="DEFECT RECORD"
         title={defect.asset_type ? formatAssetType(defect.asset_type) : 'Defect Details'}
-        subtitle={defect.property_name || defect.location_on_site || ''}
+        subtitle={defect.property_name || (defect.location_on_site ? formatLocationCode(defect.location_on_site) : '')}
         showBack
         fallbackHref="/jobs"
         rightComponent={
@@ -323,7 +323,7 @@ export default function DefectDetailScreen() {
               {defect.location_on_site && (
                 <View style={s.infoRow}>
                   <MaterialCommunityIcons name="map-marker-outline" size={15} color={C.textSecondary} />
-                  <Text style={[s.infoTxt, { color: C.text }]}>{defect.location_on_site}</Text>
+                  <Text style={[s.infoTxt, { color: C.text }]}>{formatLocationFull(defect.location_on_site)}</Text>
                 </View>
               )}
               {defect.serial_number && (

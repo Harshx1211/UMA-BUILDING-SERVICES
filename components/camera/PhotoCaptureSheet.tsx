@@ -17,6 +17,7 @@ import { Asset } from '@/types';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system/legacy';
 import { generateUUID } from '@/utils/uuid';
+import { formatLocationCode } from '@/utils/assetHelpers';
 
 interface Props {
   jobId: string;
@@ -323,7 +324,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
                     </Text>
                     {a.location_on_site ? (
                       <Text style={[s.assetChipSub, { color: isSelected ? T.textOnPrimary : C.textTertiary, opacity: isSelected ? 0.75 : 1 }]} numberOfLines={1}>
-                        {a.location_on_site}
+                        {formatLocationCode(a.location_on_site)}
                       </Text>
                     ) : null}
                   </View>

@@ -88,7 +88,7 @@ export interface Asset {
   /** Short technician reference number (e.g. '001', '040') */
   asset_ref: string | null;
   description: string | null;
-  /** Structured code: "{tower}-{floor}-{unit or area}" (e.g. "1-1-1" or "1-1-CR") */
+  /** Structured code: "{tower}-{level}-{unit or area}" (e.g. "1-1-1" or "1-1-CR") */
   location_on_site: string | null;
   serial_number: string | null;
   barcode_id: string | null;

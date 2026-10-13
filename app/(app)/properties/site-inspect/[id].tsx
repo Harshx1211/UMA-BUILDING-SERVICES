@@ -38,7 +38,7 @@ import { generateUUID } from '@/utils/uuid';  // BUG 28 FIX
 import { localDateString } from '@/utils/dateHelpers';
 import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { useFocusEffect } from '@react-navigation/native';
-import { formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
+import { formatAssetName, formatAssetSubtitle, formatLocationCode } from '@/utils/assetHelpers';
 
 // ─── Defect quick-suggestion chips per asset type ────────────
 const DEFECT_CHIPS: Record<string, string[]> = {
@@ -137,7 +137,7 @@ const AssetInspectCard = React.memo(({
                 </Text>
               ) : null}
               <Text style={[s.assetLoc, { color: C.textSecondary }]} numberOfLines={1}>
-                {asset.location_on_site || 'No location specified'}
+                {asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'No location specified'}
               </Text>
               {asset.serial_number
                 ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text>

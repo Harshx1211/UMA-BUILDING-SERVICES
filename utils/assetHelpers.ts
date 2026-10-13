@@ -154,31 +154,53 @@ export function formatRelativeDays(iso: string | null | undefined): string {
   return `${days} days ago`;
 }
 
-// ─── formatLocationCode ───────────────────────────────────────────────────────
+// ─── formatLocationCode / formatLocationFull ─────────────────────────────────
+
+// Location codes from the Tower / Level / Unit-or-Area builder: "1-1-2",
+// "1-G-12A", "1-B1-CR", or "2-CR" (tower + area). Australian usage: "Level",
+// with G = Ground; a unit is a number (optionally with a letter), anything
+// else in that slot is an area code kept as typed (CR, PLANT...).
+function locationParts(location: string): string[] | null {
+  const parts = location.split('-').map((p) => p.trim());
+  const structured = parts.length >= 2 && parts.length <= 3
+    && parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
+  return structured ? parts : null;
+}
+const isUnitNumber = (p: string) => /^\d+[A-Za-z]?$/.test(p);
+const isLevelNumber = (p: string) => /^\d+$/.test(p);
 
 /**
- * Expands a structured location code ("1-1-1" or "1-CR") into a short,
- * unambiguous label: "T1 · F1 · U1" or "T1 · CR". Kept compact on purpose —
- * this shows up on asset cards and group headers where space is tight, and
- * the full "Tower 1 · Floor 1 · Unit 1" wording was getting truncated.
- * Legacy free-text locations (spaces, long segments) are left untouched —
- * only strings that actually look like the Tower/Floor/Unit builder's
- * output get expanded.
- *
- * Examples:
- *   '1-1-1'                → 'T1 · F1 · U1'
- *   '2-6-3'                → 'T2 · F6 · U3'
- *   '1-CR'                 → 'T1 · CR'
- *   'Level 2 corridor'     → 'Level 2 corridor'   (untouched — legacy free text)
+ * Compact form for cards, chips and group headers, where space is tight:
+ *   '1-1-2'   -> 'T1 · L1 · U2'      '1-G-12A' -> 'T1 · G · U12A'
+ *   '1-B1-CR' -> 'T1 · B1 · CR'      '2-CR'    -> 'T2 · CR'
+ * Free-text locations ('Level 2 corridor') are returned unchanged.
+ * FIX: an area code in the third slot used to print as "UCR"; and "Floor"
+ * became "Level" (Australian usage) everywhere — app, report and admin.
  */
 export function formatLocationCode(location: string): string {
   if (!location) return '';
-  const parts = location.split('-').map((p) => p.trim());
-  const looksStructured =
-    parts.length >= 2 &&
-    parts.length <= 3 &&
-    parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
-  if (!looksStructured) return location;
-  if (parts.length === 3) return `T${parts[0]} · F${parts[1]} · U${parts[2]}`;
-  return `T${parts[0]} · ${parts[1]}`;
+  const parts = locationParts(location);
+  if (!parts) return location;
+  const tower = `T${parts[0]}`;
+  if (parts.length === 2) return `${tower} · ${parts[1]}`;
+  const level = isLevelNumber(parts[1]) ? `L${parts[1]}` : parts[1];
+  const unit = isUnitNumber(parts[2]) ? `U${parts[2]}` : parts[2];
+  return `${tower} · ${level} · ${unit}`;
 }
+
+/**
+ * Written-out form, as printed in the PDF report:
+ *   '1-1-2' -> 'Tower 1 · Level 1 · Unit 2'   '1-G-12A' -> 'Tower 1 · Ground · Unit 12A'
+ *   '1-B1-CR' -> 'Tower 1 · Level B1 · CR'    '2-CR'    -> 'Tower 2 · CR'
+ */
+export function formatLocationFull(location: string | null | undefined): string {
+  if (!location) return '';
+  const parts = locationParts(location);
+  if (!parts) return location;
+  const tower = `Tower ${parts[0]}`;
+  if (parts.length === 2) return `${tower} · ${parts[1]}`;
+  const level = /^g$/i.test(parts[1]) ? 'Ground' : `Level ${parts[1]}`;
+  const unit = isUnitNumber(parts[2]) ? `Unit ${parts[2]}` : parts[2];
+  return `${tower} · ${level} · ${unit}`;
+}
+

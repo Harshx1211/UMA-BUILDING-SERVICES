@@ -13,7 +13,7 @@ import { useColors } from '@/hooks/useColors';
 import { DefectSeverity } from '@/constants/Enums';
 import { useDefectsStore } from '@/store/defectsStore';
 import { getAssetsForProperty } from '@/lib/database';
-import { formatAssetType, getAssetTypeIcon, formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatAssetName, formatAssetSubtitle, formatLocationCode } from '@/utils/assetHelpers';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import type { DefectCode } from '@/constants/DefectCodes';
@@ -284,7 +284,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
                   {a.location_on_site && (
                     <View style={s.metaChip}>
                       <MaterialCommunityIcons name="map-marker-outline" size={11} color={C.textTertiary} />
-                      <Text style={[s.assetMeta, { color: C.textTertiary }]} numberOfLines={1}>{a.location_on_site}</Text>
+                      <Text style={[s.assetMeta, { color: C.textTertiary }]} numberOfLines={1}>{formatLocationCode(a.location_on_site)}</Text>
                     </View>
                   )}
                   {(a.asset_ref || a.serial_number) && (

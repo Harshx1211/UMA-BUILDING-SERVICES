@@ -66,18 +66,30 @@ export function renderYearlyConditionReport(
     || (sectionOf(a) ?? Infinity) - (sectionOf(b) ?? Infinity)
     || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
   );
-  const defectRows = sortedDefects
-    .map((d) => {
-      const t = typeOf(d);
-      const section = sectionOf(d);
-      const color = (COLORS.SEVERITY[d.severity] ?? COLORS.SEVERITY.non_conformance).accent;
-      return `
+  const row = (d: (typeof defects)[number], third: string) => {
+    const t = typeOf(d);
+    const color = (COLORS.SEVERITY[d.severity] ?? COLORS.SEVERITY.non_conformance).accent;
+    return `
         <tr>
           <td style="text-align:center"><span class="type-badge" style="background:${color}">${t.type}</span></td>
           <td style="font-weight:700;color:${color}">${esc(t.label)}</td>
-          <td>${section != null ? `Section ${section}` : '&mdash;'}</td>
+          <td>${third}</td>
           <td class="pre">${esc(stripPrices(d.description))}</td>
         </tr>`;
+  };
+  // Appendix E lists what AS 1851 covers. Defects on systems outside it
+  // (emergency lighting and exit signs are AS 2293; access control; general
+  // defects not linked to an asset) go in their own table under it — still
+  // reported in full, just not presented as AS 1851 items (owner's decision,
+  // 2026-10-13).
+  const as1851Defects = sortedDefects.filter((d) => sectionOf(d) != null);
+  const otherDefects = sortedDefects.filter((d) => sectionOf(d) == null);
+  const defectRows = as1851Defects.map((d) => row(d, `Section ${sectionOf(d)}`)).join('');
+  const otherRows = otherDefects
+    .map((d) => {
+      const asset = d.asset_id ? assetsById.get(d.asset_id) : undefined;
+      const system = asset?.categoryLabel?.replace(/^\s*\d+\s*[-–]\s*/, '');
+      return row(d, esc(system || 'General (not linked to an asset)'));
     })
     .join('');
 
@@ -106,6 +118,13 @@ export function renderYearlyConditionReport(
     <tbody>${defectRows || `<tr><td colspan="4">No defects or non-conformances recorded</td></tr>`}</tbody>
   </table>
 
+  ${otherRows ? `
+  <div class="section-bar" style="margin-top:16px">Other Systems (Not Covered by AS 1851)</div>
+  <table>
+    <thead><tr><th style="width:7%;text-align:center">Type</th><th style="width:19%">Classification</th><th style="width:28%">System</th><th>Description</th></tr></thead>
+    <tbody>${otherRows}</tbody>
+  </table>` : ''}
+
   <!-- Kept together: two short closing blocks, never split from their
        headings or from each other. -->
   <div class="keep">
@@ -113,7 +132,7 @@ export function renderYearlyConditionReport(
     <div class="panel statement">
       The essential safety measures listed above have been serviced for the period stated in
       accordance with AS 1851-2012 and are considered fit for service, except where a defect
-      or non-conformance is recorded in the table above.
+      or non-conformance is recorded in the System Defects and Non-conformances table above.
     </div>
 
     <div class="section-bar" style="margin-top:16px">Service Provider Details</div>

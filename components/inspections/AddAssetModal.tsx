@@ -17,7 +17,7 @@ import type { RecordData } from '@/lib/database';
 import { AssetStatus, SyncOperation } from '@/constants/Enums';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { effectiveRoutine, formatAssetName, formatAssetSubtitle, nextAssetRefs, refPrefixOf, type AssetArea } from '@/utils/assetHelpers';
+import { effectiveRoutine, formatAssetName, formatAssetSubtitle, nextAssetRefs, refPrefixOf, type AssetArea, formatLocationCode } from '@/utils/assetHelpers';
 import type { Asset } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
@@ -56,7 +56,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const [addingNewLocation, setAddingNewLocation] = useState(false);
   const [showMoreFields, setShowMoreFields] = useState(false);
 
-  // ── Structured "New Location" builder — Tower / Floor / Unit-or-Area ──
+  // ── Structured "New Location" builder — Tower / Level / Unit-or-Area ──
   const [tower,   setTower]   = useState('');
   const [floorNo, setFloorNo] = useState('');
   const [unitNo,  setUnitNo]  = useState('');
@@ -195,7 +195,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
     const e: { location?: string; type?: string } = {};
     if (!selectedType) e.type = 'Please select an asset type.';
     if (!effectiveLocation.trim()) {
-      e.location = addingNewLocation ? 'Tower, floor and unit no. are all required.' : 'Please pick a location.';
+      e.location = addingNewLocation ? 'Tower, level and unit/area are all required.' : 'Please pick a location.';
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
@@ -450,7 +450,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                           style={[s.locationChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary : C.backgroundTertiary }]}
                         >
                           {selected && <MaterialCommunityIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />}
-                          <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                          <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{formatLocationCode(loc)}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -475,7 +475,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                       />
                     </View>
                     <View style={s.locFieldCol}>
-                      <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Floor No</Text>
+                      <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Level No</Text>
                       <TextInput
                         style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
                         placeholder="1" placeholderTextColor={C.textTertiary}

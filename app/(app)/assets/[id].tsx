@@ -13,7 +13,7 @@ import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
-import { formatAssetType, formatAssetName, AREA_LABEL, areaOf } from '@/utils/assetHelpers';
+import { formatAssetType, formatAssetName, AREA_LABEL, areaOf, formatLocationFull } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
@@ -205,7 +205,7 @@ export default function AssetDetailScreen() {
               <InfoRow icon="qrcode" label="Barcode / QR ID" value={asset.barcode_id} mono C={C} />
             ) : null}
             {asset.location_on_site ? (
-              <InfoRow icon="map-marker-outline" label="Location on Site" value={asset.location_on_site} C={C} />
+              <InfoRow icon="map-marker-outline" label="Location on Site" value={formatLocationFull(asset.location_on_site)} C={C} />
             ) : null}
             {asset.install_date ? (
               <InfoRow icon="wrench-outline" label="Install Date" value={asset.install_date} C={C} />

@@ -15,7 +15,7 @@ import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { areaOf, formatAssetName, formatAssetSubtitle, type AssetArea } from '@/utils/assetHelpers';
+import { areaOf, formatAssetName, formatAssetSubtitle, type AssetArea, formatLocationCode } from '@/utils/assetHelpers';
 import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
 
@@ -56,7 +56,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [addingNewLocation, setAddingNewLocation] = useState(false);
 
-  // ── Structured "New Location" builder — Tower / Floor / Unit-or-Area ──
+  // ── Structured "New Location" builder — Tower / Level / Unit-or-Area ──
   const [tower,   setTower]   = useState('');
   const [floorNo, setFloorNo] = useState('');
   const [unitNo,  setUnitNo]  = useState('');
@@ -178,7 +178,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
     if (!asset) return;
 
     if (!effectiveLocation.trim()) {
-      setErrors({ location: addingNewLocation ? 'Tower, floor and unit no. are all required.' : 'Please pick a location.' });
+      setErrors({ location: addingNewLocation ? 'Tower, level and unit/area are all required.' : 'Please pick a location.' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -386,7 +386,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                             style={[s.locationChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary : C.backgroundTertiary }]}
                           >
                             {selected && <MaterialCommunityIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />}
-                            <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{loc}</Text>
+                            <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{formatLocationCode(loc)}</Text>
                           </TouchableOpacity>
                         );
                       })}
@@ -411,7 +411,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                         />
                       </View>
                       <View style={s.locFieldCol}>
-                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Floor No</Text>
+                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Level No</Text>
                         <TextInput
                           style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
                           placeholder="1" placeholderTextColor={C.textTertiary}

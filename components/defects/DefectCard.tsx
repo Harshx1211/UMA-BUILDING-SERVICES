@@ -9,6 +9,7 @@ import { DefectSeverity, DefectStatus } from '@/constants/Enums';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { findDefectCode } from '@/constants/DefectCodes';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
+import { formatAssetType, formatLocationCode } from '@/utils/assetHelpers';
 
 interface Props {
   defect: Defect & { asset_type?: string; location_on_site?: string };
@@ -109,7 +110,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
           <View style={[s.assetPill, { backgroundColor: C.backgroundSecondary }]}>
             <MaterialCommunityIcons name="tools" size={11} color={C.textSecondary} />
             <Text style={[s.assetPillText, { color: C.textSecondary }]}>
-              {defect.asset_type} — {defect.location_on_site || 'No Location'}
+              {formatAssetType(defect.asset_type ?? '')} — {defect.location_on_site ? formatLocationCode(defect.location_on_site) : 'No Location'}
             </Text>
           </View>
         </View>

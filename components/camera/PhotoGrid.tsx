@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { queryRecordsIn, getFailedPhotoUploadIds } from '@/lib/database';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
 import { useResponsive } from '@/hooks/useResponsive';
+import { formatAssetName, formatLocationCode } from '@/utils/assetHelpers';
 
 interface Props {
   photos: InspectionPhoto[];
@@ -97,7 +98,7 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   // itself actually changes.
   const sections = useMemo(() => {
     const assetIds = [...new Set(photos.map((p) => p.asset_id).filter((id): id is string => !!id))];
-    const assets = queryRecordsIn<{ id: string; asset_type: string; location_on_site: string }>(
+    const assets = queryRecordsIn<{ id: string; asset_type: string; variant: string | null; location_on_site: string }>(
       'assets', 'id', assetIds,
     );
     const assetById = new Map(assets.map((a) => [a.id, a]));
@@ -107,7 +108,9 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
       let key = 'Site Photos (General)';
       if (photo.asset_id) {
         const asset = assetById.get(photo.asset_id);
-        key = asset ? `${asset.asset_type} - ${asset.location_on_site}` : `Asset Photos (${photo.asset_id.substring(0, 6)})`;
+        key = asset
+          ? [formatAssetName(asset.asset_type, asset.variant), asset.location_on_site ? formatLocationCode(asset.location_on_site) : null].filter(Boolean).join(' - ')
+          : `Asset Photos (${photo.asset_id.substring(0, 6)})`;
       }
       if (!sectionsObj[key]) sectionsObj[key] = [];
       sectionsObj[key].push(photo);

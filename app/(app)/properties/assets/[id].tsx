@@ -14,7 +14,7 @@ import type { Property, Asset } from '@/types';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
-import { formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
+import { formatAssetName, formatAssetSubtitle, formatLocationCode } from '@/utils/assetHelpers';
 
 type ColorsType = ReturnType<typeof useColors>;
 
@@ -215,7 +215,7 @@ export default function PropertyAssetsScreen() {
                         ? <Text style={[s.assetLocation, { color: C.textSecondary }]}>{formatAssetSubtitle(asset.asset_type, asset.variant, asset.area)}</Text>
                         : null}
                       {asset.location_on_site
-                        ? <Text style={[s.assetLocation, { color: C.textSecondary }]}>{asset.location_on_site}</Text>
+                        ? <Text style={[s.assetLocation, { color: C.textSecondary }]}>{formatLocationCode(asset.location_on_site)}</Text>
                         : null
                       }
                       {asset.serial_number

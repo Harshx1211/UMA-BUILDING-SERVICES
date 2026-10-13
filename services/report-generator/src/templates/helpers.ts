@@ -112,20 +112,34 @@ type AssetLike = {
   area?: string | null;
 };
 
-/**
- * A structured location code ("1-1-2", "2-CR") written out for a client:
- * "Tower 1 · Floor 1 · Unit 2", "Tower 2 · CR". The app shows the same
- * codes compactly ("T1 · F1 · U2"); a report reader shouldn't need to know
- * the code. Free-text locations are returned unchanged.
- */
-export function formatLocation(location: string | null | undefined): string | null {
-  if (!location) return null;
+// Location codes from the Tower / Level / Unit-or-Area builder: "1-1-2",
+// "1-G-12A", "1-B1-CR", or "2-CR" (tower + area). Australian usage: "Level",
+// with G = Ground; a unit is a number (optionally with a letter), anything
+// else in that slot is an area code kept as typed (CR, PLANT...).
+function locationParts(location: string): string[] | null {
   const parts = location.split('-').map((p) => p.trim());
   const structured = parts.length >= 2 && parts.length <= 3
     && parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
-  if (!structured) return location;
-  if (parts.length === 3) return `Tower ${parts[0]} · Floor ${parts[1]} · Unit ${parts[2]}`;
-  return `Tower ${parts[0]} · ${parts[1]}`;
+  return structured ? parts : null;
+}
+const isUnitNumber = (p: string) => /^\d+[A-Za-z]?$/.test(p);
+
+/**
+ * A structured location code written out for a client — same wording as
+ * the app's asset record (utils/assetHelpers.ts formatLocationFull):
+ *   '1-1-2' -> 'Tower 1 · Level 1 · Unit 2'   '1-G-12A' -> 'Tower 1 · Ground · Unit 12A'
+ *   '1-B1-CR' -> 'Tower 1 · Level B1 · CR'    '2-CR'    -> 'Tower 2 · CR'
+ * Free-text locations are returned unchanged.
+ */
+export function formatLocation(location: string | null | undefined): string | null {
+  if (!location) return null;
+  const parts = locationParts(location);
+  if (!parts) return location;
+  const tower = `Tower ${parts[0]}`;
+  if (parts.length === 2) return `${tower} · ${parts[1]}`;
+  const level = /^g$/i.test(parts[1]) ? 'Ground' : `Level ${parts[1]}`;
+  const unit = isUnitNumber(parts[2]) ? `Unit ${parts[2]}` : parts[2];
+  return `${tower} · ${level} · ${unit}`;
 }
 
 function inUnit(asset: AssetLike): boolean {
