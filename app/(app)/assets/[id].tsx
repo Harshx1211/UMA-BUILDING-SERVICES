@@ -13,7 +13,7 @@ import { AssetStatus, InspectionResult, DefectSeverity } from '@/constants/Enums
 import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/database';
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
-import { formatAssetType, formatAssetName } from '@/utils/assetHelpers';
+import { formatAssetType, formatAssetName, AREA_LABEL, areaOf } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 
@@ -191,6 +191,7 @@ export default function AssetDetailScreen() {
             {asset.variant ? (
               <InfoRow icon="format-list-bulleted" label="Variant" value={asset.variant} C={C} />
             ) : null}
+            <InfoRow icon="home-city-outline" label="Where" value={AREA_LABEL[areaOf(asset)]} C={C} />
             {asset.asset_ref ? (
               <InfoRow icon="tag-outline" label="Ref" value={asset.asset_ref} mono C={C} />
             ) : null}

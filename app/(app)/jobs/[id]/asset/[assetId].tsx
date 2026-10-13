@@ -36,7 +36,7 @@ import { DefectFieldsCard, DefectFieldsValue, DefectPhotosDraft } from '@/compon
 import DefectCard from '@/components/defects/DefectCard';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
-import { formatAssetType, formatLocationCode, formatRelativeDays, formatAssetName } from '@/utils/assetHelpers';
+import { formatAssetType, formatLocationCode, formatRelativeDays, formatAssetName, AREA_LABEL, areaOf } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
 import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
@@ -874,7 +874,10 @@ export default function AssetDetailScreen() {
   const isNT = !pendingFail && result === InspectionResult.NotTested;
 
   const failCount = history.filter((h) => h.result === 'fail').length;
-  const location = asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'No location specified';
+  const location = [
+    asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'No location specified',
+    areaOf(asset) === 'unit' ? AREA_LABEL.unit : null,
+  ].filter(Boolean).join(' · ');
 
   const resultPillColors = (r: string | null) =>
     r === 'pass' ? { bg: C.successLight, fg: C.successDark }

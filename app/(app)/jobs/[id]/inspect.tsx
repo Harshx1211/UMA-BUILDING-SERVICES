@@ -654,6 +654,7 @@ export default function AssetInspectionScreen() {
         company_id: companyId,
         asset_type: assetToClone.asset_type,
         variant: assetToClone.variant,
+        area: assetToClone.area ?? 'common',
         asset_ref: null,
         description: assetToClone.description,
         location_on_site: assetToClone.location_on_site,

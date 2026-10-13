@@ -38,6 +38,7 @@ import { generateUUID } from '@/utils/uuid';  // BUG 28 FIX
 import { localDateString } from '@/utils/dateHelpers';
 import { PropertyNotebookSheet, PropertyNotebookSheetRef } from '@/components/notebook/PropertyNotebookSheet';
 import { useFocusEffect } from '@react-navigation/native';
+import { formatAssetName, formatAssetSubtitle } from '@/utils/assetHelpers';
 
 // ─── Defect quick-suggestion chips per asset type ────────────
 const DEFECT_CHIPS: Record<string, string[]> = {
@@ -128,8 +129,13 @@ const AssetInspectCard = React.memo(({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.assetType, { color: C.text }]} numberOfLines={1}>
-                {asset.asset_type}
+                {formatAssetName(asset.asset_type, asset.variant)}
               </Text>
+              {formatAssetSubtitle(asset.asset_type, asset.variant, asset.area) ? (
+                <Text style={[s.assetLoc, { color: C.textSecondary }]} numberOfLines={1}>
+                  {formatAssetSubtitle(asset.asset_type, asset.variant, asset.area)}
+                </Text>
+              ) : null}
               <Text style={[s.assetLoc, { color: C.textSecondary }]} numberOfLines={1}>
                 {asset.location_on_site || 'No location specified'}
               </Text>
