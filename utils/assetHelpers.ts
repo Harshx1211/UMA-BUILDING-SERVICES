@@ -160,11 +160,25 @@ export function formatRelativeDays(iso: string | null | undefined): string {
 // "1-G-12A", "1-B1-CR", or "2-CR" (tower + area). Australian usage: "Level",
 // with G = Ground; a unit is a number (optionally with a letter), anything
 // else in that slot is an area code kept as typed (CR, PLANT...).
+// A tower is a number (1, 2A) or a letter or two (A, NW); a level is G, LG,
+// UG, M, RF, or a number with an optional B/L/P prefix (1, L3, B1, P2). The
+// Unit / Area box is free, so anything goes in the third slot ("Pump room").
+// Ordinary text with hyphens ("North-East stair", "Lift-1-Lobby") doesn't
+// fit the tower/level shape and is left as typed.
+const isTowerCode = (p: string) => /^(\d{1,3}[A-Za-z]?|[A-Za-z]{1,2})$/.test(p);
+const isLevelCode = (p: string) => /^(G|LG|UG|M|RF|[BLP]?\d{1,3}[A-Za-z]?)$/i.test(p);
 function locationParts(location: string): string[] | null {
   const parts = location.split('-').map((p) => p.trim());
-  const structured = parts.length >= 2 && parts.length <= 3
-    && parts.every((p) => p.length > 0 && p.length <= 6 && !p.includes(' '));
-  return structured ? parts : null;
+  if (parts.length < 2 || parts.some((p) => p.length === 0) || !isTowerCode(parts[0])) return null;
+  if (parts.length === 2) return parts[1].length <= 6 && !parts[1].includes(' ') ? parts : null;
+  return isLevelCode(parts[1]) ? [parts[0], parts[1], parts.slice(2).join('-')] : null;
+}
+/** Australian building usage: Ground, Lower/Upper Ground, Mezzanine, Roof,
+ * otherwise "Level 3" / "Level B1". */
+function levelName(p: string): string {
+  const named: Record<string, string> = { G: 'Ground', LG: 'Lower Ground', UG: 'Upper Ground', M: 'Mezzanine', RF: 'Roof' };
+  const code = p.toUpperCase();
+  return named[code] ?? `Level ${code.replace(/^L(?=\d)/, '')}`;
 }
 const isUnitNumber = (p: string) => /^\d+[A-Za-z]?$/.test(p);
 const isLevelNumber = (p: string) => /^\d+$/.test(p);
@@ -183,7 +197,7 @@ export function formatLocationCode(location: string): string {
   if (!parts) return location;
   const tower = `T${parts[0]}`;
   if (parts.length === 2) return `${tower} · ${parts[1]}`;
-  const level = isLevelNumber(parts[1]) ? `L${parts[1]}` : parts[1];
+  const level = isLevelNumber(parts[1]) ? `L${parts[1]}` : parts[1].toUpperCase();
   const unit = isUnitNumber(parts[2]) ? `U${parts[2]}` : parts[2];
   return `${tower} · ${level} · ${unit}`;
 }
@@ -199,7 +213,7 @@ export function formatLocationFull(location: string | null | undefined): string 
   if (!parts) return location;
   const tower = `Tower ${parts[0]}`;
   if (parts.length === 2) return `${tower} · ${parts[1]}`;
-  const level = /^g$/i.test(parts[1]) ? 'Ground' : `Level ${parts[1]}`;
+  const level = levelName(parts[1]);
   const unit = isUnitNumber(parts[2]) ? `Unit ${parts[2]}` : parts[2];
   return `${tower} · ${level} · ${unit}`;
 }
