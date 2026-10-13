@@ -17,14 +17,16 @@
 -- display text changes: no asset is re-typed or removed. Each catalogue
 -- list is re-sorted alphabetically and de-duplicated.
 --
--- Safe to run more than once (old names simply no longer match).
+-- One statement (data-modifying CTEs), so it is atomic on its own and
+-- needs no temporary table — the Supabase SQL Editor reported "relation
+-- variant_renames does not exist" for the first version after it had
+-- already committed (applied 2026-10-13: 115 assets, all 30 catalogue
+-- rows). Safe to run more than once (old names simply no longer match).
 -- Run this once in the Supabase SQL Editor.
 -- ============================================================
 
-BEGIN;
-
-CREATE TEMP TABLE variant_renames (asset_type text, old_name text, new_name text) ON COMMIT DROP;
-INSERT INTO variant_renames (asset_type, old_name, new_name) VALUES
+WITH renames (asset_type, old_name, new_name) AS (
+  VALUES
   ('Emergency - Exit Signs', 'Blade (Ceiling Mount) - Exit', 'Exit Sign - Blade (Ceiling Mount)'),
   ('Emergency - Exit Signs', 'Blade (Recessed) - Exit', 'Exit Sign - Blade (Recessed)'),
   ('Emergency - Exit Signs', 'Box (Wall Mount) - Exit', 'Exit Sign - Box (Wall Mount)'),
@@ -110,30 +112,33 @@ INSERT INTO variant_renames (asset_type, old_name, new_name) VALUES
   ('Fire Hydrant System', 'In-ground Spring Hydrant', 'In-Ground Spring Hydrant'),
   ('Fire Hydrant System', 'Sprinkler head', 'Sprinkler Head'),
   ('Fire Sprinkler System - Wet Pipe', 'Sprinkler head', 'Sprinkler Head'),
-  ('Fire Sprinkler System - Wet Pipe', 'sprinkler (heads) cabinet', 'Sprinkler Head Cabinet');
-
--- Existing assets
-UPDATE public.assets a
-SET variant = r.new_name, updated_at = now()
-FROM variant_renames r
-WHERE a.asset_type = r.asset_type AND a.variant = r.old_name;
-
--- Catalogue lists
-UPDATE public.asset_type_definitions d
-SET variants = (
-      SELECT array_agg(v ORDER BY lower(v))
-      FROM (
-        SELECT DISTINCT coalesce(r.new_name, x.v) AS v
-        FROM unnest(d.variants) AS x(v)
-        LEFT JOIN variant_renames r ON r.asset_type = d.value AND r.old_name = x.v
-      ) renamed
-    ),
-    updated_at = now()
-WHERE EXISTS (
-  SELECT 1 FROM variant_renames r WHERE r.asset_type = d.value AND r.old_name = ANY (d.variants)
-);
-
-COMMIT;
+  ('Fire Sprinkler System - Wet Pipe', 'sprinkler (heads) cabinet', 'Sprinkler Head Cabinet')
+),
+renamed_assets AS (
+  UPDATE public.assets a
+  SET variant = r.new_name, updated_at = now()
+  FROM renames r
+  WHERE a.asset_type = r.asset_type AND a.variant = r.old_name
+  RETURNING a.id
+),
+renamed_catalogue AS (
+  UPDATE public.asset_type_definitions d
+  SET variants = (
+        SELECT array_agg(v ORDER BY lower(v))
+        FROM (
+          SELECT DISTINCT coalesce(r.new_name, x.v) AS v
+          FROM unnest(d.variants) AS x(v)
+          LEFT JOIN renames r ON r.asset_type = d.value AND r.old_name = x.v
+        ) renamed
+      ),
+      updated_at = now()
+  WHERE EXISTS (
+    SELECT 1 FROM renames r WHERE r.asset_type = d.value AND r.old_name = ANY (d.variants)
+  )
+  RETURNING d.id
+)
+SELECT (SELECT count(*) FROM renamed_assets) AS assets_renamed,
+       (SELECT count(*) FROM renamed_catalogue) AS catalogue_rows_updated;
 
 -- Check: should return no rows (nothing left on an old name)
 SELECT a.asset_type, a.variant, count(*)
