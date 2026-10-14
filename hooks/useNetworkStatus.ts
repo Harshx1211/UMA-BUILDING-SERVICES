@@ -2,7 +2,6 @@
 // Phase 12: Tracks false→true transition to auto-trigger sync and show toast
 import { useEffect, useRef, useState } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
-import Toast from 'react-native-toast-message';
 import { runSync, getCachedUserId } from '@/lib/sync';
 
 // FIX (2026-10-14): "online" used to mean only "connected to a network".
@@ -56,12 +55,8 @@ export function useNetworkStatus(): NetworkStatus {
 
       // Reconnection detected → trigger sync + show toast
       if (wasOffline && online) {
-        Toast.show({
-          type: 'info',
-          text1: '🌐 Back online',
-          text2: 'Syncing your offline changes...',
-          visibilityTime: 3000,
-        });
+        // The strip under the header (SyncStrip) already shows the
+        // catch-up upload with real progress — no second pop-up on top of it.
         // Pass cached userId — avoids a Supabase auth round-trip on reconnect
         void runSync(getCachedUserId() ?? undefined);
       }

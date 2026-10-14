@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { SyncStrip } from '@/components/SyncStrip';
 
 interface Props {
   title: string;
@@ -47,6 +48,7 @@ export function ScreenHeader({
   const insets = useSafeAreaInsets();
 
   return (
+    <View>
     <View
       style={[
         styles.header,
@@ -91,6 +93,10 @@ export function ScreenHeader({
           <View style={styles.right}>{rightComponent}</View>
         ) : null}
       </View>
+    </View>
+    {/* Offline / uploading status — attached under the header so it never
+        covers the title or back button (see SyncStrip). */}
+    <SyncStrip />
     </View>
   );
 }

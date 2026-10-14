@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import NetInfo from '@react-native-community/netinfo';
 import { queueReportGeneration, pollReportStatus, getOrRefreshReportUrl } from '@/lib/pdfGenerator';
-import { runSync, describeReportWait } from '@/lib/sync';
+import { runSync, describeReportWait, getReportWaitInfo, type ReportWaitInfo } from '@/lib/sync';
 import { updateRecord } from '@/lib/database';
 
 // Was 5s — with generation itself now down to seconds, a 5s poll could
@@ -35,6 +35,8 @@ export function useReportGeneration(
   // What the request is still waiting on before it leaves this device
   // (see describeReportWait) — null once it's been sent.
   const [waitingOn, setWaitingOn] = useState<string | null>(null);
+  // The same, as data for the progress view (preview.tsx).
+  const [waitInfo, setWaitInfo] = useState<ReportWaitInfo | null>(null);
 
   const startedAtMs  = useRef<number | null>(null);
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -99,6 +101,7 @@ export function useReportGeneration(
     const check = async () => {
       if (!isMounted.current) return;
       setWaitingOn(describeReportWait(id));
+      setWaitInfo(getReportWaitInfo(id));
       let result;
       try {
         result = await pollReportStatus(id);
@@ -141,6 +144,7 @@ export function useReportGeneration(
       if (result.status === 'completed') {
         stop();
         setWaitingOn(null);
+        setWaitInfo(null);
         setStatus('completed');
         setPdfUrl(result.pdfUrl);
         const now = new Date().toISOString();
@@ -155,6 +159,7 @@ export function useReportGeneration(
       if (result.status === 'failed') {
         stop();
         setWaitingOn(null);
+        setWaitInfo(null);
         setStatus('failed');
         setError(result.error);
         if (!notifiedRef.current) {
@@ -354,5 +359,5 @@ export function useReportGeneration(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, opts?.hasExistingReport, opts?.forceOnMount]);
 
-  return { status, elapsedS, pdfUrl, error, waitingOn, generate, loadExisting, stopPolling: stop };
+  return { status, elapsedS, pdfUrl, error, waitingOn, waitInfo, generate, loadExisting, stopPolling: stop };
 }

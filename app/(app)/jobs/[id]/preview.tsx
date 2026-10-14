@@ -21,87 +21,141 @@ import { useReportGeneration } from '@/hooks/useReportGeneration';
 import { useJobsStore } from '@/store/jobsStore';
 import { JobStatus } from '@/constants/Enums';
 import Toast from 'react-native-toast-message';
+import type { ReportWaitInfo } from '@/lib/sync';
 
 // ─── Screen states ─────────────────────────────────────────────────────────────
 type ScreenState = 'pending' | 'ready' | 'downloading' | 'error';
 
-// ─── Pending animation view ────────────────────────────────────────────────────
+// ─── Pending view ──────────────────────────────────────────────────────────────
+// Three plain steps — upload, build, ready — with the real upload count, the
+// way delivery or banking apps show progress. Technical error text only
+// appears behind "Show details".
+type StepState = 'todo' | 'active' | 'done';
+
+function Step({ state, title, detail, progress, last }: {
+  state: StepState; title: string; detail: string; progress?: number; last?: boolean;
+}) {
+  const C = useColors();
+  return (
+    <View style={styles.step}>
+      <View style={styles.stepRail}>
+        {state === 'done' ? (
+          <MaterialCommunityIcons name="check-circle" size={22} color={C.success} />
+        ) : state === 'active' ? (
+          <View style={styles.stepActive}>
+            <ActivityIndicator size="small" color={C.primary} />
+          </View>
+        ) : (
+          <View style={[styles.stepTodo, { borderColor: C.border }]} />
+        )}
+        {!last ? <View style={[styles.stepLine, { backgroundColor: state === 'done' ? C.success : C.border }]} /> : null}
+      </View>
+      <View style={styles.stepText}>
+        <Text style={[styles.stepTitle, { color: state === 'todo' ? C.textTertiary : C.text }]}>{title}</Text>
+        <Text style={[styles.stepDetail, { color: C.textSecondary }]}>{detail}</Text>
+        {progress !== undefined ? (
+          <View style={[styles.bar, { backgroundColor: C.border }]}>
+            <View style={[styles.barFill, { backgroundColor: C.primary, width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+
 function PendingView({
-  primaryColor,
-  textColor,
-  textSecondary,
-  border,
   elapsedS,
   isViewMode,
-  waitingOn,
+  waitInfo,
 }: {
-  primaryColor: string;
-  textColor: string;
-  textSecondary: string;
-  border: string;
   elapsedS: number;
   isViewMode: boolean;
-  waitingOn: string | null;
+  waitInfo: ReportWaitInfo | null;
 }) {
+  const C = useColors();
   const pulse = useSharedValue(1);
   useEffect(() => {
     pulse.value = withRepeat(withTiming(0.5, { duration: 900 }), -1, true);
   }, [pulse]);
   const animStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const noMotion = useReducedMotion();
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Largest number of changes seen waiting, so "done of total" only ever counts up.
+  const totalRef = useRef(0);
+  const remaining = waitInfo?.remaining ?? 0;
+  totalRef.current = Math.max(totalRef.current, remaining);
+  const total = totalRef.current;
+  const uploading = remaining > 0;
+
+  const icon = (
+    <View style={[styles.iconCircle, { backgroundColor: T.tintBg(C.primary), borderColor: T.tintBorder(C.primary) }]}>
+      <Animated.View style={noMotion ? undefined : animStyle}>
+        <MaterialCommunityIcons name={isViewMode ? 'cloud-download-outline' : 'file-document-outline'} size={40} color={C.primary} />
+      </Animated.View>
+    </View>
+  );
+
+  if (isViewMode) {
+    return (
+      <Animated.View entering={noMotion ? undefined : FadeIn} style={styles.centeredWrap}>
+        {icon}
+        <Text style={[styles.bigTitle, { color: C.text }]}>Opening report</Text>
+        <Text style={[styles.lead, { color: C.textSecondary }]}>
+          Checking the latest version of this job&apos;s report. This doesn&apos;t create a new PDF.
+        </Text>
+        <ActivityIndicator style={{ marginTop: 20 }} color={C.primary} />
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View entering={noMotion ? undefined : FadeIn} style={styles.centeredWrap}>
-      {/* Cloud icon with pulse */}
-      <View style={[styles.iconCircle, { backgroundColor: primaryColor + '18', borderColor: primaryColor + '30' }]}>
-        <Animated.View style={noMotion ? undefined : animStyle}>
-          <MaterialCommunityIcons name={isViewMode ? 'cloud-download-outline' : 'cloud-upload-outline'} size={42} color={primaryColor} />
-        </Animated.View>
-      </View>
-
-      <Text style={[styles.bigTitle, { color: textColor }]}>{isViewMode ? 'Loading Report' : 'Generating Report'}</Text>
-      <Text style={[styles.subTitle, { color: primaryColor }]}>
-        {isViewMode ? 'Fetching your existing report…' : 'Processing on our servers…'}
+      {icon}
+      <Text style={[styles.bigTitle, { color: C.text }]}>Preparing your report</Text>
+      <Text style={[styles.lead, { color: C.textSecondary }]}>
+        {uploading ? 'Sending your latest work first, so the report includes all of it.' : 'Your work is on the server. Building the PDF now.'}
       </Text>
 
-      {/* Progress dots */}
-      <View style={styles.dotsRow}>
-        {[0, 1, 2].map(i => (
-          <Animated.View
-            key={i}
-            style={[styles.dot, { backgroundColor: primaryColor }, noMotion ? undefined : animStyle]}
-          />
-        ))}
+      <View style={[styles.stepsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+        <Step
+          state={uploading ? 'active' : 'done'}
+          title="Upload your work"
+          detail={uploading
+            ? `${total - remaining} of ${total} change${total === 1 ? '' : 's'} · ${waitInfo?.label ?? ''}`
+            : 'Everything is on the server'}
+          progress={uploading && total > 0 ? (total - remaining) / total : undefined}
+        />
+        <Step
+          state={uploading ? 'todo' : 'active'}
+          title="Build the PDF"
+          detail={uploading ? 'Starts when the upload finishes' : `Running on our servers · ${mmss(elapsedS)}`}
+        />
+        <Step state="todo" title="Ready to share" detail="Opens here when it's done" last />
       </View>
 
-      <View style={[styles.infoBox, { borderColor: border }]}>
-        {isViewMode ? (
-          <Text style={[styles.infoLine, { color: textSecondary }]}>
-            This job&apos;s report was already generated — just checking its current status.
-            {'\n'}This isn&apos;t creating a new PDF.
-          </Text>
-        ) : (
-          <>
-            <Text style={[styles.infoLine, { color: textSecondary }]}>
-              ⏱  Elapsed: {elapsedS}s
+      {waitInfo?.retrying ? (
+        <View style={[styles.retryBox, { backgroundColor: C.warningLight }]}>
+          <MaterialCommunityIcons name="refresh" size={16} color={C.warningDark} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.retryTitle, { color: C.warningDark }]}>
+              Retrying {waitInfo.retrying.label}. Your work is safe on this phone.
             </Text>
-            {/* Still on this device — say exactly what it's waiting for. */}
-            {waitingOn ? (
-              <Text style={[styles.infoLine, { color: textColor, fontWeight: '600', marginBottom: 8 }]}>
-                {waitingOn}
-              </Text>
+            <TouchableOpacity onPress={() => setShowDetails((v) => !v)} hitSlop={8} accessibilityRole="button">
+              <Text style={[styles.retryLink, { color: C.warningDark }]}>{showDetails ? 'Hide details' : 'Show details'}</Text>
+            </TouchableOpacity>
+            {showDetails ? (
+              <Text selectable style={[styles.retryError, { color: C.warningDark }]}>{waitInfo.retrying.error}</Text>
             ) : null}
-            <Text style={[styles.infoLine, { color: textSecondary }]}>
-              The PDF is being built on our servers with full-resolution photos.
-              {'\n'}Large sites (1000+ assets) take 15–45 seconds.
-            </Text>
-            <Text style={[styles.infoLine, { color: textSecondary, marginTop: 8 }]}>
-              You can go back — the report will be ready in the cloud when done.
-              Come back to this screen to download it.
-            </Text>
-          </>
-        )}
-      </View>
+          </View>
+        </View>
+      ) : null}
+
+      <Text style={[styles.footnote, { color: C.textTertiary }]}>
+        You can leave this screen. The report keeps building and will be here when you come back.
+      </Text>
     </Animated.View>
   );
 }
@@ -136,10 +190,10 @@ function ReadyView({
         <MaterialCommunityIcons name="check-circle-outline" size={42} color={C.success} />
       </View>
 
-      <Text style={[styles.bigTitle, { color: textColor }]}>Report Ready</Text>
+      <Text style={[styles.bigTitle, { color: textColor }]}>Report ready</Text>
       <Text style={[styles.subTitle, { color: C.success }]}>{pdfTitle}</Text>
       <Text style={[styles.hintTxt, { color: textSecondary }]}>
-        Generated on our servers · Full-resolution · AS1851 compliant
+        Full-resolution photos · AS 1851-2012 format
       </Text>
 
       <View style={[styles.btnStack, { paddingBottom: Math.max(insetBottom, 20) }]}>
@@ -152,7 +206,7 @@ function ReadyView({
         />
         <TouchableOpacity onPress={onOpenBrowser} style={styles.secondaryBtn}>
           <MaterialCommunityIcons name="open-in-new" size={16} color={primaryColor} />
-          <Text style={[styles.secondaryTxt, { color: primaryColor }]}>Open in Browser</Text>
+          <Text style={[styles.secondaryTxt, { color: primaryColor }]}>Open in browser</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -193,7 +247,7 @@ export default function PreviewScreen() {
     elapsedS,
     pdfUrl,
     error: errorMsg,
-    waitingOn,
+    waitInfo,
     generate,
     loadExisting,
   } = useReportGeneration(jobId, { forceOnMount: mode !== 'view', hasExistingReport: mode === 'view' });
@@ -283,13 +337,9 @@ export default function PreviewScreen() {
 
       {screenState === 'pending' && (
         <PendingView
-          primaryColor={C.primary}
-          textColor={C.text}
-          textSecondary={C.textSecondary}
-          border={C.border}
           elapsedS={elapsedS}
           isViewMode={isViewMode}
-          waitingOn={waitingOn}
+          waitInfo={waitInfo}
         />
       )}
 
@@ -350,6 +400,23 @@ const styles = StyleSheet.create({
 
   infoBox:     { borderWidth: 1, borderRadius: 10, padding: 16, width: '100%', marginTop: 8 },
   infoLine:    { fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  lead:        { fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 340, marginBottom: 20 },
+  stepsCard:   { width: '100%', maxWidth: 420, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  step:        { flexDirection: 'row', gap: 12 },
+  stepRail:    { alignItems: 'center', width: 24 },
+  stepActive:  { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+  stepTodo:    { width: 18, height: 18, borderRadius: 9, borderWidth: 2, marginTop: 2 },
+  stepLine:    { width: 2, flex: 1, minHeight: 14, marginVertical: 4, borderRadius: 1 },
+  stepText:    { flex: 1, paddingBottom: 16, gap: 2 },
+  stepTitle:   { fontSize: 15, fontWeight: '700' },
+  stepDetail:  { fontSize: 13, lineHeight: 18 },
+  bar:         { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 8 },
+  barFill:     { height: 4, borderRadius: 2 },
+  retryBox:    { width: '100%', maxWidth: 420, flexDirection: 'row', gap: 10, borderRadius: 12, padding: 12, marginTop: 12 },
+  retryTitle:  { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  retryLink:   { fontSize: 13, fontWeight: '700', textDecorationLine: 'underline', marginTop: 4 },
+  retryError:  { fontSize: 12, lineHeight: 17, marginTop: 6, opacity: 0.85 },
+  footnote:    { fontSize: 12, lineHeight: 18, textAlign: 'center', maxWidth: 340, marginTop: 16 },
 
   btnStack:    { width: '100%', gap: 12, marginTop: 28 },
   secondaryBtn:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },

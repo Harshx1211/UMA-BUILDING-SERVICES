@@ -156,7 +156,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Drives the ring pulsing out of the active job's dot (0 → 1, repeating).
+  const pulseAnim = useRef(new Animated.Value(0)).current;
 
   // FIX: Use localDateString() instead of toISOString().slice(0,10).
   // toISOString() is UTC — before ~10am AEST the UTC date is already "yesterday".
@@ -219,11 +220,11 @@ export default function HomeScreen() {
     onSyncComplete(onSync);
 
     // Active job pulse animation — store reference so we can stop it on unmount
+    // FIX (look): the whole Active job card used to grow and shrink
+    // non-stop. Now the card stays still and only the dot gives off a soft
+    // ring, the usual "live" signal.
     const pulseAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.025, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,     duration: 1000, useNativeDriver: true }),
-      ])
+      Animated.timing(pulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
     );
     pulseAnimation.start();
 
@@ -295,15 +296,23 @@ export default function HomeScreen() {
       >
         {/* ── Active Job Banner ── */}
         {inProgress && (
-          <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: T.space16 }}>
+          <View style={{ marginBottom: T.space16 }}>
             <Card
               variant="default"
               noPadding
               onPress={() => openJob(inProgress.id)}
             >
               <View style={styles.activeJobInner}>
-                {/* Pulsing orange dot */}
-                <View style={styles.activeDot} />
+                {/* Live dot with a ring pulsing out of it */}
+                <View style={styles.activeDotWrap}>
+                  <Animated.View
+                    style={[styles.activeDotRing, {
+                      opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
+                      transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.6] }) }],
+                    }]}
+                  />
+                  <View style={styles.activeDot} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.activeEyebrow}>Active job</Text>
                   <Text style={styles.activeName} numberOfLines={1}>
@@ -316,7 +325,7 @@ export default function HomeScreen() {
                 </View>
               </View>
             </Card>
-          </Animated.View>
+          </View>
         )}
 
         {/* ── Overdue Compliance Banner ── */}
@@ -340,7 +349,7 @@ export default function HomeScreen() {
             elements otherwise stretching edge-to-edge. */}
         <View style={[styles.kpiRow, isTablet && styles.kpiRowTablet]}>
           {isLoading
-            ? (["Today's Jobs", 'Open Jobs', 'Completed Today'] as const).map((label) => (
+            ? (["Today's jobs", 'Open jobs', 'Completed today'] as const).map((label) => (
                 <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <SkeletonBlock width={32} height={26} borderRadius={6} />
                   <SkeletonBlock width={48} height={10} borderRadius={4} style={{ marginTop: 6 }} />
@@ -349,9 +358,9 @@ export default function HomeScreen() {
             : [
                 // Overview → what's still outstanding → what's done — reads
                 // left to right as the state of today's work, completed last.
-                { value: todayJobs.length, label: "Today's Jobs"   },
-                { value: openCount,        label: 'Open Jobs'      },
-                { value: doneToday,        label: 'Completed Today' },
+                { value: todayJobs.length, label: "Today's jobs"   },
+                { value: openCount,        label: 'Open jobs'      },
+                { value: doneToday,        label: 'Completed today' },
               ].map(({ value, label }) => (
                 <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <Text style={styles.kpiValue}>{value}</Text>
@@ -410,22 +419,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // FIX (look): the count was 8 pt in a 14 pt circle — unreadable at arm's
+  // length. Standard badge size, with a ring in the button's colour so it
+  // reads as sitting on top of the bell.
   bellBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 2,
+    right: 2,
     backgroundColor: T.danger,
     borderRadius: T.radiusPill,
-    minWidth: 14,
-    height: 14,
+    minWidth: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: T.surface,
   },
   bellBadgeText: {
     color: T.textOnPrimary,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '800',
+    lineHeight: 12,
+    fontVariant: ['tabular-nums'],
   },
 
   scroll: {
@@ -440,15 +456,24 @@ const styles = StyleSheet.create({
     padding: T.space16,
     gap: T.space12,
   },
+  activeDotWrap: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeDotRing: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: T.radiusPill,
+    backgroundColor: T.primary,
+  },
   activeDot: {
     width: 8,
     height: 8,
     borderRadius: T.radiusPill,
     backgroundColor: T.primary,
-    shadowColor: T.primary,
-    shadowRadius: 6,
-    shadowOpacity: 0.7,
-    elevation: 3,
   },
   activeEyebrow: {
     ...Typography.eyebrow,

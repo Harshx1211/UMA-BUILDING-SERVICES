@@ -355,6 +355,13 @@ export function schedulePushSoon(): void {
   }, PUSH_SOON_DEBOUNCE_MS);
 }
 
+/** True while any upload is actually running — a full sync, a quick push,
+ * or the photo queue. Read by the sync strip so "Uploading…" only shows
+ * when something is really being sent. */
+export function isSyncActive(): boolean {
+  return _isSyncing || _isPushingQueue || _isProcessingPhotos;
+}
+
 /** Returns the currently cached user ID — useful for fire-and-forget callers */
 export function getCachedUserId(): string | null {
   return _cachedUserId;
@@ -2184,21 +2191,41 @@ const BLOCKER_LABELS: Record<string, string> = {
  * blocker that's actually failing, with its last error, when there is one —
  * an upload that keeps failing used to look identical to a slow server.
  */
-export function describeReportWait(jobId: string): string | null {
+/** What a queued report request is still waiting for, as data for the
+ * report screen's progress view. `null` once the request has been sent. */
+export interface ReportWaitInfo {
+  /** Changes for this job still to upload before the PDF can be built. */
+  remaining: number;
+  /** What the first of them is, in plain words ("photos"). */
+  label: string;
+  /** Set when an upload has failed at least once and is being retried. */
+  retrying: { label: string; error: string } | null;
+}
+
+export function getReportWaitInfo(jobId: string): ReportWaitInfo | null {
   const stillQueued = getUnsyncedItemsIncludingBackoff().some((i) => {
     if (i.operation !== SyncOperation.ReportGenerate) return false;
     try { return (JSON.parse(i.payload ?? '{}') as { jobId?: string }).jobId === jobId; } catch { return false; }
   });
   if (!stillQueued) return null;
   const blockers = getReportBlockers(jobId);
-  if (blockers.length === 0) return 'Sending the report request…';
+  if (blockers.length === 0) return { remaining: 0, label: '', retrying: null };
   const failing = blockers.find((b) => (b.retry_count ?? 0) > 0 && b.last_error);
-  if (failing) {
-    const label = BLOCKER_LABELS[failing.table_name] ?? failing.table_name;
-    return `Waiting for ${label} to upload — the last attempt failed: ${failing.last_error}`;
-  }
-  const label = BLOCKER_LABELS[blockers[0].table_name] ?? blockers[0].table_name;
-  return `Uploading ${blockers.length} change${blockers.length === 1 ? '' : 's'} first (${label})…`;
+  return {
+    remaining: blockers.length,
+    label: BLOCKER_LABELS[blockers[0].table_name] ?? blockers[0].table_name,
+    retrying: failing
+      ? { label: BLOCKER_LABELS[failing.table_name] ?? failing.table_name, error: failing.last_error ?? '' }
+      : null,
+  };
+}
+
+export function describeReportWait(jobId: string): string | null {
+  const info = getReportWaitInfo(jobId);
+  if (!info) return null;
+  if (info.remaining === 0) return 'Sending the report request…';
+  if (info.retrying) return `Waiting for ${info.retrying.label} to upload — the last attempt failed: ${info.retrying.error}`;
+  return `Uploading ${info.remaining} change${info.remaining === 1 ? '' : 's'} first (${info.label})…`;
 }
 
 // Exported for emergency use by authStore.forceFinalSyncAndSignOut only.

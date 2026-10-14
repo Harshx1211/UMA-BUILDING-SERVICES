@@ -30,7 +30,7 @@ SiteTrack is the technician-facing mobile companion to the SiteTrack platform. T
 | UI Icons | `@expo/vector-icons` — MaterialCommunityIcons exclusively |
 | Maps | Expo MapView (Google Maps) |
 | PDF Generation | `react-native-html-to-pdf` |
-| Offline Detection | NetInfo + custom `OfflineBanner` + `SyncStatusBar` |
+| Offline Detection | NetInfo + `SyncStrip` (under every header) + `SyncStatusBar` |
 
 ---
 

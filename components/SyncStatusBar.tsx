@@ -105,7 +105,7 @@ export function SyncStatusBar() {
   // ── Label ────────────────────────────────────────────────
   let label = 'Never synced';
   if (isSyncing) {
-    label = 'Syncing...';
+    label = 'Syncing…';
   } else if (!isOnline) {
     label = 'Offline';
   } else if (hasFailures) {
@@ -126,6 +126,10 @@ export function SyncStatusBar() {
   }
 
   const textColor = hasFailures ? T.danger : T.textMuted;
+
+  // FIX: before the first status read finishes, this used to say "Never
+  // synced" for a moment on every app open. Hold the space, say nothing.
+  if (!status && !isSyncing) return <View style={styles.placeholder} />;
 
   return (
     <TouchableOpacity
@@ -148,4 +152,5 @@ const styles = StyleSheet.create({
   container: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   dot:       { width: 7, height: 7, borderRadius: 4 },
   label:     { fontSize: 11, fontWeight: '500' },
+  placeholder: { height: 21 },
 });

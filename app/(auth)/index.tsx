@@ -1,7 +1,6 @@
 // Splash screen — uses shared BrandLogo, routes to app or login after session check
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
@@ -34,8 +33,8 @@ export default function SplashScreen() {
 
       {/* ── Loading indicator ─────── */}
       <Animated.View entering={noMotion ? undefined : FadeInDown.delay(400).duration(400)} style={styles.footer}>
-        <ActivityIndicator size="small" color={T.textPrimary} />
-        <Text style={styles.loadingText}>Loading...</Text>
+        {/* Logo plus a quiet spinner — no "Loading..." caption, like most apps' start screens. */}
+        <ActivityIndicator size="small" color={T.textMuted} accessibilityLabel="Loading" />
       </Animated.View>
     </View>
   );
@@ -55,10 +54,5 @@ const styles = StyleSheet.create({
     bottom: 60,
     alignItems: 'center',
     gap: 10,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: T.textPrimary,
-    opacity: 0.45,
   },
 });

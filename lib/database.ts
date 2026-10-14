@@ -2915,6 +2915,28 @@ export function getUnsyncedItemsIncludingBackoff(maxRetries = 5): SyncQueueItem[
 }
 
 /**
+ * How much of this device's work hasn't reached the server — one cheap
+ * COUNT for the sync strip (useSyncStrip), which polls it. `unsynced` is
+ * everything still to go, including items waiting out a retry backoff;
+ * `failed` is what gave up and needs a retry.
+ */
+export function getSyncQueueCounts(maxRetries = 5): { unsynced: number; failed: number } {
+  try {
+    const db = openDatabase();
+    const row = db.getFirstSync<{ unsynced: number | null; failed: number | null }>(
+      `SELECT SUM(CASE WHEN synced = 0 AND retry_count < ? THEN 1 ELSE 0 END) AS unsynced,
+              SUM(CASE WHEN synced = -1 THEN 1 ELSE 0 END) AS failed
+       FROM sync_queue`,
+      [maxRetries],
+    );
+    return { unsynced: row?.unsynced ?? 0, failed: row?.failed ?? 0 };
+  } catch (err) {
+    console.error('[UMA BUILDING SERVICES DB] getSyncQueueCounts error:', err);
+    return { unsynced: 0, failed: 0 };
+  }
+}
+
+/**
  * Returns sync queue items that have permanently failed (synced = -1).
  * These will never be retried automatically until resetStaleFailedSyncItems()
  * or retryAllFailedSyncItems() runs. Callers can expose them to the user

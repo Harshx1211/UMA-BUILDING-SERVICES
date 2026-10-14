@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
+import { toastConfig } from '@/components/ui/AppToast';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { AppLockScreen } from '@/components/AppLockScreen';
@@ -185,7 +186,7 @@ export default function RootLayout() {
         <PaperProvider theme={theme}>
           <Slot />
           <StatusBar style="dark" />
-          <Toast />
+          <Toast config={toastConfig} />
           <ConfirmDialogHost />
           {/* Last, so it covers every screen, toast and dialog above. */}
           {isAuthenticated && isLocked && <AppLockScreen />}
