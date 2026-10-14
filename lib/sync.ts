@@ -2209,6 +2209,48 @@ export function describeReportWait(jobId: string): string | null {
 // The leading underscore signals this is an internal function — do not call
 // it from screens or other stores. Use runSync() for normal sync triggering.
 //
+/** How many queue items of one run (see _parallelRuns) are pushed at once. */
+const PUSH_CONCURRENCY = 6;
+
+// Inserts that resolve two-device conflicts by reading and rewriting other
+// rows (job_assets, signatures) and anything on jobs (status, report
+// requests) always go one at a time, exactly as before.
+const SEQUENTIAL_ONLY_TABLES = new Set(['jobs', 'signatures']);
+const SEQUENTIAL_INSERT_TABLES = new Set(['job_assets']);
+
+function _canRunInParallel(item: SyncQueueItem): boolean {
+  if (SEQUENTIAL_ONLY_TABLES.has(item.table_name)) return false;
+  if (item.operation === SyncOperation.Insert) return !SEQUENTIAL_INSERT_TABLES.has(item.table_name);
+  return item.operation === SyncOperation.Update || item.operation === SyncOperation.Delete;
+}
+
+/**
+ * Splits the queue, in order, into runs that may be pushed concurrently: a
+ * run is consecutive items with the same table and operation, each on a
+ * different record. Anything else is a run of one. Order between runs is
+ * kept, so nothing is sent before the change queued ahead of it.
+ */
+function _parallelRuns(items: SyncQueueItem[]): SyncQueueItem[][] {
+  const runs: SyncQueueItem[][] = [];
+  let run: SyncQueueItem[] = [];
+  let records = new Set<string>();
+  for (const item of items) {
+    const head = run[0];
+    const joins = head !== undefined && _canRunInParallel(item) && _canRunInParallel(head)
+      && item.table_name === head.table_name && item.operation === head.operation
+      && !records.has(item.record_id);
+    if (!joins) {
+      if (run.length) runs.push(run);
+      run = [];
+      records = new Set();
+    }
+    run.push(item);
+    records.add(item.record_id);
+  }
+  if (run.length) runs.push(run);
+  return runs;
+}
+
 // FIX: the company_id-injection fallback below used to read only the
 // module-level _cachedUserId — which stopSync() nulls out immediately, as
 // part of sign-out, BEFORE authStore's own final flush (pushPendingWork ->
@@ -2258,7 +2300,9 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
     pending.filter(p => p.operation === SyncOperation.Insert).map(p => `${p.table_name}:${p.record_id}`),
   );
 
-  for (const item of pending) {
+  // One queue item, start to finish. Was the body of a plain sequential
+  // loop; `return` here is that loop's old `continue`.
+  const processItem = async (item: SyncQueueItem): Promise<void> => {
     // FIX: a JSON.parse failure here used to fall through to the generic
     // catch at the bottom of this loop, which classifies everything as a
     // transient, retryable failure (isTerminal=false). A malformed payload
@@ -2276,7 +2320,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
       const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
       console.warn(`[UMA BUILDING SERVICES Sync] PUSH: queue item ${item.id} has unparsable payload, marking terminal: ${msg}`);
       incrementSyncRetry(item.id, `Corrupt payload (unparsable JSON): ${msg}`, MAX_SYNC_RETRIES, true);
-      continue;
+      return;
     }
     try {
       let error: { message: string; code?: string } | null = null;
@@ -2505,7 +2549,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
             incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to sync first`, MAX_SYNC_RETRIES);
           }
-          continue;
+          return;
         }
 
         // FIX: the guard above only catches a same-pass race — it says
@@ -2519,7 +2563,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         if (hasTerminalInsertFailure(item.table_name, item.record_id)) {
           incrementSyncRetry(item.id, `This record's own creation failed permanently, so this update can never be applied`, MAX_SYNC_RETRIES, true);
           console.warn(`[SiteTrack Sync] Update for ${item.table_name}/${item.record_id} abandoned — its own Insert failed terminally`);
-          continue;
+          return;
         }
 
         // FIX: Inject company_id for UPDATE operations too.
@@ -2596,7 +2640,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           if ((item.retry_count ?? 0) < MAX_SYNC_RETRIES - 1) {
             incrementSyncRetry(item.id, `Deferred: waiting on this record's own Insert to resolve first`, MAX_SYNC_RETRIES);
           }
-          continue;
+          return;
         }
         // FIX: unlike the equivalent Update-side check, a terminally-failed
         // own-Insert means this Delete's goal (this row shouldn't exist) is
@@ -2608,7 +2652,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
         if (hasTerminalInsertFailure(item.table_name, item.record_id)) {
           if (__DEV__) console.log(`[SiteTrack Sync] Delete for ${item.table_name}/${item.record_id} — its own Insert failed terminally, so it never existed; marking complete`);
           markSyncItemComplete(item.id);
-          continue;
+          return;
         }
         // If it's an inspection photo deletion, also attempt to delete the physical file from the storage bucket
         if (item.table_name === 'inspection_photos' && typeof payload.photo_url === 'string') {
@@ -2696,7 +2740,7 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
           // very next push pass — which runs as soon as the blockers
           // themselves push (schedulePushSoon) or the screen nudges.
           deferSyncItem(item.id, `Waiting for ${blockers.length} change(s) to upload first`);
-          continue;
+          return;
         }
 
         const session = useAuthStore.getState().session;
@@ -2838,6 +2882,20 @@ export async function _pushQueue(fallbackUserId?: string): Promise<void> {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[UMA BUILDING SERVICES Sync] PUSH unexpected error for queue item ${item.id}: ${msg}`);
       incrementSyncRetry(item.id, msg, MAX_SYNC_RETRIES);
+    }
+  };
+
+  // FIX (slow catch-up after offline work, 2026-10-14): every item used to
+  // wait for the previous one's round trip, so ~100 queued changes took
+  // ~100 sequential requests. Items still run in queue order, but a run of
+  // CONSECUTIVE items that are the same kind of change on the same table,
+  // each on a different record (e.g. 21 assets removed, 30 audit rows) now
+  // goes up a few at a time — rows of one table don't depend on each other,
+  // and the run finishes before anything queued after it starts, so an
+  // asset still lands before its result, a defect before its photo.
+  for (const run of _parallelRuns(pending)) {
+    for (let i = 0; i < run.length; i += PUSH_CONCURRENCY) {
+      await Promise.all(run.slice(i, i + PUSH_CONCURRENCY).map(processItem));
     }
   }
 }

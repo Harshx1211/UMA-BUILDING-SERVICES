@@ -530,6 +530,15 @@ export default function AssetDetailScreen() {
         } else if (!failed && (n.trim() !== (a.technician_notes || '') || internalNoteChanged)) {
           updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim(), undefined, undefined, undefined, undefined, undefined, internalNoteTrim);
           notifyIfRejected(() => useInspectionStore.getState().error);
+        } else if (failed && a.result !== null && (n.trim() !== (a.technician_notes || '') || internalNoteChanged)) {
+          // FIX (found in offline testing, 2026-10-14): a Remark typed on a
+          // Fail asset AFTER its defect was saved — no defect card open, so
+          // no draft — fell through both branches above and was lost when
+          // the screen closed before the field's own blur-save fired. Same
+          // write as handleSaveNote; the defect's severity is passed through
+          // unchanged (undefined would reset it), code/price left untouched.
+          updateAssetResult(a.id, a.result, a.checklist_data ?? undefined, a.is_compliant, a.defect_reason ?? undefined, n.trim(), undefined, pDefect?.severity, undefined, undefined, undefined, internalNoteTrim, primaryDefectId);
+          notifyIfRejected(() => useInspectionStore.getState().error);
         }
 
         // FIX: same safety net as above, extended to an in-progress
