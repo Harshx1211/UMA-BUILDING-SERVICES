@@ -2201,10 +2201,6 @@ export function describeReportWait(jobId: string): string | null {
   return `Uploading ${blockers.length} change${blockers.length === 1 ? '' : 's'} first (${label})…`;
 }
 
-/**
- * Pushes all pending sync_queue items to Supabase, marking each complete on success.
- * Items that fail MAX_SYNC_RETRIES times are permanently abandoned to prevent infinite loops.
- */
 // Exported for emergency use by authStore.forceFinalSyncAndSignOut only.
 // The leading underscore signals this is an internal function — do not call
 // it from screens or other stores. Use runSync() for normal sync triggering.
@@ -2251,6 +2247,10 @@ function _parallelRuns(items: SyncQueueItem[]): SyncQueueItem[][] {
   return runs;
 }
 
+/**
+ * Pushes all pending sync_queue items to Supabase, marking each complete on success.
+ * Items that fail MAX_SYNC_RETRIES times are permanently abandoned to prevent infinite loops.
+ */
 // FIX: the company_id-injection fallback below used to read only the
 // module-level _cachedUserId — which stopSync() nulls out immediately, as
 // part of sign-out, BEFORE authStore's own final flush (pushPendingWork ->
