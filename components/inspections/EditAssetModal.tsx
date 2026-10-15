@@ -15,7 +15,8 @@ import { SyncOperation } from '@/constants/Enums';
 import { useAuthStore } from '@/store/authStore';
 import { useCatalogueStore } from '@/store/catalogueStore';
 import { AreaSwitch } from '@/components/inspections/AreaSwitch';
-import { areaOf, formatAssetName, formatAssetSubtitle, type AssetArea, formatLocationCode } from '@/utils/assetHelpers';
+import { areaOf, formatAssetName, formatAssetSubtitle, type AssetArea } from '@/utils/assetHelpers';
+import { LocationPicker } from '@/components/inspections/LocationPicker';
 import { generateUUID } from '@/utils/uuid';
 import type { Asset } from '@/types';
 
@@ -53,18 +54,8 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const [allTags, setAllTags] = useState<AssetTag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [initialAssignments, setInitialAssignments] = useState<AssetTagAssignment[]>([]);
-  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
-  const [addingNewLocation, setAddingNewLocation] = useState(false);
 
-  // ── Structured "New Location" builder — Tower / Level / Unit-or-Area ──
-  const [tower,   setTower]   = useState('');
-  const [floorNo, setFloorNo] = useState('');
-  const [unitNo,  setUnitNo]  = useState('');
-
-  const generatedLocation = tower.trim() && floorNo.trim() && unitNo.trim()
-    ? `${tower.trim()}-${floorNo.trim()}-${unitNo.trim()}`
-    : '';
-  const effectiveLocation = addingNewLocation ? generatedLocation : location;
+  const effectiveLocation = location;
 
   const typeDef = useMemo(() => assetTypes.find(t => t.value === selectedType), [selectedType, assetTypes]);
   // Common Area / Unit (SOU) — see AreaSwitch. Only types with a unit
@@ -89,9 +80,6 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       setSerialNumber(asset.serial_number || '');
       setNotes(asset.description || '');
       setErrors({});
-      setTower('');
-      setFloorNo('');
-      setUnitNo('');
       setSelectedType(asset.asset_type);
       setSelectedVariant(asset.variant || '');
       setArea(areaOf(asset));
@@ -109,13 +97,6 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       const current = queryRecords<AssetTagAssignment>('asset_tag_assignments', { asset_id: asset.id });
       setSelectedTagIds(current.map(a => a.tag_id));
       setInitialAssignments(current);
-
-      // Include this asset's own location so it shows pre-selected — everything
-      // else the property has recorded is offered alongside it.
-      const rows = queryRecords<{ location_on_site: string | null }>('assets', { property_id: asset.property_id });
-      const distinct = Array.from(new Set(rows.map(r => r.location_on_site).filter((v): v is string => !!v))).sort();
-      setLocationSuggestions(distinct);
-      setAddingNewLocation(distinct.length === 0);
     }
   }, [visible, asset]);
 
@@ -178,7 +159,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
     if (!asset) return;
 
     if (!effectiveLocation.trim()) {
-      setErrors({ location: addingNewLocation ? 'Tower, level and unit/area are all required.' : 'Please pick a location.' });
+      setErrors({ location: 'Choose the tower, level and unit or area.' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -362,79 +343,15 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
               {/* Common Area / Unit — only for types with a unit routine */}
               <AreaSwitch typeDef={typeDef} area={area} onChange={setArea} />
 
-              {/* Location */}
+              {/* Location — see LocationPicker */}
               <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Location on Site <Text style={{color: C.primary}}>*</Text></Text>
-                {errors.location && (
-                  <View style={[s.errorRow, { backgroundColor: C.errorLight, borderColor: C.error }]}>
-                    <MaterialCommunityIcons name="alert-circle" size={13} color={C.error} />
-                    <Text style={[s.errorTxt, { color: C.error }]}>{errors.location}</Text>
-                  </View>
-                )}
-                {locationSuggestions.length > 0 && !addingNewLocation ? (
-                  <>
-                    <Text style={[s.fieldHint, { color: C.textTertiary, marginTop: 0, marginBottom: 10 }]}>
-                      Pick an existing block/unit so it groups correctly, or add a new one.
-                    </Text>
-                    <View style={s.locationSuggestWrap}>
-                      {locationSuggestions.map(loc => {
-                        const selected = location === loc;
-                        return (
-                          <TouchableOpacity
-                            key={loc}
-                            onPress={() => { setLocation(loc); setErrors(e => ({ ...e, location: undefined })); }}
-                            style={[s.locationChip, { borderColor: selected ? C.primary : C.border, backgroundColor: selected ? C.primary : C.backgroundTertiary }]}
-                          >
-                            {selected && <MaterialCommunityIcons name="check" size={12} color="#fff" style={{ marginRight: 4 }} />}
-                            <Text style={[s.locationChipTxt, { color: selected ? '#fff' : C.textSecondary }]} numberOfLines={1}>{formatLocationCode(loc)}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                      <TouchableOpacity
-                        onPress={() => { setLocation(''); setAddingNewLocation(true); setErrors(e => ({ ...e, location: undefined })); }}
-                        style={[s.locationChip, { borderColor: C.primary, backgroundColor: C.background, borderStyle: 'dashed' }]}
-                      >
-                        <MaterialCommunityIcons name="plus" size={13} color={C.primary} style={{ marginRight: 3 }} />
-                        <Text style={[s.locationChipTxt, { color: C.primary }]}>New Location</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={s.locFieldsRow}>
-                      <View style={s.locFieldCol}>
-                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Tower No</Text>
-                        <TextInput
-                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
-                          placeholder="1" placeholderTextColor={C.textTertiary}
-                          value={tower} onChangeText={v => { setTower(v); setErrors(e => ({ ...e, location: undefined })); }}
-                        />
-                      </View>
-                      <View style={s.locFieldCol}>
-                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Level No</Text>
-                        <TextInput
-                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
-                          placeholder="1" placeholderTextColor={C.textTertiary}
-                          value={floorNo} onChangeText={v => { setFloorNo(v); setErrors(e => ({ ...e, location: undefined })); }}
-                        />
-                      </View>
-                      <View style={s.locFieldCol}>
-                        <Text style={[s.locFieldLabel, { color: C.textTertiary }]}>Unit / Area</Text>
-                        <TextInput
-                          style={[s.locInput, { backgroundColor: C.backgroundTertiary, color: C.text }]}
-                          placeholder="1 or CR" placeholderTextColor={C.textTertiary}
-                          value={unitNo} onChangeText={v => { setUnitNo(v); setErrors(e => ({ ...e, location: undefined })); }}
-                        />
-                      </View>
-                    </View>
-
-                    {locationSuggestions.length > 0 && (
-                      <TouchableOpacity onPress={() => { setAddingNewLocation(false); setLocation(asset.location_on_site || ''); }} style={{ marginTop: 10 }}>
-                        <Text style={[s.locationBackLink, { color: C.primary }]}>← Choose from existing locations</Text>
-                      </TouchableOpacity>
-                    )}
-                  </>
-                )}
+                <LocationPicker
+                  value={location}
+                  onChange={(v) => { setLocation(v); setErrors(e => ({ ...e, location: undefined })); }}
+                  propertyId={asset.property_id}
+                  excludeAssetId={asset.id}
+                  error={errors.location}
+                />
               </View>
 
               {/* Ref */}
@@ -568,14 +485,8 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   variantSearchInput: { flex: 1, fontSize: 14, fontWeight: '600', padding: 0 },
-  locationSuggestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  locationChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, maxWidth: '100%' },
-  locationChipTxt: { fontSize: 12, fontWeight: '600' },
   locationBackLink: { fontSize: 12, fontWeight: '700' },
-  locFieldsRow: { flexDirection: 'row', gap: 8 },
-  locFieldCol:  { flex: 1 },
   locFieldLabel:{ fontSize: 11, fontWeight: '700', marginBottom: 5, letterSpacing: 0.2, textTransform: 'uppercase' },
-  locInput:     { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '500' },
   tagWrap:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagChip:  { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   tagChipText: { fontSize: 13, fontWeight: '700' },

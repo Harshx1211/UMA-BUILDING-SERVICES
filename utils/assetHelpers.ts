@@ -202,6 +202,77 @@ export function formatLocationCode(location: string): string {
   return `${tower} · ${level} · ${unit}`;
 }
 
+// ─── Location picker support (components/inspections/LocationPicker.tsx) ─────
+
+/** A location split into its tower / level / unit-or-area. `level` is '' for
+ * a two-part code ("2-CR"). Null for free text ("Plant room east"). */
+export interface LocationParts { tower: string; level: string; unit: string }
+
+export function parseLocation(location: string | null | undefined): LocationParts | null {
+  if (!location) return null;
+  const parts = locationParts(location);
+  if (!parts) return null;
+  return parts.length === 2
+    ? { tower: parts[0], level: '', unit: parts[1] }
+    : { tower: parts[0], level: parts[1], unit: parts[2] };
+}
+
+export function buildLocation(p: LocationParts): string {
+  return p.level ? `${p.tower}-${p.level}-${p.unit}` : `${p.tower}-${p.unit}`;
+}
+
+export { isTowerCode, isUnitNumber };
+export const formatLevelName = (level: string): string => levelName(level);
+export const formatUnitName = (unit: string): string => (isUnitNumber(unit) ? `Unit ${unit}` : unit);
+
+/** Ground first, basements below it, then levels by number. */
+export function compareLevels(a: string, b: string): number {
+  const key = (l: string) => {
+    const c = l.toUpperCase();
+    if (c === 'LG') return -0.5;
+    if (c === 'G') return 0;
+    if (c === 'UG') return 0.5;
+    if (c === 'M') return 0.75;
+    if (c === 'RF') return 10_000;
+    const b = /^B(\d+)/.exec(c); if (b) return -Number(b[1]);
+    const p = /^P(\d+)/.exec(c); if (p) return -100 - Number(p[1]);
+    const n = /^L?(\d+)/.exec(c); return n ? Number(n[1]) : 9_999;
+  };
+  return key(a) - key(b) || a.localeCompare(b);
+}
+
+/** Unit numbers first in number order, then named areas A–Z. */
+export function compareUnits(a: string, b: string): number {
+  const na = isUnitNumber(a), nb = isUnitNumber(b);
+  if (na && nb) return parseInt(a, 10) - parseInt(b, 10) || a.localeCompare(b);
+  if (na !== nb) return na ? -1 : 1;
+  return a.localeCompare(b);
+}
+
+/** What a technician types for a level, as the stored code: "Ground" -> G,
+ * "Level 3" -> 3, "Basement 1" -> B1, "Roof" -> RF. Null if it isn't a level
+ * the location format can hold. */
+export function normalizeLevelInput(raw: string): string | null {
+  const v = raw.trim().replace(/\s+/g, ' ');
+  if (!v) return null;
+  const named: Record<string, string> = {
+    ground: 'G', 'ground floor': 'G', g: 'G', 'lower ground': 'LG', lg: 'LG', 'upper ground': 'UG', ug: 'UG',
+    mezzanine: 'M', mezz: 'M', m: 'M', roof: 'RF', rooftop: 'RF', rf: 'RF',
+  };
+  const n = named[v.toLowerCase()];
+  if (n) return n;
+  const basement = /^basement\s*(\d{1,2})$/i.exec(v); if (basement) return `B${basement[1]}`;
+  const level = /^(?:level|lvl|floor|l)\s*(\d{1,3}[A-Za-z]?)$/i.exec(v); if (level) return level[1].toUpperCase();
+  const code = v.toUpperCase();
+  return isLevelCode(code) ? code : null;
+}
+
+/** "Unit 12A" -> "12A"; anything else kept as typed. Hyphens become spaces
+ * so the text can't be mistaken for extra location parts. */
+export function normalizeUnitInput(raw: string): string {
+  return raw.trim().replace(/^unit\s+/i, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ');
+}
+
 /**
  * Written-out form, as printed in the PDF report:
  *   '1-1-2' -> 'Tower 1 · Level 1 · Unit 2'   '1-G-12A' -> 'Tower 1 · Ground · Unit 12A'
