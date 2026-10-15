@@ -31,6 +31,7 @@ import { warmUpReportService } from '@/lib/pdfGenerator';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import type { JobLiveChangeTable } from '@/lib/sync';
 import type { Defect, Signature } from '@/types';
+import { stripPrices } from '@/utils/prices';
 
 type MCIcon = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -136,7 +137,7 @@ function AssetRow({ asset, index, isLast, colors: C }: AssetRowProps) {
         {isFail && asset.defect_reason ? (
           <View style={s.defectReasonRow}>
             <MaterialCommunityIcons name="alert-circle-outline" size={11} color={C.error} />
-            <Text style={[s.defectReasonTxt, { color: C.error }]}>{asset.defect_reason}</Text>
+            <Text style={[s.defectReasonTxt, { color: C.error }]}>{stripPrices(asset.defect_reason)}</Text>
           </View>
         ) : null}
       </View>
@@ -186,7 +187,7 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
           </View>
 
           {/* Description */}
-          <Text style={[s.defectDesc, { color: C.text }]}>{defect.description}</Text>
+          <Text style={[s.defectDesc, { color: C.text }]}>{stripPrices(defect.description)}</Text>
 
           {/* Meta row — C2: uses typed ExtendedDefect fields, no `as any` */}
           <View style={s.defectMetaRow}>
@@ -201,11 +202,6 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
                   {defect.defect_code.toUpperCase()}
                 </Text>
               </View>
-            ) : null}
-            {defect.quote_price != null ? (
-              <Text style={[s.defectPrice, { color: C.success }]}>
-                Ref: ${defect.quote_price}
-              </Text>
             ) : null}
           </View>
         </View>

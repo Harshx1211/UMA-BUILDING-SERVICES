@@ -10,11 +10,16 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { getFieldAuditLog, getRecord, AuditLogEntry } from '@/lib/database';
+import { stripPrices } from '@/utils/prices';
 
 interface Props {
   tableName: 'job_assets' | 'defects';
   recordId: string;
 }
+
+// Prices are admin-only (owner's rule, 2026-10-15): price changes aren't
+// listed here at all.
+const HIDDEN_FIELDS = new Set(['quote_price']);
 
 const FIELD_LABELS: Record<string, string> = {
   result: 'Result',
@@ -36,6 +41,8 @@ function formatValue(field: string, value: unknown): string {
   if (field === 'checklist_data') return 'updated';
   if (field === 'result') return String(value).replace(/_/g, ' ');
   if (field === 'severity') return String(value).replace(/_/g, ' ');
+  // Prices out first, before the text is shortened.
+  if (typeof value === 'string') value = stripPrices(value);
   if (typeof value === 'string' && value.length > 60) return value.slice(0, 57) + '…';
   return String(value);
 }
@@ -83,7 +90,10 @@ export function Timeline({ tableName, recordId }: Props) {
 
   return (
     <View>
-      {entries.map((entry, i) => (
+      {entries
+        .map((entry) => ({ ...entry, changes: entry.changes.filter((c) => !HIDDEN_FIELDS.has(c.field)) }))
+        .filter((entry) => entry.changes.length > 0)
+        .map((entry, i) => (
         <View key={entry.id} style={[s.row, i > 0 && { borderTopColor: C.border, borderTopWidth: 1 }]}>
           <View style={s.topRow}>
             <Text style={[s.who, { color: C.text }]}>{entry.changed_by ? names.get(entry.changed_by) ?? 'Unknown' : 'Unknown'}</Text>

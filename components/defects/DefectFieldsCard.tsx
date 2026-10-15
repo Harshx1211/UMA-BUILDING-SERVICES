@@ -28,6 +28,7 @@ import DefectCodePicker from '@/components/defects/DefectCodePicker';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import { getValidLocalUri } from '@/utils/fileHelpers';
 import { cardShadow } from '@/components/ui/Card';
+import { stripPrices } from '@/utils/prices';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -180,7 +181,7 @@ export function DefectFieldsCard({
       // swapping codes before typing anything custom) — never clobber text
       // they actually wrote themselves, with no undo.
       if (!description.trim() || description === selectedCode?.description) {
-        setDescription(code.description);
+        setDescription(stripPrices(code.description));
       }
       setSelectedCode(code);
       setSuggestedPrice(code.quote_price ?? null);
@@ -337,12 +338,9 @@ export function DefectFieldsCard({
             {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from Code Library'}
           </Text>
           <Text style={[s.codeSub, { color: C.textSecondary }]} numberOfLines={1}>
-            {selectedCode ? selectedCode.description : 'Browse 100+ Uptick defect codes'}
+            {selectedCode ? stripPrices(selectedCode.description) : 'Browse 100+ defect codes'}
           </Text>
         </View>
-        {suggestedPrice !== null && (
-          <View style={s.priceBadge}><Text style={s.priceBadgeTxt}>${suggestedPrice}</Text></View>
-        )}
         {selectedCode ? (
           <TouchableOpacity onPress={() => { codeTouchedRef.current = true; setSelectedCode(null); setSuggestedPrice(null); }} hitSlop={8} style={{ padding: 4 }}>
             <MaterialCommunityIcons name="close-circle" size={18} color={C.textTertiary} />
@@ -359,7 +357,7 @@ export function DefectFieldsCard({
         onChangeText={(v) => {
           setDescription(v);
           if (v.trim()) setError(false);
-          if (selectedCode && v !== selectedCode.description) { codeTouchedRef.current = true; setSelectedCode(null); setSuggestedPrice(null); }
+          if (selectedCode && v !== stripPrices(selectedCode.description)) { codeTouchedRef.current = true; setSelectedCode(null); setSuggestedPrice(null); }
         }}
         multiline
         textAlignVertical="top"

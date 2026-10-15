@@ -10,6 +10,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { findDefectCode } from '@/constants/DefectCodes';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
 import { formatAssetType, formatLocationCode } from '@/utils/assetHelpers';
+import { stripPrices } from '@/utils/prices';
 
 interface Props {
   defect: Defect & { asset_type?: string; location_on_site?: string };
@@ -117,15 +118,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
       )}
 
       {/* Description */}
-      <Text style={[s.description, { color: C.text }]} numberOfLines={2}>{defect.description}</Text>
-
-      {/* Price badge */}
-      {defect.quote_price != null && (
-        <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
-          <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
-          <Text style={[s.priceTxt, { color: C.success }]}>Ref: ${defect.quote_price}</Text>
-        </View>
-      )}
+      <Text style={[s.description, { color: C.text }]} numberOfLines={2}>{stripPrices(defect.description)}</Text>
 
       {/* Photo thumbnails */}
       {photosArr.length > 0 && (

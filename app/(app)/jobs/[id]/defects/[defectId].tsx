@@ -34,6 +34,7 @@ import { DefectSeverity, DefectStatus, JobStatus, PhotoStage } from '@/constants
 import { findDefectCode } from '@/constants/DefectCodes';
 import { formatAssetType, formatLocationCode, formatLocationFull } from '@/utils/assetHelpers';
 import { T } from '@/constants/Colors';
+import { stripPrices } from '@/utils/prices';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -258,17 +259,6 @@ export default function DefectDetailScreen() {
                 Logged {new Date(defect.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
               </Text>
             </View>
-            {defect.quote_price ? (
-              <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
-                <MaterialCommunityIcons name="tag-outline" size={11} color={C.success} />
-                <Text style={[s.priceBadgeTxt, { color: C.success }]}>${defect.quote_price}</Text>
-              </View>
-            ) : (
-              <View style={[s.priceBadge, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
-                <MaterialCommunityIcons name="tag-outline" size={11} color={C.textTertiary} />
-                <Text style={[s.priceBadgeTxt, { color: C.textTertiary }]}>Unquoted</Text>
-              </View>
-            )}
           </View>
         </Animated.View>
 
@@ -294,7 +284,7 @@ export default function DefectDetailScreen() {
                   Code: {codeInfo.code.toUpperCase()} — {codeInfo.category}
                 </Text>
                 <Text style={[s.codeDesc, { color: C.textSecondary }]} numberOfLines={2}>
-                  {codeInfo.description}
+                  {stripPrices(codeInfo.description)}
                 </Text>
               </View>
             </View>
@@ -305,7 +295,7 @@ export default function DefectDetailScreen() {
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(380)}>
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }, cardShadow]}>
             <Text style={[s.cardLabel, { color: C.textTertiary }]}>DESCRIPTION</Text>
-            <Text style={[s.cardBody, { color: C.text }]}>{defect.description}</Text>
+            <Text style={[s.cardBody, { color: C.text }]}>{stripPrices(defect.description)}</Text>
           </View>
         </Animated.View>
 

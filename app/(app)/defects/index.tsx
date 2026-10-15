@@ -24,6 +24,7 @@ import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { getDefectCounts } from '@/lib/database';
 import { useAuthStore } from '@/store/authStore';
 import { openJobRoute } from '@/utils/navigation';
+import { stripPrices } from '@/utils/prices';
 
 type ExtendedDefect = Defect & {
   asset_type?: string;
@@ -85,7 +86,7 @@ const DefectRow = React.memo(function DefectRow({ defect, onPress, C }: { defect
       </View>
 
       {/* Description */}
-      <Text style={[s.description, { color: C.text }]} numberOfLines={2}>{defect.description}</Text>
+      <Text style={[s.description, { color: C.text }]} numberOfLines={2}>{stripPrices(defect.description)}</Text>
 
       {/* Meta */}
       <View style={s.rowMeta}>
@@ -99,11 +100,6 @@ const DefectRow = React.memo(function DefectRow({ defect, onPress, C }: { defect
           <View style={s.metaItem}>
             <MaterialCommunityIcons name="tools" size={12} color={C.textTertiary} />
             <Text style={[s.metaTxt, { color: C.textTertiary }]}>{formatAssetType(defect.asset_type)}</Text>
-          </View>
-        )}
-        {defect.quote_price && (
-          <View style={[s.pricePill, { backgroundColor: T.tintBg(C.success) }]}>
-            <Text style={[s.pricePillTxt, { color: C.success }]}>${defect.quote_price}</Text>
           </View>
         )}
         <Text style={[s.dateTxt, { color: C.textTertiary }]}>

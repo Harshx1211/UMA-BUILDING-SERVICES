@@ -16,6 +16,7 @@ import type { Asset, Defect } from '@/types';
 import { formatAssetType, formatAssetName, AREA_LABEL, areaOf, formatLocationFull } from '@/utils/assetHelpers';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { stripPrices } from '@/utils/prices';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type ColorsType = ReturnType<typeof useColors>;
@@ -287,7 +288,7 @@ export default function AssetDetailScreen() {
                   <View key={d.id} style={[s.defectRow, i < defects.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
                     <View style={[s.severityBar, { backgroundColor: sc?.color ?? C.border }]} />
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.defectDesc, { color: C.text }]}>{d.description}</Text>
+                      <Text style={[s.defectDesc, { color: C.text }]}>{stripPrices(d.description)}</Text>
                       <Text style={[s.defectMeta, { color: C.textTertiary }]}>
                         {d.severity.toUpperCase()} · {d.status.toUpperCase().replace('_', ' ')}
                       </Text>

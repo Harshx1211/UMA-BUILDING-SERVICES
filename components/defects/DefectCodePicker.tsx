@@ -4,7 +4,7 @@
  * Matches the UI from Uptick Image 6:
  *   - Search bar filters codes + descriptions in real-time
  *   - "Custom Note" always at top
- *   - Code bold + description grey + price badge (green)
+ *   - Code bold + description grey (no prices — quotes are admin-only)
  *   - Category grouping with icons
  */
 import React, { useState, useMemo, useCallback, useRef } from 'react';
@@ -34,6 +34,7 @@ import {
 } from '@/constants/DefectCodes';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { stripPrices } from '@/utils/prices';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -129,16 +130,9 @@ const CodeRow = React.memo(function CodeRow({
           style={[s.codeDesc, { color: C.textSecondary }]}
           numberOfLines={2}
         >
-          {item.description}
+          {stripPrices(item.description)}
         </Text>
       </View>
-
-      {/* Price badge */}
-      {item.quote_price !== undefined && (
-        <View style={[s.priceBadge, { backgroundColor: T.tintBg(C.success), borderColor: T.tintBorder(C.success) }]}>
-          <Text style={[s.priceBadgeTxt, { color: C.success }]}>${item.quote_price}</Text>
-        </View>
-      )}
 
       {/* Arrow */}
       <MaterialCommunityIcons

@@ -20,6 +20,7 @@ import type { DefectCode } from '@/constants/DefectCodes';
 import type { Asset } from '@/types';
 import { T } from '@/constants/Colors';
 import { showConfirm } from '@/components/ui';
+import { stripPrices } from '@/utils/prices';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -73,7 +74,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
     // codes before typing anything custom) — never clobber text they
     // actually wrote themselves, with no undo.
     if (code && (!description.trim() || description === selectedCode?.description)) {
-      setDescription(code.description);
+      setDescription(stripPrices(code.description));
     }
     setSelectedCode(code);
     if (code) setDescError(false);
@@ -330,7 +331,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
             {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Browse Code Library'}
           </Text>
           <Text style={[s.codeBtnSub, { color: C.textSecondary }]} numberOfLines={1}>
-            {selectedCode ? selectedCode.description : '100+ Uptick defect codes with suggested prices'}
+            {selectedCode ? stripPrices(selectedCode.description) : '100+ defect codes'}
           </Text>
         </View>
         {selectedCode ? (
@@ -351,7 +352,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
           multiline
           maxLength={500}
           value={description}
-          onChangeText={v => { setDescription(v); if (v.trim()) setDescError(false); if (selectedCode && v !== selectedCode.description) setSelectedCode(null); }}
+          onChangeText={v => { setDescription(v); if (v.trim()) setDescError(false); if (selectedCode && v !== stripPrices(selectedCode.description)) setSelectedCode(null); }}
         />
         <Text style={[s.charCount, { color: C.textTertiary }]}>{description.length}/500</Text>
       </View>

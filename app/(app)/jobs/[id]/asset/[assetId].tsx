@@ -44,6 +44,7 @@ import { Timeline } from '@/components/audit/Timeline';
 import { useDefectsStore } from '@/store/defectsStore';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { stripPrices } from '@/utils/prices';
 
 type ColorsType = ReturnType<typeof useColors>;
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -768,7 +769,8 @@ export default function AssetDetailScreen() {
     setPrimaryDraft(null);
     setPrimaryPhotosDraft(null);
     setEditingDefectId(null);
-    setTimeout(() => router.push(`/jobs/${jobId}/quote` as never), 400);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Toast.show({ type: 'success', text1: 'Marked for replacement', text2: 'The office will quote it.' });
   };
 
   // Any defect beyond the first is a genuinely independent record, saved
@@ -1200,7 +1202,7 @@ export default function AssetDetailScreen() {
                       ) : null}
                       {h.defects.map((d) => (
                         <Text key={d.id} style={[s.historyNote, { color: C.textSecondary }]}>
-                          {SEVERITY_LABEL[d.severity] ?? d.severity}: {d.description}
+                          {SEVERITY_LABEL[d.severity] ?? d.severity}: {stripPrices(d.description)}
                         </Text>
                       ))}
                       {h.photos.length > 0 && (

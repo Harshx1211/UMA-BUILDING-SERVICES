@@ -629,11 +629,6 @@ export default function JobDetailScreen() {
       onPress: () => router.push(`/jobs/${id}/photos` as never),
     }] : []),
     ...(!isCancelled ? [{
-      key: 'quote', icon: 'file-document-outline' as MCIconName, iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
-      title: 'Quote', subtitle: 'Parts & labour',
-      onPress: () => router.push(`/jobs/${id}/quote` as never),
-    }] : []),
-    ...(!isCancelled ? [{
       key: 'signature', icon: 'draw' as MCIconName, iconBg: hasSig ? T.iconBg(C.success) : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
       title: 'Signature', subtitle: hasSig ? 'Captured' : 'Required for report',
       onPress: () => router.push(`/jobs/${id}/signature` as never),
