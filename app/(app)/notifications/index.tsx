@@ -3,7 +3,8 @@ import React, { useEffect, useCallback } from 'react';
 import {
   FlatList, StyleSheet, TouchableOpacity, View, RefreshControl,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { openJob } from '@/utils/navigation';
 import * as Haptics from 'expo-haptics';

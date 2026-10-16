@@ -9,7 +9,7 @@
  */
 import React, { useState } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, chipsForMulti } from '@/components/ui';

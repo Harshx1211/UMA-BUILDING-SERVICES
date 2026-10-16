@@ -18,7 +18,7 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';

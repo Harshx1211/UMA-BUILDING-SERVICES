@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';

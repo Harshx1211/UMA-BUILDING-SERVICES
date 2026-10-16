@@ -1,6 +1,6 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';

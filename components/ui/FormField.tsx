@@ -16,7 +16,7 @@ import React, { useState } from 'react';
 import {
   StyleSheet, TextInput, TextInputProps, View, ViewStyle,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { T } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 

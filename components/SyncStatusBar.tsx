@@ -2,7 +2,7 @@
 // and a user-visible alert when data permanently fails to reach the server.
 import { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getSyncStatus,

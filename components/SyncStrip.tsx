@@ -6,7 +6,7 @@
 // What it shows comes from hooks/useSyncStrip.ts — always the real queue.
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
@@ -58,7 +58,7 @@ export function SyncStrip() {
   const body = (
     <>
       <View style={styles.row}>
-        <MaterialCommunityIcons name={icon} size={15} color={fg} />
+        <MaterialCommunityIcons name={icon} size={18} color={fg} />
         <Text style={[styles.title, { color: fg }]} numberOfLines={1}>{title}</Text>
         {detail ? (
           <Text
@@ -103,10 +103,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 20,
-    paddingVertical: 7,
+    paddingVertical: 10,
+    minHeight: 40,
   },
-  title: { fontSize: 12.5, fontWeight: '700', flexShrink: 1 },
-  detail: { fontSize: 12.5, fontWeight: '500', marginLeft: 'auto', flexShrink: 1, fontVariant: ['tabular-nums'] },
+  title: { fontSize: 13.5, fontWeight: '600', flexShrink: 1 },
+  detail: { fontSize: 13.5, fontWeight: '500', marginLeft: 'auto', flexShrink: 1, fontVariant: ['tabular-nums'] },
   action: { fontWeight: '700', textDecorationLine: 'underline' },
   track: { height: 2 },
   fill: { height: 2 },

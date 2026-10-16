@@ -6,7 +6,9 @@ import { StyleSheet, View, ActivityIndicator, TouchableOpacity, Text, AppState, 
 import { Slot, ErrorBoundaryProps } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
+import { Provider as PaperProvider, MD3LightTheme, configureFonts } from 'react-native-paper';
+import { useFonts } from 'expo-font';
+import { FONT_FILES, setFontsReady } from '@/constants/Fonts';
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '@/components/ui/AppToast';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
@@ -52,9 +54,20 @@ const paperTheme = {
   },
 };
 
+// Same theme with Paper's own components (buttons, chips, inputs) in Public Sans.
+const paperThemeWithFonts = {
+  ...paperTheme,
+  fonts: configureFonts({ config: { fontFamily: 'PublicSans_400Regular' } }),
+};
 
 export default function RootLayout() {
   const { isLoading, restoreSession, isAuthenticated, isLocked } = useAuthStore();
+
+  // App fonts (constants/Fonts.ts). The splash screen stays up until they've
+  // loaded; if they fail, the app carries on in the system font.
+  const [fontsLoaded, fontError] = useFonts(FONT_FILES);
+  const fontsSettled = fontsLoaded || !!fontError;
+  if (fontsSettled) setFontsReady(fontsLoaded);
 
   // ── Screenshot / Screen-capture prevention ─────────────────────────────────
   // FIX: this comment previously claimed FLAG_SECURE was hand-set natively
@@ -148,13 +161,13 @@ export default function RootLayout() {
   // Hide splash once loading is complete. MUST be above the conditional early-return
   // so React Hooks are always called in the same order (rules-of-hooks).
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading && fontsSettled) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isLoading]);
+  }, [isLoading, fontsSettled]);
 
   // Single theme — field service app.
-  const theme = paperTheme;
+  const theme = fontsLoaded ? paperThemeWithFonts : paperTheme;
 
   // FIX: the native splash screen shows the SiteTrack brand mark
   // (app.json's splash-icon.png); the instant JS took over, this branch
@@ -164,14 +177,16 @@ export default function RootLayout() {
   // back in across one continuous "app is opening" moment. Keeping it
   // visible through the auth-check phase reads as one smooth transition
   // instead of splash -> blank -> login.
+  if (!fontsSettled) return null; // splash screen still showing
+
   if (isLoading) {
     return (
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
           <PaperProvider theme={theme}>
             <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-              <BrandLogo size="large" showWordmark={false} />
-              <ActivityIndicator color={theme.colors.primary} size="large" style={{ marginTop: 32 }} />
+              <BrandLogo size="large" />
+              <ActivityIndicator color={theme.colors.primary} size="small" style={{ marginTop: 32 }} />
             </View>
             <StatusBar style="dark" />
           </PaperProvider>

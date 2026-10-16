@@ -5,7 +5,7 @@
 // type names are unchanged, so all existing Toast.show({ type: ... }) calls
 // pick this up with no change.
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { ToastConfig, ToastConfigParams } from 'react-native-toast-message';
 import { T } from '@/constants/Colors';

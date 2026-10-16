@@ -21,7 +21,7 @@
 // showConfirm() can be called from anywhere without local modal state.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
@@ -90,7 +90,9 @@ export function ConfirmDialogHost() {
                   key={i}
                   style={[
                     s.btn,
-                    { backgroundColor: isDestructive ? C.error : isCancel ? C.backgroundTertiary : C.primary },
+                    isCancel
+                      ? { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }
+                      : { backgroundColor: isDestructive ? C.error : C.primary },
                   ]}
                   onPress={() => { close(); b.onPress?.(); }}
                   activeOpacity={0.8}
@@ -110,12 +112,13 @@ export function ConfirmDialogHost() {
 
 const s = StyleSheet.create({
   overlay:  { flex: 1, backgroundColor: T.overlay, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  card:     { width: '100%', maxWidth: 340, borderRadius: 20, padding: 24, alignItems: 'center' },
-  iconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  title:    { fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  message:  { fontSize: 13, marginTop: 6, textAlign: 'center', lineHeight: 19 },
+  // Approved redesign: white card, centred tinted icon, white Cancel + solid action.
+  card:     { width: '100%', maxWidth: 360, borderRadius: 16, padding: 20, alignItems: 'center' },
+  iconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  title:    { fontSize: 16, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
+  message:  { fontSize: 14, marginTop: 6, textAlign: 'center', lineHeight: 20 },
   btnRow:       { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
   btnRowStacked:{ flexDirection: 'column' },
   btn:      { flex: 1, height: 48, borderRadius: T.radiusButton, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  btnTxt:   { fontSize: 15, fontWeight: '700' },
+  btnTxt:   { fontSize: 15, fontWeight: '600' },
 });

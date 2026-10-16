@@ -5,7 +5,7 @@
 // instead of a third copy of it.
 import React from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';

@@ -5,7 +5,7 @@
 import React, { useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, Linking } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Priority, ComplianceStatus } from '@/constants/Enums';

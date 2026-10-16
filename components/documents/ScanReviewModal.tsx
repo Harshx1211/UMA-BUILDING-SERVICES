@@ -14,7 +14,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Modal as RNModal, BackHandler } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

@@ -1,4 +1,4 @@
-// Forgot Password — navy curved header + floating form card, success state
+// Forgot Password — approved redesign (stitch-designs/README.md, Batch A): form, error box, success view
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +17,8 @@ import { useColors } from '@/hooks/useColors';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { T } from '@/constants/Colors';
 import { Button } from '@/components/ui/Button';
-import { Card, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 type BannerState = { type: 'success' | 'error'; message: string } | null;
@@ -29,6 +30,7 @@ export default function ForgotPasswordScreen() {
   const [banner, setBanner]       = useState<BannerState>(null);
   const C = useColors();
   const noMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
 
   const validate = (): boolean => {
     if (!email.trim()) {
@@ -72,54 +74,63 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: C.primary }]}
+      style={[styles.container, { backgroundColor: C.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: Math.max(16, insets.top + 8), paddingBottom: 32 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Navy Hero Header ──────────── */}
-        <View style={[styles.heroSection, { backgroundColor: C.primary }]}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.back()}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <MaterialCommunityIcons name="arrow-left" size={20} color={T.textOnPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.heroTitle}>Reset Password</Text>
-          <Text style={styles.heroSub}>Enter your email to receive a reset link</Text>
-        </View>
+        {/* Approved redesign (stitch-designs/README.md, Batch A) */}
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back to sign in"
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={C.text} />
+        </TouchableOpacity>
 
-        {/* ── Form Card ─────────────────── */}
-        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}>
-          <Card style={[styles.formCard]}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)} style={styles.body}>
+          <View style={[styles.iconTile, { backgroundColor: C.primary + '1F' }]}>
+            <MaterialCommunityIcons name="lock-reset" size={26} color={C.primary} />
+          </View>
+          <Text style={[styles.title, { color: C.text }]}>Reset password</Text>
+          <Text style={[styles.intro, { color: C.textSecondary }]}>
+            Enter your email address and we&apos;ll send you a link to reset your password.
+          </Text>
 
-          {/* Success state replaces form */}
           {banner?.type === 'success' ? (
-            <View style={styles.successCard}>
-              <View style={[styles.successIcon, { backgroundColor: C.success }]}>
-                <MaterialCommunityIcons name="check-circle" size={36} color={T.textOnPrimary} />
+            <View style={[styles.successCard, { backgroundColor: C.successLight, borderColor: T.tintBorder(C.success) }]}>
+              <View style={[styles.successIcon, { backgroundColor: T.tintBg(C.success) }]}>
+                <MaterialCommunityIcons name="check-circle" size={20} color={C.success} />
               </View>
-              <Text style={[styles.successTitle, { color: C.text }]}>Email Sent!</Text>
-              <Text style={[styles.successBody, { color: C.textSecondary }]}>{banner.message}</Text>
-              <Button style={{ marginTop: 12, width: '100%' }} variant="secondary" title="Back to Login" onPress={() => router.back()} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.successTitle, { color: C.success }]}>Email sent</Text>
+                <Text style={[styles.successBody, { color: C.textSecondary }]}>{banner.message}</Text>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backLink} hitSlop={8} accessibilityRole="link">
+                  <Text style={[styles.backLinkTxt, { color: C.text }]}>Back to sign in</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={C.text} />
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <>
-              {/* Error banner */}
               {banner?.type === 'error' ? (
-                <View style={[styles.errorBanner, { backgroundColor: C.errorLight }]}>
-                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={C.errorDark} />
-                  <Text style={[styles.errorBannerText, { color: C.errorDark }]}>{banner.message}</Text>
+                <View style={[styles.errorBanner, { backgroundColor: C.errorLight, borderColor: T.tintBorder(C.error) }]}>
+                  <MaterialCommunityIcons name="alert-circle" size={20} color={C.error} />
+                  <Text style={[styles.errorBannerText, { color: C.error }]}>{banner.message}</Text>
+                  <TouchableOpacity onPress={() => setBanner(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Dismiss message">
+                    <MaterialCommunityIcons name="close" size={16} color={C.error} />
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
-              {/* Email field */}
               <Input
-                label="EMAIL ADDRESS"
+                label="Email address"
+                required
                 value={email}
                 onChangeText={(t) => { setEmail(t); setEmailError(''); }}
                 placeholder="you@company.com.au"
@@ -132,15 +143,12 @@ export default function ForgotPasswordScreen() {
                 disabled={isLoading}
                 maxLength={254}
                 error={emailError}
-                leftIcon={<MaterialCommunityIcons name="email-outline" size={18} color={C.textSecondary} />}
-                style={{ marginBottom: 20 }}
+                style={{ marginBottom: 16 }}
               />
 
-              {/* Send button */}
-              <Button title="Send Reset Email" variant="secondary" onPress={handleSendReset} isLoading={isLoading} />
+              <Button title="Send reset email" icon="arrow-right" iconRight onPress={handleSendReset} isLoading={isLoading} />
             </>
           )}
-          </Card>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -148,90 +156,19 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scroll: { flexGrow: 1 },
-
-  // Hero
-  heroSection: {
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    gap: 8,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: T.textOnPrimary,
-  },
-  heroSub: {
-    fontSize: 14,
-    color: T.textOnPrimary,
-    opacity: 0.65,
-  },
-
-  // Form card
-  formCard: {
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginTop: -24,
-    padding: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-
-  // Success
-  successCard: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 0,
-  },
-  successIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  successTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  successBody: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 24,
-  },
-
-  // Error banner
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorBannerText: {
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24 },
+  backBtn: { width: 44, height: 44, marginLeft: -10, alignItems: 'center', justifyContent: 'center' },
+  body: { width: '100%', maxWidth: 400, alignSelf: 'center', marginTop: 16 },
+  iconTile: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3, marginBottom: 8 },
+  intro: { fontSize: 14, lineHeight: 20, marginBottom: 24 },
+  successCard: { flexDirection: 'row', gap: 12, borderRadius: T.radiusCard, borderWidth: 1, padding: 16 },
+  successIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  successTitle: { fontSize: 16, fontWeight: '700' },
+  successBody: { fontSize: 14, lineHeight: 20, marginTop: 4, marginBottom: 12 },
+  backLink: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 },
+  backLinkTxt: { fontSize: 14, fontWeight: '600' },
+  errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 16 },
+  errorBannerText: { fontSize: 13, lineHeight: 18, fontWeight: '500', flex: 1 },
 });

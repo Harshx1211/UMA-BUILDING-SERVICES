@@ -3,7 +3,7 @@
 // No curves, no decorative circles. Just crisp typography and clean layout.
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,8 +54,9 @@ export function ScreenHeader({
         styles.header,
         {
           backgroundColor: C.surface,
-          paddingTop: Math.max(insets.top, 14),
+          paddingTop: Math.max(insets.top, 10),
           borderBottomColor: C.border,
+          shadowColor: C.shadow,
         },
       ]}
     >
@@ -65,12 +66,12 @@ export function ScreenHeader({
             onPress={() =>
               router.canGoBack() ? router.back() : router.replace(fallbackHref as never)
             }
-            style={[styles.backBtn, { backgroundColor: C.backgroundTertiary }]}
+            style={styles.backBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <MaterialCommunityIcons name="arrow-left" size={20} color={C.text} />
+            <MaterialCommunityIcons name="arrow-left" size={24} color={C.text} />
           </TouchableOpacity>
         )}
 
@@ -102,21 +103,29 @@ export function ScreenHeader({
 }
 
 const styles = StyleSheet.create({
+  // Approved redesign (stitch-designs/README.md): white bar, 56 px row, a
+  // hairline plus a very soft shadow instead of a heavy border.
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 2,
+    zIndex: 1,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 8,
+    gap: 8,
+    minHeight: 48,
   },
   backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 10,
+    marginLeft: -8,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -133,9 +142,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   subtitle: {
     fontSize: 12,

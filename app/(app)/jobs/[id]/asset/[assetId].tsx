@@ -13,7 +13,8 @@ import {
   View, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useFocusEffect, router } from 'expo-router';

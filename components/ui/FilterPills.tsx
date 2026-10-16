@@ -2,7 +2,7 @@
 // Clean segmented control — professional tab-style filter
 import React from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 

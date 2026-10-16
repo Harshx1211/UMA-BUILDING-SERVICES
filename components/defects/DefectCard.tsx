@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList, StyleProp, ViewStyle } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { Defect } from '@/types';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';

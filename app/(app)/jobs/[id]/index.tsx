@@ -3,7 +3,8 @@ import {
   Linking, Modal, Platform, ScrollView, StyleSheet,
   View, TouchableOpacity, TextInput, RefreshControl,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';

@@ -34,7 +34,7 @@ export default function SplashScreen() {
       {/* ── Loading indicator ─────── */}
       <Animated.View entering={noMotion ? undefined : FadeInDown.delay(400).duration(400)} style={styles.footer}>
         {/* Logo plus a quiet spinner — no "Loading..." caption, like most apps' start screens. */}
-        <ActivityIndicator size="small" color={T.textMuted} accessibilityLabel="Loading" />
+        <ActivityIndicator size="small" color={T.primary} accessibilityLabel="Loading" />
       </Animated.View>
     </View>
   );

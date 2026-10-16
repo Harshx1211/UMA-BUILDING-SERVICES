@@ -14,7 +14,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, ScrollView, TouchableOpacity, StyleSheet, Animated, RefreshControl,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';

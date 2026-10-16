@@ -15,10 +15,11 @@
  */
 import React, { useRef } from 'react';
 import {
-  Pressable, Text, StyleSheet, Animated,
+  Pressable, StyleSheet, Animated,
   ActivityIndicator, ViewStyle, TextStyle, View,
 } from 'react-native';
 import { T } from '@/constants/Colors';
+import { Text } from '@/components/ui/AppText';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -36,6 +37,8 @@ interface ButtonProps {
   isLoading?: boolean;  // alias for loading
   disabled?: boolean;
   icon?: MCIconName | React.ReactNode;
+  /** Icon after the label instead of before it (e.g. a forward arrow). */
+  iconRight?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
@@ -47,7 +50,7 @@ const VARIANT_STYLES: Record<Variant, {
     bg: T.primary, textColor: T.textOnPrimary, borderWidth: 0, borderColor: 'transparent',
   },
   secondary: {
-    bg: 'transparent', textColor: T.textSecondary, borderWidth: 1, borderColor: T.border,
+    bg: T.surface, textColor: T.textPrimary, borderWidth: 1, borderColor: T.border,
   },
   destructive: {
     bg: T.danger, textColor: T.textOnPrimary, borderWidth: 0, borderColor: 'transparent',
@@ -63,6 +66,7 @@ export function Button({
   isLoading,
   disabled,
   icon,
+  iconRight,
   style,
   textStyle,
 }: ButtonProps) {
@@ -70,8 +74,9 @@ export function Button({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const v = VARIANT_STYLES[variant];
 
-  const height   = size === 'large' ? 48 : 36;
-  const fontSize = size === 'large' ? 15 : 13;
+  // Approved redesign: 52 px main buttons (glove-friendly), 40 px small.
+  const height   = size === 'large' ? 52 : 40;
+  const fontSize = size === 'large' ? 16 : 13;
 
   const handlePress = () => {
     if (!disabled && !resolvedLoading) {
@@ -111,7 +116,7 @@ export function Button({
       >
         {resolvedLoading ? (
           <ActivityIndicator color={v.textColor} size="small" />
-        ) : icon ? (
+        ) : icon && !iconRight ? (
           <View style={styles.iconWrap}>
             {typeof icon === 'string' ? (
               <MaterialCommunityIcons name={icon as MCIconName} size={fontSize + 4} color={v.textColor} />
@@ -123,6 +128,15 @@ export function Button({
         <Text style={[styles.label, { fontSize, color: v.textColor }, textStyle]}>
           {title}
         </Text>
+        {!resolvedLoading && icon && iconRight ? (
+          <View style={styles.iconWrap}>
+            {typeof icon === 'string' ? (
+              <MaterialCommunityIcons name={icon as MCIconName} size={fontSize + 2} color={v.textColor} />
+            ) : (
+              icon
+            )}
+          </View>
+        ) : null}
       </Pressable>
     </Animated.View>
   );

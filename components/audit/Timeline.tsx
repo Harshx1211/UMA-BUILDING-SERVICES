@@ -6,7 +6,8 @@
  */
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { useFocusEffect } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { getFieldAuditLog, getRecord, AuditLogEntry } from '@/lib/database';

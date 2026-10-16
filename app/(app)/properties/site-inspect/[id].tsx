@@ -11,7 +11,7 @@ import {
   View, StyleSheet, TouchableOpacity, FlatList,
   Modal, TextInput, Platform, BackHandler,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';

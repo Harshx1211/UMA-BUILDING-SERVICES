@@ -19,7 +19,7 @@
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { T } from '@/constants/Colors';
 
 type KnownStatus =

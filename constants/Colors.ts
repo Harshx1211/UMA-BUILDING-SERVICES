@@ -10,6 +10,7 @@
  */
 
 // ─── Raw Palette (do not use these directly in components) ────────────────────
+// Values follow the approved Stitch redesign (stitch-designs/README.md, 16 Oct 2026).
 const palette = {
   // Brand navy ("ink") — matches brand/README.md exactly. Now used for text
   // and icons rather than backgrounds.
@@ -21,21 +22,21 @@ const palette = {
   orange400: '#E86A28',
   orangeDark: '#B8460F',
 
-  slate400: '#94A3B8',
+  slate400: '#8A94A6',
   slate300: '#CBD5E1',
-  slate200: '#E2E8F0',
+  slate200: '#E4E8EE',
   slate100: '#F1F5F9',
 
   white: '#FFFFFF',
   black: '#000000',
   /** Page background — a hair off pure white so cards have something to sit on */
-  paper: '#F7F9FB',
+  paper: '#F2F4F7',
 
-  green600: '#16A34A',
-  green700: '#15803D',
-  greenBg:  '#DCFCE7',
+  green600: '#15803D',
+  green700: '#166534',
+  greenBg:  '#E8F6EC',
 
-  amber600: '#D97706',
+  amber600: '#B45309',
   amber700: '#92400E',
   amberBg:  '#FEF3C7',
 
@@ -43,8 +44,8 @@ const palette = {
   red700: '#B91C1C',
   redBg:  '#FEE2E2',
 
-  blue600: '#2563EB',
-  blueBg:  '#DBEAFE',
+  blue600: '#1E3A8A',
+  blueBg:  '#EEF1F7',
   blueDark: '#1E3A8A',
 };
 
@@ -144,9 +145,9 @@ export const T = {
 
   // ── Radius Scale ─────────────────────────────────────────────────────────
   /** Cards, info blocks, list containers */
-  radiusCard:    16,
+  radiusCard:    14,
   /** Buttons, text inputs */
-  radiusButton:  10,
+  radiusButton:  12,
   /** Chips, status pills — fully rounded */
   radiusPill:    999,
 

@@ -6,6 +6,7 @@ import {
   TextInputSubmitEditingEventData,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { fontFor } from '@/constants/Fonts';
 import { useColors } from '@/hooks/useColors';
 
 export interface InputProps {
@@ -23,6 +24,8 @@ export interface InputProps {
   numberOfLines?: number;
   maxLength?: number;
   leftIcon?: React.ReactNode;
+  /** Shows an orange asterisk after the label. */
+  required?: boolean;
   rightIcon?: React.ReactNode;
   style?: ViewStyle;
   // ── Keyboard / autofill forwarding ────────────────────────────────────────
@@ -42,7 +45,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   {
     label, value, onChangeText, placeholder, secureTextEntry, keyboardType, autoCapitalize,
     autoCorrect, error, disabled, multiline, numberOfLines, maxLength,
-    leftIcon, rightIcon, style,
+    leftIcon, rightIcon, style, required,
     returnKeyType, textContentType, autoComplete, onSubmitEditing, accessibilityHint,
   },
   ref,
@@ -55,23 +58,26 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   const borderColor = error
     ? C.error
     : isFocused
-      ? C.accentLight
-      : C.cardBorder;
+      ? C.primary
+      : C.borderStrong;
 
-  const backgroundColor = isFocused ? C.surface : C.backgroundSecondary;
+  // Approved redesign (stitch-designs/README.md): white field, thin border,
+  // orange border while typing.
+  const backgroundColor = C.surface;
 
   return (
     <View style={[styles.container, style]}>
       {/* Label — sentence case only; all-caps is reserved for Typography.eyebrow */}
-      <RNText style={[styles.label, { color: C.textSecondary, opacity: isFocused ? 1 : 0.7 }]}>
+      <RNText style={[styles.label, { color: C.text }, fontFor(styles.label)]}>
         {label}
+        {required ? <RNText style={{ color: C.primary }}> *</RNText> : null}
       </RNText>
 
       <View
         style={[
           styles.inputWrapper,
           {
-            height: multiline ? undefined : 54,
+            height: multiline ? undefined : 48,
             opacity: disabled ? 0.55 : 1,
             borderColor,
             backgroundColor,
@@ -81,7 +87,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
         {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <TextInput
           ref={ref}
-          style={[styles.input, { color: C.text }]}
+          style={[styles.input, { color: C.text }, fontFor(styles.input)]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -112,7 +118,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
       {error && (
         <View style={styles.errorRow}>
           <MaterialCommunityIcons name="alert-circle-outline" size={13} color={C.error} />
-          <RNText style={[styles.error, { color: C.error }]}>{error}</RNText>
+          <RNText style={[styles.error, { color: C.error }, fontFor(styles.error)]}>{error}</RNText>
         </View>
       )}
     </View>
@@ -124,23 +130,22 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   label: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 0.1,
-    marginBottom: 7,
+    marginBottom: 6,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 10,
+    borderWidth: 1,
     paddingHorizontal: 14,
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '400',
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   iconLeft: {
     marginRight: 10,

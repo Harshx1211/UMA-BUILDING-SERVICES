@@ -3,7 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   Platform, TextInput, Modal,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
