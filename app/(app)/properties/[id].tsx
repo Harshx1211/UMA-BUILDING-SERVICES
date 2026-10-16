@@ -97,7 +97,7 @@ const sh = StyleSheet.create({
   left:     { flexDirection: 'row', alignItems: 'center', gap: 7 },
   title:    { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
   badge:    { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
-  badgeTxt: { fontSize: 10.5, fontWeight: '700' },
+  badgeTxt: { fontSize: 11, fontWeight: '700' },
   action:   { fontSize: 13, fontWeight: '700' },
 });
 
@@ -142,7 +142,7 @@ const infoRow = StyleSheet.create({
   wrap:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 16 },
   iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   right:   { flex: 1 },
-  label:   { fontSize: 10, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 1 },
+  label:   { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 1 },
   value:   { fontSize: 14, fontWeight: '500' },
 });
 
@@ -656,7 +656,7 @@ const s = StyleSheet.create({
 
   // Compliance hero — banner + stats merged into one bordered block, the
   // one place compliance status is shown now.
-  hero:                 { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  hero:                 { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   heroTop:              { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
   complianceBannerIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   complianceBannerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
@@ -669,7 +669,7 @@ const s = StyleSheet.create({
   statCol:        { flex: 1, alignItems: 'center', paddingVertical: 14 },
   statColDivider: { borderLeftWidth: 1 },
   statNum:        { fontSize: 22, fontWeight: '800' },
-  statLbl:        { fontSize: 10, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 3 },
+  statLbl:        { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 3 },
 
   // Quick action buttons
   actionRowWrap: { flexDirection: 'row', marginHorizontal: 16, marginTop: 14, gap: 10 },
@@ -678,7 +678,7 @@ const s = StyleSheet.create({
   actionBtnLabel:{ fontSize: 13, fontWeight: '700' },
 
   // Alert cards
-  alertCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1.5 },
+  alertCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 14, borderWidth: 1.5 },
   alertIconWrap:{ width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   alertTitle:   { fontSize: 13, fontWeight: '700', marginBottom: 3 },
   alertBody:    { fontSize: 12, lineHeight: 18 },
@@ -705,7 +705,7 @@ const s = StyleSheet.create({
   // unlike every other card on this screen), and the divider's margin is 0
   // so it spans the card's own (unpadded) width exactly edge-to-edge — the
   // standard grouped-list look: full-width separators, inset row content.
-  card: { borderRadius: 16, borderWidth: 1,
+  card: { borderRadius: 14, borderWidth: 1,
           shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
   divider: { height: 1 },
 

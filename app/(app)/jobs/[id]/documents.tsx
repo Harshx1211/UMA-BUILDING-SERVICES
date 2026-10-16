@@ -159,7 +159,7 @@ export default function DocumentsScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1 },
-  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14 },
   countText: { fontSize: 11, fontWeight: '700' },
   listContent: { padding: 16, paddingBottom: 100 },
   fab: {

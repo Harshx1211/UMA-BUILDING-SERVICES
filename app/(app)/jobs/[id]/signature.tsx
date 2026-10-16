@@ -697,7 +697,7 @@ const s = StyleSheet.create({
   // Step indicator
   stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 4 },
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  stepPillTxt:{ fontSize: 10, fontWeight: '700', color: T.textOnPrimary, letterSpacing: 1 },
+  stepPillTxt:{ fontSize: 11, fontWeight: '700', color: T.textOnPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
   resumedTxt: { fontSize: 12, fontWeight: '500', marginTop: 8, lineHeight: 17 },
 
@@ -709,7 +709,7 @@ const s = StyleSheet.create({
   nameInput:  { flex: 1, fontSize: 16, fontWeight: '600', padding: 0 },
 
   // Canvas card
-  canvasCard:  { borderRadius: 16, borderWidth: 1.5, overflow: 'hidden', height: CANVAS_H, position: 'relative' },
+  canvasCard:  { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden', height: CANVAS_H, position: 'relative' },
   canvasInner: { flex: 1, width: '100%', height: CANVAS_H },
   sigImage:    { width: '100%', height: '100%' },
 

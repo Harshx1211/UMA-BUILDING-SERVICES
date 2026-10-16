@@ -421,7 +421,7 @@ const s = StyleSheet.create({
     borderRadius: 10, borderWidth: 1,
   },
   statusDot:    { width: 7, height: 7, borderRadius: 4 },
-  statusChipTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  statusChipTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   lockedBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -441,7 +441,7 @@ const s = StyleSheet.create({
 
   sevBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, borderRadius: 16, borderWidth: 1,
+    padding: 14, borderRadius: 14, borderWidth: 1,
     marginBottom: 12,
     ...cardShadow,
   },
@@ -456,7 +456,7 @@ const s = StyleSheet.create({
 
   codeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 12, borderRadius: 16, borderWidth: 1,
+    padding: 12, borderRadius: 14, borderWidth: 1,
     marginBottom: 12,
     ...cardShadow,
   },
@@ -465,10 +465,10 @@ const s = StyleSheet.create({
   codeDesc:     { fontSize: 11, marginTop: 2, lineHeight: 16 },
 
   card: {
-    borderRadius: 16, padding: 16, borderWidth: 1,
+    borderRadius: 14, padding: 16, borderWidth: 1,
     marginBottom: 12,
   },
-  cardLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
+  cardLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 },
   cardBody:  { fontSize: 15, lineHeight: 22 },
 
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
@@ -489,7 +489,7 @@ const s = StyleSheet.create({
   statusReadPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1,
+    borderRadius: 14, borderWidth: 1,
   },
   statusReadTxt:   { fontSize: 13, fontWeight: '700' },
   statusAdminNote: { fontSize: 11, fontStyle: 'italic', flex: 1 },

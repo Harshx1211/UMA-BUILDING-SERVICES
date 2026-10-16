@@ -5,7 +5,9 @@ import { router, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/authStore';
-import { retryAllFailedSyncItems, onSyncComplete, offSyncComplete } from '@/lib/sync';
+import { retryAllFailedSyncItems, onSyncComplete, offSyncComplete, getSyncStatus, runSync } from '@/lib/sync';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import type { SyncStatus } from '@/types';
 import { updateRecord, addToSyncQueue, getFailedSyncItems, getPendingSyncItems } from '@/lib/database';
 import { SyncOperation } from '@/constants/Enums';
 import { T } from '@/constants/Colors';
@@ -66,8 +68,13 @@ export default function ProfileScreen() {
   // normal "come back to this tab" case) and whenever a sync cycle
   // completes (covers retryAllFailedSyncItems() below actually clearing it).
   const [failedSyncCount, setFailedSyncCount] = useState(0);
+  // Sync card (approved Batch D): last sync time, what's waiting, Sync now.
+  const { isOnline } = useNetworkStatus();
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
   const refreshFailedSyncCount = useCallback(() => {
     setFailedSyncCount(getFailedSyncItems().length);
+    getSyncStatus().then(setSyncStatus).catch(() => {});
   }, []);
   useFocusEffect(refreshFailedSyncCount);
   useEffect(() => {
@@ -131,6 +138,17 @@ export default function ProfileScreen() {
     }
   };
 
+  const lastSyncedLabel = (() => {
+    const ls = syncStatus?.lastSynced;
+    if (!ls) return 'Not synced yet';
+    const d = new Date(ls);
+    if (Number.isNaN(d.getTime()) || d.getFullYear() < 2020) return 'Not synced yet';
+    const sameDay = d.toDateString() === new Date().toDateString();
+    const time = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+    return sameDay ? `Last synced today at ${time}` : `Last synced ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} at ${time}`;
+  })();
+  const waiting = syncStatus?.pendingCount ?? 0;
+
   return (
     <View style={styles.container}>
       <ScreenHeader
@@ -158,13 +176,15 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}>
         {/* Avatar card */}
         <View style={styles.avatarCard}>
+          <View style={styles.avatarTopBar} />
           <View style={styles.avatarCircle}>
-            <Text style={[styles.avatarInitials, { color: C.textOnPrimary }]}>
+            <Text style={[styles.avatarInitials, { color: C.text }]}>
               {user?.full_name?.split(' ').map((w: string) => w[0]).slice(0, 2).join('') ?? 'T'}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.userName}>{user?.full_name ?? 'Technician'}</Text>
+            {company?.name ? <Text style={styles.userCompany}>{company.name}</Text> : null}
             <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
             <Badge status="active" label={(user?.role ?? 'Technician').replace(/\b\w/g, c => c.toUpperCase())} />
           </View>
@@ -185,6 +205,38 @@ export default function ProfileScreen() {
             </Text>
           </View>
         )}
+
+        {/* Sync */}
+        <View style={styles.syncCard}>
+          <View style={styles.syncTop}>
+            <View style={styles.syncIcon}>
+              <MaterialCommunityIcons name="cloud-sync-outline" size={20} color={T.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.syncTitle}>Sync</Text>
+              <Text style={styles.syncSub}>{lastSyncedLabel}</Text>
+            </View>
+            <View style={[styles.syncPill, { backgroundColor: !isOnline ? T.warningBg : waiting > 0 ? T.infoBg : T.successBg }]}>
+              <View style={[styles.syncDot, { backgroundColor: !isOnline ? T.warning : waiting > 0 ? T.info : T.success }]} />
+              <Text style={[styles.syncPillTxt, { color: !isOnline ? T.warning : waiting > 0 ? T.info : T.success }]}>
+                {!isOnline ? 'Offline' : waiting > 0 ? `${waiting} waiting` : 'All synced'}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.syncBtn, (!isOnline || isSyncingNow) && { opacity: 0.5 }]}
+            disabled={!isOnline || isSyncingNow}
+            onPress={async () => {
+              setIsSyncingNow(true);
+              try { await runSync(); } finally { setIsSyncingNow(false); refreshFailedSyncCount(); }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Sync now"
+          >
+            {isSyncingNow ? <ActivityIndicator size="small" color={T.textPrimary} /> : <MaterialCommunityIcons name="sync" size={18} color={T.textPrimary} />}
+            <Text style={styles.syncBtnTxt}>{isSyncingNow ? 'Syncing…' : isOnline ? 'Sync now' : 'Sync when back online'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Contact details */}
         <View style={styles.section}>
@@ -224,6 +276,15 @@ export default function ProfileScreen() {
           <InfoRow label="Member since" value={user?.created_at?.slice(0, 10)} />
         </View>
 
+        {/* Help */}
+        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/help' as never)} activeOpacity={0.7} accessibilityRole="button">
+          <View style={styles.syncIcon}>
+            <MaterialCommunityIcons name="help-circle-outline" size={20} color={T.textSecondary} />
+          </View>
+          <Text style={styles.linkTxt}>Help &amp; support</Text>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={T.textMuted} />
+        </TouchableOpacity>
+
         {/* Sign out */}
         <TouchableOpacity
           style={[styles.signOutBtn, isSigningOut && { opacity: 0.6 }]}
@@ -241,7 +302,10 @@ export default function ProfileScreen() {
               </Text>
             </View>
           ) : (
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <MaterialCommunityIcons name="logout" size={18} color={T.danger} />
+              <Text style={styles.signOutText}>Sign out</Text>
+            </View>
           )}
         </TouchableOpacity>
 
@@ -285,16 +349,40 @@ const styles = StyleSheet.create({
   scroll:         { padding: 16, paddingBottom: 40 },
   avatarCard:     {
     backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border,
-    flexDirection: 'row', alignItems: 'center', padding: 20, marginBottom: 16, gap: 16,
+    flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 24, marginBottom: 16, gap: 16,
+    overflow: 'hidden',
     ...cardShadow,
   },
+  avatarTopBar:   { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: T.primary },
   avatarCircle:   {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: T.primary,
+    width: 64, height: 64, borderRadius: 32, backgroundColor: T.surfaceInput,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarInitials: { fontSize: 22, fontWeight: '800' },
-  userName:       { color: T.textPrimary, fontSize: 18, fontWeight: '700' },
-  userEmail:      { color: T.textMuted, fontSize: 13, marginTop: 2 },
+  userName:       { color: T.textPrimary, fontSize: 20, fontWeight: '700' },
+  userCompany:    { color: T.textSecondary, fontSize: 14, marginTop: 1 },
+  userEmail:      { color: T.textMuted, fontSize: 13, marginTop: 2, marginBottom: 6 },
+  syncCard:       {
+    backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border,
+    padding: 16, marginBottom: 16, gap: 14, ...cardShadow,
+  },
+  syncTop:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  syncIcon:       { width: 40, height: 40, borderRadius: 12, backgroundColor: T.surfaceInput, alignItems: 'center', justifyContent: 'center' },
+  syncTitle:      { color: T.textPrimary, fontSize: 16, fontWeight: '700' },
+  syncSub:        { color: T.textMuted, fontSize: 13, marginTop: 1 },
+  syncPill:       { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  syncDot:        { width: 7, height: 7, borderRadius: 4 },
+  syncPillTxt:    { fontSize: 12, fontWeight: '600' },
+  syncBtn:        {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
+    borderRadius: T.radiusButton, backgroundColor: T.surfaceInput,
+  },
+  syncBtnTxt:     { color: T.textPrimary, fontSize: 15, fontWeight: '600' },
+  linkRow:        {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, borderRadius: T.radiusCard,
+    borderWidth: 1, borderColor: T.border, padding: 12, paddingRight: 14, minHeight: 60, marginBottom: 16, ...cardShadow,
+  },
+  linkTxt:        { flex: 1, color: T.textPrimary, fontSize: 15, fontWeight: '600' },
   warningBanner:  {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
     backgroundColor: T.warningBg, borderLeftWidth: 3, borderLeftColor: T.warning,
@@ -308,19 +396,19 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   sectionTitle:   {
-    color: T.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
+    color: T.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1,
     borderBottomColor: T.border,
   },
   infoRow:        {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: T.border,
+    paddingHorizontal: 16, paddingVertical: 14, minHeight: 52, borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  infoLabel:      { color: T.textMuted, fontSize: 13 },
-  infoValue:      { color: T.textPrimary, fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
+  infoLabel:      { color: T.textSecondary, fontSize: 14 },
+  infoValue:      { color: T.textPrimary, fontSize: 14, fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
   signOutBtn:     {
     backgroundColor: T.dangerBg, borderRadius: T.radiusButton, borderWidth: 1,
-    borderColor: T.danger, paddingVertical: 16, alignItems: 'center', marginBottom: 12,
+    borderColor: T.tintBorder(T.danger), minHeight: 52, justifyContent: 'center', alignItems: 'center', marginBottom: 12,
   },
   signOutText:    { color: T.danger, fontSize: 15, fontWeight: '700' },
   retryBtn:       {
@@ -329,7 +417,7 @@ const styles = StyleSheet.create({
     borderColor: T.warning, paddingVertical: 14, marginBottom: 20,
   },
   retryText:      { color: T.warning, fontSize: 14, fontWeight: '700' },
-  version:        { color: T.textMuted, fontSize: 11, textAlign: 'center' },
+  version:        { color: T.textMuted, fontSize: 12, textAlign: 'center', marginTop: 4 },
   input:          {
     color: T.textPrimary, fontSize: 13, fontWeight: '500',
     minWidth: 150, textAlign: 'right', paddingVertical: 4, paddingHorizontal: 10,

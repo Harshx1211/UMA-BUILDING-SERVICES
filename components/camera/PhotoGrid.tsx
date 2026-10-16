@@ -200,7 +200,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
-  captionText: { color: T.textOnPrimary, fontSize: 10 },
+  captionText: { color: T.textOnPrimary, fontSize: 11 },
   pendingBadge: {
     position: 'absolute',
     top: 4,

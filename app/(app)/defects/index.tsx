@@ -324,14 +324,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 10, borderWidth: 1,
   },
-  openCountTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  openCountTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   filterRow: {
     paddingHorizontal: 16, paddingVertical: 10, gap: 8,
   },
   filterPill: {
     paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1,
+    borderRadius: 14, borderWidth: 1,
   },
   filterPillTxt: { fontSize: 12, fontWeight: '700' },
 
@@ -341,7 +341,7 @@ const s = StyleSheet.create({
   resultTxt: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3 },
 
   defectRow: {
-    borderRadius: 16, borderWidth: 1, borderLeftWidth: 4,
+    borderRadius: 14, borderWidth: 1, borderLeftWidth: 4,
     padding: 16, marginBottom: 12,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -350,11 +350,11 @@ const s = StyleSheet.create({
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   sevBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  sevBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  sevBadgeTxt: { fontSize: 11, fontWeight: '700' },
   codeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
-  codeBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  codeBadgeTxt: { fontSize: 11, fontWeight: '700' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
-  statusBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  statusBadgeTxt: { fontSize: 11, fontWeight: '700' },
 
   description: { fontSize: 13, lineHeight: 19, marginBottom: 10 },
 
@@ -362,7 +362,7 @@ const s = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaTxt:  { fontSize: 11, flex: 1, maxWidth: 120 },
   pricePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  pricePillTxt: { fontSize: 10, fontWeight: '700' },
+  pricePillTxt: { fontSize: 11, fontWeight: '700' },
   dateTxt: { fontSize: 11, marginLeft: 'auto' },
 
   emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 8 },

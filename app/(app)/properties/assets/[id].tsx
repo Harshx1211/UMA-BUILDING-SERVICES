@@ -15,7 +15,13 @@ import type { Property, Asset } from '@/types';
 import { ScreenHeader, EmptyState } from '@/components/ui';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
-import { formatAssetName, formatAssetSubtitle, formatLocationCode } from '@/utils/assetHelpers';
+import { formatAssetName, formatAssetSubtitle, formatLocationCode, areaOf } from '@/utils/assetHelpers';
+
+type AreaFilter = 'all' | 'common' | 'unit';
+const fmtDate = (d: string) => {
+  const x = new Date(d.length <= 10 ? `${d}T00:00:00` : d);
+  return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 type ColorsType = ReturnType<typeof useColors>;
 
@@ -47,6 +53,8 @@ export default function PropertyAssetsScreen() {
   // FIX: a genuine load failure used to render identically to "this
   // property doesn't exist" — see properties/[id].tsx's identical fix.
   const [loadError, setLoadError] = useState(false);
+  // All / Common Area / Unit (SOU) chips (approved Batch D).
+  const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
 
   const load = useCallback(() => {
     if (!id) return;
@@ -87,6 +95,15 @@ export default function PropertyAssetsScreen() {
     activeAssetsCount: assets.filter(a => a.status === AssetStatus.Active).length,
     overdueAssetsCount: assets.filter(a => a.next_service_date && a.next_service_date < today).length,
   }), [assets, today]);
+  const areaCounts = useMemo(() => ({
+    all: assets.length,
+    common: assets.filter(a => areaOf(a) === 'common').length,
+    unit: assets.filter(a => areaOf(a) === 'unit').length,
+  }), [assets]);
+  const shownAssets = useMemo(
+    () => (areaFilter === 'all' ? assets : assets.filter(a => areaOf(a) === areaFilter)),
+    [assets, areaFilter],
+  );
 
   if (isLoading) {
     return (
@@ -134,7 +151,7 @@ export default function PropertyAssetsScreen() {
       <ScreenHeader
         eyebrow="ASSET REGISTER"
         title={property.name}
-        subtitle={`${activeAssets} Active Asset${activeAssets !== 1 ? 's' : ''}${overdueAssets > 0 ? ` · ${overdueAssets} Overdue` : ''}`}
+        subtitle={`${activeAssets} active asset${activeAssets !== 1 ? 's' : ''}${overdueAssets > 0 ? ` · ${overdueAssets} overdue` : ''}`}
         showBack={true}
         rightComponent={
           <TouchableOpacity
@@ -149,7 +166,7 @@ export default function PropertyAssetsScreen() {
       {assets.length === 0 ? (
         <View style={s.emptyState}>
           <MaterialCommunityIcons name="magnify" size={52} color={C.textTertiary} />
-          <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
+          <Text style={[s.emptyTitle, { color: C.text }]}>No assets registered</Text>
           <Text style={[s.emptySub, { color: C.textSecondary }]}>
             It looks like there are no fire safety assets on record for this site.
           </Text>
@@ -159,7 +176,7 @@ export default function PropertyAssetsScreen() {
             activeOpacity={0.85}
           >
             <MaterialCommunityIcons name="plus-circle" size={20} color={C.textOnPrimary} />
-            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add First Asset</Text>
+            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add first asset</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -170,13 +187,31 @@ export default function PropertyAssetsScreen() {
         // mounted immediately with no windowing. FlatList windows off-screen
         // rows; the card's border/radius/background move onto the wrapping
         // View so the visual "one bordered list" look is unchanged.
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
+          {areaCounts.unit > 0 ? (
+            <View style={s.chipRow}>
+              {([['all', 'All'], ['common', 'Common Area'], ['unit', 'Unit (SOU)']] as const).map(([key, label]) => {
+                const on = areaFilter === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setAreaFilter(key)}
+                    style={[s.chip, on ? { backgroundColor: C.text, borderColor: C.text } : { backgroundColor: C.surface, borderColor: C.border }]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                  >
+                    <Text style={[s.chipTxt, { color: on ? C.textOnPrimary : C.text }]}>{label} ({areaCounts[key]})</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
           <Animated.View
             entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}
             style={[s.card, { backgroundColor: C.surface, borderColor: C.border, flex: 1, marginBottom: 40 }]}
           >
             <FlatList
-              data={assets}
+              data={shownAssets}
               keyExtractor={(asset) => asset.id}
               showsVerticalScrollIndicator={false}
               initialNumToRender={12}
@@ -190,7 +225,7 @@ export default function PropertyAssetsScreen() {
                   <TouchableOpacity
                     style={[
                       s.assetRow,
-                      i < assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
+                      i < shownAssets.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
                     ]}
                     onPress={() => router.push(`/assets/${asset.id}` as never)}
                     activeOpacity={0.7}
@@ -230,7 +265,7 @@ export default function PropertyAssetsScreen() {
                           <View style={[s.dateChip, { backgroundColor: C.backgroundTertiary }]}>
                             <MaterialCommunityIcons name="history" size={10} color={C.textTertiary} />
                             <Text style={[s.dateChipTxt, { color: C.textTertiary }]}>
-                              Last: {asset.last_service_date}
+                              Last serviced {fmtDate(asset.last_service_date)}
                             </Text>
                           </View>
                         )}
@@ -245,7 +280,7 @@ export default function PropertyAssetsScreen() {
                               color={isOverdue ? C.error : C.success}
                             />
                             <Text style={[s.dateChipTxt, { color: isOverdue ? C.error : C.success }]}>
-                              {isOverdue ? 'Overdue: ' : 'Due: '}{asset.next_service_date}
+                              {isOverdue ? 'Overdue since ' : 'Due '}{fmtDate(asset.next_service_date)}
                             </Text>
                           </View>
                         )}
@@ -288,28 +323,31 @@ const s = StyleSheet.create({
   screen:   { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   
-  headerAddBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  headerAddBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  chipRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
+  chip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 14, minHeight: 36, justifyContent: 'center' },
+  chipTxt: { fontSize: 13, fontWeight: '600' },
 
   // Cards
-  card: { borderRadius: 16, borderWidth: 1, overflow: 'hidden', padding: 0 },
+  card: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', padding: 0 },
 
   // Asset rows
-  assetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  assetIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  assetType:     { fontSize: 14, fontWeight: '700', marginBottom: 1 },
-  assetLocation: { fontSize: 12, marginTop: 1 },
-  assetSerial:   { fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
+  assetRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 72 },
+  assetIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  assetType:     { fontSize: 15, fontWeight: '600', marginBottom: 1 },
+  assetLocation: { fontSize: 13, marginTop: 1 },
+  assetSerial:   { fontSize: 12, fontFamily: 'monospace', marginTop: 1 },
   dateChipsRow:  { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  dateChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  dateChipTxt:   { fontSize: 10, fontWeight: '600' },
+  dateChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  dateChipTxt:   { fontSize: 12, fontWeight: '500' },
   assetRight:    { alignItems: 'center', gap: 2 },
   statusDot:     { width: 6, height: 6, borderRadius: 3 },
-  inactiveLabel: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  inactiveLabel: { fontSize: 11, fontWeight: '600' },
 
   // Empty state
   emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
-  emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8 },
-  emptySub:      { fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20, marginTop: 16 },
-  addFirstBtnTxt:{ fontSize: 15, fontWeight: '700' },
+  emptyTitle:    { fontSize: 18, fontWeight: '700', marginTop: 8 },
+  emptySub:      { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, minHeight: 52, borderRadius: 12, marginTop: 16 },
+  addFirstBtnTxt:{ fontSize: 16, fontWeight: '600' },
 });

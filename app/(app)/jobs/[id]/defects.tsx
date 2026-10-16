@@ -188,7 +188,7 @@ export default function DefectsScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1 },
-  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14 },
   countText:  { fontSize: 11, fontWeight: '700' },
   filterRow:  { marginVertical: 8, paddingHorizontal: 16 },
   fab: {

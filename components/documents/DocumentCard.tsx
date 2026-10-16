@@ -178,6 +178,6 @@ const s = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   meta: { fontSize: 11, fontWeight: '500' },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
-  badgeTxt: { fontSize: 10, fontWeight: '700' },
+  badgeTxt: { fontSize: 11, fontWeight: '700' },
   actionBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });
