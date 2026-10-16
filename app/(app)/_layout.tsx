@@ -1,6 +1,8 @@
 // Main app tab navigator — premium tab bar with active top indicator
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, AppState, AppStateStatus } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { Text } from '@/components/ui/AppText';
+import { fontFor } from '@/constants/Fonts';
 import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
@@ -200,16 +202,16 @@ export default function AppLayout() {
           // with the gesture nav bar on any Android device (fixes the gap
           // reported by user — was previously a hardcoded 12px that was
           // too small for devices with a tall gesture navigation bar).
-          height: Platform.OS === 'ios' ? 82 : 56 + insets.bottom,
+          height: Platform.OS === 'ios' ? 86 : 64 + insets.bottom,
           paddingBottom: Platform.OS === 'ios' ? 22 : insets.bottom + 6,
           paddingTop: 2,
         },
         tabBarActiveTintColor: C.accent,
         tabBarInactiveTintColor: C.tabIconDefault,
+        // Approved Batch B tab bar: 12 pt labels in the app font.
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          letterSpacing: 0.2,
+          fontSize: 12,
+          ...(fontFor({ fontSize: 12, fontWeight: '600' }) ?? { fontWeight: '600' }),
         },
         tabBarItemStyle: {
           paddingTop: 4,
@@ -223,8 +225,8 @@ export default function AppLayout() {
           title: 'Home',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
-              name="view-dashboard-outline"
-              name_active="view-dashboard"
+              name="home-outline"
+              name_active="home"
               color={color}
               size={size}
               focused={focused}
@@ -240,8 +242,8 @@ export default function AppLayout() {
           title: 'Schedule',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
-              name="briefcase-check-outline"
-              name_active="briefcase-check"
+              name="calendar-blank-outline"
+              name_active="calendar-blank"
               color={color}
               size={size}
               focused={focused}
@@ -257,8 +259,8 @@ export default function AppLayout() {
           title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
-              name="account-circle-outline"
-              name_active="account-circle"
+              name="account-outline"
+              name_active="account"
               color={color}
               size={size}
               focused={focused}

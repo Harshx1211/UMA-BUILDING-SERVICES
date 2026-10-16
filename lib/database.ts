@@ -3860,6 +3860,31 @@ export function getOverdueCompliancePropertyCount(userId: string, todayStr: stri
   }
 }
 
+/** The overdue properties themselves (same rule as the count above), oldest
+ * due date first — the Home screen's overdue banner opens this list. */
+export function getOverdueComplianceProperties(userId: string, todayStr: string): {
+  id: string; name: string; address: string | null; suburb: string | null; next_inspection_date: string;
+}[] {
+  try {
+    const db = openDatabase();
+    return db.getAllSync(
+      `SELECT p.id, p.name, p.address, p.suburb, p.next_inspection_date
+       FROM properties p
+       WHERE p.next_inspection_date IS NOT NULL
+         AND p.next_inspection_date < ?
+         AND EXISTS (
+           SELECT 1 FROM jobs j
+           WHERE j.property_id = p.id
+             AND (j.assigned_to = ? OR EXISTS (SELECT 1 FROM job_technicians jt WHERE jt.job_id = j.id AND jt.user_id = ?))
+         )
+       ORDER BY p.next_inspection_date ASC`,
+      [todayStr, userId, userId],
+    );
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Robustly wipes all tenant-specific local data from the SQLite database.
  * Called securely upon signOut to ensure data does not leak between sessions.

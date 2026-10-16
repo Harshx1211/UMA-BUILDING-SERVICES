@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, FlatList, TouchableOpacity, StyleSheet,
   TextInput, RefreshControl,
 } from 'react-native';
+import { Text } from '@/components/ui/AppText';
+import { fontFor } from '@/constants/Fonts';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore, JobWithProperty } from '@/store/jobsStore';
@@ -19,7 +21,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 
 type FilterTab = 'today' | 'week' | 'all';
 const FILTER_TABS: FilterTab[] = ['today', 'week', 'all'];
-const FILTER_TAB_OPTIONS = [{ label: 'Today' }, { label: 'This Week' }, { label: 'All Jobs' }];
+const FILTER_TAB_OPTIONS = [{ label: 'Today' }, { label: 'This week' }, { label: 'All jobs' }];
 
 type JobWithJoins = Job & { property_name?: string; address?: string; suburb?: string; state?: string };
 
@@ -36,12 +38,20 @@ function fmtJobDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+// Left accent: urgent red, high amber; normal/low jobs show none.
 const PRIORITY_COLOR: Record<string, string> = {
   urgent: T.danger,
   high:   T.warning,
-  normal: T.info,
-  low:    T.textMuted,
+  normal: 'transparent',
+  low:    'transparent',
 };
+
+/** "14:30" -> "2:30 pm" */
+function fmtTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  if (!Number.isFinite(h)) return t;
+  return `${h % 12 || 12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
 
 const ALL = 'All';
 
@@ -249,7 +259,7 @@ export default function ScheduleScreen() {
             style={[styles.filterIconBtn, activeFilterCount > 0 && styles.filterIconBtnActive]}
             onPress={() => setFilterModalVisible(true)}
           >
-            <MaterialCommunityIcons name="tune-variant" size={16} color={activeFilterCount > 0 ? T.textOnPrimary : T.textMuted} />
+            <MaterialCommunityIcons name="tune-variant" size={20} color={activeFilterCount > 0 ? T.textOnPrimary : T.textSecondary} />
             {activeFilterCount > 0 && (
               <View style={styles.filterCountBadge}>
                 <Text style={styles.filterCountBadgeTxt}>{activeFilterCount}</Text>
@@ -260,10 +270,10 @@ export default function ScheduleScreen() {
 
         {/* ── Search ── */}
         <View style={styles.searchWrap}>
-          <MaterialCommunityIcons name="magnify" size={16} color={T.textMuted} style={{ marginRight: 6 }} />
+          <MaterialCommunityIcons name="magnify" size={20} color={T.textMuted} style={{ marginRight: 8 }} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search property or address…"
+            style={[styles.searchInput, fontFor(styles.searchInput)]}
+            placeholder="Search property or address"
             placeholderTextColor={T.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -271,8 +281,8 @@ export default function ScheduleScreen() {
             autoCorrect={false}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <MaterialCommunityIcons name="close-circle" size={16} color={T.textMuted} />
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Clear search">
+              <MaterialCommunityIcons name="close-circle" size={18} color={T.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -294,7 +304,9 @@ export default function ScheduleScreen() {
         windowSize={8}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="briefcase-search-outline" size={40} color={T.textMuted} />
+            <View style={styles.emptyIcon}>
+              <MaterialCommunityIcons name="briefcase-search-outline" size={26} color={T.textSecondary} />
+            </View>
             <Text style={styles.emptyTitle}>No jobs found</Text>
             <Text style={styles.emptyText}>
               {search ? 'Try a different search term.' : 'No jobs scheduled for this period.'}
@@ -326,96 +338,92 @@ export default function ScheduleScreen() {
 
 function ScheduleJobCard({ job }: { job: Job }) {
   const j = job as JobWithJoins;
+  const address = [j.address, j.suburb, j.state].filter(Boolean).join(', ');
+  const when = job.status === 'completed'
+    ? { icon: 'check-circle-outline' as const, color: T.success, text: `Done ${fmtJobDate(job.updated_at || job.scheduled_date)}` }
+    : job.status === 'in_progress'
+      ? { icon: 'play-circle-outline' as const, color: T.primary, text: `Started ${fmtJobDate(job.updated_at)}` }
+      : null;
   return (
     <TouchableOpacity
-      style={styles.card}
-      // FIX: this was the only job-navigation call in the whole app using the
-      // fully-qualified /(app)/... group prefix AND a trailing slash — every
-      // other push into a job screen (including openJob(), used from every
-      // other entry point) uses the bare /jobs/{id} form. That prefix is only
-      // needed to jump INTO a different tab's stack (see openJob's own
-      // comment, and Home's notifications bell) — using it here, already
-      // inside the Jobs tab's own stack, risked resolving as a fresh
-      // navigation to the tab root instead of a normal push, which is
-      // exactly the shape of "back doesn't return to Schedule" bugs.
+      style={[styles.card, job.status === 'completed' && { opacity: 0.92 }]}
+      // FIX: bare /jobs/{id} push from inside the Jobs tab's own stack — see
+      // openJob's comment for why the /(app)/ prefix must not be used here.
       onPress={() => router.push(`/jobs/${job.id}` as never)}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${j.property_name ?? 'Job'}, ${STATUS_LABEL[job.status] ?? job.status}`}
     >
-      <View style={[styles.priorityBar, { backgroundColor: PRIORITY_COLOR[job.priority] ?? T.border }]} />
-      <View style={styles.cardBody}>
-        <View style={styles.cardRow}>
-          <Text style={styles.propName} numberOfLines={1}>
-            {j.property_name ?? 'Unknown Property'}
-          </Text>
-          <Badge status={job.status} />
+      <View style={[styles.priorityBar, { backgroundColor: job.status === 'in_progress' && job.priority !== 'urgent' && job.priority !== 'high' ? T.primary : (PRIORITY_COLOR[job.priority] ?? 'transparent') }]} />
+      <View style={{ flex: 1 }}>
+        <View style={styles.cardBody}>
+          <View style={styles.cardTop}>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.statusRow}>
+                <Badge status={job.status} />
+                <Text style={styles.typeText} numberOfLines={1}>· {JOB_TYPE_LABEL[job.job_type] ?? job.job_type}</Text>
+              </View>
+              <Text style={styles.propName} numberOfLines={1}>{j.property_name ?? 'Unknown Property'}</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={T.textSecondary} style={{ marginTop: 10 }} />
+          </View>
+          {address ? (
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="map-marker-outline" size={16} color={T.textMuted} />
+              <Text style={styles.infoText} numberOfLines={1}>{address}</Text>
+            </View>
+          ) : null}
+          <View style={styles.infoRow}>
+            <MaterialCommunityIcons name="clock-outline" size={16} color={T.textMuted} />
+            <Text style={styles.infoText}>
+              {fmtJobDate(job.scheduled_date)}{job.scheduled_time && job.status === 'scheduled' ? ` · ${fmtTime(job.scheduled_time)}` : ''}
+            </Text>
+          </View>
         </View>
-        <Text style={styles.address} numberOfLines={1}>
-          {[j.address, j.suburb, j.state].filter(Boolean).join(', ')}
-        </Text>
-        <View style={styles.metaRow}>
-          {job.status === 'completed' ? (
-            <>
-              <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
-              <MaterialCommunityIcons name="arrow-right" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
-              <MaterialCommunityIcons name="check-circle-outline" size={12} color={T.success} style={{ marginLeft: 4 }} />
-              <Text style={[styles.metaText, { color: T.success }]}>
-                {fmtJobDate(job.updated_at || job.scheduled_date)}
-              </Text>
-            </>
-          ) : job.status === 'in_progress' ? (
-            <>
-              <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
-              <MaterialCommunityIcons name="arrow-right" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
-              <MaterialCommunityIcons name="play-circle-outline" size={12} color={T.primary} style={{ marginLeft: 4 }} />
-              <Text style={[styles.metaText, { color: T.primary }]}>
-                Started {fmtJobDate(job.updated_at)}
-              </Text>
-            </>
-          ) : (
-            <>
-              <MaterialCommunityIcons name="calendar-outline" size={11} color={T.textMuted} />
-              <Text style={styles.metaText}>{fmtJobDate(job.scheduled_date)}</Text>
-              {job.scheduled_time && (
-                <>
-                  <MaterialCommunityIcons name="clock-outline" size={11} color={T.textMuted} style={{ marginLeft: 4 }} />
-                  <Text style={styles.metaText}>{job.scheduled_time.substring(0, 5)}</Text>
-                </>
-              )}
-            </>
-          )}
-        </View>
-        {job.status === 'scheduled' && (
-          <ToleranceLabel scheduledDate={job.scheduled_date} jobType={job.job_type} style={{ marginTop: 4 }} />
-        )}
+        {(when || job.status === 'scheduled') ? (
+          <View style={styles.cardFooter}>
+            {when ? (
+              <View style={styles.footerItem}>
+                <MaterialCommunityIcons name={when.icon} size={15} color={when.color} />
+                <Text style={[styles.footerText, { color: when.color }]}>{when.text}</Text>
+              </View>
+            ) : (
+              <ToleranceLabel scheduledDate={job.scheduled_date} jobType={job.job_type} />
+            )}
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
 }
 
+// Approved Batch B design (stitch-designs/README.md).
 const styles = StyleSheet.create({
   container:            { flex: 1, backgroundColor: T.background },
   filterRow:            { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8 },
-  filterIconBtn:        { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
+  filterIconBtn:        { width: 44, height: 44, borderRadius: T.radiusButton, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   filterIconBtnActive:  { backgroundColor: T.primary, borderColor: T.primary },
-  filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 9.5, fontWeight: '800' },
-  groupHeader:          { color: T.textMuted, fontSize: 11.5, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 },
-  searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14 },
+  filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: T.background },
+  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 10, fontWeight: '800' },
+  groupHeader:          { color: T.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 },
+  searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: T.radiusButton, borderWidth: 1, borderColor: T.border, paddingHorizontal: 14, height: 48 },
+  searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14, paddingVertical: 0 },
   // padding around list + ensure list always grows to fill screen height
-  // (prevents empty dark area below last card when few jobs are visible)
   scroll: { padding: 16, paddingBottom: 40, flexGrow: 1 },
-  emptyState:           { alignItems: 'center', paddingVertical: 60, backgroundColor: T.surface, borderRadius: 16, borderWidth: 1, borderColor: T.border, gap: 8, ...cardShadow },
+  emptyState:           { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border, gap: 8, ...cardShadow },
+  emptyIcon:            { width: 52, height: 52, borderRadius: 26, backgroundColor: T.surfaceInput, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyTitle:           { color: T.textPrimary, fontSize: 16, fontWeight: '700' },
-  emptyText:            { color: T.textMuted, fontSize: 13 },
-  card:                 { backgroundColor: T.surface, borderRadius: 16, borderWidth: 1, borderColor: T.border, flexDirection: 'row', overflow: 'hidden', marginBottom: 12, ...cardShadow },
+  emptyText:            { color: T.textSecondary, fontSize: 14, textAlign: 'center' },
+  card:                 { backgroundColor: T.surface, borderRadius: T.radiusCard, borderWidth: 1, borderColor: T.border, flexDirection: 'row', overflow: 'hidden', marginBottom: 12, ...cardShadow },
   priorityBar:          { width: 4 },
-  cardBody:             { flex: 1, padding: 16 },
-  cardRow:              { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  propName:             { color: T.textPrimary, fontSize: 15, fontWeight: '700', flex: 1 },
-  address:              { color: T.textMuted, fontSize: 12, marginBottom: 8 },
-  metaRow:              { flexDirection: 'row', alignItems: 'center' },
-  metaText:             { color: T.textMuted, fontSize: 11, paddingLeft: 4, paddingRight: 8 },
+  cardBody:             { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, gap: 8 },
+  cardTop:              { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  statusRow:            { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  typeText:             { color: T.textMuted, fontSize: 12, flexShrink: 1 },
+  propName:             { color: T.textPrimary, fontSize: 16, fontWeight: '600' },
+  infoRow:              { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoText:             { color: T.textSecondary, fontSize: 13, flex: 1 },
+  cardFooter:           { backgroundColor: T.surfaceInput, paddingHorizontal: 16, paddingVertical: 10, minHeight: 40, justifyContent: 'center' },
+  footerItem:           { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerText:           { fontSize: 12, fontWeight: '600' },
 });

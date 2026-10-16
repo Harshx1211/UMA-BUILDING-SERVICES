@@ -2,7 +2,8 @@
 // device unlock (fingerprint, face, or the phone's own PIN/pattern). See
 // authStore's "Remembered session + device lock" notes for when it shows.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/ui/AppText';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

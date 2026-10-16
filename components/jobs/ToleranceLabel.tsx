@@ -4,7 +4,8 @@
  * exists once (job list row + job detail chip row both use it).
  */
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Text } from '@/components/ui/AppText';
 import { T } from '@/constants/Colors';
 import { getToleranceWindow } from '@/utils/toleranceWindow';
 

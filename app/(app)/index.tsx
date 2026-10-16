@@ -21,12 +21,13 @@ import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
 import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
-import { getUnreadNotificationCount, getOverdueCompliancePropertyCount } from '@/lib/database';
+import { getUnreadNotificationCount, getOverdueCompliancePropertyCount, getOverdueComplianceProperties } from '@/lib/database';
+import { OverdueSheet, type OverdueProperty } from '@/components/home/OverdueSheet';
+import { jobTypeLabel } from '@/constants/JobTypeLabels';
 import { T } from '@/constants/Colors';
-import { Typography } from '@/constants/Typography';
 import { JobStatus } from '@/constants/Enums';
 import type { Job } from '@/types';
-import { ScreenHeader, Badge, EmptyState, SectionHeader, Card, cardShadow, SkeletonBlock } from '@/components/ui';
+import { ScreenHeader, Badge, EmptyState, Card, cardShadow, SkeletonBlock } from '@/components/ui';
 import { SyncStatusBar } from '@/components/SyncStatusBar';
 import { localDateString } from '@/utils/dateHelpers';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -81,6 +82,12 @@ function JobCard({ job, index }: { job: Job; index: number }) {
       })
     : null;
 
+  const address = [j.address, j.suburb].filter(Boolean).join(', ');
+  const time = job.scheduled_time ? fmtTime(job.scheduled_time) : null;
+  const activity = (job.status === JobStatus.InProgress || job.status === JobStatus.Completed) && updDate
+    ? `${job.status === JobStatus.Completed ? 'Done' : 'Started'} ${updDate}`
+    : null;
+
   return (
     <Animated.View
       style={{
@@ -93,52 +100,54 @@ function JobCard({ job, index }: { job: Job; index: number }) {
         style={styles.jobCard}
         onPress={() => openJob(job.id)}
         activeOpacity={0.82}
+        accessibilityRole="button"
+        accessibilityLabel={`${j.property_name ?? 'Job'}, ${job.status}`}
       >
-        {/* Priority left bar */}
-        <View style={[styles.priorityBar, { backgroundColor: PRIORITY_BAR[job.priority] ?? T.border }]} />
+        {/* Priority bar (urgent red, high amber) */}
+        <View style={[styles.priorityBar, { backgroundColor: PRIORITY_BAR[job.priority] ?? 'transparent' }]} />
 
         <View style={styles.jobBody}>
-          {/* Top row: property name + status badge */}
           <View style={styles.jobTop}>
-            <Text style={styles.jobName} numberOfLines={1}>
-              {j.property_name ?? 'Unknown Property'}
-            </Text>
-            <Badge status={job.status} />
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.statusRow}>
+                <Badge status={job.status} />
+                {time ? <Text style={styles.timeText}>{time}</Text> : null}
+              </View>
+              <Text style={styles.jobName} numberOfLines={1}>
+                {j.property_name ?? 'Unknown Property'}
+              </Text>
+              {address ? (
+                <View style={styles.addrRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={15} color={T.textMuted} />
+                  <Text style={styles.jobAddress} numberOfLines={1}>{address}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.chevronTile}>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={T.textPrimary} />
+            </View>
           </View>
 
-          {/* Address */}
-          {(j.address || j.suburb) ? (
-            <Text style={styles.jobAddress} numberOfLines={1}>
-              {[j.address, j.suburb].filter(Boolean).join(', ')}
-            </Text>
-          ) : null}
-
-          <View style={styles.jobMeta}>
-            {metaDate ? (
+          <View style={styles.jobFooter}>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="clipboard-text-outline" size={15} color={T.textMuted} />
+              <Text style={styles.metaText} numberOfLines={1}>{jobTypeLabel(job.job_type) || 'Job'}</Text>
+            </View>
+            {activity ? (
               <View style={styles.metaItem}>
-                <MaterialCommunityIcons name="calendar-outline" size={12} color={T.textMuted} />
-                <Text style={styles.metaText}>{metaDate}</Text>
+                <MaterialCommunityIcons
+                  name={job.status === JobStatus.Completed ? 'check-circle-outline' : 'play-circle-outline'}
+                  size={15}
+                  color={job.status === JobStatus.Completed ? T.success : T.primary}
+                />
+                <Text style={[styles.metaText, { color: job.status === JobStatus.Completed ? T.success : T.primary, fontWeight: '600' }]}>
+                  {activity}
+                </Text>
               </View>
-            ) : null}
-            
-            {(job.status === JobStatus.InProgress || job.status === JobStatus.Completed) && updDate ? (
-              <>
-                <MaterialCommunityIcons name="arrow-right" size={11} color={T.textMuted} />
-                <View style={styles.metaItem}>
-                  <MaterialCommunityIcons 
-                    name={job.status === JobStatus.Completed ? "check-circle-outline" : "play-circle-outline"} 
-                    size={12} 
-                    color={job.status === JobStatus.Completed ? T.success : T.primary} 
-                  />
-                  <Text style={[styles.metaText, { color: job.status === JobStatus.Completed ? T.success : T.primary, fontWeight: '700' }]}>
-                    {job.status === JobStatus.Completed ? 'Done ' : 'Started '}{updDate}
-                  </Text>
-                </View>
-              </>
-            ) : job.scheduled_time ? (
+            ) : metaDate ? (
               <View style={styles.metaItem}>
-                <MaterialCommunityIcons name="clock-outline" size={12} color={T.textMuted} />
-                <Text style={styles.metaText}>{job.scheduled_time.substring(0, 5)}</Text>
+                <MaterialCommunityIcons name="calendar-outline" size={15} color={T.textMuted} />
+                <Text style={styles.metaText}>{metaDate}</Text>
               </View>
             ) : null}
           </View>
@@ -146,6 +155,14 @@ function JobCard({ job, index }: { job: Job; index: number }) {
       </TouchableOpacity>
     </Animated.View>
   );
+}
+
+/** "14:30:00" -> "2:30 pm" */
+function fmtTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  if (!Number.isFinite(h)) return t;
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -156,6 +173,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing]   = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
+  const [overdueList, setOverdueList] = useState<OverdueProperty[] | null>(null);
   // Drives the ring pulsing out of the active job's dot (0 → 1, repeating).
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -294,16 +312,12 @@ export default function HomeScreen() {
         }
         contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
       >
-        {/* ── Active Job Banner ── */}
+        {/* ── Active job (approved Batch B card) ── */}
         {inProgress && (
-          <View style={{ marginBottom: T.space16 }}>
-            <Card
-              variant="default"
-              noPadding
-              onPress={() => openJob(inProgress.id)}
-            >
-              <View style={styles.activeJobInner}>
-                {/* Live dot with a ring pulsing out of it */}
+          <View style={styles.activeCard}>
+            <View style={styles.activeTopBar} />
+            <View style={styles.activeHead}>
+              <View style={styles.activePill}>
                 <View style={styles.activeDotWrap}>
                   <Animated.View
                     style={[styles.activeDotRing, {
@@ -313,29 +327,60 @@ export default function HomeScreen() {
                   />
                   <View style={styles.activeDot} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.activeEyebrow}>Active job</Text>
-                  <Text style={styles.activeName} numberOfLines={1}>
-                    {(inProgress as JobWithJoins).property_name ?? 'Unknown Property'}
-                  </Text>
-                </View>
-                <View style={styles.activeOpenBtn}>
-                  <Text style={styles.activeOpenBtnText}>Open</Text>
-                  <MaterialCommunityIcons name="arrow-right" size={14} color={T.primary} />
-                </View>
+                <Text style={styles.activeEyebrow}>ACTIVE JOB</Text>
               </View>
-            </Card>
+            </View>
+            <Text style={styles.activeName} numberOfLines={1}>
+              {(inProgress as JobWithJoins).property_name ?? 'Unknown Property'}
+            </Text>
+            {((inProgress as JobWithJoins).address || (inProgress as JobWithJoins).suburb) ? (
+              <View style={styles.addrRow}>
+                <MaterialCommunityIcons name="map-marker-outline" size={16} color={T.textMuted} />
+                <Text style={styles.activeMeta} numberOfLines={1}>
+                  {[(inProgress as JobWithJoins).address, (inProgress as JobWithJoins).suburb].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.addrRow}>
+              <MaterialCommunityIcons name="clipboard-text-outline" size={16} color={T.textMuted} />
+              <Text style={styles.activeMeta}>{jobTypeLabel(inProgress.job_type) || 'Job'}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.activeOpenBtn}
+              onPress={() => openJob(inProgress.id)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Open active job"
+            >
+              <Text style={styles.activeOpenBtnText}>Open job</Text>
+              <MaterialCommunityIcons name="arrow-right" size={18} color={T.textOnPrimary} />
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Overdue Compliance Banner ── */}
+        {/* ── Overdue properties: tap to see which ── */}
         {overdueCount > 0 && (
-          <View style={[styles.overdueBanner, { marginBottom: T.space16 }]}>
-            <MaterialCommunityIcons name="calendar-alert-outline" size={18} color={T.danger} />
-            <Text style={styles.overdueText}>
+          <TouchableOpacity
+            style={styles.overdueBanner}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`${overdueCount} overdue. Show properties`}
+            onPress={() => {
+              if (!user) return;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const list = getOverdueComplianceProperties(user.id, today);
+              if (list.length === 1) router.push(`/(app)/properties/${list[0].id}` as never);
+              else if (list.length > 1) setOverdueList(list);
+            }}
+          >
+            <View style={styles.overdueIcon}>
+              <MaterialCommunityIcons name="alert-outline" size={18} color={T.danger} />
+            </View>
+            <Text style={styles.overdueText} numberOfLines={2}>
               {overdueCount} propert{overdueCount === 1 ? 'y is' : 'ies are'} overdue for inspection
             </Text>
-          </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={T.danger} />
+          </TouchableOpacity>
         )}
 
         {/* ── KPI Stat Tiles ── */}
@@ -363,8 +408,8 @@ export default function HomeScreen() {
                 { value: doneToday,        label: 'Completed today' },
               ].map(({ value, label }) => (
                 <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
+                  <Text style={styles.kpiLabel} numberOfLines={1}>{label}</Text>
                   <Text style={styles.kpiValue}>{value}</Text>
-                  <Text style={styles.kpiLabel}>{label}</Text>
                 </View>
               ))
           }
@@ -372,7 +417,14 @@ export default function HomeScreen() {
 
         {/* ── Today's Jobs ── */}
         <View style={styles.section}>
-          <SectionHeader title="Today's jobs" style={styles.sectionHeader} />
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>Today&apos;s jobs</Text>
+            {todayJobs.length > 0 ? (
+              <Text style={styles.sectionCount}>
+                {todayJobs.length - doneToday > 0 ? `${todayJobs.length - doneToday} remaining` : 'All done'}
+              </Text>
+            ) : null}
+          </View>
           {todayJobs.length === 0 ? (
             <Card>
               <EmptyState
@@ -391,13 +443,23 @@ export default function HomeScreen() {
         {/* ── Upcoming ── */}
         {upcoming.length > 0 && (
           <View style={styles.section}>
-            <SectionHeader title="Upcoming" style={styles.sectionHeader} />
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Upcoming</Text>
+              <Text style={styles.sectionCount}>{upcoming.length}</Text>
+            </View>
             {upcoming.map((job: Job, idx: number) => (
               <JobCard key={job.id} job={job} index={idx} />
             ))}
           </View>
         )}
       </ScrollView>
+
+      <OverdueSheet
+        visible={!!overdueList}
+        properties={overdueList ?? []}
+        onClose={() => setOverdueList(null)}
+        onOpen={(id) => { setOverdueList(null); router.push(`/(app)/properties/${id}` as never); }}
+      />
     </View>
   );
 }
@@ -449,73 +511,51 @@ const styles = StyleSheet.create({
     paddingBottom: T.space32,
   },
 
-  // Active job banner
-  activeJobInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Active job card
+  activeCard: {
+    backgroundColor: T.surface,
+    borderRadius: T.radiusCard,
+    borderWidth: 1,
+    borderColor: T.border,
     padding: T.space16,
-    gap: T.space12,
+    paddingTop: T.space16 + 4,
+    marginBottom: T.space16,
+    gap: 6,
+    overflow: 'hidden',
+    ...cardShadow,
   },
-  activeDotWrap: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  activeTopBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: T.primary },
+  activeHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  activePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: T.successBg, borderRadius: T.radiusPill, paddingLeft: 6, paddingRight: 10, paddingVertical: 3,
   },
-  activeDotRing: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: T.radiusPill,
-    backgroundColor: T.primary,
-  },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: T.radiusPill,
-    backgroundColor: T.primary,
-  },
-  activeEyebrow: {
-    ...Typography.eyebrow,
-    color: T.primary,
-    marginBottom: 2,
-  },
-  activeName: {
-    ...Typography.cardTitle,
-    color: T.textPrimary,
-  },
+  activeDotWrap: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
+  activeDotRing: { position: 'absolute', width: 7, height: 7, borderRadius: T.radiusPill, backgroundColor: T.success },
+  activeDot: { width: 7, height: 7, borderRadius: T.radiusPill, backgroundColor: T.success },
+  activeEyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: T.success },
+  activeName: { fontSize: 16, fontWeight: '700', color: T.textPrimary },
+  activeMeta: { fontSize: 14, color: T.textSecondary, flexShrink: 1 },
   activeOpenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: T.iconBg(T.primary),
-    paddingHorizontal: T.space12,
-    paddingVertical: T.space8,
-    borderRadius: T.radiusButton,
+    marginTop: 10, height: 48, borderRadius: T.radiusButton, backgroundColor: T.primary,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  activeOpenBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: T.primary,
-  },
+  activeOpenBtnText: { fontSize: 15, fontWeight: '600', color: T.textOnPrimary },
 
-  // Overdue compliance banner
+  // Overdue banner (tappable)
   overdueBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: T.space8,
-    backgroundColor: T.iconBg(T.danger),
-    borderRadius: T.radiusCard,
-    paddingVertical: T.space12,
-    paddingHorizontal: T.space16,
+    gap: T.space12,
+    backgroundColor: T.dangerBg,
+    borderRadius: T.radiusButton,
+    borderWidth: 1,
+    borderColor: T.tintBorder(T.danger),
+    padding: 14,
+    marginBottom: T.space16,
   },
-  overdueText: {
-    ...Typography.body,
-    color: T.danger,
-    fontSize: 13,
-    fontWeight: '700',
-    flex: 1,
-  },
+  overdueIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: T.tintBg(T.danger), alignItems: 'center', justifyContent: 'center' },
+  overdueText: { color: T.danger, fontSize: 14, fontWeight: '600', flex: 1 },
 
   // KPI strip
   kpiRow: {
@@ -534,9 +574,10 @@ const styles = StyleSheet.create({
     borderRadius: T.radiusCard,
     borderWidth: 1,
     borderColor: T.border,
-    paddingVertical: T.space16,
-    paddingHorizontal: T.space16,
+    paddingVertical: T.space12,
+    paddingHorizontal: T.space8,
     alignItems: 'center',
+    gap: 2,
     ...cardShadow,
   },
   kpiCardTablet: {
@@ -545,15 +586,15 @@ const styles = StyleSheet.create({
   },
   kpiValue: {
     // Neutral — not semantic colors (confirmed with user)
-    fontSize: 26,
-    fontWeight: '800',
+    fontSize: 24,
+    fontWeight: '700',
     letterSpacing: -0.5,
     color: T.textPrimary,
   },
   kpiLabel: {
-    ...Typography.label,
-    color: T.textMuted,
-    marginTop: T.space4,
+    fontSize: 11,
+    fontWeight: '500',
+    color: T.textSecondary,
     textAlign: 'center',
   },
 
@@ -561,9 +602,9 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: T.space24,
   },
-  sectionHeader: {
-    marginBottom: T.space12,
-  },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: T.space12 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: T.textPrimary },
+  sectionCount: { fontSize: 12, fontWeight: '600', color: T.textMuted },
 
   // Job card
   jobCard: {
@@ -580,40 +621,40 @@ const styles = StyleSheet.create({
   },
   jobBody: {
     flex: 1,
-    padding: T.space16,
-    gap: T.space4,
   },
   jobTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: T.space4,
-  },
-  jobName: {
-    ...Typography.cardTitle,
-    color: T.textPrimary,
-    flex: 1,
-    marginRight: T.space8,
-  },
-  jobAddress: {
-    ...Typography.body,
-    color: T.textSecondary,
-    fontSize: 13,
-  },
-  jobMeta: {
-    flexDirection: 'row',
     gap: T.space12,
-    marginTop: T.space4,
+    padding: T.space16,
+    paddingBottom: T.space12,
+  },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timeText: { fontSize: 12, color: T.textMuted },
+  jobName: { fontSize: 16, fontWeight: '600', color: T.textPrimary },
+  addrRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  jobAddress: { fontSize: 13, color: T.textSecondary, flexShrink: 1 },
+  chevronTile: {
+    width: 40, height: 40, borderRadius: T.radiusButton, backgroundColor: T.surfaceInput,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  jobFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: T.space12,
+    paddingHorizontal: T.space16,
+    paddingVertical: 10,
+    backgroundColor: T.surfaceInput,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: T.space4,
+    gap: 6,
+    flexShrink: 1,
   },
   metaText: {
-    ...Typography.eyebrow,
-    color: T.textMuted,
-    textTransform: 'none',
-    letterSpacing: 0,
+    fontSize: 12,
+    color: T.textSecondary,
   },
 });

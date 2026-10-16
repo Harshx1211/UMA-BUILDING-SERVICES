@@ -1,6 +1,7 @@
 /**
- * JobCard — professional enterprise card with priority strip, status badge, and swipe actions.
- * Clean, data-rich layout with strong typography and clear visual hierarchy.
+ * JobCard — the Schedule list card (approved Batch B design, stitch-designs/README.md):
+ * status pill + job type, name, address, hazard line, time, a grey footer with
+ * compliance status and Map. Priority strip and swipe Start / Cancel unchanged.
  */
 import React, { useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, Linking } from 'react-native';
@@ -12,6 +13,7 @@ import { Priority, ComplianceStatus } from '@/constants/Enums';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
 import { Badge, showConfirm } from '@/components/ui';
+import { jobTypeLabel } from '@/constants/JobTypeLabels';
 import type { JobWithProperty } from '@/store/jobsStore';
 
 interface Props {
@@ -26,7 +28,7 @@ interface Props {
 function parseTime(hhmm: string): string {
   try {
     const [h, m] = hhmm.split(':').map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
   } catch { return hhmm; }
 }
 
@@ -52,8 +54,8 @@ function CancelAction({ onPress, C }: { onPress: () => void, C: ReturnType<typeo
 CancelAction.displayName = 'CancelAction';
 
 const sw = StyleSheet.create({
-  startAction:  { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginLeft: 8, gap: 4 },
-  cancelAction: { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: 16, marginRight: 8, gap: 4 },
+  startAction:  { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: T.radiusCard, marginLeft: 8, gap: 4 },
+  cancelAction: { justifyContent: 'center', alignItems: 'center', width: 78, borderRadius: T.radiusCard, marginRight: 8, gap: 4 },
   actionLabel:  { fontSize: 11, fontWeight: '700', color: T.textOnPrimary },
 });
 
@@ -68,9 +70,9 @@ export const JobCard = React.memo(function JobCard({
     switch(p) {
       case Priority.Urgent: return C.error;
       case Priority.High:   return C.warning;
-      case Priority.Normal: return C.primary;
-      case Priority.Low:    return C.textTertiary;
-      default:              return C.info;
+      case Priority.Normal: return 'transparent';
+      case Priority.Low:    return 'transparent';
+      default:              return 'transparent';
     }
   };
 
@@ -131,78 +133,76 @@ export const JobCard = React.memo(function JobCard({
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
       activeOpacity={0.82}
     >
-      {/* Priority strip — left edge */}
+      {/* Priority strip — urgent red, high amber */}
       <View style={[s.strip, { backgroundColor: stripColor }]} />
 
-      {/* Content */}
-      <View style={s.content}>
-        {/* Row 1: Property name + Status badge */}
-        <View style={s.row1}>
-          <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>
-            {job.property_name ?? 'Unknown Property'}
-          </Text>
-          <Badge status={job.status} dot small />
-        </View>
-
-        {/* Row 2: Address */}
-        {suburb ? (
-          <View style={s.row2}>
-            <MaterialCommunityIcons name="map-marker-outline" size={13} color={C.textTertiary} />
-            <Text style={[s.address, { color: C.textSecondary }]} numberOfLines={1}>
-              {[job.property_address, suburb].filter(Boolean).join(', ')}
-            </Text>
+      <View style={{ flex: 1 }}>
+        <View style={s.content}>
+          <View style={s.topRow}>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={s.statusRow}>
+                <Badge status={job.status} dot small />
+                <Text style={[s.typeText, { color: C.textTertiary }]} numberOfLines={1}>
+                  · {jobTypeLabel(job.job_type) || 'Job'}
+                </Text>
+              </View>
+              <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>
+                {job.property_name ?? 'Unknown Property'}
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={C.textSecondary} style={{ marginTop: 10 }} />
           </View>
-        ) : null}
 
-        {/* Hazard warning — surfaced here (not just on the job/property detail
-            screen) so a technician sees it while scanning the day's list,
-            before ever opening the job. */}
-        {job.hazard_notes ? (
-          <View style={[s.hazardRow, { backgroundColor: C.errorLight }]}>
-            <MaterialCommunityIcons name="alert" size={12} color={C.errorDark} />
-            <Text style={[s.hazardText, { color: C.errorDark }]} numberOfLines={1}>
-              {job.hazard_notes}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Divider */}
-        <View style={[s.divider, { backgroundColor: C.border }]} />
-
-        {/* Row 3: Type badge + time + navigate */}
-        <View style={s.row3}>
-          <Badge status={job.job_type} />
-          {timeLabel ? (
-            <View style={[s.timeChip, { backgroundColor: C.backgroundSecondary }]}>
-              <MaterialCommunityIcons name="clock-outline" size={11} color={C.textSecondary} />
-              <Text style={[s.timeText, { color: C.textSecondary }]}>{timeLabel}</Text>
+          {suburb ? (
+            <View style={s.infoRow}>
+              <MaterialCommunityIcons name="map-marker-outline" size={16} color={C.textTertiary} />
+              <Text style={[s.infoText, { color: C.textSecondary }]} numberOfLines={1}>
+                {[job.property_address, suburb].filter(Boolean).join(', ')}
+              </Text>
             </View>
           ) : null}
-          <View style={{ flex: 1 }} />
-          {showNavigate && (
-            <TouchableOpacity
-              style={[s.navBtn, { backgroundColor: C.backgroundSecondary, borderColor: C.border, borderWidth: 1 }]}
-              onPress={handleNavigate}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <MaterialCommunityIcons name="navigation-variant-outline" size={12} color={C.primary} />
-              <Text style={[s.navText, { color: C.primary }]}>Map</Text>
-            </TouchableOpacity>
-          )}
+
+          {timeLabel ? (
+            <View style={s.infoRow}>
+              <MaterialCommunityIcons name="clock-outline" size={16} color={C.textTertiary} />
+              <Text style={[s.infoText, { color: C.textSecondary }]}>{timeLabel}</Text>
+            </View>
+          ) : null}
+
+          {/* Hazard warning — surfaced here so a technician sees it while
+              scanning the day's list, before ever opening the job. */}
+          {job.hazard_notes ? (
+            <View style={[s.hazardRow, { backgroundColor: C.errorLight }]}>
+              <MaterialCommunityIcons name="alert" size={14} color={C.errorDark} />
+              <Text style={[s.hazardText, { color: C.errorDark }]} numberOfLines={1}>
+                {job.hazard_notes}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Row 4: Compliance dot */}
-        {complianceCfg ? (
-          <View style={s.complianceRow}>
-            <View style={[s.complianceDot, { backgroundColor: complianceCfg.dot }]} />
-            <Text style={[s.complianceLabel, { color: C.textTertiary }]}>{complianceCfg.label}</Text>
+        {(complianceCfg || showNavigate) ? (
+          <View style={[s.footer, { backgroundColor: C.backgroundSecondary }]}>
+            {complianceCfg ? (
+              <View style={s.complianceRow}>
+                <View style={[s.complianceDot, { backgroundColor: complianceCfg.dot }]} />
+                <Text style={[s.complianceLabel, { color: C.textSecondary }]}>{complianceCfg.label}</Text>
+              </View>
+            ) : <View />}
+            {showNavigate && (
+              <TouchableOpacity
+                style={s.navBtn}
+                onPress={handleNavigate}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Directions in maps"
+              >
+                <MaterialCommunityIcons name="navigation-variant-outline" size={15} color={C.primary} />
+                <Text style={[s.navText, { color: C.primary }]}>Map</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : null}
-      </View>
-
-      {/* Right chevron */}
-      <View style={s.chevronWrap}>
-        <MaterialCommunityIcons name="chevron-right" size={18} color={C.textTertiary} />
       </View>
     </TouchableOpacity>
   );
@@ -226,40 +226,34 @@ export const JobCard = React.memo(function JobCard({
 
 const s = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: T.radiusCard,
     flexDirection: 'row',
     alignItems: 'stretch',
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: T.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 1,
   },
   strip:   { width: 4 },
-  content: { flex: 1, paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
+  content: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, gap: 8 },
 
-  row1: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  propertyName: { fontSize: 15, fontWeight: '800', flex: 1, letterSpacing: -0.2 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  typeText: { fontSize: 12, flexShrink: 1 },
+  propertyName: { fontSize: 16, fontWeight: '600', letterSpacing: -0.1 },
 
-  row2: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  address: { fontSize: 12, flex: 1, lineHeight: 17 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoText: { fontSize: 13, flex: 1, lineHeight: 18 },
 
-  hazardRow:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, alignSelf: 'flex-start', maxWidth: '100%' },
-  hazardText: { fontSize: 11, fontWeight: '700', flexShrink: 1 },
+  hazardRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'flex-start', maxWidth: '100%' },
+  hazardText: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
 
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
-
-  row3: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  timeText:  { fontSize: 11, fontWeight: '500' },
-  navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  navText:   { fontSize: 11, fontWeight: '600' },
-
-  complianceRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
-  complianceDot:   { width: 6, height: 6, borderRadius: 3 },
-  complianceLabel: { fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
-
-  chevronWrap: { justifyContent: 'center', paddingRight: 12 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, minHeight: 40 },
+  complianceRow:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  complianceDot:   { width: 7, height: 7, borderRadius: 4 },
+  complianceLabel: { fontSize: 12, fontWeight: '500' },
+  navBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4, paddingVertical: 2 },
+  navText:   { fontSize: 13, fontWeight: '600' },
 });

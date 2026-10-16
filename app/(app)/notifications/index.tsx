@@ -62,19 +62,17 @@ function NotifCard({ item }: { item: AppNotification }) {
   return (
     <Card
       noPadding
-      style={[
-        { backgroundColor: !item.is_read ? C.warningLight : C.surface },
-        !item.is_read ? { borderLeftWidth: 3, borderLeftColor: C.accent } : {}
-      ]}
+      // Approved Batch B: unread = white card with an orange dot; read = quieter grey card.
+      style={!item.is_read ? undefined : { backgroundColor: C.backgroundSecondary, borderColor: 'transparent', shadowOpacity: 0, elevation: 0 }}
     >
       <TouchableOpacity
-        style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12, position: 'relative' }}
+        style={{ padding: 16, paddingRight: 28, flexDirection: 'row', alignItems: 'flex-start', gap: 12, position: 'relative' }}
         onPress={handlePress}
         activeOpacity={0.75}
       >
       {/* Left icon circle */}
-      <View style={[s.iconWrap, { backgroundColor: cfg.color + '22' }]}>
-        <MaterialCommunityIcons name={cfg.icon} size={22} color={cfg.color} />
+      <View style={[s.iconWrap, { backgroundColor: cfg.color + '1A' }]}>
+        <MaterialCommunityIcons name={cfg.icon} size={20} color={cfg.color} />
       </View>
 
       {/* Body */}
@@ -221,14 +219,14 @@ const s = StyleSheet.create({
   // FIX: paddingVertical 6 made this ~28pt tall, under the ~44pt touch-
   // target guideline for a frequently-tapped control.
   markAllBtn: { paddingHorizontal: 10, paddingVertical: 12, borderRadius: 10 },
-  markAllText:{ fontSize: 12, fontWeight: '700' },
+  markAllText:{ fontSize: 13, fontWeight: '600' },
 
-  list:      { padding: 16, gap: 12, paddingBottom: 32 },
+  list:      { padding: 16, gap: 10, paddingBottom: 32 },
   listEmpty: { flex: 1, justifyContent: 'center' },
 
   unreadDot: {
-    position: 'absolute', top: 12, right: 12,
-    width: 8, height: 8, borderRadius: 4,
+    position: 'absolute', top: 18, right: 14,
+    width: 10, height: 10, borderRadius: 5,
   },
 
   iconWrap: {
@@ -237,9 +235,9 @@ const s = StyleSheet.create({
   },
   cardBody:   { flex: 1, gap: 2 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  cardTitle:  { fontSize: 15, fontWeight: '700', flexShrink: 1 },
-  cardTime:   { fontSize: 11, flexShrink: 0 },
-  cardMsg:    { fontSize: 13, lineHeight: 18 },
+  cardTitle:  { fontSize: 16, fontWeight: '600', flexShrink: 1 },
+  cardTime:   { fontSize: 12, flexShrink: 0 },
+  cardMsg:    { fontSize: 14, lineHeight: 20, marginTop: 2 },
 
   clearBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
