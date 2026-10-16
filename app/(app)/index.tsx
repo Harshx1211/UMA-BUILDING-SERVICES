@@ -394,7 +394,7 @@ export default function HomeScreen() {
             elements otherwise stretching edge-to-edge. */}
         <View style={[styles.kpiRow, isTablet && styles.kpiRowTablet]}>
           {isLoading
-            ? (["Today's jobs", 'Open jobs', 'Completed today'] as const).map((label) => (
+            ? (["Today's jobs", 'Open jobs', 'Done today'] as const).map((label) => (
                 <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <SkeletonBlock width={32} height={26} borderRadius={6} />
                   <SkeletonBlock width={48} height={10} borderRadius={4} style={{ marginTop: 6 }} />
@@ -405,7 +405,7 @@ export default function HomeScreen() {
                 // left to right as the state of today's work, completed last.
                 { value: todayJobs.length, label: "Today's jobs"   },
                 { value: openCount,        label: 'Open jobs'      },
-                { value: doneToday,        label: 'Completed today' },
+                { value: doneToday,        label: 'Done today' },
               ].map(({ value, label }) => (
                 <View key={label} style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
                   <Text style={styles.kpiLabel} numberOfLines={1}>{label}</Text>

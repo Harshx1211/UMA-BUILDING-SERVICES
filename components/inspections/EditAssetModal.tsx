@@ -358,7 +358,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
               <View style={s.field}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
                 <TextInput
-                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                   placeholder="Reference code..."
                   placeholderTextColor={C.textTertiary}
                   value={assetRef}
@@ -377,7 +377,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
               <View style={s.field}>
                 <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
                 <TextInput
-                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                  style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                   placeholder="Serial number..."
                   placeholderTextColor={C.textTertiary}
                   value={serialNumber}

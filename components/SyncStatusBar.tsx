@@ -9,6 +9,9 @@ import {
   runSync,
   onSyncFailure,
   offSyncFailure,
+  onSyncComplete,
+  offSyncComplete,
+  isSyncActive,
   retryAllFailedSyncItems,
   type SyncFailureAlert,
 } from '@/lib/sync';
@@ -82,7 +85,10 @@ export function SyncStatusBar() {
   useEffect(() => {
     void refresh();
     const t = setInterval(refresh, POLL_MS);
-    return () => clearInterval(t);
+    // Refresh the moment a sync finishes, not up to 30 s later.
+    const onDone = () => { void refresh(); };
+    onSyncComplete(onDone);
+    return () => { clearInterval(t); offSyncComplete(onDone); };
   }, []);
 
   const handleSync = async () => {
@@ -94,7 +100,7 @@ export function SyncStatusBar() {
 
   // ── Dot colour ──────────────────────────────────────────
   const hasFailures = (status?.failedCount ?? 0) > 0;
-  const dotColor = !isOnline
+  const dotColor = !isOnline || !status?.lastSynced
     ? T.textMuted
     : hasFailures
       ? T.danger      // red — permanent failures
@@ -103,7 +109,8 @@ export function SyncStatusBar() {
         : T.success;  // green — all good
 
   // ── Label ────────────────────────────────────────────────
-  let label = 'Never synced';
+  // No sync recorded yet: say it's syncing if it is, otherwise 'Not synced yet'.
+  let label = isSyncActive() ? 'Syncing…' : 'Not synced yet';
   if (isSyncing) {
     label = 'Syncing…';
   } else if (!isOnline) {

@@ -321,7 +321,7 @@ const s = StyleSheet.create({
   infoIcon:  { marginTop: 2, width: 20 },
   infoLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginBottom: 2 },
   infoValue: { fontSize: 14, fontWeight: '500' },
-  mono:      { fontFamily: 'monospace', fontSize: 13 },
+  mono:      { fontWeight: '600', letterSpacing: 0.3, fontSize: 13 },
 
   // Service history
   histRow:       { paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'flex-start' },

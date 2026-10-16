@@ -29,13 +29,9 @@ interface TabIconProps {
 
 function TabIcon({ name, name_active, color, size, focused, label, activeColor }: TabIconProps) {
   return (
-    <View style={[
-      styles.tabIconWrap,
-      focused && { backgroundColor: activeColor + '18' },
-    ]}>
-      {focused && (
-        <View style={[styles.activeBar, { backgroundColor: activeColor }]} />
-      )}
+    // Approved Batch B tab bar: the active tab is shown by its orange icon
+    // and label only (no extra pill or bar).
+    <View style={styles.tabIconWrap}>
       <MaterialCommunityIcons
         name={focused ? name_active : name}
         size={size}

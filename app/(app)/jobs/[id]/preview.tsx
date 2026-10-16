@@ -42,8 +42,8 @@ function Step({ state, title, detail, progress, last }: {
         {state === 'done' ? (
           <MaterialCommunityIcons name="check-circle" size={22} color={C.success} />
         ) : state === 'active' ? (
-          <View style={styles.stepActive}>
-            <ActivityIndicator size="small" color={C.primary} />
+          <View style={[styles.stepActive, { borderColor: C.primary, backgroundColor: C.primary + '14' }]}>
+            <ActivityIndicator size={14} color={C.primary} />
           </View>
         ) : (
           <View style={[styles.stepTodo, { borderColor: C.border }]} />
@@ -124,7 +124,9 @@ function PendingView({
           state={uploading ? 'active' : 'done'}
           title="Upload your work"
           detail={uploading
-            ? `${total - remaining} of ${total} change${total === 1 ? '' : 's'} · ${waitInfo?.label ?? ''}`
+            ? (total <= 1
+                ? `Sending ${waitInfo?.label ?? 'your change'}…`
+                : `${total - remaining} of ${total} changes sent · ${waitInfo?.label ?? ''} next`)
             : 'Everything is on the server'}
           progress={uploading && total > 0 ? (total - remaining) / total : undefined}
         />
@@ -307,7 +309,7 @@ export default function PreviewScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: C.background }]}>
-      <ScreenHeader
+      <ScreenHeader hideSyncStrip
         title={
           screenState === 'ready' || screenState === 'downloading' ? 'Report Preview'
           : isViewMode ? 'Loading Report'
@@ -404,7 +406,7 @@ const styles = StyleSheet.create({
   stepsCard:   { width: '100%', maxWidth: 420, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   step:        { flexDirection: 'row', gap: 12 },
   stepRail:    { alignItems: 'center', width: 24 },
-  stepActive:  { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+  stepActive:  { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   stepTodo:    { width: 18, height: 18, borderRadius: 9, borderWidth: 2, marginTop: 2 },
   stepLine:    { width: 2, flex: 1, minHeight: 14, marginVertical: 4, borderRadius: 1 },
   stepText:    { flex: 1, paddingBottom: 16, gap: 2 },

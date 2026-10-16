@@ -33,6 +33,9 @@ interface Props {
    * sensible as the normal case, regardless of why canGoBack() was false.
    */
   fallbackHref?: string;
+  /** Hide the offline/uploading strip — for a screen that shows its own
+   * upload progress (the report screen), so the same upload isn't counted twice. */
+  hideSyncStrip?: boolean;
 }
 
 export function ScreenHeader({
@@ -43,6 +46,7 @@ export function ScreenHeader({
   eyebrow,
   extra,
   fallbackHref = '/(app)',
+  hideSyncStrip = false,
 }: Props) {
   const C = useColors();
   const insets = useSafeAreaInsets();
@@ -97,7 +101,7 @@ export function ScreenHeader({
     </View>
     {/* Offline / uploading status — attached under the header so it never
         covers the title or back button (see SyncStrip). */}
-    <SyncStrip />
+    {hideSyncStrip ? null : <SyncStrip />}
     </View>
   );
 }

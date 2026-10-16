@@ -336,7 +336,7 @@ const s = StyleSheet.create({
   assetIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   assetType:     { fontSize: 15, fontWeight: '600', marginBottom: 1 },
   assetLocation: { fontSize: 13, marginTop: 1 },
-  assetSerial:   { fontSize: 12, fontFamily: 'monospace', marginTop: 1 },
+  assetSerial:   { fontSize: 12, fontWeight: '600', letterSpacing: 0.3, marginTop: 1 },
   dateChipsRow:  { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
   dateChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   dateChipTxt:   { fontSize: 12, fontWeight: '500' },

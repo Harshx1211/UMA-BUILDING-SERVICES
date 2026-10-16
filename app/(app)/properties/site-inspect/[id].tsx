@@ -940,7 +940,7 @@ const s = StyleSheet.create({
   assetIconWrap:{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   assetType:    { fontSize: 16, fontWeight: '700', marginBottom: 2, letterSpacing: -0.2 },
   assetLoc:     { fontSize: 13, marginTop: 2, fontWeight: '500' },
-  assetSerial:  { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.8, fontWeight: '600' },
+  assetSerial:  { fontSize: 12, fontWeight: '600', letterSpacing: 0.3, marginTop: 4, opacity: 0.8 },
   resultDot:    { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 
   // Defect

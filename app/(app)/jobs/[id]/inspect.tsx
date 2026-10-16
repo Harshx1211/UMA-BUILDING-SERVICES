@@ -9,7 +9,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useResponsive } from '@/hooks/useResponsive';
-import { T } from '@/constants/Colors';
 import { ScreenHeader, Button, showConfirm } from '@/components/ui';
 import { InspectionResult, AssetStatus, SyncOperation, JobStatus } from '@/constants/Enums';
 import { useInspectionStore, AssetWithResult } from '@/store/inspectionStore';
@@ -23,7 +22,7 @@ import { cardShadow } from '@/components/ui/Card';
 import AddAssetModal from '@/components/inspections/AddAssetModal';
 import EditAssetModal from '@/components/inspections/EditAssetModal';
 import InspectionFilterModal, { GroupBy, SortBy } from '@/components/inspections/InspectionFilterModal';
-import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatAssetName, formatAssetSubtitle, effectiveRoutine, areaOf, nextAssetRefs, refPrefixOf } from '@/utils/assetHelpers';
+import { formatAssetType, getAssetTypeIcon, formatLocationCode, formatLocationFull, formatAssetName, formatAssetSubtitle, effectiveRoutine, areaOf, nextAssetRefs, refPrefixOf } from '@/utils/assetHelpers';
 import { getJobById, upsertRecord, addToSyncQueue, updateRecord, deleteRecord, queryRecords, queryRecordsIn, cancelPendingPhotoUpload, recordDeletedPhoto, openDatabase } from '@/lib/database';
 import { generateUUID } from '@/utils/uuid';
 import { Asset } from '@/types';
@@ -145,7 +144,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
                   {asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'Location not specified'}
                 </Text>
               </View>
-              {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref: {asset.asset_ref}</Text>
+              {asset.asset_ref ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>Ref {asset.asset_ref}</Text>
                 : asset.serial_number ? <Text style={[s.assetSerial, { color: C.textTertiary }]}>S/N: {asset.serial_number}</Text> : null}
             </View>
             {/* Clone/Edit/Delete collapse into one overflow menu — keeps the
@@ -276,6 +275,9 @@ export default function AssetInspectionScreen() {
   const [jobTitle, setJobTitle]    = useState<string>('');
   const [jobDate, setJobDate]     = useState<string>('');
   const [isCompleting, setIsCompleting] = useState(false);
+  // Measured height of the bottom bar, so '+ Add asset' always sits just
+  // above it instead of over the Complete button.
+  const [bottomBarH, setBottomBarH] = useState(96);
   const notebookSheetRef = useRef<PropertyNotebookSheetRef>(null);
 
   // ── Routines/Asset Types/Tags/Location filter + group/sort panel ──────────
@@ -551,7 +553,7 @@ export default function AssetInspectionScreen() {
     const rows: ListRow[] = [];
     for (const key of sortedKeys) {
       const items = buckets.get(key)!;
-      const label = groupBy === 'location' ? formatLocationCode(key) : key;
+      const label = groupBy === 'location' ? formatLocationFull(key) : key;
       rows.push({ kind: 'header', label, count: items.length, assetIds: items.map(a => a.id) });
       for (const asset of items) rows.push({ kind: 'asset', asset });
     }
@@ -892,7 +894,7 @@ export default function AssetInspectionScreen() {
         ref={listRef}
         data={listData}
         keyExtractor={i => i.kind === 'header' ? `header-${i.label}` : i.asset.id}
-        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: 120, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
+        contentContainerStyle={{ flexGrow: 1, paddingTop: 8, paddingBottom: bottomBarH + 88, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
         initialNumToRender={6}
@@ -910,7 +912,7 @@ export default function AssetInspectionScreen() {
                 >
                   <View style={s.overviewHeaderLeft}>
                     <Text style={[s.overviewTitle, { color: C.text }]} numberOfLines={1}>{jobTitle || 'Inspection'}</Text>
-                    <Text style={[s.overviewSub, { color: C.textTertiary }]} numberOfLines={1}>
+                    <Text style={[s.overviewSub, { color: C.textTertiary }]} numberOfLines={2}>
                       {store.assets.length === 0
                         ? 'No assets registered'
                         : `${counts.passed} passed · ${counts.failed} failed${counts.nt > 0 ? ` · ${counts.nt} N/T` : ''} · ${counts.remaining} remaining`}
@@ -1026,7 +1028,10 @@ export default function AssetInspectionScreen() {
       />
 
       {store.assets.length > 0 && (
-        <View style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, shadowColor: C.shadow, paddingBottom: 16 + insets.bottom }]}>
+        <View
+          onLayout={(e) => setBottomBarH(e.nativeEvent.layout.height)}
+          style={[s.bottomBar, { backgroundColor: C.surface, borderTopColor: C.border, shadowColor: C.shadow, paddingBottom: 16 + insets.bottom }]}
+        >
           <View style={{ flex: 1 }}>
             <Text style={[s.bottomBarTitle, { color: C.text }]}>{allDone ? (hasActualResults ? 'All assets inspected' : 'All assets marked (N/T)') : `${counts.remaining} remaining`}</Text>
             <Text style={[s.bottomBarSub, { color: C.textSecondary }]}>{store.progress.inspected} of {store.progress.total} inspected</Text>
@@ -1043,7 +1048,7 @@ export default function AssetInspectionScreen() {
 
       {store.assets.length > 0 && (
         <TouchableOpacity
-          style={[s.addAssetFab, { backgroundColor: C.primary, borderColor: C.primary, bottom: (Platform.OS === 'ios' ? 90 : 70) + insets.bottom, shadowColor: C.primary }]}
+          style={[s.addAssetFab, { backgroundColor: C.primary, borderColor: C.primary, bottom: bottomBarH + 12, shadowColor: C.primary }]}
           onPress={() => setShowAddAsset(true)}
           activeOpacity={0.85}
           accessibilityRole="button"
@@ -1167,7 +1172,7 @@ const s = StyleSheet.create({
   assetVariant:    { fontSize: 13, marginTop: 1 },
   assetLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   assetLocation:   { fontSize: 13, fontWeight: '600' },
-  assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
+  assetSerial:     { fontSize: 12, fontWeight: '600', letterSpacing: 0.3, marginTop: 4 },
   overflowBtn:  { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   resultBtnRow: { flexDirection: 'row', gap: 4, marginTop: 14, padding: 4, borderRadius: 12 },
   // FIX: was `height: 42` — under an OS "Larger Text" accessibility

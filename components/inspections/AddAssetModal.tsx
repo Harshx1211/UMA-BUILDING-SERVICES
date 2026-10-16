@@ -472,7 +472,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 <View style={s.field}>
                   <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
                   <TextInput
-                    style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                    style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                     placeholder={selectedType ? `Leave empty for ${nextAssetRefs(queryRecords<{ asset_ref: string | null }>('assets', { property_id: propertyId }).map(r => r.asset_ref), refPrefixOf(typeDef, selectedType), 1)[0]}${quantity > 1 ? ' onwards' : ''}` : 'Reference code...'}
                     placeholderTextColor={C.textTertiary}
                     value={assetRef}
@@ -510,7 +510,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                   <View style={[s.field, { marginBottom: 0 }]}>
                     <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
                     <TextInput
-                      style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text, fontFamily: 'monospace' }]}
+                      style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                       placeholder="Serial number..."
                       placeholderTextColor={C.textTertiary}
                       value={serialNumber}

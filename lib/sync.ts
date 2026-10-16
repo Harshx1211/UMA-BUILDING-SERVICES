@@ -310,7 +310,9 @@ export async function stopSync(): Promise<void> {
 }
 
 let _pushSoonTimer: ReturnType<typeof setTimeout> | null = null;
-const PUSH_SOON_DEBOUNCE_MS = 1500;
+// 700 ms (was 1.5 s): still coalesces a burst of taps into one push, but a
+// single edit — a status change, a result — reaches the server sooner.
+const PUSH_SOON_DEBOUNCE_MS = 700;
 
 /**
  * Schedules a push-only sync shortly after a local write reaches the sync
@@ -350,7 +352,7 @@ export function schedulePushSoon(): void {
       const netState = await NetInfo.fetch();
       const online = netState.isConnected === true && netState.isInternetReachable !== false;
       if (!online) return;
-      await pushPendingWork(_cachedUserId);
+      await pushPendingWork(_cachedUserId, { waitForSync: false });
     })();
   }, PUSH_SOON_DEBOUNCE_MS);
 }
@@ -597,7 +599,22 @@ export async function waitForSyncIdle(maxWaitMs = 5000): Promise<void> {
  * periodic full runSync(). Any OTHER caller wanting normal sync triggering
  * (pull included, revocation check included) should still use runSync().
  */
-export async function pushPendingWork(userId: string): Promise<void> {
+export async function pushPendingWork(userId: string, opts: { waitForSync?: boolean } = {}): Promise<void> {
+  // FIX (slow status changes, 2026-10-16): the quick push after an edit
+  // (schedulePushSoon) used to wait up to 5 s for any running full sync and
+  // then, if it was still pulling, skip the push entirely — leaving e.g. a
+  // job status change unsent until the next sync trigger. The queue push has
+  // its own mutex now (_pushQueueGuarded re-runs if one is already going),
+  // and photo/document uploads keep theirs, so an edit can go up straight
+  // away. Sign-out still waits (the default), as before.
+  if (opts.waitForSync === false) {
+    if (!_isProcessingPhotos) {
+      _isProcessingPhotos = true;
+      try { await processPhotoQueue(userId); } finally { _isProcessingPhotos = false; }
+    }
+    await _pushQueueGuarded(userId);
+    return;
+  }
   for (let waited = 0; _isSyncing && waited < 10; waited++) {
     await new Promise((r) => setTimeout(r, 500));
   }
