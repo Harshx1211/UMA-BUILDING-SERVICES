@@ -330,8 +330,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: 44,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 14,
   },
@@ -350,13 +350,13 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    minHeight: 36,
     borderRadius: 20,
     borderWidth: 1,
   },
   catPillTxt: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
 
@@ -366,9 +366,9 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   resultsLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
 
@@ -377,7 +377,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    minHeight: 60,
     borderBottomWidth: 1,
     gap: 12,
   },
@@ -393,13 +394,13 @@ const s = StyleSheet.create({
     gap: 3,
   },
   codeLabel: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     letterSpacing: 0.2,
   },
   codeDesc: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 19,
   },
   priceBadge: {
     paddingHorizontal: 8,
@@ -409,7 +410,7 @@ const s = StyleSheet.create({
   },
   priceBadgeTxt: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
   },
 
   // Empty state

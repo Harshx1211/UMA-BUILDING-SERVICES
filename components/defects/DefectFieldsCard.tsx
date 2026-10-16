@@ -499,34 +499,34 @@ function PhotoStageSection({ label, hint, photos, onAdd, onRemove, disabled, loa
 }
 
 const s = StyleSheet.create({
-  card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
-  label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 8 },
+  card: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
 
   // Severity — a 3-way segmented control (matches the Pass/Fail/N-T track
   // on the asset screen exactly: same track/segment radii and padding).
   sevTrack: { flexDirection: 'row', borderRadius: 12, padding: 4, gap: 4 },
-  sevSeg: { flex: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 2, gap: 3 },
-  sevSegTxt: { fontSize: 10.5, fontWeight: '700', textAlign: 'center' },
-  sevDesc: { fontSize: 11.5, marginTop: 6, marginBottom: 14 },
+  sevSeg: { flex: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingVertical: 8, paddingHorizontal: 2, gap: 3 },
+  sevSegTxt: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  sevDesc: { fontSize: 12, marginTop: 6, marginBottom: 14 },
 
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 4 },
   errorTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
 
-  codeBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  codeBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 10, borderWidth: 1, padding: 12, minHeight: 52 },
   codeIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  codeTitle: { fontSize: 13, fontWeight: '700' },
-  codeSub: { fontSize: 11, marginTop: 2 },
+  codeTitle: { fontSize: 14, fontWeight: '600' },
+  codeSub: { fontSize: 12, marginTop: 2 },
   priceBadge: { backgroundColor: T.tintBg(T.success), borderWidth: 1, borderColor: T.tintBorder(T.success), paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800', color: T.success },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '700', color: T.success },
 
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500', minHeight: 80, textAlignVertical: 'top' },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 88, textAlignVertical: 'top' },
 
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   iconBtn: { width: 48, height: 48, borderRadius: T.radiusButton, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelBtn: { flex: 1, height: 48, borderRadius: T.radiusButton, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelTxt: { fontSize: 13.5, fontWeight: '700' },
-  saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: T.radiusButton },
-  saveTxt: { fontSize: 14, fontWeight: '700' },
+  cancelBtn: { flex: 1, height: 52, borderRadius: T.radiusButton, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelTxt: { fontSize: 15, fontWeight: '600' },
+  saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 52, borderRadius: T.radiusButton },
+  saveTxt: { fontSize: 15, fontWeight: '600' },
 
   // Two stacked photo sections (Before, then After — always both visible,
   // no toggle) — grid sizing (72×72, 12 radius, dashed add-tile) matches
@@ -534,14 +534,14 @@ const s = StyleSheet.create({
   // (s.photoRow/photoThumbWrap/photoAddTile there), so this reads as the
   // same established pattern, not a new one.
   photoSectionBlock: { marginTop: 14 },
-  photoHint: { fontSize: 11, marginTop: 1, marginBottom: 8 },
+  photoHint: { fontSize: 12, marginTop: 1, marginBottom: 8 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photoAddTile: { width: 72, height: 72, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  thumbWrap: { width: 72, height: 72, borderRadius: 12, position: 'relative' },
-  thumb: { width: '100%', height: '100%', borderRadius: 12 },
+  photoAddTile: { width: 80, height: 80, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  thumbWrap: { width: 80, height: 80, borderRadius: 10, position: 'relative' },
+  thumb: { width: '100%', height: '100%', borderRadius: 10 },
   thumbDel: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
 
-  resolvedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  resolvedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, minHeight: 44 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  resolvedTxt: { fontSize: 13, fontWeight: '600', flex: 1 },
+  resolvedTxt: { fontSize: 14, fontWeight: '600', flex: 1 },
 });

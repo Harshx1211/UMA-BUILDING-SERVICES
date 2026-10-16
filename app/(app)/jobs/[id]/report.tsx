@@ -439,7 +439,7 @@ export default function ReportSummaryScreen() {
             <View style={[s.warningBanner, { backgroundColor: C.errorLight, borderColor: C.error }]}>
               <MaterialCommunityIcons name="alert" size={20} color={C.error} />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.errorDark, fontWeight: '800', fontSize: 13 }}>Missing Signature</Text>
+                <Text style={{ color: C.errorDark, fontWeight: '700', fontSize: 13 }}>Missing Signature</Text>
                 <Text style={{ color: C.errorDark, fontSize: 12, marginTop: 2 }}>This report was completed without a client signature.</Text>
               </View>
               <Button
@@ -642,7 +642,7 @@ const s = StyleSheet.create({
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   heroIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   heroBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  heroBadgeTxt: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  heroBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   heroTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4 },
   heroSub: { fontSize: 13, fontWeight: '500' },
   heroDivider: { height: 1, marginVertical: 14 },
@@ -669,7 +669,7 @@ const s = StyleSheet.create({
   // Progress Bar Card
   barHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 },
   barTitle: { fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-  barPct: { fontSize: 14, fontWeight: '800' },
+  barPct: { fontSize: 14, fontWeight: '700' },
   barTrack: { height: 8, borderRadius: 4, flexDirection: 'row', overflow: 'hidden' },
   barSegment: { height: '100%' },
   barLegend: { flexDirection: 'row', justifyContent: 'center', marginTop: 14, gap: 12 },
@@ -682,20 +682,20 @@ const s = StyleSheet.create({
   checkTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
   checkSub: { fontSize: 12, fontWeight: '500' },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  actionBtnTxt: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', color: T.textOnPrimary },
+  actionBtnTxt: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', color: T.textOnPrimary },
 
   // Table
   emptyTable: { padding: 24, alignItems: 'center' },
   assetRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1 },
   assetIndexBadge: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  assetIndexText: { fontSize: 11, fontWeight: '800' },
+  assetIndexText: { fontSize: 11, fontWeight: '700' },
   assetMiddle: { flex: 1, marginRight: 12 },
   assetName: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
   assetLoc: { fontSize: 11, fontStyle: 'italic', fontWeight: '500' },
   defectReasonRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4, gap: 4 },
   defectReasonTxt: { flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 14 },
   resultPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
-  resultPillTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  resultPillTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
   // Defect Card
   defectCard: { flexDirection: 'row' },
@@ -703,15 +703,15 @@ const s = StyleSheet.create({
   defectContent: { flex: 1, padding: 16 },
   defectHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   sevBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  sevBadgeTxt: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  sevBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusBadgeTxt: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  statusBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   defectDesc: { fontSize: 13, fontWeight: '500', lineHeight: 18, marginBottom: 10 },
   defectMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   defectMeta: { fontSize: 11, fontWeight: '600' },
   codeChip: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  codeChipTxt: { fontSize: 9, fontWeight: '800' },
+  codeChipTxt: { fontSize: 9, fontWeight: '700' },
   defectPrice: { fontSize: 11, fontWeight: '700' },
 
   // Bottom Bar
@@ -725,6 +725,6 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, height: 60, borderRadius: 20, flex: 1
   },
-  generateBtnTxt: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  generateBtnTxt: { fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
   bottomBtnRow: { flexDirection: 'row', gap: 16 },
 });

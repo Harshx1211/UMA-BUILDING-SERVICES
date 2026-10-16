@@ -95,9 +95,9 @@ const sh = StyleSheet.create({
   // this screen already uses, and is what this actually needs.
   row:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   left:     { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  title:    { fontSize: 15, fontWeight: '800', letterSpacing: -0.1 },
+  title:    { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
   badge:    { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
-  badgeTxt: { fontSize: 10.5, fontWeight: '800' },
+  badgeTxt: { fontSize: 10.5, fontWeight: '700' },
   action:   { fontSize: 13, fontWeight: '700' },
 });
 
@@ -659,7 +659,7 @@ const s = StyleSheet.create({
   hero:                 { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
   heroTop:              { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
   complianceBannerIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  complianceBannerTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
+  complianceBannerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   complianceBannerSub:   { fontSize: 12, lineHeight: 17 },
 
   // Stats — a typographic row inside the hero (replaces 3 separately

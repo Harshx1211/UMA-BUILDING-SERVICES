@@ -568,15 +568,15 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  headerTitle: { fontSize: 20, fontWeight: '700', letterSpacing: -0.4 },
   headerSub:   { fontSize: 12, marginTop: 2, fontWeight: '600' },
 
   // Step indicators
   stepBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 1, justifyContent: 'space-between' },
   stepItem:   { alignItems: 'center', gap: 6, flex: 1 },
   stepDot:    { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  stepNum:    { fontSize: 11, fontWeight: '800' },
-  stepLabel:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  stepNum:    { fontSize: 11, fontWeight: '700' },
+  stepLabel:  { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
 
   // Type grid
   typeScroll: { padding: 16, paddingBottom: 40 },
@@ -588,7 +588,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', padding: 14, gap: 14, flex: 1,
   },
   typeIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  typeLabel:    { flex: 1, fontSize: 15, fontWeight: '800', letterSpacing: -0.1 },
+  typeLabel:    { flex: 1, fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
 
   // Variant dropdown — expands inline under the tapped type row
   variantDropdown: { borderTopWidth: 1, padding: 12, gap: 8 },
@@ -617,23 +617,23 @@ const s = StyleSheet.create({
   moreFieldsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
   moreFieldsTxt: { fontSize: 13, fontWeight: '700' },
 
-  sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
   formCard:     { marginBottom: 16 },
 
   field:      { marginBottom: 18 },
-  fieldLabel: { fontSize: 13, fontWeight: '800', marginBottom: 6, letterSpacing: -0.1 },
+  fieldLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6, letterSpacing: -0.1 },
   fieldHint:  { fontSize: 12, lineHeight: 17, marginBottom: 10, fontWeight: '500' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1.5, marginBottom: 10 },
-  errorTxt: { fontSize: 12, fontWeight: '800', flex: 1 },
+  errorTxt: { fontSize: 12, fontWeight: '700', flex: 1 },
 
-  input:    { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
+  input:    { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   textArea: { minHeight: 80, paddingTop: 12 },
 
   qtyRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  qtyBtn:    { width: 40, height: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  qtyDisplay:{ flex: 1, flexDirection: 'row', borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 40, gap: 6 },
-  qtyValue:  { fontSize: 16, fontWeight: '800' },
+  qtyBtn:    { width: 44, height: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  qtyDisplay:{ flex: 1, flexDirection: 'row', borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', height: 44, gap: 6 },
+  qtyValue:  { fontSize: 16, fontWeight: '700' },
   qtyUnit:   { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   qtyMaxHint:{ fontSize: 11, marginTop: 6 },
 
@@ -646,8 +646,8 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     shadowColor: T.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
   },
-  saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, height: 54 },
-  saveBtnTxt: { color: T.textOnPrimary, fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  saveBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, height: 52 },
+  saveBtnTxt: { color: T.textOnPrimary, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   cancelBtn:  { paddingHorizontal: 12 },
-  cancelBtnTxt: { fontSize: 15, fontWeight: '800' },
+  cancelBtnTxt: { fontSize: 15, fontWeight: '700' },
 });

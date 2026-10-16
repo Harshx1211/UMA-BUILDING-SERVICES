@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   bellBadgeText: {
     color: T.textOnPrimary,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 12,
     fontVariant: ['tabular-nums'],
   },

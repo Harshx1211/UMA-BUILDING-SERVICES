@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   filterIconBtn:        { width: 44, height: 44, borderRadius: T.radiusButton, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   filterIconBtnActive:  { backgroundColor: T.primary, borderColor: T.primary },
   filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: T.background },
-  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 10, fontWeight: '800' },
+  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 10, fontWeight: '700' },
   groupHeader:          { color: T.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 },
   searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: T.radiusButton, borderWidth: 1, borderColor: T.border, paddingHorizontal: 14, height: 48 },
   searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14, paddingVertical: 0 },

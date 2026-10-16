@@ -324,7 +324,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 10, borderWidth: 1,
   },
-  openCountTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  openCountTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
   filterRow: {
     paddingHorizontal: 16, paddingVertical: 10, gap: 8,
@@ -350,9 +350,9 @@ const s = StyleSheet.create({
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   sevBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  sevBadgeTxt: { fontSize: 10, fontWeight: '800' },
+  sevBadgeTxt: { fontSize: 10, fontWeight: '700' },
   codeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
-  codeBadgeTxt: { fontSize: 10, fontWeight: '800' },
+  codeBadgeTxt: { fontSize: 10, fontWeight: '700' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
   statusBadgeTxt: { fontSize: 10, fontWeight: '700' },
 
@@ -362,7 +362,7 @@ const s = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaTxt:  { fontSize: 11, flex: 1, maxWidth: 120 },
   pricePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  pricePillTxt: { fontSize: 10, fontWeight: '800' },
+  pricePillTxt: { fontSize: 10, fontWeight: '700' },
   dateTxt: { fontSize: 11, marginLeft: 'auto' },
 
   emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 8 },

@@ -167,7 +167,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
 
           {/* BUG-N7 FIX: Disable all result buttons while a save is in flight to prevent
               rapid-tap duplicates from creating two job_assets rows for the same asset. */}
-          <View style={[s.resultBtnRow, { opacity: isSaving ? 0.5 : 1 }]}>
+          <View style={[s.resultBtnRow, { backgroundColor: C.backgroundSecondary, opacity: isSaving ? 0.5 : 1 }]}>
             {/* FIX: these three buttons — the actual Pass/Fail/N-T call for
                 every asset in every inspection — had zero accessibility
                 props, on this, the main inspection screen. The one screen
@@ -177,7 +177,7 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
                 name and no indication of which one was currently selected.
                 Matches that screen's own proven pattern exactly. */}
             <TouchableOpacity
-              style={[s.resultBtn, isPassed ? { backgroundColor: C.successLight, borderColor: C.success } : { backgroundColor: C.surface, borderColor: C.border }]}
+              style={[s.resultBtn, isPassed && { backgroundColor: C.success }]}
               onPress={() => !isSaving && handleResult(InspectionResult.Pass)}
               activeOpacity={0.8}
               disabled={isSaving}
@@ -185,11 +185,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               accessibilityState={{ selected: isPassed }}
               accessibilityLabel="Pass"
             >
-              <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.success : C.textSecondary} />
-              <Text style={[s.resultBtnTxt, { color: isPassed ? C.success : C.textSecondary }]}>Pass</Text>
+              <MaterialCommunityIcons name="check" size={18} color={isPassed ? C.textOnPrimary : C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: isPassed ? C.textOnPrimary : C.textSecondary }]}>Pass</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.resultBtn, isFailed ? { backgroundColor: C.errorLight, borderColor: C.error } : { backgroundColor: C.surface, borderColor: C.border }]}
+              style={[s.resultBtn, isFailed && { backgroundColor: C.error }]}
               onPress={() => !isSaving && handleResult(InspectionResult.Fail)}
               activeOpacity={0.8}
               disabled={isSaving}
@@ -197,11 +197,11 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               accessibilityState={{ selected: isFailed }}
               accessibilityLabel="Fail"
             >
-              <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.error : C.textSecondary} />
-              <Text style={[s.resultBtnTxt, { color: isFailed ? C.error : C.textSecondary }]}>Fail</Text>
+              <MaterialCommunityIcons name="close" size={18} color={isFailed ? C.textOnPrimary : C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: isFailed ? C.textOnPrimary : C.textSecondary }]}>Fail</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.resultBtn, isNT ? { backgroundColor: C.backgroundTertiary, borderColor: C.textSecondary } : { backgroundColor: C.surface, borderColor: C.border }]}
+              style={[s.resultBtn, isNT && { backgroundColor: C.textSecondary }]}
               onPress={() => !isSaving && handleResult(InspectionResult.NotTested)}
               activeOpacity={0.8}
               disabled={isSaving}
@@ -209,8 +209,8 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
               accessibilityState={{ selected: isNT }}
               accessibilityLabel="Not tested"
             >
-              <MaterialCommunityIcons name="minus-circle-outline" size={16} color={C.textSecondary} />
-              <Text style={[s.resultBtnTxt, { color: C.textSecondary }]}>N/T</Text>
+              <MaterialCommunityIcons name="minus-circle-outline" size={18} color={isNT ? C.textOnPrimary : C.textSecondary} />
+              <Text style={[s.resultBtnTxt, { color: isNT ? C.textOnPrimary : C.textSecondary }]}>N/T</Text>
             </TouchableOpacity>
           </View>
 
@@ -808,17 +808,19 @@ export default function AssetInspectionScreen() {
   const renderItem = useCallback(({ item, index }: { item: ListRow; index: number }) => {
     if (item.kind === 'header') {
       return (
-        <View style={[s.routineHeader, { backgroundColor: C.backgroundSecondary, borderColor: C.border }]}>
+        <View style={s.routineHeader}>
           <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={1}>{item.label}</Text>
           <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count}</Text>
           {groupBy === 'location' && (
             <TouchableOpacity
               onPress={() => handleBulkMark(item.label, item.assetIds)}
               hitSlop={8}
-              style={[s.routineHeaderAction, { borderColor: C.primary, backgroundColor: T.iconBg(C.primary) }]}
+              style={[s.routineHeaderAction, { borderColor: C.border, backgroundColor: C.surface }]}
+              accessibilityRole="button"
+              accessibilityLabel={`No access to ${item.label}`}
             >
-              <MaterialCommunityIcons name="lock-outline" size={14} color={C.primary} />
-              <Text style={[s.routineHeaderActionTxt, { color: C.primary }]}>No Access</Text>
+              <MaterialCommunityIcons name="lock-outline" size={16} color={C.text} />
+              <Text style={[s.routineHeaderActionTxt, { color: C.text }]}>No access</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1040,9 +1042,15 @@ export default function AssetInspectionScreen() {
       )}
 
       {store.assets.length > 0 && (
-        <TouchableOpacity style={[s.addAssetFab, { backgroundColor: C.surface, borderColor: C.border, bottom: (Platform.OS === 'ios' ? 90 : 70) + insets.bottom }, cardShadow]} onPress={() => setShowAddAsset(true)} activeOpacity={0.85}>
-          <MaterialCommunityIcons name="plus" size={18} color={C.primary} />
-          <Text style={[s.addAssetFabTxt, { color: C.primary }]}>Add Asset</Text>
+        <TouchableOpacity
+          style={[s.addAssetFab, { backgroundColor: C.primary, borderColor: C.primary, bottom: (Platform.OS === 'ios' ? 90 : 70) + insets.bottom, shadowColor: C.primary }]}
+          onPress={() => setShowAddAsset(true)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Add asset"
+        >
+          <MaterialCommunityIcons name="plus" size={20} color={C.textOnPrimary} />
+          <Text style={[s.addAssetFabTxt, { color: C.textOnPrimary }]}>Add asset</Text>
         </TouchableOpacity>
       )}
 
@@ -1104,43 +1112,43 @@ export default function AssetInspectionScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1 },
-  overviewCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  overviewCard: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   overviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   overviewHeaderLeft: { flex: 1, gap: 3 },
   overviewHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  overviewTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
-  overviewSub: { fontSize: 12, fontWeight: '600' },
+  overviewTitle: { fontSize: 16, fontWeight: '700' },
+  overviewSub: { fontSize: 13 },
   overviewProgressPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  overviewProgressTxt: { fontSize: 12, fontWeight: '800' },
+  overviewProgressTxt: { fontSize: 12, fontWeight: '700' },
   progressTrack: { height: 6, width: '100%' },
   progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
   progressBadge:    { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  progressBadgeTxt: { fontWeight: '800', fontSize: 13, letterSpacing: 0.3 },
+  progressBadgeTxt: { fontWeight: '700', fontSize: 13, letterSpacing: 0.3 },
   summaryBar:     { flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 16 },
   summaryItem:    { flex: 1, alignItems: 'center', gap: 2 },
   summaryDot:     { width: 6, height: 6, borderRadius: 3, marginBottom: 2 },
-  summaryCount:   { fontSize: 18, fontWeight: '800' },
-  summaryLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
+  summaryCount:   { fontSize: 20, fontWeight: '700' },
+  summaryLabel:   { fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   summaryDivider: { width: 1, height: 32, alignSelf: 'center', marginHorizontal: 4 },
   formInfoBar:     { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, borderTopWidth: 1 },
   formInfoItem:    { flex: 1 },
-  formInfoLabel:   { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4, textTransform: 'uppercase' },
+  formInfoLabel:   { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4, textTransform: 'uppercase' },
   formInfoValue:   { fontSize: 14, fontWeight: '700' },
   formInfoDivider: { width: 1, marginHorizontal: 16, alignSelf: 'stretch' },
   searchRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
-  searchBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, fontSize: 14 },
+  searchBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, height: 48 },
+  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
   // Compact icon-only button — sits beside the search bar instead of a
   // full-width labeled row underneath it. Active-filter count shows as a
   // small badge rather than a text label, keeping it a fixed square size.
-  filterBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1 },
+  filterBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1 },
   filterBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  filterBadgeTxt: { fontSize: 10, fontWeight: '800' },
-  routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 14, marginBottom: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1 },
-  routineHeaderTxt: { fontSize: 13, fontWeight: '800', letterSpacing: -0.1, flex: 1 },
-  routineHeaderCount: { fontSize: 12, fontWeight: '700', marginLeft: 8 },
-  routineHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
-  routineHeaderActionTxt: { fontSize: 11, fontWeight: '700' },
+  filterBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 18, marginBottom: 8, paddingVertical: 4, paddingHorizontal: 2, borderWidth: 0, backgroundColor: 'transparent' },
+  routineHeaderTxt: { fontSize: 16, fontWeight: '700', flex: 1 },
+  routineHeaderCount: { fontSize: 12, fontWeight: '600', marginLeft: 8 },
+  routineHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 10, paddingHorizontal: 12, minHeight: 40, borderRadius: 12, borderWidth: 1 },
+  routineHeaderActionTxt: { fontSize: 13, fontWeight: '600' },
   cardWrapper: { marginHorizontal: 16, marginBottom: 12 },
   // FIX: cardShadow sets elevation: 0 deliberately (Card.tsx's own comment —
   // avoids Android's Material "elevation overlay" tint), which means its
@@ -1151,25 +1159,25 @@ const s = StyleSheet.create({
   // it invisible against the page on Android. Kept the bigger radius, no
   // more coloured left accent (status lives in the result row now), but a
   // plain hairline border stays — same as every other card in the app.
-  assetCard:   { borderRadius: 20, borderWidth: 1 },
+  assetCard:   { borderRadius: 14, borderWidth: 1 },
   cardInner:   { padding: 16 },
   cardHeader:      { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  assetIconWrap:   { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  assetType:       { fontSize: 16, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },
-  assetVariant:    { fontSize: 13, fontWeight: '600', marginTop: 1, opacity: 0.85 },
+  assetIconWrap:   { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  assetType:       { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  assetVariant:    { fontSize: 13, marginTop: 1 },
   assetLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  assetLocation:   { fontSize: 13, fontWeight: '700' },
+  assetLocation:   { fontSize: 13, fontWeight: '600' },
   assetSerial:     { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.7 },
-  overflowBtn:  { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  resultBtnRow: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  overflowBtn:  { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  resultBtnRow: { flexDirection: 'row', gap: 4, marginTop: 14, padding: 4, borderRadius: 12 },
   // FIX: was `height: 42` — under an OS "Larger Text" accessibility
   // setting, RN Text's default allowFontScaling can grow the Pass/Fail/N-T
   // label taller than a hard-fixed box, clipping it instead of the pill
   // growing to fit. minHeight keeps the same 42px on default text sizes
   // (RN never shrinks a row below its content) while letting it grow when
   // the label actually needs more room.
-  resultBtn:    { flex: 1, minHeight: 42, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
-  resultBtnTxt: { fontSize: 14, fontWeight: '700' },
+  resultBtn:    { flex: 1, minHeight: 48, borderRadius: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  resultBtnTxt: { fontSize: 14, fontWeight: '600' },
 
   // Tap-through row — photos/note/defect detail all live on the Asset Detail
   // screen now (app/(app)/jobs/[id]/asset/[assetId].tsx); this just signals
@@ -1177,24 +1185,24 @@ const s = StyleSheet.create({
   openDetailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1 },
   openDetailBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   openDetailBadgeTxt: { fontSize: 11, fontWeight: '700' },
-  openDetailTxt: { fontSize: 12, fontWeight: '700' },
+  openDetailTxt: { fontSize: 13, fontWeight: '600' },
 
   // Overflow action menu (Clone/Edit/Delete) — bottom sheet, opened from the
   // card header's single ⋮ button.
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(17, 29, 63, 0.45)', justifyContent: 'flex-end' },
   menuSheet:    { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 8 },
-  menuTitle:    { fontSize: 11, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase', paddingHorizontal: 12, paddingBottom: 8 },
+  menuTitle:    { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 12, paddingBottom: 8 },
   menuRow:      { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 14 },
-  menuRowTxt:   { fontSize: 15, fontWeight: '700' },
-  menuCancel:   { marginTop: 8, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  menuCancelTxt:{ fontSize: 15, fontWeight: '800' },
+  menuRowTxt:   { fontSize: 15, fontWeight: '600' },
+  menuCancel:   { marginTop: 8, borderRadius: 12, minHeight: 52, justifyContent: 'center', alignItems: 'center' },
+  menuCancelTxt:{ fontSize: 15, fontWeight: '600' },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 36 : 16, borderTopWidth: 1, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   bottomBarTitle: { fontSize: 14, fontWeight: '700' },
   bottomBarSub:   { fontSize: 12, marginTop: 1 },
   emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyIconWrap: { width: 88, height: 88, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8, marginBottom: 8 },
+  emptyTitle:    { fontSize: 18, fontWeight: '700', marginTop: 8, marginBottom: 8 },
   emptySub:      { fontSize: 14, textAlign: 'center', lineHeight: 21 },
-  addAssetFab:    { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 16, width: 56, height: 56, borderRadius: 28, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  addAssetFabTxt: { display: 'none' },
+  addAssetFab:    { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 16, height: 52, paddingHorizontal: 20, borderRadius: 26, borderWidth: 1, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
+  addAssetFabTxt: { fontSize: 15, fontWeight: '600' },
 });

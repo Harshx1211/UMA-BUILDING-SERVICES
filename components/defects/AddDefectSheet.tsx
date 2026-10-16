@@ -545,7 +545,7 @@ const s = StyleSheet.create({
 
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 16 },
   headerIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800' },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
   headerSub:   { fontSize: 12, marginTop: 2 },
 
   tabs: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 4 },
@@ -557,14 +557,14 @@ const s = StyleSheet.create({
   summaryTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
 
   stepWrap:  { paddingHorizontal: 20, paddingTop: 12, gap: 10 },
-  stepTitle: { fontSize: 15, fontWeight: '800' },
+  stepTitle: { fontSize: 15, fontWeight: '700' },
   stepSub:   { fontSize: 13, marginTop: -4, marginBottom: 4 },
 
   // Severity
   sevStack:   { gap: 10 },
   sevCard:    { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 1.5 },
   sevIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  sevLabel:   { fontSize: 15, fontWeight: '800' },
+  sevLabel:   { fontSize: 15, fontWeight: '700' },
   sevDesc:    { fontSize: 12, marginTop: 2 },
 
   // Asset
@@ -608,5 +608,5 @@ const s = StyleSheet.create({
   backBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, height: 48, borderRadius: T.radiusButton, borderWidth: 1, flex: 1 },
   backBtnTxt: { fontSize: 14, fontWeight: '700' },
   nextBtn:    { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: T.radiusButton },
-  nextBtnTxt: { color: T.textOnPrimary, fontSize: 15, fontWeight: '800' },
+  nextBtnTxt: { color: T.textOnPrimary, fontSize: 15, fontWeight: '700' },
 });

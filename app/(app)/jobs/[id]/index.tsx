@@ -114,21 +114,21 @@ function ActionRow({
         {subtitle ? <Text style={[ar.sub, { color: C.textSecondary }]} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
       {badge !== undefined && badge > 0 && (
-        <View style={[ar.badge, { backgroundColor: badgeColor ?? C.accent }]}>
-          <Text style={[ar.badgeTxt, { color: C.textOnPrimary }]}>{badge}</Text>
+        <View style={[ar.badge, { backgroundColor: (badgeColor ?? C.accent) + '1A' }]}>
+          <Text style={[ar.badgeTxt, { color: badgeColor ?? C.accent }]}>{badge}</Text>
         </View>
       )}
-      <MaterialCommunityIcons name="chevron-right" size={18} color={C.borderStrong} />
+      <MaterialCommunityIcons name="chevron-right" size={20} color={C.textTertiary} />
     </TouchableOpacity>
   );
 }
 const ar = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  iconWrap: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  title:    { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
-  sub:      { fontSize: 12, marginTop: 1, fontWeight: '500' },
-  badge:    { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  badgeTxt: { fontSize: 10, fontWeight: '800' },
+  row:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 60 },
+  iconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  title:    { fontSize: 15, fontWeight: '600' },
+  sub:      { fontSize: 13, marginTop: 1 },
+  badge:    { minWidth: 26, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  badgeTxt: { fontSize: 12, fontWeight: '700' },
 });
 
 // ─── Main Screen ─────────────────────────────────────────────────────────
@@ -762,7 +762,7 @@ export default function JobDetailScreen() {
                 <View style={{ padding: 16 }}>
                   <View style={s.progressHeader}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.progressTitle, { color: C.text }]}>Inspection Progress</Text>
+                      <Text style={[s.progressTitle, { color: C.text }]}>Inspection progress</Text>
                       <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
                         {totalAssets === 0
                           ? 'No assets registered for this property'
@@ -780,15 +780,13 @@ export default function JobDetailScreen() {
                   {totalAssets > 0 && (
                     <View style={s.progressStatRow}>
                       {[
-                        { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success },
-                        { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error },
-                        { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textTertiary },
+                        { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success, bg: C.successLight },
+                        { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error, bg: C.errorLight },
+                        { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textSecondary, bg: C.backgroundSecondary },
                       ].map(stat => (
-                        <View key={stat.label} style={s.progressStat}>
-                          <View style={[s.progressStatDot, { backgroundColor: stat.color }]} />
-                          <Text style={[s.progressStatTxt, { color: C.textSecondary }]}>
-                            {stat.count} {stat.label}
-                          </Text>
+                        <View key={stat.label} style={[s.progressTile, { backgroundColor: stat.bg }]}>
+                          <Text style={[s.progressTileNum, { color: stat.color }]}>{stat.count}</Text>
+                          <Text style={[s.progressTileLbl, { color: stat.color }]}>{stat.label}</Text>
                         </View>
                       ))}
                     </View>
@@ -895,7 +893,7 @@ export default function JobDetailScreen() {
                     </View>
                     <View style={[s.chip, { backgroundColor: (PRIORITY_COLOR[job.priority] ?? C.accent) + '18' }]}>
                       <MaterialCommunityIcons name="lightning-bolt" size={15} color={PRIORITY_COLOR[job.priority] ?? C.accent} />
-                      <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.accent, fontWeight: '800' }]}>
+                      <Text style={[s.chipTxt, { color: PRIORITY_COLOR[job.priority] ?? C.accent, fontWeight: '700' }]}>
                         {PRIORITY_LABEL[job.priority] ?? job.priority}
                       </Text>
                     </View>
@@ -1126,83 +1124,86 @@ const s = StyleSheet.create({
   notFound: { fontSize: 20, fontWeight: '800', marginTop: 12, letterSpacing: -0.5 },
   scrollContent: { paddingBottom: 120 },
 
-  body: { padding: 20, gap: 20 },
+  body: { padding: 16, gap: 16 },
 
-  timerLabel: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  timerLabel: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   timerSub: { fontSize: 13, fontWeight: '500' },
 
-  statusBannerTitle: { fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  statusBannerTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   statusBannerSub: { fontSize: 13, fontWeight: '500' },
-  continueBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
-  continueBtnTxt: { fontSize: 13, fontWeight: '700' },
+  continueBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 44, borderRadius: 12, borderWidth: 1 },
+  continueBtnTxt: { fontSize: 14, fontWeight: '600' },
 
-  alertTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 },
+  alertTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 },
   alertBody: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
   noteRow: { flexDirection: 'row', gap: 12, padding: 16 },
 
   chipsRow: { gap: 10, padding: 16 },
   detailsHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  detailsTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2, marginBottom: 2 },
-  detailsSub: { fontSize: 12, fontWeight: '600' },
+  detailsTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  detailsSub: { fontSize: 13 },
   detailsCaption: { fontSize: 11, fontWeight: '500', fontStyle: 'italic', marginTop: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  chipTxt: { fontSize: 13, fontWeight: '700' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  chipTxt: { fontSize: 13, fontWeight: '600' },
 
   progressHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
-  progressTitle: { fontSize: 15, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },
-  progressSubtitle: { fontSize: 13, fontWeight: '500' },
-  progressPct: { fontSize: 20, fontWeight: '800' },
+  progressTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  progressSubtitle: { fontSize: 13 },
+  progressPct: { fontSize: 20, fontWeight: '700' },
   progressTrack: { height: 8, borderRadius: 4, width: '100%', overflow: 'hidden', marginBottom: 12 },
   progressFill: { height: '100%', borderRadius: 4 },
-  progressStatRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  progressStatRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  progressTile: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  progressTileNum: { fontSize: 22, fontWeight: '700' },
+  progressTileLbl: { fontSize: 12, fontWeight: '500', marginTop: 1 },
   progressStat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   progressStatDot: { width: 8, height: 8, borderRadius: 4 },
   progressStatTxt: { fontSize: 12, fontWeight: '600' },
 
   inspectRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  completeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  completeRowTxt: { fontSize: 13, fontWeight: '600' },
+  completeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48 },
+  completeRowTxt: { fontSize: 14, fontWeight: '600' },
   inspectCtaIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   inspectChevronWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  inspectCtaTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
-  inspectCtaSub: { fontSize: 13, fontWeight: '500' },
+  inspectCtaTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  inspectCtaSub: { fontSize: 13 },
 
-  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginLeft: 2, marginBottom: 10, textTransform: 'uppercase', },
+  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginLeft: 2, marginBottom: 8, textTransform: 'uppercase', },
   sectionCaption: { fontSize: 12, fontWeight: '500', marginLeft: 2, marginTop: -6, marginBottom: 10 },
 
   notesText: { fontSize: 14, lineHeight: 22, marginBottom: 14, fontWeight: '500' },
   notesEmpty: { fontSize: 13, fontStyle: 'italic', marginBottom: 14, fontWeight: '500' },
-  notesEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-  notesEditTxt: { fontSize: 13, fontWeight: '700' },
-  notesInput: { borderRadius: 12, borderWidth: 1, padding: 14, fontSize: 15, minHeight: 120, marginBottom: 12, fontWeight: '500' },
+  notesEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, borderRadius: 12, borderWidth: 1 },
+  notesEditTxt: { fontSize: 14, fontWeight: '600' },
+  notesInput: { borderRadius: 10, borderWidth: 1, padding: 14, fontSize: 14, minHeight: 120, marginBottom: 12 },
   notesActionRow: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
-  notesCancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  notesCancelBtn: { paddingHorizontal: 18, minHeight: 44, justifyContent: 'center', borderRadius: 12, borderWidth: 1 },
   notesCancelTxt: { fontSize: 13, fontWeight: '600' },
-  notesSaveBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  notesSaveTxt: { fontSize: 13, fontWeight: '700' },
+  notesSaveBtn: { paddingHorizontal: 20, minHeight: 44, justifyContent: 'center', borderRadius: 12 },
+  notesSaveTxt: { fontSize: 14, fontWeight: '600' },
 
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 20, paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 20,
+    padding: 16, paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 16,
     borderTopWidth: 1,
-    shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 20,
+    shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 8,
   },
 });
 
 const cm = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: '100%', maxWidth: 360, borderRadius: 32, padding: 32, alignItems: 'center', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 15 },
-  checkCircle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  title: { fontSize: 26, fontWeight: '800', marginBottom: 4, letterSpacing: -0.5 },
+  card: { width: '100%', maxWidth: 360, borderRadius: 20, padding: 24, alignItems: 'center', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 15 },
+  checkCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: '800', marginBottom: 4, letterSpacing: -0.3 },
   property: { fontSize: 14, fontWeight: '600', marginBottom: 28, textAlign: 'center' },
-  statsRow: { flexDirection: 'row', borderRadius: 20, padding: 20, width: '100%', marginBottom: 28 },
+  statsRow: { flexDirection: 'row', borderRadius: 14, padding: 16, width: '100%', marginBottom: 20 },
   statItem: { flex: 1, alignItems: 'center' },
   statIcon: { marginBottom: 6 },
-  statValue: { fontSize: 18, fontWeight: '800', marginBottom: 2, letterSpacing: -0.5 },
-  statLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  statValue: { fontSize: 18, fontWeight: '700', marginBottom: 2, letterSpacing: -0.5 },
+  statLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   statDivider: { width: 1, height: '80%', alignSelf: 'center' },
   autoCloseTxt: { fontSize: 13, marginBottom: 16, fontWeight: '600' },
-  btn: { paddingVertical: 16, paddingHorizontal: 32, borderRadius: 24, width: '100%', alignItems: 'center' },
-  btnTxt: { fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
+  btn: { height: 52, justifyContent: 'center', paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center' },
+  btnTxt: { fontSize: 16, fontWeight: '600' },
 });

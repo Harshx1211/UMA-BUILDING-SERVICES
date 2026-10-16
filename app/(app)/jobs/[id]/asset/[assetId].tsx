@@ -1303,8 +1303,8 @@ const s = StyleSheet.create({
   lockedTxt: { fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 17 },
 
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',
-    marginTop: 22, marginBottom: 10,
+    fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
+    marginTop: 20, marginBottom: 8,
   },
   defectsHint: { fontSize: 12, lineHeight: 17, marginTop: -4, marginBottom: 10 },
 
@@ -1313,38 +1313,38 @@ const s = StyleSheet.create({
   // FIX: was `height: 42` — see inspect.tsx's identical resultBtn fix for
   // why a fixed height risks clipping this label under accessibility text
   // scaling; minHeight preserves the default look exactly.
-  resultSeg: { flex: 1, minHeight: 42, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  resultSegTxt: { fontSize: 14, fontWeight: '700' },
+  resultSeg: { flex: 1, minHeight: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  resultSegTxt: { fontSize: 15, fontWeight: '600' },
 
   // Section card — every section (Photos / Note / History / Timeline)
-  card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
+  card: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 14 },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  cardHeaderIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  cardHeaderTitle: { fontSize: 13.5, fontWeight: '700' },
+  cardHeaderIconWrap: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  cardHeaderTitle: { fontSize: 16, fontWeight: '700' },
 
   // Defects — DefectFieldsCard/DefectCard (both their own components) sit
   // flush against this screen's own 16px padding instead of DefectCard's
   // default list-level margin.
   defectCardFlush: { marginHorizontal: 0 },
-  addDefectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', marginBottom: 12 },
-  addDefectBtnTxt: { fontSize: 13.5, fontWeight: '700' },
+  addDefectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', marginBottom: 12 },
+  addDefectBtnTxt: { fontSize: 14, fontWeight: '600' },
 
   // Input (shared by the Technician Notes card)
-  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontWeight: '500' },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
   textArea: { minHeight: 80, paddingTop: 12, textAlignVertical: 'top' },
 
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photoThumbWrap: { width: 72, height: 72, borderRadius: 12, overflow: 'hidden' },
+  photoThumbWrap: { width: 80, height: 80, borderRadius: 10, overflow: 'hidden' },
   photoThumb: { width: '100%', height: '100%' },
-  photoAddTile: { width: 72, height: 72, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  photoAddTile: { width: 80, height: 80, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
 
   historyEmpty: { fontSize: 12.5, fontStyle: 'italic' },
   historyRow: { flexDirection: 'row', gap: 10, paddingVertical: 12 },
   historyTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  historyDate: { fontSize: 12.5, fontWeight: '700' },
-  historyResultPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  historyResultPillTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
-  historyNote: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  historyDate: { fontSize: 14, fontWeight: '600' },
+  historyResultPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 },
+  historyResultPillTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+  historyNote: { fontSize: 13, lineHeight: 18, marginTop: 4 },
   historyInternalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 4 },
   internalNotesCaption: { fontSize: 11, fontStyle: 'italic', marginBottom: 8 },
   historyPhotoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
@@ -1356,7 +1356,7 @@ const s = StyleSheet.create({
   historyLoadMoreRow: { marginTop: 12, gap: 8 },
   historyLoadMoreLabel: { fontSize: 12 },
   historyLoadMoreChips: { flexDirection: 'row', gap: 8 },
-  historyLoadMoreChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  historyLoadMoreChip: { paddingHorizontal: 14, minHeight: 36, justifyContent: 'center', borderRadius: 999, borderWidth: 1 },
   historyLoadMoreChipTxt: { fontSize: 12.5, fontWeight: '700' },
 
   // Photo viewer

@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   overlayTitle: {
     color: T.textPrimary,
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '700',
     marginBottom: 10,
     textAlign: 'center',
   },

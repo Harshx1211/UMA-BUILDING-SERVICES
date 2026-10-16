@@ -171,7 +171,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
 
 const s = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
@@ -185,25 +185,25 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   severityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  severityText:  { color: T.textOnPrimary, fontWeight: '700', fontSize: 11 },
+  severityText:  { color: T.textOnPrimary, fontWeight: '600', fontSize: 12 },
 
   codeBadge: {
     paddingHorizontal: 7, paddingVertical: 3,
     borderRadius: 7, borderWidth: 1,
   },
-  codeBadgeTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  codeBadgeTxt: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
 
   statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  statusText:  { fontWeight: '800', fontSize: 11, letterSpacing: 0.2 },
+  statusText:  { fontWeight: '600', fontSize: 12 },
 
   resolvedRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
-  resolvedText: { fontSize: 11.5, fontWeight: '700' },
+  resolvedText: { fontSize: 12, fontWeight: '600' },
 
   assetRow: { marginBottom: 8, flexDirection: 'row' },
   assetPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
-  assetPillText: { fontSize: 12, fontWeight: '700' },
+  assetPillText: { fontSize: 13, fontWeight: '600' },
 
-  description: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  description: { fontSize: 15, lineHeight: 21, marginTop: 4 },
 
   priceBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -213,7 +213,7 @@ const s = StyleSheet.create({
   priceTxt: { fontSize: 11, fontWeight: '700' },
 
   photoList: { marginTop: 12 },
-  thumbnail: { width: 60, height: 60, borderRadius: 8 },
+  thumbnail: { width: 64, height: 64, borderRadius: 10 },
 
   footerRow: {
     flexDirection: 'row',
@@ -230,5 +230,5 @@ const s = StyleSheet.create({
   },
   viewBtnTxt: { fontSize: 12, fontWeight: '700' },
   editBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  editBtnText: { fontWeight: '800', fontSize: 14 },
+  editBtnText: { fontWeight: '700', fontSize: 14 },
 });

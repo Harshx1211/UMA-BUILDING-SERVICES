@@ -918,15 +918,15 @@ const s = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
 
   progressBadge:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 24 },
-  progressBadgeTxt: { fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
+  progressBadgeTxt: { fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
 
   progressTrack: { height: 6 },
   progressFill:  { height: 6, borderTopRightRadius: 6, borderBottomRightRadius: 6 },
 
   statsBar:    { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1 },
   statItem:    { flex: 1, alignItems: 'center', gap: 4 },
-  statValue:   { fontSize: 18, fontWeight: '800' },
-  statLabel:   { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  statValue:   { fontSize: 18, fontWeight: '700' },
+  statLabel:   { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   statDivider: { width: 1, height: 32, alignSelf: 'center' },
 
   filterRow: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1 },
@@ -938,20 +938,20 @@ const s = StyleSheet.create({
   cardBody:     { flex: 1, padding: 18 },
   cardHeader:   { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   assetIconWrap:{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  assetType:    { fontSize: 16, fontWeight: '800', marginBottom: 2, letterSpacing: -0.2 },
+  assetType:    { fontSize: 16, fontWeight: '700', marginBottom: 2, letterSpacing: -0.2 },
   assetLoc:     { fontSize: 13, marginTop: 2, fontWeight: '500' },
   assetSerial:  { fontSize: 12, fontFamily: 'monospace', marginTop: 4, opacity: 0.8, fontWeight: '600' },
   resultDot:    { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 
   // Defect
   defectSection: { borderRadius: 16, borderWidth: 1.5, padding: 16, marginTop: 16 },
-  defectTitle:   { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 14 },
+  defectTitle:   { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 14 },
   chipRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  chipTxt:       { fontSize: 13, fontWeight: '800' },
+  chipTxt:       { fontSize: 13, fontWeight: '700' },
   defectInput:   { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, fontWeight: '600' },
   criticalToggle:   { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 10 },
-  criticalToggleTxt:{ fontSize: 13, fontWeight: '800', flex: 1 },
+  criticalToggleTxt:{ fontSize: 13, fontWeight: '700', flex: 1 },
 
   // Buttons
   btnRow:    { flexDirection: 'row', gap: 10, marginTop: 16 },
@@ -960,18 +960,18 @@ const s = StyleSheet.create({
   // gloved/wet/cold field hands. minHeight also avoids clipping the label
   // under larger accessibility text sizes.
   resultBtn: { flex: 1, minHeight: 44, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5 },
-  btnTxt:    { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+  btnTxt:    { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
 
   // FAB
   fab:    { position: 'absolute', right: 20, bottom: 104, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingVertical: 16, borderRadius: 32, elevation: 12, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14 },
-  fabTxt: { fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
+  fabTxt: { fontSize: 15, fontWeight: '700', letterSpacing: 0.5 },
 
   // Empty state
   emptyState:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   emptyTitle:    { fontSize: 22, fontWeight: '800', marginTop: 12, letterSpacing: -0.5 },
   emptySub:      { fontSize: 14, textAlign: 'center', lineHeight: 22, fontWeight: '500' },
   addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20, marginTop: 24 },
-  addFirstBtnTxt:{ fontSize: 15, fontWeight: '800' },
+  addFirstBtnTxt:{ fontSize: 15, fontWeight: '700' },
   backBtn:       { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 20 },
 
   // Bottom bar
@@ -984,7 +984,7 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.15, shadowRadius: 16,
   },
-  bottomTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  bottomTitle: { fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
   bottomSub:   { fontSize: 13, marginTop: 2, fontWeight: '600' },
 });
 
@@ -999,9 +999,9 @@ const cm = StyleSheet.create({
   statItem: { flex: 1, alignItems: 'center', gap: 6 },
   statDiv:  { width: 1 },
   statValue:{ fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  statLabel:{ fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  statLabel:{ fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   alertRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1, width: '100%' },
   alertTxt: { fontSize: 13, flex: 1, lineHeight: 20, fontWeight: '600' },
   btn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 20, height: 56, width: '100%' },
-  btnTxt:   { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  btnTxt:   { fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
 });

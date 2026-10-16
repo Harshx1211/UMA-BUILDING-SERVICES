@@ -311,7 +311,7 @@ const s = StyleSheet.create({
   centered:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   statusBadge:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, flexDirection: 'row', alignItems: 'center' },
-  statusBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   overdueBar:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, borderRadius: 12, marginBottom: 16 },
   overdueText: { fontSize: 12, fontWeight: '600', flex: 1 },

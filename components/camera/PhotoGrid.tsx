@@ -187,7 +187,7 @@ const s = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 24, marginBottom: 12, gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700' },
   countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  countText: { fontSize: 12, fontWeight: '800' },
+  countText: { fontSize: 12, fontWeight: '700' },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAPS },
   cell: { borderRadius: 12, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },

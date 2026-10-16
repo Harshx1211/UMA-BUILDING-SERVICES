@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   sectionTitle:   {
-    color: T.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase',
+    color: T.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase',
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1,
     borderBottomColor: T.border,
   },

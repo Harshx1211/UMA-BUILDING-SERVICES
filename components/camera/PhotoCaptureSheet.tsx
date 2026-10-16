@@ -355,7 +355,7 @@ PhotoCaptureSheet.displayName = 'PhotoCaptureSheet';
 const s = StyleSheet.create({
   topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 12 },
   doneBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20 },
-  doneText: { fontWeight: '800', fontSize: 14 },
+  doneText: { fontWeight: '700', fontSize: 14 },
   content: { paddingBottom: 64 },
   cameraContainer: { width: '100%', aspectRatio: 4/3, backgroundColor: T.black, overflow: 'hidden' },
   camera: { flex: 1 },

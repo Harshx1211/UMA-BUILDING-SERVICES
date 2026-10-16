@@ -421,7 +421,7 @@ const s = StyleSheet.create({
     borderRadius: 10, borderWidth: 1,
   },
   statusDot:    { width: 7, height: 7, borderRadius: 4 },
-  statusChipTxt: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  statusChipTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
   lockedBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -446,13 +446,13 @@ const s = StyleSheet.create({
     ...cardShadow,
   },
   sevIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  sevLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+  sevLabel:    { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   sevDate:     { fontSize: 11, marginTop: 2 },
   priceBadge:  {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
   },
-  priceBadgeTxt: { fontSize: 11, fontWeight: '800' },
+  priceBadgeTxt: { fontSize: 11, fontWeight: '700' },
 
   codeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

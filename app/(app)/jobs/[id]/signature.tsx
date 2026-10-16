@@ -685,24 +685,24 @@ const s = StyleSheet.create({
 
   // Consent card
   consentRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  consentTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  consentTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
   consentTxt:   { fontSize: 13, lineHeight: 20, fontWeight: '500' },
 
   // Banner
   bannerCard: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   bannerTxt:  { fontSize: 13, fontWeight: '700', flex: 1 },
   resignBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  resignTxt:  { fontSize: 11, fontWeight: '800' },
+  resignTxt:  { fontSize: 11, fontWeight: '700' },
 
   // Step indicator
   stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 4 },
   stepPill:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  stepPillTxt:{ fontSize: 10, fontWeight: '800', color: T.textOnPrimary, letterSpacing: 1 },
+  stepPillTxt:{ fontSize: 10, fontWeight: '700', color: T.textOnPrimary, letterSpacing: 1 },
   stepLabel:  { fontSize: 14, fontWeight: '700' },
   resumedTxt: { fontSize: 12, fontWeight: '500', marginTop: 8, lineHeight: 17 },
 
   // Field label
-  fieldLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 10, textTransform: 'uppercase' },
 
   // Name input
   inputRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 4 },

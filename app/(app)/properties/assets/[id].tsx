@@ -311,5 +311,5 @@ const s = StyleSheet.create({
   emptyTitle:    { fontSize: 20, fontWeight: '800', marginTop: 8 },
   emptySub:      { fontSize: 13, textAlign: 'center', lineHeight: 20 },
   addFirstBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20, marginTop: 16 },
-  addFirstBtnTxt:{ fontSize: 15, fontWeight: '800' },
+  addFirstBtnTxt:{ fontSize: 15, fontWeight: '700' },
 });

@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 2,
   },
