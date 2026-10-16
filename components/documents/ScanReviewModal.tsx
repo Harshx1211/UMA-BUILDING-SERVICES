@@ -13,7 +13,8 @@
  * technician's own eyes via the full-screen viewer are the review mechanism.
  */
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Modal as RNModal, BackHandler } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Modal as RNModal, BackHandler } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -116,7 +117,7 @@ export function ScanReviewModal({
         <View style={[s.container, { backgroundColor: C.background }]}>
           <View style={[s.header, { backgroundColor: C.surface, paddingTop: Math.max(insets.top, 16), borderBottomColor: C.border }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.headerTitle, { color: C.text }]}>Review Scan</Text>
+              <Text style={[s.headerTitle, { color: C.text }]}>Review scan</Text>
               <Text style={[s.headerSub, { color: C.textSecondary }]}>{pages.length} page{pages.length !== 1 ? 's' : ''} · drag to reorder</Text>
             </View>
             <TouchableOpacity onPress={onCancel} disabled={busy} style={[s.closeBtn, { backgroundColor: C.backgroundTertiary }]} hitSlop={10}>
@@ -148,7 +149,7 @@ export function ScanReviewModal({
           />
 
           <View style={[s.bottomPanel, { backgroundColor: C.surface, borderTopColor: C.border, paddingBottom: 16 + insets.bottom }]}>
-            <Text style={[s.fieldLabel, { color: C.textTertiary }]}>Document Name</Text>
+            <Text style={[s.fieldLabel, { color: C.textTertiary }]}>Document name</Text>
             <TextInput
               style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: C.border, color: C.text }]}
               value={title}
@@ -172,7 +173,7 @@ export function ScanReviewModal({
                 ) : (
                   <>
                     <MaterialCommunityIcons name="check" size={17} color={C.textOnPrimary} />
-                    <Text style={[s.saveTxt, { color: C.textOnPrimary }]}>Save Document</Text>
+                    <Text style={[s.saveTxt, { color: C.textOnPrimary }]}>Save document</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -208,7 +209,7 @@ export function ScanReviewModal({
               activeOpacity={0.8}
             >
               <MaterialCommunityIcons name="trash-can-outline" size={18} color="#fff" />
-              <Text style={s.viewerDeleteTxt}>Delete Page</Text>
+              <Text style={s.viewerDeleteTxt}>Delete page</Text>
             </TouchableOpacity>
           </Animated.View>
         ) : null}

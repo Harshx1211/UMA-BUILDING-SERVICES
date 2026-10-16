@@ -1,4 +1,6 @@
-import { View, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { formatDisplayDate } from '@/utils/dateHelpers';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { useState, useEffect, useCallback } from 'react';
 import { router, useFocusEffect } from 'expo-router';
@@ -84,7 +86,7 @@ export default function ProfileScreen() {
 
   function _confirmLogout() {
     showConfirm({
-      title: 'Sign Out',
+      title: 'Sign out',
       message: 'Are you sure you want to sign out? Any unsynced changes will be uploaded first.',
       icon: 'logout',
       buttons: [
@@ -152,7 +154,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="My Profile"
+        title="My profile"
         rightComponent={
           <TouchableOpacity
             onPress={() => isEditing ? handleSave() : setIsEditing(true)}
@@ -262,18 +264,18 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>FPAS Accreditation</Text>
-          <InfoRow label="FPAS Number" value={user?.fpas_number} />
-          <InfoRow label="FPAS Class"  value={user?.fpas_class} />
-          <InfoRow label="FPAS Expiry" value={user?.fpas_expiry} />
-          <InfoRow label="State Licence"   value={user?.state_license} />
-          <InfoRow label="Licence Expiry"  value={user?.state_license_expiry} />
+          <InfoRow label="FPAS number" value={user?.fpas_number} />
+          <InfoRow label="FPAS class"  value={user?.fpas_class} />
+          <InfoRow label="FPAS expiry" value={formatDisplayDate(user?.fpas_expiry)} />
+          <InfoRow label="State licence"   value={user?.state_license} />
+          <InfoRow label="Licence expiry"  value={formatDisplayDate(user?.state_license_expiry)} />
         </View>
 
         {/* Account */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <InfoRow label="Status"       value={user?.is_active ? 'Active' : 'Inactive'} />
-          <InfoRow label="Member since" value={user?.created_at?.slice(0, 10)} />
+          <InfoRow label="Member since" value={formatDisplayDate(user?.created_at)} />
         </View>
 
         {/* Help */}
@@ -319,7 +321,7 @@ export default function ProfileScreen() {
               // Give the sync cycle a moment to kick off
               setTimeout(() => setIsRetrying(false), 1500);
               showConfirm({
-                title: 'Retry Queued',
+                title: 'Retry queued',
                 message: `${failedSyncCount} failed item(s) have been re-queued. They will sync automatically within 60 seconds.`,
                 icon: 'cloud-sync-outline',
               });

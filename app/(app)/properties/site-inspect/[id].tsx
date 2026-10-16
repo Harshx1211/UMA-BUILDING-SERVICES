@@ -9,8 +9,9 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList,
-  Modal, TextInput, Platform, BackHandler,
+  Modal, Platform, BackHandler,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeIn, ZoomIn } from 'react-native-reanimated';
@@ -508,7 +509,7 @@ export default function SiteInspectScreen() {
 
       Toast.show({
         type: 'success',
-        text1: 'Inspection Saved',
+        text1: 'Inspection saved',
         text2: 'Capture a signature to complete',
       });
       // FIX: Use navigateAway so the beforeRemove guard doesn't block the replace.
@@ -639,12 +640,12 @@ export default function SiteInspectScreen() {
   // ── Complete & save ──────────────────────────────────────
   const handleComplete = () => {
     if (counts.inspected === 0) {
-      showConfirm({ title: 'No Results', message: 'Please inspect at least one asset before completing.', icon: 'information-outline' });
+      showConfirm({ title: 'No results', message: 'Please inspect at least one asset before completing.', icon: 'information-outline' });
       return;
     }
     if (counts.remaining > 0) {
       showConfirm({
-        title: 'Not All Inspected',
+        title: 'Not all inspected',
         message: `${counts.remaining} asset${counts.remaining !== 1 ? 's have' : ' has'} not been inspected.\n\nComplete anyway?`,
         icon: 'clipboard-alert-outline',
         buttons: [
@@ -695,9 +696,9 @@ export default function SiteInspectScreen() {
     return (
       <View style={[s.screen, s.centered, { backgroundColor: C.background }]}>
         <MaterialCommunityIcons name="alert-circle-outline" size={48} color={C.border} />
-        <Text style={[s.emptyTitle, { color: C.text }]}>Property Not Found</Text>
+        <Text style={[s.emptyTitle, { color: C.text }]}>Property not found</Text>
         <TouchableOpacity style={[s.backBtn, { backgroundColor: C.primary }]} onPress={() => router.back()}>
-          <Text style={{ color: C.textOnPrimary, fontWeight: '700' }}>Go Back</Text>
+          <Text style={{ color: C.textOnPrimary, fontWeight: '700' }}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -777,7 +778,7 @@ export default function SiteInspectScreen() {
       {assets.length === 0 ? (
         <View style={s.emptyState}>
           <MaterialCommunityIcons name="magnify" size={52} color={C.textTertiary} />
-          <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
+          <Text style={[s.emptyTitle, { color: C.text }]}>No assets registered</Text>
           <Text style={[s.emptySub, { color: C.textSecondary }]}>
             Tap below to add the first asset you find on-site.
           </Text>
@@ -787,7 +788,7 @@ export default function SiteInspectScreen() {
             activeOpacity={0.85}
           >
             <MaterialCommunityIcons name="plus-circle" size={20} color={C.textOnPrimary} />
-            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add First Asset</Text>
+            <Text style={[s.addFirstBtnTxt, { color: C.textOnPrimary }]}>Add first asset</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -814,7 +815,7 @@ export default function SiteInspectScreen() {
             activeOpacity={0.85}
           >
             <MaterialCommunityIcons name="plus" size={22} color={C.textOnPrimary} />
-            <Text style={[s.fabTxt, { color: C.textOnPrimary }]}>Add Asset</Text>
+            <Text style={[s.fabTxt, { color: C.textOnPrimary }]}>Add asset</Text>
           </TouchableOpacity>
         </>
       )}

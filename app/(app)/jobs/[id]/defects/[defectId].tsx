@@ -154,7 +154,7 @@ export default function DefectDetailScreen() {
 
   const handleDelete = () => {
     showConfirm({
-      title: 'Remove Defect',
+      title: 'Remove defect',
       message: 'This will permanently remove the defect record. Continue?',
       icon: 'trash-can-outline',
       buttons: [
@@ -193,7 +193,7 @@ export default function DefectDetailScreen() {
         <MaterialCommunityIcons name="file-search-outline" size={48} color={C.textTertiary} />
         <Text style={{ color: C.textSecondary, marginTop: 8, fontSize: 16, fontWeight: '600' }}>Defect not found</Text>
         <View style={{ marginTop: 16 }}>
-          <Button title="Go Back" onPress={() => router.back()} />
+          <Button title="Go back" onPress={() => router.back()} />
         </View>
       </View>
     );
@@ -390,7 +390,7 @@ export default function DefectDetailScreen() {
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="delete-outline" size={18} color={C.error} />
-            <Text style={[s.bottomBtnTxt, { color: C.error }]}>Remove Defect</Text>
+            <Text style={[s.bottomBtnTxt, { color: C.error }]}>Remove defect</Text>
           </TouchableOpacity>
           </View>
         </View>

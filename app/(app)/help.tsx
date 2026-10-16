@@ -119,22 +119,22 @@ interface WalkthroughStep {
 const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   {
     icon: 'home',
-    title: 'Your Dashboard',
+    title: 'Your dashboard',
     body: 'This is your command centre. See today\'s job count, check your next job, and access quick actions — all in one place.',
   },
   {
     icon: 'calendar',
-    title: 'Schedule Tab',
+    title: 'Schedule tab',
     body: 'Tap "Schedule" at the bottom to see all your jobs. Filter by Today, This Week, or All Jobs. Switch to Map view to plan your route.',
   },
   {
     icon: 'fire',
-    title: 'Inspecting Assets',
+    title: 'Inspecting assets',
     body: 'Tap a job → Clock In → then tap "Inspect All Assets". Mark each asset as Pass, Fail, or Not Tested. Log defects and take photos as you go.',
   },
   {
     icon: 'wifi-off',
-    title: 'Offline First',
+    title: 'Offline first',
     body: 'You\'re in a basement with no signal? No problem. Everything saves to your phone instantly. When you\'re back in range, SiteTrack syncs automatically.',
   },
 ];
@@ -222,7 +222,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     icon: 'fire',
     item: {
       id: 'inspect',
-      title: 'Inspecting Assets',
+      title: 'Inspecting assets',
       content: '1. From the job detail, tap "Inspect All Assets"\n2. Each asset card shows the asset type and location\n3. Tap Pass, Fail, or N/T for each asset\n4. If you tap Fail, a defect reason field appears — fill it in\n5. You can take a photo directly from the inspection screen',
     },
   },
@@ -230,7 +230,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     icon: 'alert',
     item: {
       id: 'defects',
-      title: 'Logging Defects',
+      title: 'Logging defects',
       content: '1. Defects can be logged directly from the asset inspection\n2. Or go to the job detail → "Defects" tab → "Log Defect"\n3. Choose severity: Minor, Major, or Critical\n4. Write a description and attach a photo as evidence\n5. Defects sync to the cloud when you\'re back online',
     },
   },
@@ -238,7 +238,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     icon: 'draw',
     item: {
       id: 'sig',
-      title: 'Collecting Signatures',
+      title: 'Collecting signatures',
       content: '1. When the job is finished, tap "Complete" from the time tracking card\n2. A signature canvas will appear\n3. Hand your phone to the site contact\n4. They sign with their finger and enter their name\n5. Tap "Save Signature" — it\'s embedded in the PDF report',
     },
   },
@@ -246,7 +246,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     icon: 'file-document-outline',
     item: {
       id: 'report',
-      title: 'Generating Reports',
+      title: 'Generating reports',
       content: '1. From the job detail screen, tap "Generate Report" at the bottom\n2. SiteTrack sends all inspection data, defects, and the signature to our server\n3. The PDF is generated there — this needs an internet connection\n4. Tap "Share" to email it directly to the client or office\n5. The report includes pass/fail colour coding and a compliance footer',
     },
   },
@@ -330,7 +330,7 @@ export default function HelpScreen() {
                 <MaterialCommunityIcons name="school-outline" size={26} color={C.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.walkthroughTitle, { color: C.text }]}>App Walkthrough</Text>
+                <Text style={[s.walkthroughTitle, { color: C.text }]}>App walkthrough</Text>
                 <Text style={[s.walkthroughSub, { color: C.textSecondary }]}>4-step guide for new technicians</Text>
               </View>
               <MaterialCommunityIcons name="play-circle-outline" size={28} color={C.accent} />

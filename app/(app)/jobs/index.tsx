@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, FlatList, TouchableOpacity, StyleSheet,
-  TextInput, RefreshControl,
+  RefreshControl,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { fontFor } from '@/constants/Fonts';
 import { router } from 'expo-router';
@@ -293,7 +294,7 @@ export default function ScheduleScreen() {
         keyExtractor={(row) => row.kind === 'header' ? row.key : row.job.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} colors={[T.primary]} />}
         renderItem={({ item }) =>
           item.kind === 'header'
             ? <Text style={styles.groupHeader}>{item.label}</Text>

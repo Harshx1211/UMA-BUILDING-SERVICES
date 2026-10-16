@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
-  Platform, TextInput, Modal,
+  Platform, Modal,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -239,15 +240,15 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
             <Text style={[s.menuTitle, { color: C.textTertiary }]} numberOfLines={1}>{formatAssetName(asset.asset_type, asset.variant)}</Text>
             <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onClone(asset); }}>
               <MaterialCommunityIcons name="content-copy" size={19} color={C.textSecondary} />
-              <Text style={[s.menuRowTxt, { color: C.text }]}>Clone Asset</Text>
+              <Text style={[s.menuRowTxt, { color: C.text }]}>Clone asset</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onEdit(asset); }}>
               <MaterialCommunityIcons name="pencil-outline" size={19} color={C.textSecondary} />
-              <Text style={[s.menuRowTxt, { color: C.text }]}>Edit Asset</Text>
+              <Text style={[s.menuRowTxt, { color: C.text }]}>Edit asset</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); onDelete(asset); }}>
               <MaterialCommunityIcons name="trash-can-outline" size={19} color={C.error} />
-              <Text style={[s.menuRowTxt, { color: C.error }]}>Delete Asset</Text>
+              <Text style={[s.menuRowTxt, { color: C.error }]}>Delete asset</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.menuCancel, { backgroundColor: C.backgroundTertiary }]} onPress={() => setMenuOpen(false)}>
               <Text style={[s.menuCancelTxt, { color: C.text }]}>Cancel</Text>
@@ -595,11 +596,11 @@ export default function AssetInspectionScreen() {
       // about a different number than the actual reason the check failed.
       const { title, message } = uninspectedCount > 0
         ? {
-            title: 'Incomplete Inspection',
+            title: 'Incomplete inspection',
             message: `${uninspectedCount} asset${uninspectedCount !== 1 ? 's have' : ' has'} not been inspected.\n\nUninspected assets will be automatically marked as Not Tested.\n\nComplete anyway?`,
           }
         : {
-            title: 'No Results Recorded',
+            title: 'No results recorded',
             message: 'Every asset was marked Not Tested — no Pass or Fail result was recorded for this job.\n\nComplete anyway?',
           };
       showConfirm({
@@ -690,7 +691,7 @@ export default function AssetInspectionScreen() {
 
   const handleDelete = useCallback((assetToDelete: AssetWithResult) => {
     showConfirm({
-      title: 'Delete Asset',
+      title: 'Delete asset',
       message: `Are you sure you want to delete this ${formatAssetType(assetToDelete.asset_type)}?`,
       icon: 'trash-can-outline',
       buttons: [
@@ -797,7 +798,7 @@ export default function AssetInspectionScreen() {
       ? ` ${failedCount} of these ${failedCount === 1 ? 'is' : 'are'} currently marked Fail — any recorded defect still Open will be deleted.`
       : '';
     showConfirm({
-      title: 'No Access',
+      title: 'No access',
       message: `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?${warning}`,
       icon: 'lock-outline',
       buttons: [
@@ -838,7 +839,7 @@ export default function AssetInspectionScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Asset Inspection" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Asset inspection" showBack={true} fallbackHref="/jobs" />
         <View style={{ padding: 16, gap: 12 }}>
           <SkeletonBlock width="100%" height={160} borderRadius={16} />
           <SkeletonBlock width="100%" height={160} borderRadius={16} />
@@ -853,7 +854,7 @@ export default function AssetInspectionScreen() {
       <View style={[s.screen, { backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }]}>
         <MaterialCommunityIcons name="alert" size={40} color={C.error} />
         <Text style={{ marginTop: 10, color: C.error, textAlign: 'center', paddingHorizontal: 32 }}>{store.error}</Text>
-        <View style={{ marginTop: 16 }}><Button title="Go Back" onPress={() => router.back()} /></View>
+        <View style={{ marginTop: 16 }}><Button title="Go back" onPress={() => router.back()} /></View>
       </View>
     );
   }
@@ -862,7 +863,7 @@ export default function AssetInspectionScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
         eyebrow="FIRE SAFETY COMPLIANCE"
-        title="Inspection Form"
+        title="Inspection form"
         showBack={true}
         fallbackHref="/jobs"
         rightComponent={
@@ -900,7 +901,7 @@ export default function AssetInspectionScreen() {
         initialNumToRender={6}
         maxToRenderPerBatch={6}
         windowSize={8}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />}
         ListHeaderComponent={
           <View>
             <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
@@ -1007,11 +1008,11 @@ export default function AssetInspectionScreen() {
           store.assets.length === 0 ? (
             <View style={s.emptyState}>
               <View style={[s.emptyIconWrap, { backgroundColor: C.backgroundTertiary }]}><MaterialCommunityIcons name="shield-search" size={40} color={C.textTertiary} /></View>
-              <Text style={[s.emptyTitle, { color: C.text }]}>No Assets Registered</Text>
+              <Text style={[s.emptyTitle, { color: C.text }]}>No assets registered</Text>
               <Text style={[s.emptySub, { color: C.textSecondary }]}>No fire safety assets are on record for this property.</Text>
               <View style={{ marginTop: 24, width: '100%', paddingHorizontal: 32, gap: 12 }}>
                 <Button title="Add Asset On-Site" icon="plus" onPress={() => setShowAddAsset(true)} />
-                <Button variant="secondary" title="Go Back" onPress={() => router.back()} />
+                <Button variant="secondary" title="Go back" onPress={() => router.back()} />
               </View>
             </View>
           ) : (

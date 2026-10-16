@@ -15,7 +15,7 @@ import { getRecord, getServiceHistoryForAsset, getDefectsForAsset } from '@/lib/
 import { ScreenHeader, EmptyState, SectionHeader, Card } from '@/components/ui';
 import type { Asset, Defect } from '@/types';
 import { formatAssetType, formatAssetName, AREA_LABEL, areaOf, formatLocationFull } from '@/utils/assetHelpers';
-import { localDateString } from '@/utils/dateHelpers';
+import { localDateString, formatDisplayDate } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { stripPrices } from '@/utils/prices';
 
@@ -39,7 +39,7 @@ type ServiceRecord = {
 const RESULT_CONFIG: Record<InspectionResult, { icon: MCIconName; color: (C: ColorsType) => string; label: string }> = {
   [InspectionResult.Pass]:      { icon: 'check-circle',          color: (C) => C.successDark || C.success, label: 'Pass' },
   [InspectionResult.Fail]:      { icon: 'close-circle',          color: (C) => C.errorDark  || C.error,   label: 'Fail' },
-  [InspectionResult.NotTested]: { icon: 'checkbox-blank-outline', color: (C) => C.textTertiary,            label: 'Not Tested' },
+  [InspectionResult.NotTested]: { icon: 'checkbox-blank-outline', color: (C) => C.textTertiary,            label: 'Not tested' },
 };
 
 const getSeverityConfig = (C: ColorsType): Record<DefectSeverity, { color: string }> => ({
@@ -138,7 +138,7 @@ export default function AssetDetailScreen() {
   if (!asset) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Not Found" showBack={true} />
+        <ScreenHeader title="Not found" showBack={true} />
         <EmptyState
           icon="alert"
           title="Asset not found"
@@ -182,7 +182,7 @@ export default function AssetDetailScreen() {
         {isOverdue ? (
           <View style={[s.overdueBar, { backgroundColor: C.errorLight, marginTop: 16 }]}>
             <MaterialCommunityIcons name="alert" size={18} color={C.errorDark} />
-            <Text style={[s.overdueText, { color: C.errorDark }]}>Service overdue — next service was {asset.next_service_date}</Text>
+            <Text style={[s.overdueText, { color: C.errorDark }]}>Service overdue — next service was {formatDisplayDate(asset.next_service_date)}</Text>
           </View>
         ) : null}
 
@@ -201,25 +201,25 @@ export default function AssetDetailScreen() {
               <InfoRow icon="clipboard-text-outline" label="Description" value={asset.description} C={C} />
             ) : null}
             {asset.serial_number ? (
-              <InfoRow icon="identifier" label="Serial Number" value={asset.serial_number} mono C={C} />
+              <InfoRow icon="identifier" label="Serial number" value={asset.serial_number} mono C={C} />
             ) : null}
             {asset.barcode_id ? (
               <InfoRow icon="qrcode" label="Barcode / QR ID" value={asset.barcode_id} mono C={C} />
             ) : null}
             {asset.location_on_site ? (
-              <InfoRow icon="map-marker-outline" label="Location on Site" value={formatLocationFull(asset.location_on_site)} C={C} />
+              <InfoRow icon="map-marker-outline" label="Location on site" value={formatLocationFull(asset.location_on_site)} C={C} />
             ) : null}
             {asset.install_date ? (
-              <InfoRow icon="wrench-outline" label="Install Date" value={asset.install_date} C={C} />
+              <InfoRow icon="wrench-outline" label="Install date" value={formatDisplayDate(asset.install_date)} C={C} />
             ) : null}
             {asset.last_service_date ? (
-              <InfoRow icon="check-circle-outline" label="Last Service" value={asset.last_service_date} C={C} />
+              <InfoRow icon="check-circle-outline" label="Last service" value={formatDisplayDate(asset.last_service_date)} C={C} />
             ) : null}
             {asset.next_service_date ? (
               <InfoRow
                 icon={isOverdue ? 'alert-circle-outline' : 'calendar-clock'}
-                label="Next Service"
-                value={asset.next_service_date}
+                label="Next service"
+                value={formatDisplayDate(asset.next_service_date)}
                 C={C}
               />
             ) : null}
@@ -241,8 +241,8 @@ export default function AssetDetailScreen() {
                   <View key={rec.id} style={[s.histRow, i < serviceHistory.length - 1 && [s.histRowBorder, { borderBottomColor: C.border }]]}>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.histDate, { color: C.text }]}>
-                        {rec.scheduled_date ?? '—'}
-                        {rec.actioned_at ? ` → ${rec.actioned_at.substring(0, 10)}` : ''}
+                        {rec.scheduled_date ? formatDisplayDate(rec.scheduled_date) : '—'}
+                        {rec.actioned_at ? ` → ${formatDisplayDate(rec.actioned_at)}` : ''}
                       </Text>
                       {rec.technician_name ? (
                         <Text style={[s.histTech, { color: C.textSecondary }]}>{rec.technician_name}</Text>
@@ -263,7 +263,7 @@ export default function AssetDetailScreen() {
                     ) : (
                       <View style={s.resultPill}>
                         <MaterialCommunityIcons name="checkbox-blank-outline" size={14} color={C.textTertiary} />
-                        <Text style={[s.noResult, { color: C.textTertiary }]}>Not Tested</Text>
+                        <Text style={[s.noResult, { color: C.textTertiary }]}>Not tested</Text>
                       </View>
                     )}
                   </View>

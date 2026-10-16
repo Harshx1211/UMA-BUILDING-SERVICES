@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Platform,
 } from 'react-native';
+import { formatDisplayDate } from '@/utils/dateHelpers';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import MapView, { Marker, Region, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -188,9 +189,9 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
               {getJobAddress(selectedJob) || 'No address'}
             </Text>
             <Text style={[s.jobCardDate, { color: C.textTertiary }]}>
-              {selectedJob.scheduled_date}
+              {formatDisplayDate(selectedJob.scheduled_date)}
               {(selectedJob.status === 'in_progress' || selectedJob.status === 'completed') && selectedJob.updated_at
-                ? `  |  ${selectedJob.status === 'completed' ? 'Done' : 'Started'} ${selectedJob.updated_at.substring(0, 10)}`
+                ? `  |  ${selectedJob.status === 'completed' ? 'Done' : 'Started'} ${formatDisplayDate(selectedJob.updated_at)}`
                 : ''}
             </Text>
           </View>
@@ -199,7 +200,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
               <MaterialCommunityIcons name="close" size={16} color={C.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity style={[s.openBtn, { backgroundColor: C.accent }]} onPress={() => { setSelectedJob(null); onJobSelect(selectedJob); }}>
-              <Text style={s.openBtnText}>Open Job</Text>
+              <Text style={s.openBtnText}>Open job</Text>
               <MaterialCommunityIcons name="chevron-right" size={16} color={T.textOnPrimary} />
             </TouchableOpacity>
           </View>

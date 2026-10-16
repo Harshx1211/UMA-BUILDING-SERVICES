@@ -2,9 +2,10 @@
 // Mirrors the "Edit Asset" form captured in reference screenshots from Uptick
 import React, { useState, useMemo, useRef } from 'react';
 import {
-  View, StyleSheet, Modal, TouchableOpacity, TextInput,
+  View, StyleSheet, Modal, TouchableOpacity,
   ScrollView, Platform,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -179,7 +180,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
       return;
     }
     if (quantity > 100) {
-      showConfirm({ title: 'Max Quantity', message: 'You can add up to 100 assets at once.', icon: 'alert-circle-outline' });
+      showConfirm({ title: 'Max quantity', message: 'You can add up to 100 assets at once.', icon: 'alert-circle-outline' });
       return;
     }
     savingRef.current = true;
@@ -470,7 +471,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
               <>
                 {/* Ref */}
                 <View style={s.field}>
-                  <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
+                  <Text style={[s.fieldLabel, { color: C.text }]}>Asset reference</Text>
                   <TextInput
                     style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                     placeholder={selectedType ? `Leave empty for ${nextAssetRefs(queryRecords<{ asset_ref: string | null }>('assets', { property_id: propertyId }).map(r => r.asset_ref), refPrefixOf(typeDef, selectedType), 1)[0]}${quantity > 1 ? ' onwards' : ''}` : 'Reference code...'}
@@ -485,7 +486,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                 {/* Base date (single asset only) */}
                 {quantity === 1 && (
                   <View style={s.field}>
-                    <Text style={[s.fieldLabel, { color: C.text }]}>Base Date</Text>
+                    <Text style={[s.fieldLabel, { color: C.text }]}>Base date</Text>
                     <TextInput
                       style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                       placeholder="YYYY-MM-DD"
@@ -508,7 +509,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
                     separate scannable barcode ID. */}
                 {quantity === 1 && (
                   <View style={[s.field, { marginBottom: 0 }]}>
-                    <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
+                    <Text style={[s.fieldLabel, { color: C.text }]}>Serial number</Text>
                     <TextInput
                       style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                       placeholder="Serial number..."

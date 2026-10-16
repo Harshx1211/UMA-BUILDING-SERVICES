@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking, Modal, Platform, ScrollView, StyleSheet,
-  View, TouchableOpacity, TextInput, RefreshControl,
+  View, TouchableOpacity, RefreshControl,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -337,7 +338,7 @@ export default function JobDetailScreen() {
       if (!isEditingNotes) return; // no unsaved changes
       e.preventDefault();
       showConfirm({
-        title: 'Unsaved Notes',
+        title: 'Unsaved notes',
         message: 'You have unsaved field notes. Save them before leaving?',
         icon: 'note-edit-outline',
         buttons: [
@@ -381,7 +382,7 @@ export default function JobDetailScreen() {
     try {
       updateJobStatus(job.id, JobStatus.InProgress);
       setJob(p => p ? { ...p, status: JobStatus.InProgress } : p);
-      Toast.show({ type: 'success', text1: 'Job Started' });
+      Toast.show({ type: 'success', text1: 'Job started' });
     } catch {
       Toast.show({ type: 'error', text1: 'Failed to start job' });
     } finally {
@@ -396,7 +397,7 @@ export default function JobDetailScreen() {
     setShowBottomSheet(false);
     if (!hasSig) {
       showConfirm({
-        title: 'Signature Required',
+        title: 'Signature required',
         message: 'A client signature is required before completing this job. Please capture a signature first.',
         icon: 'draw',
         buttons: [
@@ -418,7 +419,7 @@ export default function JobDetailScreen() {
     const allAssetsResulted = totalAssets > 0 && assets.every(a => a.result !== null);
     if (!allAssetsResulted && totalAssets > 0) {
       showConfirm({
-        title: 'Inspection Incomplete',
+        title: 'Inspection incomplete',
         message: 'All assets must have a result (Pass, Fail, or Not Tested) before completing this job.',
         icon: 'clipboard-alert-outline',
         buttons: [
@@ -548,7 +549,7 @@ export default function JobDetailScreen() {
   if (isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Job Details" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Job details" showBack={true} fallbackHref="/jobs" />
         <View style={{ padding: 16, gap: 12 }}>
           <SkeletonBlock width="100%" height={140} borderRadius={16} />
           <SkeletonBlock width="100%" height={64} borderRadius={16} />
@@ -564,7 +565,7 @@ export default function JobDetailScreen() {
         <MaterialCommunityIcons name="file-search-outline" size={48} color={C.textTertiary} />
         <Text style={[s.notFound, { color: C.textSecondary }]}>Job not found</Text>
         <View style={{ marginTop: 16 }}>
-          <Button title="Go Back" onPress={() => router.back()} />
+          <Button title="Go back" onPress={() => router.back()} />
         </View>
       </View>
     );
@@ -591,7 +592,7 @@ export default function JobDetailScreen() {
     // "View Assets" links pointed out. This is the first real entry point.
     {
       key: 'property', icon: 'home-city-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
-      title: 'Property Details',
+      title: 'Property details',
       subtitle: job.property_name || 'Site history, documents & notebook',
       // Full (app) group prefix, matching this codebase's own established
       // pattern for jumping into another hidden tab-group's screen from a
@@ -606,7 +607,7 @@ export default function JobDetailScreen() {
     },
     {
       key: 'notebook', icon: 'notebook-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
-      title: 'Site Notebook',
+      title: 'Site notebook',
       subtitle: notebookCount === 0 ? 'No notes yet for this site' : `${notebookCount} thing${notebookCount !== 1 ? 's' : ''} to remember`,
       // View-only here, same as Property Detail's — items can only be added
       // or deleted from inside an actual inspection (inspect.tsx / the
@@ -642,7 +643,7 @@ export default function JobDetailScreen() {
     },
     {
       key: 'checklist-guide', icon: 'clipboard-text-search-outline', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
-      title: 'Inspection Checklist Guide',
+      title: 'Inspection checklist guide',
       subtitle: 'What to check, by asset type',
       onPress: () => router.push('/help' as never),
     },
@@ -680,7 +681,7 @@ export default function JobDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />}
       >
         <View style={s.body}>
 
@@ -691,7 +692,7 @@ export default function JobDetailScreen() {
             <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(360)}>
               <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.timerLabel, { color: C.text }]}>Job Scheduled</Text>
+                  <Text style={[s.timerLabel, { color: C.text }]}>Job scheduled</Text>
                   <Text style={[s.timerSub, { color: C.textSecondary }]}>Start the job to begin work.</Text>
                 </View>
                 <TouchableOpacity
@@ -701,7 +702,7 @@ export default function JobDetailScreen() {
                 >
                   {isStarting
                     ? <ActivityIndicator size="small" color={C.textOnPrimary} />
-                    : <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start Job</Text>}
+                    : <Text style={[s.continueBtnTxt, { color: C.textOnPrimary }]}>Start job</Text>}
                 </TouchableOpacity>
               </Card>
             </Animated.View>
@@ -712,7 +713,7 @@ export default function JobDetailScreen() {
             <Card variant="success" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <MaterialCommunityIcons name="check-decagram" size={22} color={C.success} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.statusBannerTitle, { color: C.success }]}>Job Completed</Text>
+                <Text style={[s.statusBannerTitle, { color: C.success }]}>Job completed</Text>
                 {hasSig && (
                   <Text style={[s.statusBannerSub, { color: C.success }]}>Client signature captured</Text>
                 )}
@@ -732,7 +733,7 @@ export default function JobDetailScreen() {
             <Card variant="default" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <MaterialCommunityIcons name="cancel" size={22} color={C.textSecondary} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.statusBannerTitle, { color: C.textSecondary }]}>Job Cancelled</Text>
+                <Text style={[s.statusBannerTitle, { color: C.textSecondary }]}>Job cancelled</Text>
                 <Text style={[s.statusBannerSub, { color: C.textTertiary }]}>
                   Contact your manager for details.
                 </Text>
@@ -746,7 +747,7 @@ export default function JobDetailScreen() {
               <Card variant="danger" style={{ flexDirection: 'row', gap: 12 }}>
                 <MaterialCommunityIcons name="alert" size={20} color={C.error} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.error }]}>Site Hazard</Text>
+                  <Text style={[s.alertTitle, { color: C.error }]}>Site hazard</Text>
                   <Text style={[s.alertBody, { color: C.text }]}>{job.hazard_notes}</Text>
                 </View>
               </Card>
@@ -834,7 +835,7 @@ export default function JobDetailScreen() {
                     activeOpacity={0.6}
                     style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
                   >
-                    <Text style={[s.completeRowTxt, { color: C.textTertiary }]}>Mark Job Complete</Text>
+                    <Text style={[s.completeRowTxt, { color: C.textTertiary }]}>Mark job complete</Text>
                   </TouchableOpacity>
                 )}
               </Card>
@@ -903,7 +904,7 @@ export default function JobDetailScreen() {
                     <View style={[s.noteRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
                       <MaterialCommunityIcons name="key" size={18} color={C.textSecondary} />
                       <View style={{ flex: 1 }}>
-                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Access Notes</Text>
+                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Access notes</Text>
                         <Text style={[s.alertBody, { color: C.text }]}>{job.access_notes}</Text>
                       </View>
                     </View>
@@ -912,7 +913,7 @@ export default function JobDetailScreen() {
                     <View style={[s.noteRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
                       <MaterialCommunityIcons name="note-text-outline" size={18} color={C.textSecondary} />
                       <View style={{ flex: 1 }}>
-                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Property Note</Text>
+                        <Text style={[s.alertTitle, { color: C.textSecondary }]}>Property note</Text>
                         <Text style={[s.alertBody, { color: C.text }]}>{job.site_note}</Text>
                         <Text style={[s.detailsCaption, { color: C.textTertiary }]}>
                           Read-only — set on the property record, shared by every job at this site
@@ -968,7 +969,7 @@ export default function JobDetailScreen() {
                       style={[s.notesSaveBtn, { backgroundColor: C.accent }]}
                       onPress={handleSaveNotes}
                     >
-                      <Text style={[s.notesSaveTxt, { color: C.textOnPrimary }]}>Save Notes</Text>
+                      <Text style={[s.notesSaveTxt, { color: C.textOnPrimary }]}>Save notes</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -1101,7 +1102,7 @@ export default function JobDetailScreen() {
                 setShowCompletionModal(false);
               }}
             >
-              <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Close Now</Text>
+              <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Close now</Text>
             </TouchableOpacity>
           </View>
         </View>

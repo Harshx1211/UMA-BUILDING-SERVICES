@@ -185,7 +185,7 @@ export default function GlobalDefectsScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
         eyebrow="DEFECTS"
-        title="All Defects"
+        title="All defects"
         subtitle={`${counts.total} total · ${openCount} open · ${criticalCount} critical`}
         showBack
         rightComponent={
@@ -208,7 +208,7 @@ export default function GlobalDefectsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.filterRow}
         >
-          <FilterPill label="All Severity" isActive={severityFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter('all'); }} C={C} />
+          <FilterPill label="All severity" isActive={severityFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter('all'); }} C={C} />
           <FilterPill label="Critical" isActive={severityFilter === DefectSeverity.Critical} color={SEVERITY_COLORS[DefectSeverity.Critical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.Critical); }} C={C} />
           <FilterPill label="Non-critical" isActive={severityFilter === DefectSeverity.NonCritical} color={SEVERITY_COLORS[DefectSeverity.NonCritical]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.NonCritical); }} C={C} />
           <FilterPill label="Non-conformance" isActive={severityFilter === DefectSeverity.NonConformance} color={SEVERITY_COLORS[DefectSeverity.NonConformance]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSeverityFilter(DefectSeverity.NonConformance); }} C={C} />
@@ -219,7 +219,7 @@ export default function GlobalDefectsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[s.filterRow, { paddingTop: 0 }]}
         >
-          <FilterPill label="All Status" isActive={statusFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStatusFilter('all'); }} C={C} />
+          <FilterPill label="All status" isActive={statusFilter === 'all'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStatusFilter('all'); }} C={C} />
           <FilterPill label="Open" isActive={statusFilter === DefectStatus.Open} color={STATUS_COLORS[DefectStatus.Open]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStatusFilter(DefectStatus.Open); }} C={C} />
           <FilterPill label="Monitoring" isActive={statusFilter === DefectStatus.Monitoring} color={STATUS_COLORS[DefectStatus.Monitoring]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStatusFilter(DefectStatus.Monitoring); }} C={C} />
           <FilterPill label="Quoted" isActive={statusFilter === DefectStatus.Quoted} color={STATUS_COLORS[DefectStatus.Quoted]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStatusFilter(DefectStatus.Quoted); }} C={C} />
@@ -271,7 +271,7 @@ export default function GlobalDefectsScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 40, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} />}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={C.primary} colors={[C.primary]} />}
           onEndReachedThreshold={0.4}
           onEndReached={() => { if (hasMoreDefects) loadMoreDefects(); }}
           ListFooterComponent={

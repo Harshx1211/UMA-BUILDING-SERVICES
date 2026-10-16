@@ -212,7 +212,7 @@ const DocumentScanSheet = forwardRef<DocumentScanSheetRef, Props>(({ propertyId,
     try {
       const currentUserId = useAuthStore.getState().user?.id ?? null;
       if (!currentUserId) {
-        Toast.show({ type: 'error', text1: 'Session Error', text2: 'Please re-sign in before scanning documents.' });
+        Toast.show({ type: 'error', text1: 'Session error', text2: 'Please re-sign in before scanning documents.' });
         return;
       }
 

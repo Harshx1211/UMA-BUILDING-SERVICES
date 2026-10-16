@@ -290,7 +290,7 @@ export default function PreviewScreen() {
       });
     } catch (e) {
       console.error('[Preview] Share failed:', e);
-      showConfirm({ title: 'Share Failed', message: 'Could not download or share the report. Please try again.', icon: 'alert-circle-outline' });
+      showConfirm({ title: 'Share failed', message: 'Could not download or share the report. Please try again.', icon: 'alert-circle-outline' });
     } finally {
       if (isMounted.current) setIsDownloading(false);
     }
@@ -350,7 +350,7 @@ export default function PreviewScreen() {
           <View style={[styles.iconCircle, { backgroundColor: T.iconBg(C.error), borderColor: T.tintBorder(C.error) }]}>
             <MaterialCommunityIcons name="alert-circle-outline" size={42} color={C.error} />
           </View>
-          <Text style={[styles.bigTitle, { color: C.text }]}>Generation Failed</Text>
+          <Text style={[styles.bigTitle, { color: C.text }]}>Generation failed</Text>
           <Text style={[styles.hintTxt, { color: C.textSecondary }]}>
             {errorMsg ?? 'Could not generate report. Please try again.'}
           </Text>
@@ -366,7 +366,7 @@ export default function PreviewScreen() {
             style={[styles.secondaryBtn, { backgroundColor: T.iconBg(C.primary), borderRadius: 10, paddingHorizontal: 24 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={C.primary} />
-            <Text style={[styles.secondaryTxt, { color: C.primary }]}>Try Again</Text>
+            <Text style={[styles.secondaryTxt, { color: C.primary }]}>Try again</Text>
           </TouchableOpacity>
         </Animated.View>
       )}

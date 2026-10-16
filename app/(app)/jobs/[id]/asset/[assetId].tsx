@@ -10,9 +10,10 @@
  */
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
+  View, StyleSheet, TouchableOpacity, ScrollView, Modal,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import { Image } from 'expo-image';
@@ -83,7 +84,7 @@ function PhotoViewer({
         {onDelete && (
           <TouchableOpacity style={s.viewerDeleteBtn} onPress={onDelete} activeOpacity={0.8}>
             <MaterialCommunityIcons name="trash-can-outline" size={18} color={T.textOnPrimary} />
-            <Text style={s.viewerDeleteTxt}>Delete Photo</Text>
+            <Text style={s.viewerDeleteTxt}>Delete photo</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -830,7 +831,7 @@ export default function AssetDetailScreen() {
 
   const handleDeleteAdditionalDefect = (defectId: string) => {
     showConfirm({
-      title: 'Remove Defect',
+      title: 'Remove defect',
       message: 'This will permanently remove this defect record. Continue?',
       icon: 'trash-can-outline',
       buttons: [
@@ -1119,7 +1120,7 @@ export default function AssetDetailScreen() {
                 activeOpacity={0.8}
               >
                 <MaterialCommunityIcons name="plus" size={16} color={C.accent} />
-                <Text style={[s.addDefectBtnTxt, { color: C.accent }]}>Add Defect</Text>
+                <Text style={[s.addDefectBtnTxt, { color: C.accent }]}>Add defect</Text>
               </TouchableOpacity>
             )}
           </Animated.View>
@@ -1157,7 +1158,7 @@ export default function AssetDetailScreen() {
             never client-facing. Distinct icon + caption so it's never
             mistaken for Remarks. */}
         {(result !== null || pendingFail) && (
-          <SectionCard icon="shield-lock-outline" title="Internal Notes" C={C}>
+          <SectionCard icon="shield-lock-outline" title="Internal notes" C={C}>
             <Text style={[s.internalNotesCaption, { color: C.textTertiary }]}>
               Visible to your team only — never included in the report.
             </Text>

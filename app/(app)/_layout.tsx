@@ -280,7 +280,7 @@ export default function AppLayout() {
         <View style={styles.overlayBg} />
         <View style={styles.overlayContent}>
           <ActivityIndicator size="large" color={C.accent} style={{ marginBottom: 20 }} />
-          <Text style={styles.overlayTitle}>Account Deactivated</Text>
+          <Text style={styles.overlayTitle}>Account deactivated</Text>
           <Text style={styles.overlayText}>
             Please wait while your final offline changes are securely synced to the server before logout...
           </Text>

@@ -1,5 +1,6 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView, Animated } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useColors } from '@/hooks/useColors';
@@ -138,7 +139,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
       if (!currentUserId) {
         Toast.show({
           type: 'error',
-          text1: 'Session Error',
+          text1: 'Session error',
           text2: 'Please re-sign in before taking photos.',
         });
         return;

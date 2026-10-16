@@ -46,13 +46,13 @@ type KnownStatus =
   | 'defect_repair' | 'defect_repair_quote' | 'installation' | 'emergency' | 'quote';
 
 const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
-  in_progress:    'In Progress',
+  in_progress:    'In progress',
   scheduled:      'Scheduled',
   completed:      'Completed',
   cancelled:      'Cancelled',
   pass:           'Pass',
   fail:           'Fail',
-  not_tested:     'Not Tested',
+  not_tested:     'Not tested',
   open:           'Open',
   quoted:         'Quoted',
   repaired:       'Repaired',
@@ -64,7 +64,7 @@ const HUMAN_LABEL: Partial<Record<KnownStatus, string>> = {
   active:         'Active',
   decommissioned: 'Decommissioned',
   compliant:      'Compliant',
-  non_compliant:  'Non-Compliant',
+  non_compliant:  'Non-compliant',
   overdue:        'Overdue',
   pending:        'Pending',
   // Job types

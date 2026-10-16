@@ -31,9 +31,9 @@ const getComplianceConfig = (C: ColorsType): Record<ComplianceStatus, {
   bg: string; border: string; text: string; subtext: string; icon: MCIconName; label: string;
 }> => ({
   [ComplianceStatus.Compliant]:    { bg: C.successLight, border: C.success, text: C.successDark, subtext: C.success, icon: 'check-decagram', label: 'Compliant' },
-  [ComplianceStatus.NonCompliant]: { bg: C.errorLight,   border: C.error,   text: C.errorDark,   subtext: C.error,   icon: 'close-circle',  label: 'Non-Compliant' },
+  [ComplianceStatus.NonCompliant]: { bg: C.errorLight,   border: C.error,   text: C.errorDark,   subtext: C.error,   icon: 'close-circle',  label: 'Non-compliant' },
   [ComplianceStatus.Overdue]:      { bg: C.warningLight, border: C.warning, text: C.warningDark, subtext: C.warning, icon: 'alert-decagram', label: 'Overdue' },
-  [ComplianceStatus.Pending]:      { bg: C.backgroundTertiary, border: C.border, text: C.textSecondary, subtext: C.textTertiary, icon: 'clock-outline', label: 'Pending Review' },
+  [ComplianceStatus.Pending]:      { bg: C.backgroundTertiary, border: C.border, text: C.textSecondary, subtext: C.textTertiary, icon: 'clock-outline', label: 'Pending review' },
 });
 
 
@@ -310,7 +310,7 @@ export default function PropertyDetailScreen() {
   if (!property) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Not Found" showBack={true} />
+        <ScreenHeader title="Not found" showBack={true} />
         <EmptyState
           icon="office-building-marker-outline"
           title="Property not found"
@@ -414,7 +414,7 @@ export default function PropertyDetailScreen() {
               <View style={[s.actionBtnIcon, { backgroundColor: C.backgroundTertiary }]}>
                 <MaterialCommunityIcons name="phone" size={18} color={C.textSecondary} />
               </View>
-              <Text style={[s.actionBtnLabel, { color: C.text }]}>Call Contact</Text>
+              <Text style={[s.actionBtnLabel, { color: C.text }]}>Call contact</Text>
             </TouchableOpacity>
           )}
           {property.address && (
@@ -444,7 +444,7 @@ export default function PropertyDetailScreen() {
                   <MaterialCommunityIcons name="alert" size={16} color={C.textOnPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.errorDark }]}>Site Hazard Warning</Text>
+                  <Text style={[s.alertTitle, { color: C.errorDark }]}>Site hazard warning</Text>
                   <Text style={[s.alertBody, { color: C.error }]}>{property.hazard_notes}</Text>
                 </View>
               </View>
@@ -455,7 +455,7 @@ export default function PropertyDetailScreen() {
                   <MaterialCommunityIcons name="note-text-outline" size={16} color={C.textOnPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.alertTitle, { color: C.successDark }]}>Site Note</Text>
+                  <Text style={[s.alertTitle, { color: C.successDark }]}>Site note</Text>
                   <Text style={[s.alertBody, { color: C.successDark }]}>{property.site_note}</Text>
                 </View>
               </View>
@@ -465,7 +465,7 @@ export default function PropertyDetailScreen() {
 
         {/* ── PROPERTY INFO CARD ──────────────────────────── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(200).duration(400)}>
-          <SectionHeader title="Site Details" />
+          <SectionHeader title="Site details" />
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16 }]}>
             <InfoRow
               icon="map-marker-outline"
@@ -477,7 +477,7 @@ export default function PropertyDetailScreen() {
                 <View style={[s.divider, { backgroundColor: C.border }]} />
                 <InfoRow
                   icon="account-tie-outline"
-                  label="Site Contact"
+                  label="Site contact"
                   value={property.site_contact_name}
                 />
               </>
@@ -500,7 +500,7 @@ export default function PropertyDetailScreen() {
         {/* ── ASSET SUMMARY ──────────────────────────────── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(240).duration(400)}>
           <SectionHeader
-            title="Asset Register"
+            title="Asset register"
             count={assets.length}
             actionLabel="View All"
             onAction={() => router.push(`/properties/assets/${id}` as never)}
@@ -508,7 +508,7 @@ export default function PropertyDetailScreen() {
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16 }]}>
             <InfoRow
               icon="shield-check-outline"
-              label="Total Assets"
+              label="Total assets"
               value={assets.length.toString()}
               onPress={() => router.push(`/properties/assets/${id}` as never)}
             />
@@ -517,7 +517,7 @@ export default function PropertyDetailScreen() {
                 <View style={[s.divider, { backgroundColor: C.border }]} />
                 <InfoRow
                   icon="calendar-clock-outline"
-                  label="Next Inspection"
+                  label="Next inspection"
                   value={fmtDate(property.next_inspection_date)}
                   valueColor={isOverdue ? C.error : C.text}
                 />
@@ -533,7 +533,7 @@ export default function PropertyDetailScreen() {
         {/* ── JOB HISTORY ─────────────────────────────────── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(280).duration(400)}>
           <SectionHeader
-            title="Job History"
+            title="Job history"
             count={jobHistoryTotal}
           />
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16, padding: 0 }]}>

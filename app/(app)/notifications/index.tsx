@@ -167,7 +167,7 @@ export default function NotificationsScreen() {
           showsVerticalScrollIndicator={false}
           // FIX: this list had no pull-to-refresh — the only way to force a
           // refresh was leaving and returning to the screen.
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadNotifications} tintColor={C.accent} />}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadNotifications} tintColor={C.accent} colors={[C.accent]} />}
           renderItem={({ item }) => <NotifCard item={item} />}
           ListEmptyComponent={
             <EmptyState 

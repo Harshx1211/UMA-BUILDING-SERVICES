@@ -131,7 +131,7 @@ export default function PropertyAssetsScreen() {
   if (!property) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Not Found" showBack={true} />
+        <ScreenHeader title="Not found" showBack={true} />
         <EmptyState
           icon="office-building-marker-outline"
           title="Property not found"

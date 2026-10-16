@@ -75,7 +75,7 @@ export default function PhotosScreen() {
     // flatter than deleting anything else.
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     showConfirm({
-      title: 'Delete Photo',
+      title: 'Delete photo',
       message: 'Are you sure you want to delete this photo? This cannot be undone.',
       icon: 'trash-can-outline',
       buttons: [
@@ -96,7 +96,7 @@ export default function PhotosScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Job Photos" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Job photos" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.accent} />
         </View>
@@ -107,7 +107,7 @@ export default function PhotosScreen() {
   if (store.error) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Job Photos" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Job photos" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
           <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
           <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
@@ -122,7 +122,7 @@ export default function PhotosScreen() {
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
-        title="Job Photos"
+        title="Job photos"
         showBack={true}
         fallbackHref="/jobs"
         rightComponent={

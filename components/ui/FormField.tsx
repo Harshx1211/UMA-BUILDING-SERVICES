@@ -14,8 +14,9 @@
  */
 import React, { useState } from 'react';
 import {
-  StyleSheet, TextInput, TextInputProps, View, ViewStyle,
+  StyleSheet, TextInputProps, View, ViewStyle,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { T } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';

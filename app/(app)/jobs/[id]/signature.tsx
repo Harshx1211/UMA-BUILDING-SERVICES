@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, TouchableOpacity, StyleSheet,
   Platform, ScrollView, Image,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
+import { Text } from '@/components/ui/AppText';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import type { NavigationAction } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -319,7 +321,7 @@ export default function SignatureScreen() {
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
       showConfirm({
-        title: 'Signature Saved',
+        title: 'Signature saved',
         message: 'All signatures have been recorded.',
         icon: 'check-circle-outline',
         buttons: [{ text: 'OK', onPress: finishAfterSignature }],
@@ -583,7 +585,7 @@ export default function SignatureScreen() {
                 existingSig?.signature_url === 'UNAVAILABLE'
                   ? <View style={s.emptyState}>
                       <MaterialCommunityIcons name="account-off-outline" size={26} color={C.warning} />
-                      <Text style={[s.emptyTxt, { color: C.warningDark, fontWeight: '700' }]}>Client Unavailable</Text>
+                      <Text style={[s.emptyTxt, { color: C.warningDark, fontWeight: '700' }]}>Client unavailable</Text>
                       <Text style={[s.emptyTxt, { color: C.textTertiary }]}>No client signature captured</Text>
                     </View>
                   : <Image source={{ uri: existingSig?.signature_url }} style={s.sigImage} resizeMode="contain" />

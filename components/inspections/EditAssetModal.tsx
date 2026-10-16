@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View, StyleSheet, Modal, TouchableOpacity, TextInput,
+  View, StyleSheet, Modal, TouchableOpacity,
   ScrollView, Platform,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -244,7 +245,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
             <MaterialCommunityIcons name="close" size={22} color={C.text} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={[s.headerTitle, { color: C.text }]}>Edit Asset</Text>
+            <Text style={[s.headerTitle, { color: C.text }]}>Edit asset</Text>
             <Text style={[s.headerSub, { color: C.textTertiary }]} numberOfLines={1}>
               {typeDef?.label ?? selectedType} {selectedVariant ? `— ${selectedVariant}` : ''}
             </Text>
@@ -257,7 +258,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
             <View style={{ padding: 16 }}>
               {/* Asset Type — fixes a mis-added type without delete + recreate */}
               <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Asset Type</Text>
+                <Text style={[s.fieldLabel, { color: C.text }]}>Asset type</Text>
                 {!typeEditing ? (
                   <TouchableOpacity
                     onPress={() => setTypeEditing(true)}
@@ -356,7 +357,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
 
               {/* Ref */}
               <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Asset Reference</Text>
+                <Text style={[s.fieldLabel, { color: C.text }]}>Asset reference</Text>
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                   placeholder="Reference code..."
@@ -375,7 +376,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
                   always showed "No barcode" regardless of what was typed
                   here. Relabeled to stop implying otherwise. */}
               <View style={s.field}>
-                <Text style={[s.fieldLabel, { color: C.text }]}>Serial Number</Text>
+                <Text style={[s.fieldLabel, { color: C.text }]}>Serial number</Text>
                 <TextInput
                   style={[s.input, { backgroundColor: C.backgroundTertiary, borderColor: 'transparent', color: C.text }]}
                   placeholder="Serial number..."

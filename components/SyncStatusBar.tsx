@@ -56,7 +56,7 @@ export function SyncStatusBar() {
       ? `\n\n${terminalCount} of these ${terminalCount > 1 ? 'have' : 'has'} a data or permission problem and won't succeed just by retrying — it needs to be reviewed.`
       : '';
     showConfirm({
-      title: 'Sync Failed',
+      title: 'Sync failed',
       message: `${failedCount} item${failedCount > 1 ? 's' : ''} could not be saved to the server.\n\n` +
         `Affected: ${tables.join(', ')}\n` +
         `Reason: ${lastError}` +

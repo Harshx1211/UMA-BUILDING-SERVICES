@@ -1,5 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Keyboard } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -111,7 +112,7 @@ export const PropertyNotebookSheet = forwardRef<PropertyNotebookSheetRef, Props>
       >
         <View style={s.header}>
           <MaterialCommunityIcons name="notebook-outline" size={18} color={C.text} />
-          <Text style={[s.headerTxt, { color: C.text }]}>Site Notebook</Text>
+          <Text style={[s.headerTxt, { color: C.text }]}>Site notebook</Text>
         </View>
 
         {editable && (

@@ -23,12 +23,12 @@ export function PhotoChooserSheet({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={s.chooserOverlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
-          <Text style={[s.chooserTitle, { color: C.text }]}>Add Photo</Text>
+          <Text style={[s.chooserTitle, { color: C.text }]}>Add photo</Text>
           <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
             <View style={[s.chooserIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
               <MaterialCommunityIcons name="camera-outline" size={20} color={C.primary} />
             </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Take Photo</Text>
+            <Text style={[s.chooserRowTxt, { color: C.text }]}>Take photo</Text>
           </TouchableOpacity>
           <View style={[s.chooserDivider, { backgroundColor: C.border }]} />
           <TouchableOpacity style={s.chooserRow} onPress={onPickGallery} activeOpacity={0.7}>

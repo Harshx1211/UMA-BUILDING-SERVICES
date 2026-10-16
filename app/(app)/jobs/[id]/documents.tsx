@@ -67,7 +67,7 @@ export default function DocumentsScreen() {
 
   const handleLongPress = (doc: SiteDocument) => {
     showConfirm({
-      title: 'Delete Document',
+      title: 'Delete document',
       message: `Are you sure you want to delete "${doc.title || 'this document'}"? This cannot be undone.`,
       icon: 'trash-can-outline',
       buttons: [
@@ -87,7 +87,7 @@ export default function DocumentsScreen() {
   if (store.isLoading) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Site Documents" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Site documents" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.accent} />
         </View>
@@ -98,7 +98,7 @@ export default function DocumentsScreen() {
   if (store.error) {
     return (
       <View style={[s.screen, { backgroundColor: C.background }]}>
-        <ScreenHeader title="Site Documents" showBack={true} fallbackHref="/jobs" />
+        <ScreenHeader title="Site documents" showBack={true} fallbackHref="/jobs" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 }}>
           <MaterialCommunityIcons name="cloud-alert-outline" size={40} color={C.error} />
           <Text style={{ color: C.error, textAlign: 'center', fontSize: 14, lineHeight: 21 }}>
@@ -113,7 +113,7 @@ export default function DocumentsScreen() {
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
-        title="Site Documents"
+        title="Site documents"
         showBack={true}
         fallbackHref="/jobs"
         rightComponent={

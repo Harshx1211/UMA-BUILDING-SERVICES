@@ -316,7 +316,7 @@ export default function ReportSummaryScreen() {
       <View style={[s.screen, s.center, { backgroundColor: C.background }]}>
         <MaterialCommunityIcons name="file-document-outline" size={48} color={C.textTertiary} style={{ marginBottom: 16 }} />
         <Text style={{ color: C.textSecondary }}>Report data not found</Text>
-        <Button title="Go Back" onPress={() => router.back()} style={{ marginTop: 16 }} />
+        <Button title="Go back" onPress={() => router.back()} style={{ marginTop: 16 }} />
       </View>
     );
   }
@@ -351,7 +351,7 @@ export default function ReportSummaryScreen() {
   const handleGenerate = () => {
     if (!isFullyInspected) {
       showConfirm({
-        title: 'Inspection Incomplete',
+        title: 'Inspection incomplete',
         message: 'All assets must have a result (Pass, Fail, or Not Tested) before generating the report.',
         icon: 'clipboard-alert-outline',
         buttons: [
@@ -363,7 +363,7 @@ export default function ReportSummaryScreen() {
     }
     if (!hasSignature) {
       showConfirm({
-        title: 'Signature Required',
+        title: 'Signature required',
         message: 'A client signature is required before generating the report. Please capture a signature first.',
         icon: 'draw',
         buttons: [
@@ -387,7 +387,7 @@ export default function ReportSummaryScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
         eyebrow={`JOB #${job.id.substring(0, 8).toUpperCase()}`}
-        title="Report Summary"
+        title="Report summary"
         showBack
         fallbackHref="/jobs"
       />
@@ -395,7 +395,7 @@ export default function ReportSummaryScreen() {
       <ScrollView
         contentContainerStyle={[s.scrollContent, { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />}
       >
         {/* ── Top Hero Card: Property Info ── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(340)}>
@@ -439,7 +439,7 @@ export default function ReportSummaryScreen() {
             <View style={[s.warningBanner, { backgroundColor: C.errorLight, borderColor: C.error }]}>
               <MaterialCommunityIcons name="alert" size={20} color={C.error} />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.errorDark, fontWeight: '700', fontSize: 13 }}>Missing Signature</Text>
+                <Text style={{ color: C.errorDark, fontWeight: '700', fontSize: 13 }}>Missing signature</Text>
                 <Text style={{ color: C.errorDark, fontSize: 12, marginTop: 2 }}>This report was completed without a client signature.</Text>
               </View>
               <Button
@@ -471,7 +471,7 @@ export default function ReportSummaryScreen() {
             />
             <StatCard
               icon="minus-circle" iconColor={C.textSecondary} iconBg={C.backgroundTertiary}
-              value={ntCount} label="Not Tested" valueColor={C.textSecondary}
+              value={ntCount} label="Not tested" valueColor={C.textSecondary}
               surface={C.surface} border={C.border}
             />
           </View>
@@ -511,7 +511,7 @@ export default function ReportSummaryScreen() {
                 />
               </View>
               <View style={s.checkTextCol}>
-                <Text style={[s.checkTitle, { color: C.text }]}>Asset Inspections</Text>
+                <Text style={[s.checkTitle, { color: C.text }]}>Asset inspections</Text>
                 <Text style={[s.checkSub, { color: C.textSecondary }]}>
                   {isFullyInspected ? 'All assets inspected' : `${ntCount} assets remaining`}
                 </Text>
@@ -544,7 +544,7 @@ export default function ReportSummaryScreen() {
                 <MaterialCommunityIcons name="draw" size={18} color={hasSignature ? C.success : C.error} />
               </View>
               <View style={s.checkTextCol}>
-                <Text style={[s.checkTitle, { color: C.text }]}>Client Signature</Text>
+                <Text style={[s.checkTitle, { color: C.text }]}>Client signature</Text>
                 <Text style={[s.checkSub, { color: hasSignature ? C.success : C.error }]}>
                   {hasSignature ? 'Captured and attached' : 'Required for submission'}
                 </Text>
@@ -562,7 +562,7 @@ export default function ReportSummaryScreen() {
 
         {/* ── Asset Breakdown Table ── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(140).duration(340)}>
-          <SectionHeader title="Asset Breakdown" eyebrow />
+          <SectionHeader title="Asset breakdown" eyebrow />
           <Card variant="default" noPadding style={{ marginBottom: 16, overflow: 'hidden' }}>
             {assets.length === 0 ? (
               <View style={s.emptyTable}>
@@ -579,7 +579,7 @@ export default function ReportSummaryScreen() {
         {/* ── Defect Summary ── */}
         {defects.length > 0 && (
           <Animated.View entering={noMotion ? undefined : FadeInDown.delay(160).duration(340)}>
-            <SectionHeader title="Logged Defects" eyebrow />
+            <SectionHeader title="Logged defects" eyebrow />
             <View style={{ gap: 12 }}>
               {defects.map((d, i) => <DefectCard key={d.id} defect={d} index={i} colors={C} />)}
             </View>
@@ -617,7 +617,7 @@ export default function ReportSummaryScreen() {
           </View>
         ) : (
           <Button
-            title="Generate Report"
+            title="Generate report"
             icon="file-pdf-box"
             variant="primary"
             onPress={handleGenerate}

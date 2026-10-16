@@ -1,5 +1,6 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -456,7 +457,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
               <MaterialCommunityIcons name="alert-circle-outline" size={22} color={sevCfg.color} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.headerTitle, { color: C.text }]}>Log New Defect</Text>
+              <Text style={[s.headerTitle, { color: C.text }]}>Log new defect</Text>
               <Text style={[s.headerSub, { color: C.textSecondary }]}>Step {step} of 3</Text>
             </View>
           </View>
@@ -523,7 +524,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
                 activeOpacity={0.85}
               >
                 <MaterialCommunityIcons name="check" size={16} color={T.textOnPrimary} />
-                <Text style={s.nextBtnTxt}>Save Defect</Text>
+                <Text style={s.nextBtnTxt}>Save defect</Text>
               </TouchableOpacity>
             )}
           </View>

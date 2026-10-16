@@ -56,7 +56,7 @@ function Section({ icon, label, children }: { icon: IconName; label: string; chi
 
 const CATEGORY_DEFS: { key: 'status' | 'jobType' | 'priority' | 'technician'; icon: IconName; label: string }[] = [
   { key: 'status',     icon: 'progress-clock',      label: 'Status' },
-  { key: 'jobType',    icon: 'wrench-outline',      label: 'Job Type' },
+  { key: 'jobType',    icon: 'wrench-outline',      label: 'Job type' },
   { key: 'priority',   icon: 'lightning-bolt',      label: 'Priority' },
   { key: 'technician', icon: 'account-outline',     label: 'Technician' },
 ];
@@ -111,7 +111,7 @@ export default function JobFilterModal({
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <MaterialCommunityIcons name="filter-variant" size={15} color={C.textTertiary} />
-                <Text style={[s.sectionLabel, { color: C.textSecondary }]}>Filter By</Text>
+                <Text style={[s.sectionLabel, { color: C.textSecondary }]}>Filter by</Text>
               </View>
               <View style={[s.categoryTabRow, { borderBottomColor: C.border }]}>
                 {availableCategories.map(cat => {
@@ -138,7 +138,7 @@ export default function JobFilterModal({
 
           <View style={[s.divider, { backgroundColor: C.border }]} />
 
-          <Section icon="format-list-group" label="Group By">
+          <Section icon="format-list-group" label="Group by">
             <View style={s.pillRow}>
               {([
                 { key: 'none' as const, icon: 'view-agenda-outline' as IconName, label: 'None' },
@@ -161,7 +161,7 @@ export default function JobFilterModal({
             </View>
           </Section>
 
-          <Section icon="sort" label="Sort By">
+          <Section icon="sort" label="Sort by">
             <View style={s.pillRow}>
               {([
                 { key: 'date' as const, icon: 'calendar-outline' as IconName, label: 'Date' },

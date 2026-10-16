@@ -232,7 +232,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         onPress={retry}
         style={{ backgroundColor: T.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
       >
-        <Text style={{ color: T.textOnPrimary, fontWeight: '700' }}>Try Again</Text>
+        <Text style={{ color: T.textOnPrimary, fontWeight: '700' }}>Try again</Text>
       </TouchableOpacity>
     </View>
   );

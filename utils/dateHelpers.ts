@@ -73,3 +73,21 @@ export function isOverdue(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false;
   return dateStr.slice(0, 10) < localDateString();
 }
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Formats a date for display the Australian way: "16 Oct 2026".
+ * Accepts a date-only string (YYYY-MM-DD, read as that calendar day) or a
+ * full timestamp (shown as the local day). Anything unparseable is returned
+ * as-is so nothing ever disappears from the screen.
+ */
+export function formatDisplayDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+}

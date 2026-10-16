@@ -64,7 +64,7 @@ export default function CompletionBottomSheet({
                 <MaterialCommunityIcons name={allAssetsDone ? "tools" : "alert"} size={18} color={allAssetsDone ? C.success : C.warning} />
               </View>
               <View style={s.checkTextWrap}>
-                <Text style={[s.itemTitle, { color: C.text }]}>Asset Inspection</Text>
+                <Text style={[s.itemTitle, { color: C.text }]}>Asset inspection</Text>
                 <Text style={[s.itemSub, { color: C.textSecondary }]}>{assetsInspected} / {assetsTotal} inspected</Text>
               </View>
               <MaterialCommunityIcons name={allAssetsDone ? "check-circle" : "check-circle-outline"} size={24} color={allAssetsDone ? C.success : C.textTertiary} />
@@ -76,7 +76,7 @@ export default function CompletionBottomSheet({
                 <MaterialCommunityIcons name={hasSignature ? "pen" : "pen-remove"} size={18} color={hasSignature ? C.success : C.error} />
               </View>
               <View style={s.checkTextWrap}>
-                <Text style={[s.itemTitle, { color: C.text }]}>Client Signature</Text>
+                <Text style={[s.itemTitle, { color: C.text }]}>Client signature</Text>
                 <Text style={[s.itemSub, { color: C.textSecondary }]}>{hasSignature ? 'Signature secured' : 'Missing signature (Required)'}</Text>
               </View>
               <MaterialCommunityIcons name={hasSignature ? "check-circle" : "check-circle-outline"} size={24} color={hasSignature ? C.success : C.error} />
@@ -89,7 +89,7 @@ export default function CompletionBottomSheet({
                   <MaterialCommunityIcons name="alert-decagram" size={18} color={C.warningDark} />
                 </View>
                 <View style={s.checkTextWrap}>
-                  <Text style={[s.itemTitle, { color: C.warningDark }]}>Defects Logged</Text>
+                  <Text style={[s.itemTitle, { color: C.warningDark }]}>Defects logged</Text>
                   <Text style={[s.itemSub, { color: C.warning }]}>Make sure client is aware</Text>
                 </View>
               </View>

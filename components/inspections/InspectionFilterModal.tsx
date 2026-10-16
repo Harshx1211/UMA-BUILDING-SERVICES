@@ -129,7 +129,7 @@ export default function InspectionFilterModal({
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <MaterialCommunityIcons name="filter-variant" size={15} color={C.textTertiary} />
-                <Text style={[s.sectionLabel, { color: C.textSecondary }]}>Filter By</Text>
+                <Text style={[s.sectionLabel, { color: C.textSecondary }]}>Filter by</Text>
               </View>
               <View style={[s.categoryTabRow, { borderBottomColor: C.border }]}>
                 {availableCategories.map(cat => {
@@ -156,7 +156,7 @@ export default function InspectionFilterModal({
 
           <View style={[s.divider, { backgroundColor: C.border }]} />
 
-          <Section icon="format-list-group" label="Group By">
+          <Section icon="format-list-group" label="Group by">
             <View style={s.pillRow}>
               {(['asset', 'routine', 'location'] as const).map(opt => {
                 const active = groupBy === opt;
@@ -176,7 +176,7 @@ export default function InspectionFilterModal({
             </View>
           </Section>
 
-          <Section icon="sort" label="Sort By">
+          <Section icon="sort" label="Sort by">
             <View style={s.pillRow}>
               {(['label', 'location'] as const).map(opt => {
                 const active = sortBy === opt;

@@ -11,7 +11,8 @@
  * created or edited.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import { Image } from 'expo-image';
@@ -369,7 +370,7 @@ export function DefectFieldsCard({
       {photosEnabled && (
         <>
           <PhotoStageSection
-            label="Before Photos"
+            label="Before photos"
             hint="What you found"
             photos={beforePhotos}
             onAdd={() => setChooserTarget('before')}
@@ -379,7 +380,7 @@ export function DefectFieldsCard({
             C={C}
           />
           <PhotoStageSection
-            label="After Photos"
+            label="After photos"
             hint="Already fixed? Add photos of the resolved issue."
             photos={afterPhotos}
             onAdd={() => setChooserTarget('after')}

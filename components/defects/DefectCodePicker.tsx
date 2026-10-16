@@ -12,12 +12,12 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   FlatList,
   Modal,
   Platform,
   Keyboard,
 } from 'react-native';
+import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
