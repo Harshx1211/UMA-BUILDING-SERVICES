@@ -220,7 +220,7 @@ export default function DefectDetailScreen() {
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader
         eyebrow="DEFECT RECORD"
-        title={defect.asset_type ? formatAssetType(defect.asset_type) : 'Defect Details'}
+        title={defect.asset_type ? formatAssetType(defect.asset_type) : 'Defect details'}
         subtitle={defect.property_name || (defect.location_on_site ? formatLocationCode(defect.location_on_site) : '')}
         showBack
         fallbackHref="/jobs"

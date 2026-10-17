@@ -356,7 +356,7 @@ export default function ReportSummaryScreen() {
         icon: 'clipboard-alert-outline',
         buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Inspection', onPress: () => router.push(`/jobs/${job.id}/inspect` as never) },
+          { text: 'Open inspection', onPress: () => router.push(`/jobs/${job.id}/inspect` as never) },
         ],
       });
       return;
@@ -368,7 +368,7 @@ export default function ReportSummaryScreen() {
         icon: 'draw',
         buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Signature', onPress: () => router.push(`/jobs/${job.id}/signature` as never) },
+          { text: 'Go to signature', onPress: () => router.push(`/jobs/${job.id}/signature` as never) },
         ],
       });
       return;
@@ -412,7 +412,7 @@ export default function ReportSummaryScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={[s.heroTitle, { color: C.text }]}>{job.property_name || 'Property Report'}</Text>
+              <Text style={[s.heroTitle, { color: C.text }]}>{job.property_name || 'Property report'}</Text>
               <Text style={[s.heroSub, { color: C.textSecondary }]}>
                 {[job.property_address, job.property_suburb].filter(Boolean).join(', ')}
               </Text>

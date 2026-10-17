@@ -117,7 +117,7 @@ interface Props {
 
 export function DefectFieldsCard({
   initial, onSave, onDelete, onReplace, onCancel, onDraftChange,
-  photos, onPhotosDraftChange, saving, saveLabel = 'Save Defect',
+  photos, onPhotosDraftChange, saving, saveLabel = 'Save defect',
 }: Props) {
   const C = useColors();
   const [severity, setSeverity] = useState<DefectSeverity>(initial?.severity ?? DefectSeverity.NonConformance);

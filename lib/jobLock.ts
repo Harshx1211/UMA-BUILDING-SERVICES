@@ -17,7 +17,7 @@ export function assertJobEditable(jobId: string | undefined | null): void {
   if (!jobId) return;
   const job = getJobById<{ status: string }>(jobId);
   if (job?.status === JobStatus.Completed) {
-    throw new Error('This job is completed — tap "Continue Working" to make changes.');
+    throw new Error('This job is completed — tap "Re-open" on the job screen to make changes.');
   }
   if (job?.status === JobStatus.Cancelled) {
     throw new Error('This job has been cancelled and can no longer be edited.');

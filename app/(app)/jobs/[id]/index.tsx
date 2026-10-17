@@ -32,6 +32,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { ScreenHeader, Button, Badge, Card, showConfirm } from '@/components/ui';
 import { SkeletonBlock } from '@/components/ui/SkeletonCard';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
+import { localDateString } from '@/utils/dateHelpers';
 import type { Asset, Defect, InspectionPhoto } from '@/types';
 import { useJobLiveSync } from '@/hooks/useJobLiveSync';
 import { onSyncComplete, offSyncComplete, runSync, JobLiveChangeTable } from '@/lib/sync';
@@ -67,7 +68,7 @@ function fmtDate(iso: string) {
 function fmtTime(hhmm: string) {
   try {
     const [h, m] = hhmm.split(':').map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
   } catch { return hhmm; }
 }
 
@@ -347,7 +348,7 @@ export default function JobDetailScreen() {
             style: 'destructive',
             onPress: () => navigation.dispatch(e.data.action),
           },
-          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Keep editing', style: 'cancel' },
           {
             text: 'Save & Leave',
             onPress: () => { handleSaveNotes(); navigation.dispatch(e.data.action); },
@@ -403,7 +404,7 @@ export default function JobDetailScreen() {
         buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Go to Signature',
+            text: 'Go to signature',
             onPress: () => { if (job) router.push(`/jobs/${job.id}/signature` as never); },
           },
         ],
@@ -425,7 +426,7 @@ export default function JobDetailScreen() {
         buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Open Inspection',
+            text: 'Open inspection',
             onPress: () => { if (job) router.push(`/jobs/${job.id}/inspect` as never); },
           },
         ],
@@ -470,15 +471,15 @@ export default function JobDetailScreen() {
     // again — no separate staleness check needed anywhere else.
     const existingSig = getSignatureForJob<{ id: string }>(job.id);
     showConfirm({
-      title: 'Continue Working?',
+      title: 'Re-open this job?',
       message: existingSig
         ? 'This will re-open the job and unlock the inspection form. All existing data is preserved, but the existing signature will be cleared — the client will need to sign again before this job can be completed.'
         : 'This will re-open the job and unlock the inspection form. All existing data is preserved.',
-      icon: 'pencil-outline',
+      icon: 'lock-open-variant-outline',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Continue Working',
+          text: 'Re-open job',
           onPress: () => {
             const now = new Date().toISOString();
             // Reopen, clear the signature and drop any queued PDF as ONE
@@ -534,11 +535,16 @@ export default function JobDetailScreen() {
   const totalAssets = assets.length;
   const passedCount = assets.filter(a => a.result === InspectionResult.Pass).length;
   const failedCount = assets.filter(a => a.result === InspectionResult.Fail).length;
-  const inspected   = passedCount + failedCount;
+  const notTestedCount = assets.filter(a => a.result === InspectionResult.NotTested).length;
+  // N/T is a recorded result too (the same rule the completion check at the
+  // top uses) — counting only Pass + Fail showed a finished job with N/T
+  // assets as "2 of 5 inspected · 40%" with nothing pending.
+  const inspected   = passedCount + failedCount + notTestedCount;
   const progressPct = totalAssets > 0 ? Math.round((inspected / totalAssets) * 100) : 0;
-  
+
   const passedPct = totalAssets > 0 ? (passedCount / totalAssets) * 100 : 0;
   const failedPct = totalAssets > 0 ? (failedCount / totalAssets) * 100 : 0;
+  const notTestedPct = totalAssets > 0 ? (notTestedCount / totalAssets) * 100 : 0;
 
   // ── Loading / error states ─────────────────────────────────────────────
   // FIX: was a bare centered spinner on a blank background — inconsistent
@@ -637,7 +643,7 @@ export default function JobDetailScreen() {
     }] : []),
     {
       key: 'navigate', icon: 'map-marker-path', iconBg: C.backgroundTertiary, iconColor: C.textSecondary,
-      title: 'Navigate to Site',
+      title: 'Navigate to site',
       subtitle: [job.property_address, job.property_suburb].filter(Boolean).join(', ') || undefined,
       onPress: handleNavigate,
     },
@@ -661,7 +667,7 @@ export default function JobDetailScreen() {
       {/* ── HEADER — outside ScrollView so it never overlaps the status bar ── */}
       <ScreenHeader
         eyebrow={`Job #${job.id.substring(0, 8).toUpperCase()}`}
-        title={job.property_name || 'Job Details'}
+        title={job.property_name || 'Job details'}
         subtitle={[job.property_address, job.property_suburb].filter(Boolean).join(', ') || 'No address on record'}
         showBack={true}
         fallbackHref="/jobs"
@@ -669,7 +675,7 @@ export default function JobDetailScreen() {
           <Badge
             status={job.status}
             label={
-              isInProgress ? 'In Progress'
+              isInProgress ? 'In progress'
               : isCompleted ? 'Completed'
               : isCancelled ? 'Cancelled'
               : 'Scheduled'
@@ -722,8 +728,8 @@ export default function JobDetailScreen() {
                 onPress={handleContinueWorking}
                 style={[s.continueBtn, { backgroundColor: T.iconBg(C.success), borderColor: C.success }]}
               >
-                <MaterialCommunityIcons name="pencil-outline" size={14} color={C.success} />
-                <Text style={[s.continueBtnTxt, { color: C.success }]}>Continue</Text>
+                <MaterialCommunityIcons name="lock-open-variant-outline" size={14} color={C.success} />
+                <Text style={[s.continueBtnTxt, { color: C.success }]}>Re-open</Text>
               </TouchableOpacity>
             </Card>
           )}
@@ -767,7 +773,7 @@ export default function JobDetailScreen() {
                       <Text style={[s.progressSubtitle, { color: C.textSecondary }]}>
                         {totalAssets === 0
                           ? 'No assets registered for this property'
-                          : `${inspected} of ${totalAssets} assets inspected`}
+                          : `${inspected} of ${totalAssets} assets recorded`}
                       </Text>
                     </View>
                     <Text style={[s.progressPct, { color: progressPct === 100 ? (failedCount > 0 ? C.error : C.success) : C.textSecondary }]}>
@@ -777,12 +783,17 @@ export default function JobDetailScreen() {
                   <View style={[s.progressTrack, { backgroundColor: C.backgroundTertiary, flexDirection: 'row' }]}>
                     {passedPct > 0 && <View style={[s.progressFill, { width: `${passedPct}%`, backgroundColor: C.success }]} />}
                     {failedPct > 0 && <View style={[s.progressFill, { width: `${failedPct}%`, backgroundColor: C.error }]} />}
+                    {notTestedPct > 0 && <View style={[s.progressFill, { width: `${notTestedPct}%`, backgroundColor: C.textTertiary }]} />}
                   </View>
                   {totalAssets > 0 && (
                     <View style={s.progressStatRow}>
                       {[
-                        { label: 'Passed',  count: assets.filter(a => a.result === InspectionResult.Pass).length,  color: C.success, bg: C.successLight },
-                        { label: 'Failed',  count: assets.filter(a => a.result === InspectionResult.Fail).length,  color: C.error, bg: C.errorLight },
+                        { label: 'Passed',  count: passedCount,  color: C.success, bg: C.successLight },
+                        { label: 'Failed',  count: failedCount,  color: C.error, bg: C.errorLight },
+                        // Only shown when used, so the usual three tiles stay as they were.
+                        ...(notTestedCount > 0
+                          ? [{ label: 'Not tested', count: notTestedCount, color: C.textSecondary, bg: C.backgroundTertiary }]
+                          : []),
                         { label: 'Pending', count: assets.filter(a => !a.result).length, color: C.textSecondary, bg: C.backgroundSecondary },
                       ].map(stat => (
                         <View key={stat.label} style={[s.progressTile, { backgroundColor: stat.bg }]}>
@@ -853,7 +864,7 @@ export default function JobDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[s.detailsTitle, { color: C.text }]}>Details</Text>
                   <Text style={[s.detailsSub, { color: C.textSecondary }]} numberOfLines={1}>
-                    {JOB_TYPE_LABEL[job.job_type] ?? job.job_type} · {PRIORITY_LABEL[job.priority] ?? job.priority} priority · Sch: {fmtDate(job.scheduled_date)}
+                    {JOB_TYPE_LABEL[job.job_type] ?? job.job_type} · {PRIORITY_LABEL[job.priority] ?? job.priority} priority · {fmtDate(job.scheduled_date)}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={C.textTertiary} />
@@ -861,10 +872,12 @@ export default function JobDetailScreen() {
 
               {detailsExpanded && (
                 <Animated.View entering={FadeIn.duration(150)} style={{ borderTopWidth: 1, borderTopColor: C.border }}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
+                  {/* Wraps onto a second line instead of scrolling sideways —
+                      the last chips used to sit cut off past the screen edge. */}
+                  <View style={s.chipsRow}>
                     <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
                       <MaterialCommunityIcons name="calendar" size={15} color={C.textSecondary} />
-                      <Text style={[s.chipTxt, { color: C.text }]}>Sch: {fmtDate(job.scheduled_date)}</Text>
+                      <Text style={[s.chipTxt, { color: C.text }]}>Scheduled {fmtDate(job.scheduled_date)}</Text>
                     </View>
                     {!isCompleted && (
                       <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
@@ -876,7 +889,7 @@ export default function JobDetailScreen() {
                       <View style={[s.chip, { backgroundColor: C.backgroundTertiary }]}>
                         <MaterialCommunityIcons name={isCompleted ? "check-circle-outline" : "play-circle-outline"} size={15} color={C.textSecondary} />
                         <Text style={[s.chipTxt, { color: C.text }]}>
-                          {isCompleted ? 'Done: ' : 'Started: '}{fmtDate(job.updated_at.substring(0, 10))}
+                          {isCompleted ? 'Done ' : 'Started '}{fmtDate(localDateString(new Date(job.updated_at)))}
                         </Text>
                       </View>
                     )}
@@ -898,7 +911,7 @@ export default function JobDetailScreen() {
                         {PRIORITY_LABEL[job.priority] ?? job.priority}
                       </Text>
                     </View>
-                  </ScrollView>
+                  </View>
 
                   {job.access_notes && (
                     <View style={[s.noteRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
@@ -984,7 +997,7 @@ export default function JobDetailScreen() {
                   >
                     <MaterialCommunityIcons name="pencil-outline" size={16} color={C.accent} />
                     <Text style={[s.notesEditTxt, { color: C.accent }]}>
-                      {notes ? 'Edit Notes' : 'Add Notes'}
+                      {notes ? 'Edit notes' : 'Add notes'}
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -1000,9 +1013,9 @@ export default function JobDetailScreen() {
         <View style={{ maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
         <Button
           title={
-            isCompleted && job?.report_url ? 'View Report' :
-            isCompleted                    ? 'Generate Report' :
-            'Report Not Available'
+            isCompleted && job?.report_url ? 'View report' :
+            isCompleted                    ? 'Generate report' :
+            'Report not available'
           }
           variant={isCompleted ? 'secondary' : 'primary'}
           // Report actions only exist once the job is completed — completing
@@ -1139,7 +1152,7 @@ const s = StyleSheet.create({
   alertBody: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
   noteRow: { flexDirection: 'row', gap: 12, padding: 16 },
 
-  chipsRow: { gap: 10, padding: 16 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 16 },
   detailsHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   detailsTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   detailsSub: { fontSize: 13 },

@@ -11,6 +11,7 @@ import { findDefectCode } from '@/constants/DefectCodes';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
 import { formatAssetType, formatLocationCode } from '@/utils/assetHelpers';
 import { stripPrices } from '@/utils/prices';
+import { queryRecords } from '@/lib/database';
 
 interface Props {
   defect: Defect & { asset_type?: string; location_on_site?: string };
@@ -59,10 +60,25 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
     defect.defect_code ? findDefectCode(defect.defect_code) : null,
   [defect.defect_code]);
 
-  let photosArr: string[] = [];
-  try {
-    photosArr = typeof defect.photos === 'string' ? JSON.parse(defect.photos) : (defect.photos || []);
-  } catch { /* ignore */ }
+  // FIX: the flat `defects.photos` mirror keeps the capturing phone's own
+  // file:// paths (the upload rewrites inspection_photos.photo_url, never the
+  // mirror), so on any other device every thumbnail here was a broken image.
+  // Prefer the real inspection_photos rows for this defect — uploaded https
+  // links, or the local file on the phone that took them — and only fall
+  // back to the mirror when there are no rows yet.
+  const photosArr = useMemo((): string[] => {
+    const rows = queryRecords<{ photo_url: string | null; uploaded_at: string | null }>(
+      'inspection_photos', { defect_id: defect.id },
+    ).filter((r) => !!r.photo_url);
+    if (rows.length > 0) {
+      return rows
+        .sort((a, b) => (a.uploaded_at ?? '').localeCompare(b.uploaded_at ?? ''))
+        .map((r) => r.photo_url as string);
+    }
+    try {
+      return typeof defect.photos === 'string' ? JSON.parse(defect.photos) : (defect.photos || []);
+    } catch { return []; }
+  }, [defect.id, defect.photos]);
 
   return (
     <TouchableOpacity
@@ -111,7 +127,7 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
           <View style={[s.assetPill, { backgroundColor: C.backgroundSecondary }]}>
             <MaterialCommunityIcons name="tools" size={11} color={C.textSecondary} />
             <Text style={[s.assetPillText, { color: C.textSecondary }]}>
-              {formatAssetType(defect.asset_type ?? '')} — {defect.location_on_site ? formatLocationCode(defect.location_on_site) : 'No Location'}
+              {formatAssetType(defect.asset_type ?? '')} — {defect.location_on_site ? formatLocationCode(defect.location_on_site) : 'No location'}
             </Text>
           </View>
         </View>

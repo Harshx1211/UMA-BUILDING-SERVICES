@@ -530,12 +530,12 @@ export default function SiteInspectScreen() {
   const handleBackPress = useCallback(() => {
     if (!hasProgress) return false; // let navigation proceed normally
     showConfirm({
-      title: 'Save Progress?',
+      title: 'Save progress?',
       message: 'You have inspected some assets. What would you like to do?',
       icon: 'content-save-alert-outline',
       buttons: [
         {
-          text: 'Keep Inspecting',
+          text: 'Keep inspecting',
           style: 'cancel',
         },
         {
@@ -649,7 +649,7 @@ export default function SiteInspectScreen() {
         message: `${counts.remaining} asset${counts.remaining !== 1 ? 's have' : ' has'} not been inspected.\n\nComplete anyway?`,
         icon: 'clipboard-alert-outline',
         buttons: [
-          { text: 'Continue Inspecting', style: 'cancel' },
+          { text: 'Continue inspecting', style: 'cancel' },
           { text: 'Complete', onPress: () => saveInspection() },
         ],
       });

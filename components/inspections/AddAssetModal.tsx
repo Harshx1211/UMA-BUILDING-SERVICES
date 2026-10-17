@@ -100,11 +100,11 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   const handleClose = () => {
     if (isDirty) {
       showConfirm({
-        title: 'Discard Changes?',
+        title: 'Discard changes?',
         message: 'You have unsaved changes. Are you sure you want to discard them?',
         icon: 'alert-circle-outline',
         buttons: [
-          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Keep editing', style: 'cancel' },
           { text: 'Discard', style: 'destructive', onPress: () => { resetAll(); onClose(); } },
         ],
       });

@@ -126,11 +126,11 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
   const handleClose = () => {
     if (isDirty) {
       showConfirm({
-        title: 'Discard Changes?',
+        title: 'Discard changes?',
         message: 'You have unsaved changes. Are you sure you want to discard them?',
         icon: 'alert-circle-outline',
         buttons: [
-          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Keep editing', style: 'cancel' },
           { text: 'Discard', style: 'destructive', onPress: onClose },
         ],
       });
@@ -174,12 +174,12 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
       const { totalCount } = getAssetHistory(asset.id, '__none__');
       if (totalCount > 0) {
         showConfirm({
-          title: 'Change Asset Type?',
+          title: 'Change asset type?',
           message: `This asset already has ${totalCount} completed inspection${totalCount === 1 ? '' : 's'} on record. Past history and reports won't change, but future jobs will use the ${typeDef?.label ?? selectedType}${selectedVariant ? ' — ' + selectedVariant : ''} checklist instead.`,
           icon: 'swap-horizontal-circle-outline',
           buttons: [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Change Type', style: 'destructive', onPress: () => doSave(asset) },
+            { text: 'Change type', style: 'destructive', onPress: () => doSave(asset) },
           ],
         });
         return;

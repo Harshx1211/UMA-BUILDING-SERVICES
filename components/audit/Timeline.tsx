@@ -26,14 +26,14 @@ const FIELD_LABELS: Record<string, string> = {
   result: 'Result',
   checklist_data: 'Checklist',
   is_compliant: 'Compliant',
-  defect_reason: 'Defect Reason',
+  defect_reason: 'Defect reason',
   technician_notes: 'Remarks',
-  internal_notes: 'Internal Notes',
+  internal_notes: 'Internal notes',
   status: 'Status',
   description: 'Description',
   severity: 'Severity',
-  defect_code: 'Defect Code',
-  quote_price: 'Quote Price',
+  defect_code: 'Defect code',
+  quote_price: 'Quote price',
 };
 
 function formatValue(field: string, value: unknown): string {

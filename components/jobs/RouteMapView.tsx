@@ -183,7 +183,7 @@ export default function RouteMapView({ jobs, onJobSelect }: Props) {
           <View style={[s.jobCardPriority, { backgroundColor: PRIORITY_COLOR[selectedJob.priority] ?? C.primary }]} />
           <View style={s.jobCardContent}>
             <Text style={[s.jobCardProperty, { color: C.text }]} numberOfLines={1}>
-              {selectedJob.property_name ?? 'Unknown Property'}
+              {selectedJob.property_name ?? 'Unknown property'}
             </Text>
             <Text style={[s.jobCardAddress, { color: C.textSecondary }]} numberOfLines={1}>
               {getJobAddress(selectedJob) || 'No address'}

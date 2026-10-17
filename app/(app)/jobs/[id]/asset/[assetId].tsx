@@ -128,8 +128,8 @@ function SectionCard({
 }
 
 const SEVERITY_LABEL: Record<string, string> = {
-  critical: 'Critical Defect',
-  non_critical: 'Non-critical Defect',
+  critical: 'Critical defect',
+  non_critical: 'Non-critical defect',
   non_conformance: 'Non-conformance',
 };
 
@@ -679,7 +679,7 @@ export default function AssetDetailScreen() {
 
   const handleRemovePhoto = (uri: string) => {
     showConfirm({
-      title: 'Delete Photo?',
+      title: 'Delete photo?',
       message: "This can't be undone.",
       icon: 'trash-can-outline',
       buttons: [
@@ -912,7 +912,7 @@ export default function AssetDetailScreen() {
             <View style={[s.lockedBanner, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
               <MaterialCommunityIcons name="lock-outline" size={15} color={C.textTertiary} />
               <Text style={[s.lockedTxt, { color: C.textTertiary }]}>
-                This job is completed or cancelled — read-only. Tap &quot;Continue Working&quot; on the job screen to make changes.
+                This job is completed or cancelled — read-only. Tap &quot;Re-open&quot; on the job screen to make changes.
               </Text>
             </View>
           </Animated.View>

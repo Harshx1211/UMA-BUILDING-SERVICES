@@ -39,6 +39,13 @@ function fmtJobDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+/** "today" when it happened today, otherwise the same short date as above. */
+function fmtActivityDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.length <= 10 ? `${dateStr}T00:00:00` : dateStr);
+  return !Number.isNaN(d.getTime()) && d.toDateString() === new Date().toDateString() ? 'today' : fmtJobDate(dateStr);
+}
+
 // Left accent: urgent red, high amber; normal/low jobs show none.
 const PRIORITY_COLOR: Record<string, string> = {
   urgent: T.danger,
@@ -73,7 +80,7 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   emergency:                 'Emergency',
 };
 const STATUS_LABEL: Record<string, string> = {
-  scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled',
+  scheduled: 'Scheduled', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled',
 };
 const PRIORITY_LABEL: Record<string, string> = {
   urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low',
@@ -137,7 +144,11 @@ export default function ScheduleScreen() {
     const effectiveDateStr = (j.status === 'completed' || j.status === 'in_progress')
       ? (j.updated_at || j.scheduled_date)
       : j.scheduled_date;
-    const filterDate = effectiveDateStr.substring(0, 10);
+    // A full timestamp (updated_at) is UTC — read it as the LOCAL day, or a
+    // job finished before ~10-11 am in Australia lands on yesterday.
+    const filterDate = effectiveDateStr.length > 10
+      ? getLocalDate(new Date(effectiveDateStr))
+      : effectiveDateStr;
     // FIX: this used to be a raw `scheduled_date < today` check with zero
     // slack — but the very same card renders <ToleranceLabel>, which shows
     // a job-type-aware tolerance window (e.g. an annual service has 30
@@ -206,7 +217,7 @@ export default function ScheduleScreen() {
     if (groupBy === 'none') return filtered.map(job => ({ kind: 'job', job }));
     const keyFor = (j: Job): string => {
       const jj = j as JobWithProperty;
-      if (groupBy === 'property') return jj.property_name ?? 'Unknown Property';
+      if (groupBy === 'property') return jj.property_name ?? 'Unknown property';
       if (groupBy === 'status') return STATUS_LABEL[j.status] ?? j.status;
       return jj.assigned_to_name ?? 'Unassigned';
     };
@@ -341,9 +352,9 @@ function ScheduleJobCard({ job }: { job: Job }) {
   const j = job as JobWithJoins;
   const address = [j.address, j.suburb, j.state].filter(Boolean).join(', ');
   const when = job.status === 'completed'
-    ? { icon: 'check-circle-outline' as const, color: T.success, text: `Done ${fmtJobDate(job.updated_at || job.scheduled_date)}` }
+    ? { icon: 'check-circle-outline' as const, color: T.success, text: `Done ${fmtActivityDate(job.updated_at || job.scheduled_date)}` }
     : job.status === 'in_progress'
-      ? { icon: 'play-circle-outline' as const, color: T.primary, text: `Started ${fmtJobDate(job.updated_at)}` }
+      ? { icon: 'play-circle-outline' as const, color: T.primary, text: `Started ${fmtActivityDate(job.updated_at)}` }
       : null;
   return (
     <TouchableOpacity
@@ -364,7 +375,7 @@ function ScheduleJobCard({ job }: { job: Job }) {
                 <Badge status={job.status} />
                 <Text style={styles.typeText} numberOfLines={1}>· {JOB_TYPE_LABEL[job.job_type] ?? job.job_type}</Text>
               </View>
-              <Text style={styles.propName} numberOfLines={1}>{j.property_name ?? 'Unknown Property'}</Text>
+              <Text style={styles.propName} numberOfLines={1}>{j.property_name ?? 'Unknown property'}</Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={22} color={T.textSecondary} style={{ marginTop: 10 }} />
           </View>

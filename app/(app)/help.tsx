@@ -214,7 +214,7 @@ const HOW_TO: { item: AccordionItem; icon: MCIconName }[] = [
     icon: 'clock-outline',
     item: {
       id: 'start',
-      title: 'Starting a Job',
+      title: 'Starting a job',
       content: '1. Go to the Schedule tab\n2. Tap the job you\'re about to start\n3. Tap "Clock In & Start Job"\n4. Your GPS location is recorded automatically\n5. You\'re now on the clock!',
     },
   },
@@ -309,7 +309,7 @@ export default function HelpScreen() {
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
       <ScreenHeader 
-        title="Help & Support" 
+        title="Help & support" 
         subtitle={`SiteTrack v${version}`} 
         showBack={true} 
         rightComponent={<MaterialCommunityIcons name="lifebuoy" size={26} color={C.textTertiary} />} 

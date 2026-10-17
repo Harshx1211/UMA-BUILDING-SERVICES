@@ -143,7 +143,7 @@ export function ScanReviewModal({
                 ) : (
                   <MaterialCommunityIcons name="plus" size={18} color={C.accent} />
                 )}
-                <Text style={[s.addPageTxt, { color: C.accent }]}>{addingPage ? 'Scanning…' : 'Add Page'}</Text>
+                <Text style={[s.addPageTxt, { color: C.accent }]}>{addingPage ? 'Scanning…' : 'Add page'}</Text>
               </TouchableOpacity>
             }
           />

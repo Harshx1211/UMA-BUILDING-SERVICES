@@ -20,7 +20,8 @@ import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobsStore } from '@/store/jobsStore';
-import { onSyncComplete, offSyncComplete, runSync } from '@/lib/sync';
+import { onSyncComplete, offSyncComplete, runSync, getSyncStatus } from '@/lib/sync';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getUnreadNotificationCount, getOverdueCompliancePropertyCount, getOverdueComplianceProperties } from '@/lib/database';
 import { OverdueSheet, type OverdueProperty } from '@/components/home/OverdueSheet';
 import { jobTypeLabel } from '@/constants/JobTypeLabels';
@@ -37,8 +38,8 @@ import { openJob } from '@/utils/navigation';
 const PRIORITY_BAR: Record<string, string> = {
   urgent: T.danger,
   high:   T.warning,
-  normal: T.border,
-  low:    T.border,
+  normal: 'transparent',
+  low:    'transparent',
 };
 
 function greeting(): string {
@@ -85,7 +86,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
   const address = [j.address, j.suburb].filter(Boolean).join(', ');
   const time = job.scheduled_time ? fmtTime(job.scheduled_time) : null;
   const activity = (job.status === JobStatus.InProgress || job.status === JobStatus.Completed) && updDate
-    ? `${job.status === JobStatus.Completed ? 'Done' : 'Started'} ${updDate}`
+    ? `${job.status === JobStatus.Completed ? 'Done' : 'Started'} ${new Date(job.updated_at!).toDateString() === new Date().toDateString() ? 'today' : updDate}`
     : null;
 
   return (
@@ -114,7 +115,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                 {time ? <Text style={styles.timeText}>{time}</Text> : null}
               </View>
               <Text style={styles.jobName} numberOfLines={1}>
-                {j.property_name ?? 'Unknown Property'}
+                {j.property_name ?? 'Unknown property'}
               </Text>
               {address ? (
                 <View style={styles.addrRow}>
@@ -174,6 +175,11 @@ export default function HomeScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
   const [overdueList, setOverdueList] = useState<OverdueProperty[] | null>(null);
+  // True until this phone has finished its first sync — so a fresh sign-in
+  // shows "Getting your jobs…" instead of "No jobs scheduled today" while
+  // the jobs are still downloading.
+  const [neverSynced, setNeverSynced] = useState(false);
+  const { isOnline } = useNetworkStatus();
   // Drives the ring pulsing out of the active job's dot (0 → 1, repeating).
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -196,7 +202,7 @@ export default function HomeScreen() {
   // only re-runs when the jobs list or the current date actually changes.
   const todayJobs = useMemo(() => jobs.filter((j: Job) =>
     j.scheduled_date === today ||
-    ((j.status === JobStatus.InProgress || j.status === JobStatus.Completed) && j.updated_at?.substring(0, 10) === today)
+    ((j.status === JobStatus.InProgress || j.status === JobStatus.Completed) && !!j.updated_at && localDateString(new Date(j.updated_at)) === today)
   ), [jobs, today]);
   const doneToday  = useMemo(() => todayJobs.filter((j: Job) => j.status === JobStatus.Completed).length, [todayJobs]);
   const inProgress = useMemo(() => jobs.find((j: Job) => j.status === JobStatus.InProgress), [jobs]);
@@ -229,11 +235,17 @@ export default function HomeScreen() {
       setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
     }
 
+    const checkFirstSync = () => {
+      getSyncStatus().then((st) => setNeverSynced(!st.lastSynced)).catch(() => {});
+    };
+    checkFirstSync();
+
     const onSync = () => {
       if (user) {
         setUnreadCount(getUnreadNotificationCount(user.id));
         setOverdueCount(getOverdueCompliancePropertyCount(user.id, today));
       }
+      checkFirstSync();
     };
     onSyncComplete(onSync);
 
@@ -331,7 +343,7 @@ export default function HomeScreen() {
               </View>
             </View>
             <Text style={styles.activeName} numberOfLines={1}>
-              {(inProgress as JobWithJoins).property_name ?? 'Unknown Property'}
+              {(inProgress as JobWithJoins).property_name ?? 'Unknown property'}
             </Text>
             {((inProgress as JobWithJoins).address || (inProgress as JobWithJoins).suburb) ? (
               <View style={styles.addrRow}>
@@ -425,7 +437,17 @@ export default function HomeScreen() {
               </Text>
             ) : null}
           </View>
-          {todayJobs.length === 0 ? (
+          {todayJobs.length === 0 && neverSynced && jobs.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={isOnline ? 'cloud-download-outline' : 'cloud-off-outline'}
+                title={isOnline ? 'Getting your jobs…' : "You're offline"}
+                subtitle={isOnline
+                  ? 'The first download can take a moment.'
+                  : 'Your jobs will download as soon as you are back online.'}
+              />
+            </Card>
+          ) : todayJobs.length === 0 ? (
             <Card>
               <EmptyState
                 icon="calendar-blank-outline"

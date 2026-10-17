@@ -311,9 +311,9 @@ export default function PreviewScreen() {
     <View style={[styles.screen, { backgroundColor: C.background }]}>
       <ScreenHeader hideSyncStrip
         title={
-          screenState === 'ready' || screenState === 'downloading' ? 'Report Preview'
-          : isViewMode ? 'Loading Report'
-          : 'Generating Report'
+          screenState === 'ready' || screenState === 'downloading' ? 'Report preview'
+          : isViewMode ? 'Loading report'
+          : 'Generating report'
         }
         showBack
         fallbackHref="/jobs"

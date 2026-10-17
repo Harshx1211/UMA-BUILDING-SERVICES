@@ -106,13 +106,13 @@ export const JobCard = React.memo(function JobCard({
   const handleCancel = () => {
     swipeRef.current?.close();
     showConfirm({
-      title: 'Cancel Job?',
+      title: 'Cancel job?',
       message: 'Are you sure you want to cancel this job? This action will be synced to the cloud.',
       icon: 'close-circle-outline',
       buttons: [
-        { text: 'Keep Job', style: 'cancel' },
+        { text: 'Keep job', style: 'cancel' },
         {
-          text: 'Cancel Job',
+          text: 'Cancel job',
           style: 'destructive',
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -147,7 +147,7 @@ export const JobCard = React.memo(function JobCard({
                 </Text>
               </View>
               <Text style={[s.propertyName, { color: C.text }]} numberOfLines={1}>
-                {job.property_name ?? 'Unknown Property'}
+                {job.property_name ?? 'Unknown property'}
               </Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={22} color={C.textSecondary} style={{ marginTop: 10 }} />

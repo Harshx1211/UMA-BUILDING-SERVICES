@@ -145,13 +145,13 @@ export default function SignatureScreen() {
       if (leavingAfterSaveRef.current || !unsaved) return; // nothing unsaved — let it navigate normally
       e.preventDefault();
       showConfirm({
-        title: 'Discard Signature?',
+        title: 'Discard signature?',
         message: unsaved === 'resign'
           ? "The new signatures haven't been saved. Leaving now will discard them and keep the existing signature."
           : "The signature you're drawing hasn't been saved yet. Leaving now will discard it.",
         icon: 'draw',
         buttons: [
-          { text: 'Keep Signing', style: 'cancel' },
+          { text: 'Keep signing', style: 'cancel' },
           { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
         ],
       });
@@ -201,7 +201,7 @@ export default function SignatureScreen() {
 
   function handleResetAll() {
     showConfirm({
-      title: 'Restart Sign-off',
+      title: 'Restart sign-off',
       message: 'This will delete the captured technician signature. Are you sure?',
       icon: 'restart',
       buttons: [

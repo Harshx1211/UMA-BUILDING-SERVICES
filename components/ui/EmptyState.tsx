@@ -69,7 +69,11 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: T.surfaceInput,
+    // White with a hairline border so the circle shows both inside a white
+    // card and straight on the grey page (where a grey fill disappeared).
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: T.space8,

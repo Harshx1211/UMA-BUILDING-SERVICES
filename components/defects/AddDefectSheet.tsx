@@ -194,11 +194,11 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
     if (!isDirty) return;
     sheetRef.current?.expand();
     showConfirm({
-      title: 'Discard Defect?',
+      title: 'Discard defect?',
       message: "You've started logging a defect. Leaving now will discard everything you've entered, including any photos.",
       icon: 'alert-circle-outline',
       buttons: [
-        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Keep editing', style: 'cancel' },
         { text: 'Discard', style: 'destructive', onPress: () => { reset(); sheetRef.current?.close(); } },
       ],
     });
@@ -391,7 +391,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
             <Text style={[s.addPhotoTxt, {
               color: photos.length >= MAX_PHOTOS ? C.textTertiary : C.accent,
             }]}>
-              {photos.length >= MAX_PHOTOS ? 'Limit reached' : 'Add Photo'}
+              {photos.length >= MAX_PHOTOS ? 'Limit reached' : 'Add photo'}
             </Text>
           </TouchableOpacity>
         </View>

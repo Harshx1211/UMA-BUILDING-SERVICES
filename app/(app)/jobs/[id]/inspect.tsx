@@ -336,7 +336,7 @@ export default function AssetInspectionScreen() {
           Toast.show({
             type: 'info',
             text1: 'Job already completed',
-            text2: 'Tap "Continue Working" on the job screen to make changes.',
+            text2: 'Tap "Re-open" on the job screen to make changes.',
           });
           router.back();
           return;
@@ -608,9 +608,9 @@ export default function AssetInspectionScreen() {
         message,
         icon: 'clipboard-alert-outline',
         buttons: [
-          { text: 'Continue Inspecting', style: 'cancel' },
+          { text: 'Continue inspecting', style: 'cancel' },
           {
-            text: 'Complete Anyway',
+            text: 'Complete anyway',
             onPress: async () => {
               setIsCompleting(true);
               await markUninspectedAsNotTested();
@@ -636,7 +636,7 @@ export default function AssetInspectionScreen() {
       Toast.show({
         type: 'info',
         text1: status === JobStatus.Completed ? 'Job already completed' : 'Job cancelled',
-        text2: status === JobStatus.Completed ? 'Tap "Continue Working" on the job screen to make changes.' : 'This job can no longer be edited.',
+        text2: status === JobStatus.Completed ? 'Tap "Re-open" on the job screen to make changes.' : 'This job can no longer be edited.',
       });
       return true;
     }
@@ -803,7 +803,7 @@ export default function AssetInspectionScreen() {
       icon: 'lock-outline',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Mark Not Tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
+        { text: 'Mark not tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
       ],
     });
   }, [store, isJobLocked]);
@@ -1018,7 +1018,7 @@ export default function AssetInspectionScreen() {
           ) : (
             <View style={s.emptyState}>
               <MaterialCommunityIcons name={search ? 'text-search' : 'check-circle-outline'} size={40} color={search ? C.textTertiary : C.success} />
-              <Text style={[s.emptyTitle, { color: C.text }]}>{search ? 'No Matches' : 'All Clear'}</Text>
+              <Text style={[s.emptyTitle, { color: C.text }]}>{search ? 'No matches' : 'All clear'}</Text>
               <Text style={[s.emptySub, { color: C.textSecondary }]}>
                 {search ? `No assets match "${search}".` : 'No assets match this filter.'}
               </Text>
@@ -1038,7 +1038,7 @@ export default function AssetInspectionScreen() {
             <Text style={[s.bottomBarSub, { color: C.textSecondary }]}>{store.progress.inspected} of {store.progress.total} inspected</Text>
           </View>
           <Button
-            title={allDone ? 'Complete' : 'Complete Inspection'}
+            title={allDone ? 'Complete' : 'Complete inspection'}
             disabled={store.progress.inspected === 0 || isCompleting}
             loading={isCompleting}
             onPress={handleComplete}

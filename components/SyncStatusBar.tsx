@@ -65,7 +65,7 @@ export function SyncStatusBar() {
       icon: 'cloud-alert-outline',
       buttons: [
         {
-          text: 'Retry Now',
+          text: 'Retry now',
           onPress: () => {
             // Reset retry counters then trigger an immediate sync
             retryAllFailedSyncItems();

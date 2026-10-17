@@ -92,7 +92,7 @@ export default function ProfileScreen() {
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Sign Out',
+          text: 'Sign out',
           style: 'destructive',
           onPress: async () => {
             // signOut() (store/authStore.ts) already calls stopSync() itself,

@@ -17,7 +17,7 @@ import { AppLockScreen } from '@/components/AppLockScreen';
 
 import { useAuthStore } from '@/store/authStore';
 import { initializeSchema, cleanOldSyncQueueItems, resetStaleFailedSyncItems } from '@/lib/database';
-import { configureNotificationHandler, requestNotificationPermission } from '@/lib/notifications';
+import { configureNotificationHandler } from '@/lib/notifications';
 import Colors, { T } from '@/constants/Colors';
 import * as SplashScreen from 'expo-splash-screen';
 import * as ScreenCapture from 'expo-screen-capture';
@@ -152,10 +152,12 @@ export default function RootLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3. Configure notification handler + request permission
+  // 3. Configure notification handler. The permission prompt itself is
+  // asked once the technician is signed in (app/(app)/_layout.tsx) — asking
+  // on the sign-in screen, before they're even in, is the pattern app stores
+  // and users both treat as pushy.
   useEffect(() => {
     configureNotificationHandler();
-    requestNotificationPermission();
   }, []);
 
   // Hide splash once loading is complete. MUST be above the conditional early-return

@@ -196,7 +196,7 @@ export default function NotificationsScreen() {
                       icon: 'delete-sweep-outline',
                       buttons: [
                         { text: 'Cancel', style: 'cancel' },
-                        { text: 'Clear All', style: 'destructive', onPress: clearAll },
+                        { text: 'Clear all', style: 'destructive', onPress: clearAll },
                       ],
                     })
                   }

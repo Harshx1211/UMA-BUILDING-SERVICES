@@ -7,6 +7,7 @@ import { Tabs, Redirect, useSegments } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
 import { startSync, subscribeToMyDataLive, unsubscribeFromMyDataLive } from '@/lib/sync';
+import { requestNotificationPermission } from '@/lib/notifications';
 import { useColors } from '@/hooks/useColors';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useJobsStore } from '@/store/jobsStore';
@@ -140,6 +141,11 @@ export default function AppLayout() {
 
     // Now start the background sync loop
     startSync(user.id);
+
+    // Ask for notifications once signed in (moved from the root layout,
+    // where it popped up over the sign-in screen). The OS only shows the
+    // prompt the first time; after that this is a silent no-op.
+    requestNotificationPermission().catch(() => {});
 
     return () => {
       jobsUnsub();

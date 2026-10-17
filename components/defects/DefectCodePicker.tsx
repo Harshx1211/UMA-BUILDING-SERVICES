@@ -124,7 +124,7 @@ const CodeRow = React.memo(function CodeRow({
           style={[s.codeLabel, { color: isCustom ? C.accent : C.text }]}
           numberOfLines={1}
         >
-          {isCustom ? 'Custom Note' : item.code.toUpperCase()}
+          {isCustom ? 'Custom note' : item.code.toUpperCase()}
         </Text>
         <Text
           style={[s.codeDesc, { color: C.textSecondary }]}
