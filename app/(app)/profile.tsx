@@ -52,6 +52,7 @@ export default function ProfileScreen() {
   const [editForm, setEditForm] = useState({
     phone: user?.phone || '',
   });
+  const [phoneFocused, setPhoneFocused] = useState(false);
 
   useEffect(() => {
     if (!isSigningOut) return;
@@ -156,6 +157,17 @@ export default function ProfileScreen() {
       <ScreenHeader
         title="My profile"
         rightComponent={
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isEditing && !isSaving ? (
+            <TouchableOpacity
+              onPress={() => { setEditForm({ phone: user?.phone || '' }); setIsEditing(false); }}
+              style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: C.textSecondary, fontWeight: '600', fontSize: 16 }}>Cancel</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => isEditing ? handleSave() : setIsEditing(true)}
             // FIX: this was bare Text/ActivityIndicator with zero padding —
@@ -169,6 +181,7 @@ export default function ProfileScreen() {
             {isSaving ? <ActivityIndicator size="small" color={C.accent} /> :
               <Text style={{ color: C.accent, fontWeight: '700', fontSize: 16 }}>{isEditing ? 'Save' : 'Edit'}</Text>}
           </TouchableOpacity>
+          </View>
         }
       />
 
@@ -246,8 +259,10 @@ export default function ProfileScreen() {
           {isEditing ? (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Phone</Text>
-              <TextInput 
-                style={styles.input} 
+              <TextInput
+                style={[styles.input, phoneFocused && { borderColor: T.primary }]}
+                onFocus={() => setPhoneFocused(true)}
+                onBlur={() => setPhoneFocused(false)}
                 value={editForm.phone} 
                 onChangeText={t => setEditForm(f => ({ ...f, phone: t }))} 
                 placeholder="Phone number" 
@@ -421,8 +436,8 @@ const styles = StyleSheet.create({
   retryText:      { color: T.warning, fontSize: 14, fontWeight: '700' },
   version:        { color: T.textMuted, fontSize: 12, textAlign: 'center', marginTop: 4 },
   input:          {
-    color: T.textPrimary, fontSize: 13, fontWeight: '500',
-    minWidth: 150, textAlign: 'right', paddingVertical: 4, paddingHorizontal: 10,
-    backgroundColor: T.surfaceInput, borderRadius: T.radiusButton, borderWidth: 1, borderColor: T.primary,
+    color: T.textPrimary, fontSize: 15, fontWeight: '500',
+    minWidth: 170, minHeight: 44, textAlign: 'left', paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: T.surface, borderRadius: 10, borderWidth: 1, borderColor: '#CBD5E1',
   },
 });

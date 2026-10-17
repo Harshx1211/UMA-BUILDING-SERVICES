@@ -221,7 +221,7 @@ export default function PreviewScreen() {
   const C = useColors();
   const insets = useSafeAreaInsets();
   const { id: jobId, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
-  const { updateJobStatus, jobs } = useJobsStore();
+  const { jobs } = useJobsStore();
 
   const job = jobs.find(j => j.id === jobId);
 
@@ -259,16 +259,25 @@ export default function PreviewScreen() {
     genStatus === 'failed'    ? 'error' :
     'pending';
 
-  // Mirror the job-completed toast/status-store update the old inline poller
-  // did — purely cosmetic/defensive at this point since job.status is set to
-  // Completed independently of report generation, but harmless to keep.
+  // FIX (on-device 2026-10-17): this used to call updateJobStatus(Completed)
+  // again the moment the report finished — "purely cosmetic", but it wasn't
+  // harmless: it re-stamped the job and queued a fresh jobs UPDATE right
+  // after the report service had written report_url, and queued jobs
+  // updates merge into any older one still waiting (lib/database.ts
+  // addToSyncQueue). In testing, a job flipped back to "in progress" with
+  // its report link wiped seconds after this point. The job is already
+  // Completed locally and on the server by the time a report exists (the
+  // report can't start until the jobs change has pushed), so only the
+  // in-memory list needs the nudge — no new write.
   const notifiedCompletedRef = useRef(false);
   useEffect(() => {
     if (genStatus === 'completed' && !notifiedCompletedRef.current && jobId) {
       notifiedCompletedRef.current = true;
-      if (job?.status === JobStatus.Completed) updateJobStatus(jobId, JobStatus.Completed);
+      useJobsStore.setState((st) => ({
+        jobs: st.jobs.map((j) => (j.id === jobId ? { ...j, status: JobStatus.Completed } : j)),
+      }));
     }
-  }, [genStatus, job?.status, jobId, updateJobStatus]);
+  }, [genStatus, jobId]);
 
 
   // ── Download and share ───────────────────────────────────────────────────────

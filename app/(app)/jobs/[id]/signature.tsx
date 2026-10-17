@@ -551,7 +551,12 @@ export default function SignatureScreen() {
 
           {/* Captured tech sig displayed while on client step */}
           {showCanvas && step === 'client' && techSigBase64 && (
-            <Image source={{ uri: techSigBase64 }} style={s.sigImage} resizeMode="contain" />
+            // Explicit size inside the compact 96px box: a '100%' height didn't
+            // re-resolve after the box shrank, so the signature came out
+            // cropped (only stroke fragments showed).
+            <View style={{ flex: 1, padding: 8 }}>
+              <Image source={{ uri: techSigBase64 }} style={{ width: '100%', height: 80 }} resizeMode="contain" />
+            </View>
           )}
         </View>
 

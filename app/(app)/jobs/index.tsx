@@ -245,7 +245,9 @@ export default function ScheduleScreen() {
     <View style={styles.container}>
       <ScreenHeader
         title="Schedule"
-        subtitle={`${filtered.length} job${filtered.length !== 1 ? 's' : ''} found`}
+        // Names the tab ("2 jobs today") instead of reading like a search result.
+        subtitle={`${filtered.length} job${filtered.length !== 1 ? 's' : ''}${search ? ' found'
+          : filter === 'today' ? ' today' : filter === 'week' ? ' this week' : ''}`}
       />
 
       {/* FIX: the FlatList below is correctly capped to contentMaxWidth and
@@ -319,7 +321,7 @@ export default function ScheduleScreen() {
             <View style={styles.emptyIcon}>
               <MaterialCommunityIcons name="briefcase-search-outline" size={26} color={T.textSecondary} />
             </View>
-            <Text style={styles.emptyTitle}>No jobs found</Text>
+            <Text style={styles.emptyTitle}>{search ? 'No jobs found' : filter === 'today' ? 'No jobs today' : filter === 'week' ? 'No jobs this week' : 'No jobs yet'}</Text>
             <Text style={styles.emptyText}>
               {search ? 'Try a different search term.' : 'No jobs scheduled for this period.'}
             </Text>
@@ -416,7 +418,7 @@ const styles = StyleSheet.create({
   filterIconBtn:        { width: 44, height: 44, borderRadius: T.radiusButton, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   filterIconBtnActive:  { backgroundColor: T.primary, borderColor: T.primary },
   filterCountBadge:     { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: T.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: T.background },
-  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 10, fontWeight: '700' },
+  filterCountBadgeTxt:  { color: T.textOnPrimary, fontSize: 11, fontWeight: '700' },
   groupHeader:          { color: T.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 },
   searchWrap:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, marginHorizontal: 16, marginTop: 10, borderRadius: T.radiusButton, borderWidth: 1, borderColor: T.border, paddingHorizontal: 14, height: 48 },
   searchInput:          { flex: 1, color: T.textPrimary, fontSize: 14, paddingVertical: 0 },

@@ -240,7 +240,7 @@ export function LocationPicker({ value, onChange, propertyId, showShortcuts, exc
         accessibilityRole="button"
         accessibilityLabel={`${label.toLowerCase()}: ${v || 'not chosen'}`}
       >
-        <Text style={[s.rowLabel, { color: C.textTertiary }]}>{label}</Text>
+        <Text style={[s.rowLabel, { color: C.textTertiary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
         <Text style={[s.rowValue, { color: v ? C.text : C.textTertiary, fontWeight: v ? '700' : '500' }]} numberOfLines={1}>{v || 'Choose'}</Text>
         <MaterialCommunityIcons name="chevron-right" size={20} color={C.textTertiary} />
       </TouchableOpacity>
@@ -417,12 +417,12 @@ const s = StyleSheet.create({
   radioOn: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   radioOff: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
   tag: { alignSelf: 'flex-start', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  tagTxt: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
+  tagTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   shortcutLoc: { fontSize: 13.5, fontWeight: '700', lineHeight: 18, marginTop: 'auto' },
 
   group: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
   row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  rowLabel: { width: 96, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  rowLabel: { width: 104, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   rowValue: { flex: 1, fontSize: 15 },
 
   summary: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 3 },

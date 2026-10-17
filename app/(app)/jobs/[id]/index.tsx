@@ -641,8 +641,11 @@ export default function JobDetailScreen() {
       onPress: () => router.push(`/jobs/${id}/photos` as never),
     }] : []),
     ...(!isCancelled ? [{
-      key: 'signature', icon: 'draw' as MCIconName, iconBg: hasSig ? T.iconBg(C.success) : C.backgroundTertiary, iconColor: hasSig ? C.success : C.textSecondary,
-      title: 'Signature', subtitle: hasSig ? 'Captured' : 'Required for report',
+      key: 'signature', icon: 'draw' as MCIconName,
+      // Amber once it's the last thing standing between the tech and Complete.
+      iconBg: hasSig ? T.iconBg(C.success) : (isInProgress && totalAssets > 0 && inspected === totalAssets ? T.iconBg(C.warning) : C.backgroundTertiary),
+      iconColor: hasSig ? C.success : (isInProgress && totalAssets > 0 && inspected === totalAssets ? C.warningDark : C.textSecondary),
+      title: 'Signature', subtitle: hasSig ? 'Captured' : (isInProgress && totalAssets > 0 && inspected === totalAssets ? 'Needed to complete the job' : 'Required for report'),
       onPress: () => router.push(`/jobs/${id}/signature` as never),
     }] : []),
     {
@@ -675,7 +678,9 @@ export default function JobDetailScreen() {
         subtitle={[job.property_address, job.property_suburb].filter(Boolean).join(', ') || 'No address on record'}
         showBack={true}
         fallbackHref="/jobs"
-        rightComponent={
+        // Status sits on the "JOB #…" line now — beside the title it cut
+        // long property names off ("QA Quick Test Site (…").
+        eyebrowRight={
           <Badge
             status={job.status}
             label={
@@ -780,7 +785,7 @@ export default function JobDetailScreen() {
                           : `${inspected} of ${totalAssets} assets recorded`}
                       </Text>
                     </View>
-                    <Text style={[s.progressPct, { color: progressPct === 100 ? (failedCount > 0 ? C.error : C.success) : C.textSecondary }]}>
+                    <Text style={[s.progressPct, { color: progressPct === 100 ? C.text : C.textSecondary }]}>
                       {progressPct}%
                     </Text>
                   </View>
@@ -859,7 +864,12 @@ export default function JobDetailScreen() {
                       activeOpacity={0.6}
                       style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
                     >
-                      <Text style={[s.completeRowTxt, { color: C.textSecondary }]}>Mark job complete</Text>
+                      <Text style={[s.completeRowTxt, { color: C.textSecondary }]}>
+                        Mark job complete
+                        {totalAssets > 0 && inspected === totalAssets && !hasSig ? (
+                          <Text style={{ color: C.warningDark, fontWeight: '600' }}> · Signature needed</Text>
+                        ) : null}
+                      </Text>
                     </TouchableOpacity>
                   )
                 )}
@@ -1243,7 +1253,7 @@ const cm = StyleSheet.create({
   statItem: { flex: 1, alignItems: 'center' },
   statIcon: { marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '700', marginBottom: 2, letterSpacing: -0.5 },
-  statLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  statLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   statDivider: { width: 1, height: '80%', alignSelf: 'center' },
   autoCloseTxt: { fontSize: 13, marginBottom: 16, fontWeight: '600' },
   btn: { height: 52, justifyContent: 'center', paddingHorizontal: 32, borderRadius: 12, width: '100%', alignItems: 'center' },

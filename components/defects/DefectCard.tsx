@@ -175,8 +175,11 @@ export default function DefectCard({ defect, onPress, onEdit, style }: Props) {
             </TouchableOpacity>
           )}
           {onEdit && (
-            <TouchableOpacity style={s.editBtn} onPress={onEdit} hitSlop={10}>
-              <Text style={[s.editBtnText, { color: C.accent }]}>Edit</Text>
+            // Same pill as View beside it — a bare word next to a pill read as
+            // two different kinds of control.
+            <TouchableOpacity style={[s.viewBtn, { backgroundColor: C.backgroundTertiary }]} onPress={onEdit} hitSlop={8}>
+              <MaterialCommunityIcons name="pencil-outline" size={13} color={C.primary} />
+              <Text style={[s.viewBtnTxt, { color: C.primary }]}>Edit</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -242,9 +245,7 @@ const s = StyleSheet.create({
   footerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   viewBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
+    paddingHorizontal: 12, minHeight: 34, borderRadius: 10,
   },
-  viewBtnTxt: { fontSize: 12, fontWeight: '700' },
-  editBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  editBtnText: { fontWeight: '700', fontSize: 14 },
+  viewBtnTxt: { fontSize: 13, fontWeight: '600' },
 });

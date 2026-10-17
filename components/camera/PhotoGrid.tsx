@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, StyleSheet, useWindowDimensions, TouchableOpacity, SectionList } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, StyleSheet, useWindowDimensions, TouchableOpacity, SectionList, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/AppText';
 import { InspectionPhoto } from '@/types';
 import { useColors } from '@/hooks/useColors';
@@ -43,12 +44,13 @@ function getNumColumns(width: number, isTablet: boolean) {
 // update regardless) means an unrelated photo's change no longer re-renders
 // this one.
 const PhotoCell = React.memo(function PhotoCell({
-  item, cellSize, isFailed, onLongPress,
+  item, cellSize, isFailed, onLongPress, onPress,
 }: {
   item: InspectionPhoto;
   cellSize: number;
   isFailed: boolean;
   onLongPress: () => void;
+  onPress: () => void;
 }) {
   const C = useColors();
   const isPending = item.photo_url.startsWith('file://');
@@ -56,7 +58,10 @@ const PhotoCell = React.memo(function PhotoCell({
     <TouchableOpacity
       style={[s.cell, { width: cellSize, height: cellSize, backgroundColor: C.backgroundTertiary }]}
       onLongPress={onLongPress}
+      onPress={onPress}
       activeOpacity={0.8}
+      accessibilityRole="imagebutton"
+      accessibilityHint="Opens the photo. Long-press to delete."
     >
       <ResilientPhoto photoId={item.id} uri={item.photo_url} style={s.image} contentFit="cover" />
       {item.caption && (
@@ -85,6 +90,10 @@ const PhotoCell = React.memo(function PhotoCell({
 
 export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   const C = useColors();
+  const insets = useSafeAreaInsets();
+  // Tap opens the photo full screen (it did nothing before — only a
+  // long-press, to delete, did anything).
+  const [viewing, setViewing] = useState<InspectionPhoto | null>(null);
   const { width } = useWindowDimensions();
   const { isTablet } = useResponsive();
   const numColumns = getNumColumns(width, isTablet);
@@ -105,12 +114,12 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
 
     const sectionsObj: Record<string, InspectionPhoto[]> = {};
     for (const photo of photos) {
-      let key = 'Site Photos (General)';
+      let key = 'Site photos (general)';
       if (photo.asset_id) {
         const asset = assetById.get(photo.asset_id);
         key = asset
-          ? [formatAssetName(asset.asset_type, asset.variant), asset.location_on_site ? formatLocationCode(asset.location_on_site) : null].filter(Boolean).join(' - ')
-          : `Asset Photos (${photo.asset_id.substring(0, 6)})`;
+          ? [formatAssetName(asset.asset_type, asset.variant), asset.location_on_site ? formatLocationCode(asset.location_on_site) : null].filter(Boolean).join(' · ')
+          : `Asset photos (${photo.asset_id.substring(0, 6)})`;
       }
       if (!sectionsObj[key]) sectionsObj[key] = [];
       sectionsObj[key].push(photo);
@@ -154,6 +163,7 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
   }
 
   return (
+    <>
     <SectionList
       sections={sections}
       keyExtractor={(row, index) => (row[0]?.id ?? index.toString())}
@@ -161,7 +171,7 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
       renderSectionHeader={({ section: { title, count } }) => (
         <View style={s.sectionHeader}>
           <Text style={[s.sectionTitle, { color: C.text }]}>{title}</Text>
-          <View style={[s.countBadge, { backgroundColor: C.backgroundTertiary }]}>
+          <View style={s.countBadge}>
             <Text style={[s.countText, { color: C.textSecondary }]}>{count}</Text>
           </View>
         </View>
@@ -175,20 +185,46 @@ export default function PhotoGrid({ photos, onPhotoLongPress }: Props) {
               cellSize={cellSize}
               isFailed={photo.photo_url.startsWith('file://') && failedIds.has(photo.id)}
               onLongPress={() => onPhotoLongPress(photo)}
+              onPress={() => setViewing(photo)}
             />
           ))}
         </View>
       )}
     />
+    <Modal visible={!!viewing} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
+      <View style={s.viewer}>
+        {viewing ? (
+          <ResilientPhoto photoId={viewing.id} uri={viewing.photo_url} style={s.viewerImage} contentFit="contain" />
+        ) : null}
+        {viewing?.caption ? (
+          <Text style={[s.viewerCaption, { bottom: 24 + insets.bottom }]}>{viewing.caption}</Text>
+        ) : null}
+        <TouchableOpacity
+          style={[s.viewerClose, { top: 12 + insets.top }]}
+          onPress={() => setViewing(null)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Close photo"
+        >
+          <MaterialCommunityIcons name="close" size={24} color={T.textOnPrimary} />
+        </TouchableOpacity>
+      </View>
+    </Modal>
+    </>
   );
 }
 
 const s = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 24, marginBottom: 12, gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700' },
-  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, backgroundColor: T.surface, borderWidth: 1, borderColor: T.border },
   countText: { fontSize: 12, fontWeight: '700' },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAPS },
+  // Same gap between rows as between columns (rows used to touch).
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAPS, marginBottom: GRID_GAPS },
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '80%', backgroundColor: 'transparent' },
+  viewerClose: { position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  viewerCaption: { position: 'absolute', left: 16, right: 16, color: T.textOnPrimary, fontSize: 15, textAlign: 'center' },
   cell: { borderRadius: 12, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
   captionOverlay: {

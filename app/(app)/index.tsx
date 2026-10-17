@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   },
   bellBadgeText: {
     color: T.textOnPrimary,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     lineHeight: 12,
     fontVariant: ['tabular-nums'],
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   activeDotWrap: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
   activeDotRing: { position: 'absolute', width: 7, height: 7, borderRadius: T.radiusPill, backgroundColor: T.success },
   activeDot: { width: 7, height: 7, borderRadius: T.radiusPill, backgroundColor: T.success },
-  activeEyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: T.success },
+  activeEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: T.success },
   activeName: { fontSize: 16, fontWeight: '700', color: T.textPrimary },
   activeMeta: { fontSize: 14, color: T.textSecondary, flexShrink: 1 },
   activeOpenBtn: {

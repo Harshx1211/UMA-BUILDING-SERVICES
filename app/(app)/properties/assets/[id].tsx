@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { getAssetTypeIcon } from '@/constants/AssetData';
 import { ActivityIndicator } from 'react-native-paper';
 import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -25,16 +26,11 @@ const fmtDate = (d: string) => {
 
 type ColorsType = ReturnType<typeof useColors>;
 
+// Same icon per asset type as the inspection list and Add asset
+// (constants/AssetData). This screen had its own keyword guesser, which gave
+// a Fire Hose Reel and a Fire Detection Device the same flame.
 function assetIconName(type: string): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
-  const t = type.toLowerCase();
-  if (t.includes('extinguisher'))              return 'fire-extinguisher';
-  if (t.includes('sprinkler'))                 return 'water';
-  if (t.includes('door') || t.includes('exit'))return 'door';
-  if (t.includes('emergency') || t.includes('light')) return 'led-strip';
-  if (t.includes('fire'))                      return 'fire';
-  if (t.includes('hose'))                      return 'pipe';
-  if (t.includes('alarm'))                     return 'bell-ring';
-  return 'shield-check-outline';
+  return getAssetTypeIcon(type) as React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 }
 
 function assetStatusColor(status: string, C: ColorsType) {
@@ -208,9 +204,10 @@ export default function PropertyAssetsScreen() {
           ) : null}
           <Animated.View
             entering={noMotion ? undefined : FadeInDown.delay(100).duration(400)}
-            style={[s.card, { backgroundColor: C.surface, borderColor: C.border, flex: 1, marginBottom: 40 }]}
+            style={[s.card, { backgroundColor: C.surface, borderColor: C.border, flexShrink: 1, marginBottom: 40 }]}
           >
             <FlatList
+              style={{ flexGrow: 0 }}
               data={shownAssets}
               keyExtractor={(asset) => asset.id}
               showsVerticalScrollIndicator={false}
@@ -340,7 +337,7 @@ const s = StyleSheet.create({
   dateChipsRow:  { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
   dateChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   dateChipTxt:   { fontSize: 12, fontWeight: '500' },
-  assetRight:    { alignItems: 'center', gap: 2 },
+  assetRight:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot:     { width: 6, height: 6, borderRadius: 3 },
   inactiveLabel: { fontSize: 11, fontWeight: '600' },
 

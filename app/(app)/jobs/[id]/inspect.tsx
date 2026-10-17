@@ -825,7 +825,7 @@ export default function AssetInspectionScreen() {
     if (item.kind === 'header') {
       return (
         <View style={s.routineHeader}>
-          <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={1}>{item.label}</Text>
+          <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={2}>{item.label}</Text>
           <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count} asset{item.count === 1 ? '' : 's'}</Text>
           {groupBy === 'location' && (
             <TouchableOpacity
@@ -983,8 +983,12 @@ export default function AssetInspectionScreen() {
                 <MaterialCommunityIcons name="magnify" size={16} color={C.textTertiary} style={{ marginRight: 6 }} />
                 <TextInput
                   style={[s.searchInput, { color: C.text }]}
-                  placeholder="Search by type, location, or ref…"
+                  // Shorter + single line: at large text sizes the long
+                  // placeholder wrapped and got cut through the middle.
+                  placeholder="Search assets…"
                   placeholderTextColor={C.textTertiary}
+                  numberOfLines={1}
+                  multiline={false}
                   value={search}
                   onChangeText={setSearch}
                   maxLength={80}
@@ -1162,7 +1166,7 @@ const s = StyleSheet.create({
   // small badge rather than a text label, keeping it a fixed square size.
   filterBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1 },
   filterBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  filterBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  filterBadgeTxt: { fontSize: 11, fontWeight: '700' },
   routineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 18, marginBottom: 8, paddingVertical: 4, paddingHorizontal: 2, borderWidth: 0, backgroundColor: 'transparent' },
   routineHeaderTxt: { fontSize: 16, fontWeight: '700', flex: 1 },
   routineHeaderCount: { fontSize: 12, fontWeight: '600', marginLeft: 8 },

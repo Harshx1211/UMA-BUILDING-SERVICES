@@ -38,7 +38,7 @@ import { DefectFieldsCard, DefectFieldsValue, DefectPhotosDraft } from '@/compon
 import DefectCard from '@/components/defects/DefectCard';
 import { PhotoChooserSheet } from '@/components/camera/PhotoChooserSheet';
 import ResilientPhoto from '@/components/camera/ResilientPhoto';
-import { formatAssetType, formatLocationCode, formatRelativeDays, formatAssetName, AREA_LABEL, areaOf } from '@/utils/assetHelpers';
+import { formatAssetType, formatLocationFull, formatRelativeDays, formatAssetName, AREA_LABEL, areaOf } from '@/utils/assetHelpers';
 import { getValidLocalUri, resolveExistingLocalUri } from '@/utils/fileHelpers';
 import { getAssetHistory, AssetHistoryEntry, getJobById, queryRecords, getRecord } from '@/lib/database';
 import { refreshPhotoUrlsOnView } from '@/lib/photoUpload';
@@ -895,7 +895,7 @@ export default function AssetDetailScreen() {
 
   const failCount = history.filter((h) => h.result === 'fail').length;
   const location = [
-    asset.location_on_site ? formatLocationCode(asset.location_on_site) : 'No location specified',
+    asset.location_on_site ? formatLocationFull(asset.location_on_site) : 'No location specified',
     areaOf(asset) === 'unit' ? AREA_LABEL.unit : null,
   ].filter(Boolean).join(' · ');
 
@@ -933,7 +933,7 @@ export default function AssetDetailScreen() {
 
         {/* ── Result — one segmented track, not three separate boxes ──── */}
         <Text style={[s.sectionLabel, { color: C.textTertiary, marginTop: 0 }]}>Result</Text>
-        <View style={[s.resultTrack, { backgroundColor: C.backgroundTertiary, opacity: (isSaving || jobLocked) ? 0.5 : 1 }]}>
+        <View style={[s.resultTrack, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, opacity: (isSaving || jobLocked) ? 0.5 : 1 }]}>
           {/* FIX: same gap as jobs/[id]/inspect.tsx's identical row — zero
               accessibility props on the actual Pass/Fail/N-T decision for
               this asset. Matches site-inspect/[id].tsx's proven pattern. */}
@@ -946,8 +946,8 @@ export default function AssetDetailScreen() {
             accessibilityState={{ selected: isPassed }}
             accessibilityLabel="Pass"
           >
-            <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.success} />
-            <Text style={[s.resultSegTxt, { color: isPassed ? C.textOnPrimary : C.success }]}>Pass</Text>
+            <MaterialCommunityIcons name="check-circle" size={16} color={isPassed ? C.textOnPrimary : C.textSecondary} />
+            <Text style={[s.resultSegTxt, { color: isPassed ? C.textOnPrimary : C.textSecondary }]}>Pass</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.resultSeg, isFailed && { backgroundColor: C.error }]}
@@ -958,8 +958,8 @@ export default function AssetDetailScreen() {
             accessibilityState={{ selected: isFailed }}
             accessibilityLabel="Fail"
           >
-            <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.error} />
-            <Text style={[s.resultSegTxt, { color: isFailed ? C.textOnPrimary : C.error }]}>Fail</Text>
+            <MaterialCommunityIcons name="close-circle" size={16} color={isFailed ? C.textOnPrimary : C.textSecondary} />
+            <Text style={[s.resultSegTxt, { color: isFailed ? C.textOnPrimary : C.textSecondary }]}>Fail</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.resultSeg, isNT && { backgroundColor: C.textSecondary }]}

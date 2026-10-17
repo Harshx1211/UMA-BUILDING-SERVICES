@@ -582,7 +582,7 @@ const s = StyleSheet.create({
   assetMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaChip:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
   assetMeta:    { fontSize: 11 },
-  assetServiceDate: { fontSize: 10, marginTop: 2 },
+  assetServiceDate: { fontSize: 11, marginTop: 2 },
   emptyBox:     { padding: 16, borderRadius: 12, alignItems: 'center' },
   emptyTxt:     { fontSize: 13 },
 

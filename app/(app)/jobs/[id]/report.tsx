@@ -172,17 +172,17 @@ function DefectCard({ defect, index, colors: C }: { defect: ExtendedDefect; inde
           <View style={s.defectHeaderRow}>
             <View style={[s.sevBadge, { backgroundColor: sevBg, borderColor: T.tintBorder(sev.color(C)) }]}>
               <MaterialCommunityIcons name={sev.icon} size={11} color={sev.color(C)} />
-              <Text style={[s.sevBadgeTxt, { color: sev.color(C) }]}>{sev.label.toUpperCase()}</Text>
+              <Text style={[s.sevBadgeTxt, { color: sev.color(C) }]}>{sev.label}</Text>
             </View>
             {/* M2: Status badge uses theme tokens */}
             <View style={[
               s.statusBadge,
-              { backgroundColor: isOpen ? C.warningLight : C.successLight,
-                borderColor: isOpen ? T.tintBorder(C.warning) : T.tintBorder(C.success) },
+              { backgroundColor: isOpen ? C.errorLight : C.successLight,
+                borderColor: isOpen ? T.tintBorder(C.error) : T.tintBorder(C.success) },
             ]}>
-              <View style={[s.statusDot, { backgroundColor: isOpen ? C.warning : C.success }]} />
-              <Text style={[s.statusBadgeTxt, { color: isOpen ? C.warningDark : C.successDark }]}>
-                {defect.status?.replace('_', ' ').toUpperCase() ?? 'OPEN'}
+              <View style={[s.statusDot, { backgroundColor: isOpen ? C.error : C.success }]} />
+              <Text style={[s.statusBadgeTxt, { color: isOpen ? C.errorDark : C.successDark }]}>
+                {defect.status ? defect.status.charAt(0).toUpperCase() + defect.status.slice(1).replace('_', ' ') : 'Open'}
               </Text>
             </View>
           </View>
@@ -340,7 +340,7 @@ export default function ReportSummaryScreen() {
   // loadData() and held in state (see its own FIX comment); no longer a
   // render-body query here.
   const reportDate = new Date().toLocaleDateString('en-AU', {
-    day: 'numeric', month: 'long', year: 'numeric'
+    day: 'numeric', month: 'short', year: 'numeric'
   });
 
   // Generating a report and completing the job are one action, not two —
@@ -400,7 +400,6 @@ export default function ReportSummaryScreen() {
         {/* ── Top Hero Card: Property Info ── */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(340)}>
           <Card variant="default" style={{ marginBottom: 20, position: 'relative', overflow: 'hidden' }} padding={16}>
-            <View style={[s.heroDecor, { backgroundColor: T.selectedBg(C.primary) }]} />
             <View style={s.heroInner}>
               <View style={s.heroTopRow}>
                 <View style={[s.heroIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
@@ -408,7 +407,7 @@ export default function ReportSummaryScreen() {
                 </View>
                 <View style={[s.heroBadge, { backgroundColor: C.backgroundTertiary }]}>
                   <Text style={[s.heroBadgeTxt, { color: C.textSecondary }]}>
-                    {isCompleted ? 'COMPLETED' : readyToGenerate ? 'READY TO GENERATE' : isFullyInspected ? 'AWAITING SIGNATURE' : 'IN PROGRESS'}
+                    {isCompleted ? 'Completed' : readyToGenerate ? 'Ready to generate' : isFullyInspected ? 'Awaiting signature' : 'In progress'}
                   </Text>
                 </View>
               </View>
@@ -642,7 +641,7 @@ const s = StyleSheet.create({
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   heroIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   heroBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  heroBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  heroBadgeTxt: { fontSize: 12, fontWeight: '600' },
   heroTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4 },
   heroSub: { fontSize: 13, fontWeight: '500' },
   heroDivider: { height: 1, marginVertical: 14 },
@@ -682,11 +681,12 @@ const s = StyleSheet.create({
   checkTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
   checkSub: { fontSize: 12, fontWeight: '500' },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  actionBtnTxt: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', color: T.textOnPrimary },
+  actionBtnTxt: { fontSize: 13, fontWeight: '600', color: T.textOnPrimary },
 
   // Table
   emptyTable: { padding: 24, alignItems: 'center' },
-  assetRow: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1 },
+  // No default bottom border: the last row kept a 1px border with no colour (drawn black).
+  assetRow: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   assetIndexBadge: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   assetIndexText: { fontSize: 11, fontWeight: '700' },
   assetMiddle: { flex: 1, marginRight: 12 },
@@ -703,10 +703,10 @@ const s = StyleSheet.create({
   defectContent: { flex: 1, padding: 16 },
   defectHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   sevBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  sevBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  sevBadgeTxt: { fontSize: 12, fontWeight: '600' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusBadgeTxt: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  statusBadgeTxt: { fontSize: 12, fontWeight: '600' },
   defectDesc: { fontSize: 13, fontWeight: '500', lineHeight: 18, marginBottom: 10 },
   defectMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   defectMeta: { fontSize: 11, fontWeight: '600' },

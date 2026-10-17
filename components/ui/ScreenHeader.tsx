@@ -18,6 +18,9 @@ interface Props {
   /** @deprecated — kept for API compatibility, no longer renders curves */
   curved?: boolean;
   eyebrow?: string;
+  /** Small element (e.g. a status pill) on the eyebrow line, so the title
+   * below keeps the full width instead of being cut off beside it. */
+  eyebrowRight?: React.ReactNode;
   /** Optional extra row under the subtitle — e.g. a sync status readout */
   extra?: React.ReactNode;
   /**
@@ -44,6 +47,7 @@ export function ScreenHeader({
   rightComponent,
   showBack = false,
   eyebrow,
+  eyebrowRight,
   extra,
   fallbackHref = '/(app)',
   hideSyncStrip = false,
@@ -80,7 +84,12 @@ export function ScreenHeader({
         )}
 
         <View style={styles.titleBlock}>
-          {eyebrow ? (
+          {eyebrow && eyebrowRight ? (
+            <View style={styles.eyebrowRow}>
+              <Text style={[styles.eyebrow, { color: C.textTertiary, marginBottom: 0 }]}>{eyebrow}</Text>
+              {eyebrowRight}
+            </View>
+          ) : eyebrow ? (
             <Text style={[styles.eyebrow, { color: C.textTertiary }]}>{eyebrow}</Text>
           ) : null}
           <Text style={[styles.title, { color: C.text }]} numberOfLines={1}>
@@ -138,8 +147,9 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
   },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   eyebrow: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',

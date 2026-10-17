@@ -39,7 +39,7 @@ type ServiceRecord = {
 const RESULT_CONFIG: Record<InspectionResult, { icon: MCIconName; color: (C: ColorsType) => string; label: string }> = {
   [InspectionResult.Pass]:      { icon: 'check-circle',          color: (C) => C.successDark || C.success, label: 'Pass' },
   [InspectionResult.Fail]:      { icon: 'close-circle',          color: (C) => C.errorDark  || C.error,   label: 'Fail' },
-  [InspectionResult.NotTested]: { icon: 'checkbox-blank-outline', color: (C) => C.textTertiary,            label: 'Not tested' },
+  [InspectionResult.NotTested]: { icon: 'minus-circle-outline', color: (C) => C.textTertiary,            label: 'Not tested' },
 };
 
 const getSeverityConfig = (C: ColorsType): Record<DefectSeverity, { color: string }> => ({
@@ -163,21 +163,24 @@ export default function AssetDetailScreen() {
           caps content at contentMaxWidth and centers it on a tablet; this
           one stretched its cards edge-to-edge across the full tablet width
           instead. */}
+      {/* Header fixed above the scroll (it used to scroll away, letting the
+          page slide under the status bar). */}
+      {/* ── ASSET HEADER ─────────────── */}
+      <ScreenHeader
+        eyebrow="ASSET RECORD"
+        title={formatAssetName(asset.asset_type, asset.variant)}
+        // Where it is, not "No barcode" — the barcode has its own row below.
+        subtitle={asset.location_on_site ? formatLocationFull(asset.location_on_site) : (asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No location on file')}
+        showBack={true}
+        rightComponent={
+          <View style={[s.statusBadge, { backgroundColor: isActive ? T.tintBg(C.success) : C.backgroundTertiary }]}>
+            <Text style={[s.statusBadgeText, { color: isActive ? C.success : C.textSecondary }]}>
+              {isActive ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+        }
+      />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}>
-        {/* ── ASSET HEADER ─────────────── */}
-        <ScreenHeader
-          eyebrow="ASSET RECORD"
-          title={formatAssetName(asset.asset_type, asset.variant)}
-          subtitle={asset.barcode_id ? `ID: ${asset.barcode_id}` : 'No barcode'}
-          showBack={true}
-          rightComponent={
-            <View style={[s.statusBadge, { backgroundColor: isActive ? T.tintBg(C.success) : C.backgroundTertiary }]}>
-              <Text style={[s.statusBadgeText, { color: isActive ? C.success : C.textSecondary }]}>
-                {isActive ? 'ACTIVE' : 'INACTIVE'}
-              </Text>
-            </View>
-          }
-        />
 
         {isOverdue ? (
           <View style={[s.overdueBar, { backgroundColor: C.errorLight, marginTop: 16 }]}>
@@ -188,7 +191,7 @@ export default function AssetDetailScreen() {
 
         {/* Asset info */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(60).duration(350)} style={{ marginTop: !isOverdue ? 16 : 0 }}>
-          <SectionHeader title="Asset information" eyebrow />
+          <SectionHeader title="Asset information" eyebrow style={s.sectionHdr} />
           <Card style={{ marginHorizontal: 16 }}>
             {asset.variant ? (
               <InfoRow icon="format-list-bulleted" label="Variant" value={asset.variant} C={C} />
@@ -228,7 +231,7 @@ export default function AssetDetailScreen() {
 
         {/* Service history */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(120).duration(350)}>
-          <SectionHeader title="Service history" eyebrow />
+          <SectionHeader title="Service history" eyebrow style={s.sectionHdr} />
           <Card noPadding style={{ marginHorizontal: 16 }}>
             {serviceHistory.length === 0 ? (
               <View style={s.emptyInCard}>
@@ -262,7 +265,7 @@ export default function AssetDetailScreen() {
                       </View>
                     ) : (
                       <View style={s.resultPill}>
-                        <MaterialCommunityIcons name="checkbox-blank-outline" size={14} color={C.textTertiary} />
+                        <MaterialCommunityIcons name="minus-circle-outline" size={14} color={C.textTertiary} />
                         <Text style={[s.noResult, { color: C.textTertiary }]}>Not tested</Text>
                       </View>
                     )}
@@ -275,7 +278,7 @@ export default function AssetDetailScreen() {
 
         {/* Defect history */}
         <Animated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(350)}>
-          <SectionHeader title="Defect history" eyebrow />
+          <SectionHeader title="Defect history" eyebrow style={s.sectionHdr} />
           <Card noPadding style={{ marginHorizontal: 16 }}>
             {defects.length === 0 ? (
               <View style={s.emptyInCard}>
@@ -311,7 +314,9 @@ const s = StyleSheet.create({
   centered:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   statusBadge:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, flexDirection: 'row', alignItems: 'center' },
-  statusBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  statusBadgeText: { fontSize: 12, fontWeight: '600' },
+  // Section labels were flush against the screen edge and the card above.
+  sectionHdr: { marginHorizontal: 20, marginTop: 20 },
 
   overdueBar:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, borderRadius: 12, marginBottom: 16 },
   overdueText: { fontSize: 12, fontWeight: '600', flex: 1 },

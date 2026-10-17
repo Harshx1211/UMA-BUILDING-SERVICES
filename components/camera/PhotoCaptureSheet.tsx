@@ -375,7 +375,7 @@ const s = StyleSheet.create({
   assetChipRow: { gap: 8, paddingBottom: 8 },
   assetChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderWidth: 1.5, maxWidth: 180 },
   assetChipTxt: { fontSize: 12, fontWeight: '700' },
-  assetChipSub: { fontSize: 10, marginTop: 1 },
+  assetChipSub: { fontSize: 11, marginTop: 1 },
   // FIX: was marginTop 32 — on a compact phone (iPhone SE-class), the
   // camera box + form + this button's total height can exceed the sheet's
   // visible area, pushing the shutter below the fold and forcing a scroll

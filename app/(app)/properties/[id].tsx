@@ -17,6 +17,7 @@ import { getRecord, getAssetsForProperty, getJobsForProperty, getDocumentsForPro
 import { openJob } from '@/utils/navigation';
 import type { Property, Asset, Job, SiteDocument } from '@/types';
 import { ScreenHeader, EmptyState, Badge } from '@/components/ui';
+import { cardShadow } from '@/components/ui/Card';
 import DocumentCard from '@/components/documents/DocumentCard';
 import { localDateString } from '@/utils/dateHelpers';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
@@ -341,20 +342,24 @@ export default function PropertyDetailScreen() {
 
   return (
     <View style={[s.screen, { backgroundColor: C.background }]}>
+      {/* ── HEADER ────────────────────────────────────────
+          FIX (on-device 2026-10-17): the header used to sit INSIDE the
+          ScrollView, so it scrolled away and the page slid up under the
+          phone's status bar (the clock drew over the compliance card).
+          Fixed above the scroll, the same as every other screen. */}
+      {/* FIX: dropped the compliance pill that used to sit here — the
+          banner right below is the same information, shown a second time
+          for no reason. One clear compliance signal, not two. */}
+      <ScreenHeader
+        eyebrow="PROPERTY RECORD"
+        title={property.name}
+        subtitle={fullAddress || 'No address on file'}
+        showBack={true}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40, maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }}
       >
-        {/* ── HERO HEADER ────────────────────────────────── */}
-        {/* FIX: dropped the compliance pill that used to sit here — the
-            banner right below is the same information, shown a second time
-            for no reason. One clear compliance signal, not two. */}
-        <ScreenHeader
-          eyebrow="PROPERTY RECORD"
-          title={property.name}
-          subtitle={fullAddress || 'No address on file'}
-          showBack={true}
-        />
 
         {/* ── COMPLIANCE HERO ──────────────────────────────
             FIX: the banner and the 3 stats used to be two separate floating
@@ -363,7 +368,7 @@ export default function PropertyDetailScreen() {
             banner, sharing its border/background and separated only by a
             tinted divider, so they read as supporting detail for the
             headline compliance state instead of competing with it. */}
-        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(400)} style={[s.hero, { backgroundColor: compliance.bg, borderColor: compliance.border, marginHorizontal: 16, marginTop: 16 }]}>
+        <Animated.View entering={noMotion ? undefined : FadeInDown.delay(40).duration(400)} style={[s.hero, { backgroundColor: compliance.bg, borderColor: compliance.border + '55', marginHorizontal: 16, marginTop: 16 }]}>
           <View style={s.heroTop}>
             <View style={[s.complianceBannerIcon, { backgroundColor: compliance.border + '25' }]}>
               <MaterialCommunityIcons name={compliance.icon} size={26} color={compliance.text} />
@@ -383,17 +388,17 @@ export default function PropertyDetailScreen() {
               </Text>
             </View>
           </View>
-          <View style={[s.heroStats, { borderTopColor: compliance.border }]}>
+          <View style={[s.heroStats, { borderTopColor: compliance.border + '55', backgroundColor: C.surface }]}>
             <View style={s.statCol}>
               <Text style={[s.statNum, { color: C.text }]}>{activeAssets}</Text>
               <Text style={[s.statLbl, { color: C.textSecondary }]}>ACTIVE</Text>
             </View>
-            <View style={[s.statCol, s.statColDivider, { borderLeftColor: compliance.border }]}>
+            <View style={[s.statCol, s.statColDivider, { borderLeftColor: C.border }]}>
               <Text style={[s.statNum, { color: isOverdue ? C.error : C.text }]}>{isOverdue ? 'Yes' : 'No'}</Text>
               <Text style={[s.statLbl, { color: C.textSecondary }]}>OVERDUE</Text>
             </View>
-            <View style={[s.statCol, s.statColDivider, { borderLeftColor: compliance.border }]}>
-              <Text style={[s.statNum, { color: C.success }]}>{passedJobs}</Text>
+            <View style={[s.statCol, s.statColDivider, { borderLeftColor: C.border }]}>
+              <Text style={[s.statNum, { color: passedJobs > 0 ? C.success : C.text }]}>{passedJobs}</Text>
               <Text style={[s.statLbl, { color: C.textSecondary }]}>JOBS DONE</Text>
             </View>
           </View>
@@ -502,7 +507,7 @@ export default function PropertyDetailScreen() {
           <SectionHeader
             title="Asset register"
             count={assets.length}
-            actionLabel="View All"
+            actionLabel="View all"
             onAction={() => router.push(`/properties/assets/${id}` as never)}
           />
           <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border, marginHorizontal: 16 }]}>
@@ -705,8 +710,9 @@ const s = StyleSheet.create({
   // unlike every other card on this screen), and the divider's margin is 0
   // so it spans the card's own (unpadded) width exactly edge-to-edge — the
   // standard grouped-list look: full-width separators, inset row content.
-  card: { borderRadius: 14, borderWidth: 1,
-          shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  // Same soft card as the rest of the app (components/ui/Card cardShadow) —
+  // the old elevation-4 drop shadow made this one screen look heavier.
+  card: { borderRadius: 14, borderWidth: 1, ...cardShadow },
   divider: { height: 1 },
 
   // Job history rows

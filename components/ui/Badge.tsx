@@ -167,5 +167,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
-  textSmall: { fontSize: 10 },
+  textSmall: { fontSize: 11 },
 });
