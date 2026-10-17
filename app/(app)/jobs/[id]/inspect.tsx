@@ -102,7 +102,12 @@ const AssetCard = React.memo(({ asset, index, jobId, onEdit, onClone, onDelete }
       // one-tap-one-save shape as Pass/N-T, just with a required field in
       // between.
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      router.push(`/jobs/${jobId}/asset/${asset.id}?pendingFail=1` as never);
+      // Already a saved Fail: just open it (its defect shows as-is). Only a
+      // fresh Pass/N-T -> Fail is "pending" — sending pendingFail for an
+      // already-failed asset opened a blank form that saved a SECOND defect.
+      router.push((asset.result === InspectionResult.Fail
+        ? `/jobs/${jobId}/asset/${asset.id}`
+        : `/jobs/${jobId}/asset/${asset.id}?pendingFail=1`) as never);
     } else {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       // FIX: N/T (Not Tested) must store is_compliant=false.
@@ -794,16 +799,24 @@ export default function AssetInspectionScreen() {
     const failedCount = assetIds.filter(
       id => store.assets.find(a => a.id === id)?.result === InspectionResult.Fail,
     ).length;
+    // Says exactly what is removed: only each Fail's own defect (the one
+    // matching its defect_reason — see updateAssetResult). Other defects
+    // logged on the same assets stay.
     const warning = failedCount > 0
-      ? ` ${failedCount} of these ${failedCount === 1 ? 'is' : 'are'} currently marked Fail — any recorded defect still Open will be deleted.`
+      ? ` ${failedCount === 1 ? 'One of them is' : `${failedCount} of them are`} marked Fail — ${failedCount === 1 ? 'its' : 'their'} Fail defect will be removed. Other defects stay.`
       : '';
+    const what = assetIds.length === 1 ? 'the asset' : `all ${assetIds.length} assets`;
     showConfirm({
       title: 'No access',
-      message: `Mark all ${assetIds.length} asset${assetIds.length !== 1 ? 's' : ''} in "${label}" as Not Tested?${warning}`,
+      message: `Mark ${what} in "${label}" as Not tested?${warning}`,
       icon: 'lock-outline',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Mark not tested', onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)) },
+        {
+          text: 'Mark not tested',
+          style: failedCount > 0 ? 'destructive' : undefined,
+          onPress: () => assetIds.forEach(id => store.updateAssetResult(id, InspectionResult.NotTested)),
+        },
       ],
     });
   }, [store, isJobLocked]);
@@ -813,7 +826,7 @@ export default function AssetInspectionScreen() {
       return (
         <View style={s.routineHeader}>
           <Text style={[s.routineHeaderTxt, { color: C.text }]} numberOfLines={1}>{item.label}</Text>
-          <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count}</Text>
+          <Text style={[s.routineHeaderCount, { color: C.textTertiary }]}>{item.count} asset{item.count === 1 ? '' : 's'}</Text>
           {groupBy === 'location' && (
             <TouchableOpacity
               onPress={() => handleBulkMark(item.label, item.assetIds)}
@@ -1011,7 +1024,7 @@ export default function AssetInspectionScreen() {
               <Text style={[s.emptyTitle, { color: C.text }]}>No assets registered</Text>
               <Text style={[s.emptySub, { color: C.textSecondary }]}>No fire safety assets are on record for this property.</Text>
               <View style={{ marginTop: 24, width: '100%', paddingHorizontal: 32, gap: 12 }}>
-                <Button title="Add Asset On-Site" icon="plus" onPress={() => setShowAddAsset(true)} />
+                <Button title="Add asset on site" icon="plus" onPress={() => setShowAddAsset(true)} />
                 <Button variant="secondary" title="Go back" onPress={() => router.back()} />
               </View>
             </View>

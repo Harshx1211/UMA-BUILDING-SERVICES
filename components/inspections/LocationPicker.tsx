@@ -45,6 +45,9 @@ function codeOf(d: Draft): string {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+// "Tower 1 · Level 1 · Unit 4" — a non-breaking space inside each part, so a
+// narrow card wraps between parts, never between "Unit" and its number.
+const keepTogether = (loc: string) => loc.split(' · ').map((part) => part.replace(/ /g, ' ')).join(' · ');
 
 interface Props {
   /** The stored location ("1-3-2", or free text). '' while incomplete. */
@@ -71,19 +74,22 @@ export function LocationPicker({ value, onChange, propertyId, showShortcuts, exc
 
   // Every location at this property, how many active assets each has, and
   // the most recently added asset's location ("Same as last").
-  const { counts, last } = useMemo(() => {
+  const { counts, last, ownLoc } = useMemo(() => {
     const rows = queryRecords<{ id: string; location_on_site: string | null; created_at: string | null; status: string | null }>(
       'assets', { property_id: propertyId },
     );
     const map = new Map<string, number>();
     let newest: { at: string; loc: string } | null = null;
+    // Edit asset: where the asset being edited sits right now, so keeping it
+    // there doesn't read as a brand-new, "check it is right" location.
+    const own = excludeAssetId ? rows.find((r) => r.id === excludeAssetId)?.location_on_site ?? null : null;
     for (const r of rows) {
       if (!r.location_on_site || r.id === excludeAssetId || r.status === 'decommissioned') continue;
       map.set(r.location_on_site, (map.get(r.location_on_site) ?? 0) + 1);
       const at = r.created_at ?? '';
       if (!newest || at > newest.at) newest = { at, loc: r.location_on_site };
     }
-    return { counts: map, last: newest?.loc ?? null };
+    return { counts: map, last: newest?.loc ?? null, ownLoc: own };
     // Re-read when a sheet closes, so a location added a moment ago counts.
   }, [propertyId, excludeAssetId, sheet === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -117,6 +123,8 @@ export function LocationPicker({ value, onChange, propertyId, showShortcuts, exc
 
   const code = codeOf(draft);
   const count = code ? counts.get(code) ?? 0 : 0;
+  const isCurrent = !!code && code === ownLoc;
+  const known = count > 0 || isCurrent;
   const levelDisabled = !draft.tower || !!draft.text;
   // A unit always sits on a level, so the code can't come out half-formed.
   const unitDisabled = !draft.tower || !!draft.text || !draft.level;
@@ -150,17 +158,21 @@ export function LocationPicker({ value, onChange, propertyId, showShortcuts, exc
       </View>
 
       {code ? (
-        <View style={[s.summary, count > 0
+        <View style={[s.summary, known
           ? { backgroundColor: C.successLight, borderColor: C.success + '33' }
           : { backgroundColor: C.infoLight, borderColor: C.info + '33' }]}
         >
           <View style={s.summaryTop}>
-            <MaterialCommunityIcons name={count > 0 ? 'check-circle' : 'map-marker-plus'} size={15} color={count > 0 ? C.success : C.infoDark} />
-            <Text style={[s.summaryTag, { color: count > 0 ? C.successDark : C.infoDark }]}>{count > 0 ? 'EXISTING LOCATION' : 'NEW LOCATION'}</Text>
+            <MaterialCommunityIcons name={known ? 'check-circle' : 'map-marker-plus'} size={15} color={known ? C.success : C.infoDark} />
+            <Text style={[s.summaryTag, { color: known ? C.successDark : C.infoDark }]}>
+              {isCurrent ? 'CURRENT LOCATION' : count > 0 ? 'EXISTING LOCATION' : 'NEW LOCATION'}
+            </Text>
           </View>
           <Text style={[s.summaryLoc, { color: C.text }]}>{formatLocationFull(code)}</Text>
           <Text style={[s.summarySub, { color: C.textSecondary }]}>
-            {count > 0 ? `${plural(count, 'asset')} here already` : 'Not used at this property yet — check it is right'}
+            {isCurrent
+              ? (count > 0 ? `Unchanged · ${plural(count, 'other asset')} here too` : 'Unchanged — where this asset is now')
+              : count > 0 ? `${plural(count, 'asset')} here already` : 'Not used at this property yet — check it is right'}
           </Text>
         </View>
       ) : null}
@@ -212,7 +224,7 @@ export function LocationPicker({ value, onChange, propertyId, showShortcuts, exc
         <View style={[s.tag, { backgroundColor: selected ? C.primary + '1A' : C.backgroundTertiary }]}>
           <Text style={[s.tagTxt, { color: selected ? C.primary : C.textTertiary }]}>{tag.toUpperCase()}</Text>
         </View>
-        <Text style={[s.shortcutLoc, { color: selected ? C.text : C.textSecondary }]} numberOfLines={2}>{formatLocationFull(loc)}</Text>
+        <Text style={[s.shortcutLoc, { color: selected ? C.text : C.textSecondary }]} numberOfLines={2}>{keepTogether(formatLocationFull(loc))}</Text>
       </TouchableOpacity>
     );
   }

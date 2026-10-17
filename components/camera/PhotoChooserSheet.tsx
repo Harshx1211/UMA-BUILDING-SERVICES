@@ -9,6 +9,7 @@ import { Text } from '@/components/ui/AppText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { T } from '@/constants/Colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function PhotoChooserSheet({
   visible, onClose, onTakePhoto, onPickGallery,
@@ -19,9 +20,11 @@ export function PhotoChooserSheet({
   onPickGallery: () => void;
 }) {
   const C = useColors();
+  // Keeps Cancel clear of the phone's gesture bar / home indicator.
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={s.chooserOverlay} activeOpacity={1} onPress={onClose}>
+      <TouchableOpacity style={[s.chooserOverlay, { paddingBottom: 12 + insets.bottom }]} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[s.chooserSheet, { backgroundColor: C.surface }]}>
           <Text style={[s.chooserTitle, { color: C.text }]}>Add photo</Text>
           <TouchableOpacity style={s.chooserRow} onPress={onTakePhoto} activeOpacity={0.7}>
@@ -35,7 +38,7 @@ export function PhotoChooserSheet({
             <View style={[s.chooserIconWrap, { backgroundColor: T.iconBg(C.primary) }]}>
               <MaterialCommunityIcons name="image-multiple-outline" size={20} color={C.primary} />
             </View>
-            <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from Gallery</Text>
+            <Text style={[s.chooserRowTxt, { color: C.text }]}>Choose from gallery</Text>
           </TouchableOpacity>
         </TouchableOpacity>
         <TouchableOpacity style={[s.chooserCancel, { backgroundColor: C.surface }]} onPress={onClose} activeOpacity={0.7}>

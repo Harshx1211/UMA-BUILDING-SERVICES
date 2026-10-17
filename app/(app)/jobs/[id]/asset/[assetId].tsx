@@ -203,7 +203,14 @@ export default function AssetDetailScreen() {
   // below, so that defect vanished from this screen entirely the moment it
   // was saved (still in the DB, just invisible here — additionalDefects had
   // filtered it out too, having wrongly ceded it to "primary").
-  const primaryDefect = failedNow
+  // FIX (found on-device 2026-10-17): a fresh Pass/N-T -> Fail
+  // (`pendingFail`) has NO primary defect yet — the blank form IS the new
+  // one, and every save path already forces a new record for it. Picking
+  // `assetDefects[0]` here anyway (an unrelated earlier Remark defect) hid
+  // that defect from the screen, and the leave-screen flush then reconciled
+  // the blank form's photos / "resolved on site" onto it — deleting the old
+  // defect's own before/after photos. Only a SAVED Fail has a primary.
+  const primaryDefect = failedNow && !pendingFail
     ? (assetDefects.find((d) => d.description === asset?.defect_reason) ?? assetDefects[0] ?? null)
     : null;
   const additionalDefects = assetDefects.filter((d) => d.id !== primaryDefect?.id);
@@ -1051,7 +1058,7 @@ export default function AssetDetailScreen() {
                 photos={{ before: [], after: [] }}
                 onPhotosDraftChange={setPrimaryPhotosDraft}
                 saving={isSaving || jobLocked}
-                saveLabel="Save Defect"
+                saveLabel="Save defect"
               />
             ) : editingDefectId === primaryDefect.id && !jobLocked ? (
               <DefectFieldsCard
@@ -1063,7 +1070,7 @@ export default function AssetDetailScreen() {
                 photos={defectPhotosMap[primaryDefect.id] ?? { before: [], after: [] }}
                 onPhotosDraftChange={setPrimaryPhotosDraft}
                 saving={isSaving}
-                saveLabel="Save Changes"
+                saveLabel="Save changes"
               />
             ) : (
               <DefectCard
@@ -1085,7 +1092,7 @@ export default function AssetDetailScreen() {
                   onDraftChange={setAdditionalDraft}
                   photos={defectPhotosMap[d.id] ?? { before: [], after: [] }}
                   onPhotosDraftChange={setAdditionalPhotosDraft}
-                  saveLabel="Save Changes"
+                  saveLabel="Save changes"
                 />
               ) : (
                 <DefectCard
@@ -1105,7 +1112,7 @@ export default function AssetDetailScreen() {
                 onDraftChange={setAdditionalDraft}
                 photos={{ before: [], after: [] }}
                 onPhotosDraftChange={setAdditionalPhotosDraft}
-                saveLabel="Add Defect"
+                saveLabel="Add defect"
               />
             ) : (!isFailed || primaryDefect !== null) && !jobLocked && (
               // FIX: was gated on `primaryDefect !== null` alone, which made

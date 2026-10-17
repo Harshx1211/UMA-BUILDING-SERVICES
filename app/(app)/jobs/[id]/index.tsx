@@ -579,6 +579,10 @@ export default function JobDetailScreen() {
 
   const isInProgress = job.status === JobStatus.InProgress;
   const isCompleted  = job.status === JobStatus.Completed;
+  // Everything recorded and signed: completing is now THE next step, so it
+  // becomes the strong button instead of faint grey text that read as
+  // disabled (found testing on-device).
+  const readyToComplete = isInProgress && totalAssets > 0 && inspected === totalAssets && hasSig;
   const isCancelled  = job.status === JobStatus.Cancelled;
   const isScheduled  = job.status === JobStatus.Scheduled;
 
@@ -811,7 +815,7 @@ export default function JobDetailScreen() {
                   style={[
                     s.inspectRow,
                     { borderTopWidth: 1, borderTopColor: C.border },
-                    isInProgress && { backgroundColor: T.selectedBg(C.primary) },
+                    isInProgress && !readyToComplete && { backgroundColor: T.selectedBg(C.primary) },
                   ]}
                 >
                   <View style={[s.inspectCtaIcon, { backgroundColor: isInProgress ? T.iconBg(C.primary) : C.backgroundTertiary }]}>
@@ -835,19 +839,29 @@ export default function JobDetailScreen() {
                         : 'Tap here to unlock and edit the form'}
                     </Text>
                   </View>
-                  <View style={[s.inspectChevronWrap, isInProgress && { backgroundColor: C.primary }]}>
-                    <MaterialCommunityIcons name="chevron-right" size={18} color={isInProgress ? C.textOnPrimary : C.textTertiary} />
+                  <View style={[s.inspectChevronWrap, isInProgress && !readyToComplete && { backgroundColor: C.primary }]}>
+                    <MaterialCommunityIcons name="chevron-right" size={18} color={isInProgress && !readyToComplete ? C.textOnPrimary : C.textTertiary} />
                   </View>
                 </TouchableOpacity>
 
                 {isInProgress && (
-                  <TouchableOpacity
-                    onPress={handleCompleteRequest}
-                    activeOpacity={0.6}
-                    style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
-                  >
-                    <Text style={[s.completeRowTxt, { color: C.textTertiary }]}>Mark job complete</Text>
-                  </TouchableOpacity>
+                  readyToComplete ? (
+                    <View style={{ padding: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border }}>
+                      <Button
+                        title="Mark job complete"
+                        onPress={handleCompleteRequest}
+                        icon={<MaterialCommunityIcons name="check-circle-outline" size={20} color={C.textOnPrimary} />}
+                      />
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handleCompleteRequest}
+                      activeOpacity={0.6}
+                      style={[s.completeRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+                    >
+                      <Text style={[s.completeRowTxt, { color: C.textSecondary }]}>Mark job complete</Text>
+                    </TouchableOpacity>
+                  )
                 )}
               </Card>
             </Animated.View>
@@ -1015,9 +1029,11 @@ export default function JobDetailScreen() {
           title={
             isCompleted && job?.report_url ? 'View report' :
             isCompleted                    ? 'Generate report' :
-            'Report not available'
+            'Report available once completed'
           }
-          variant={isCompleted ? 'secondary' : 'primary'}
+          // Orange only when it's the next step (completed, no report yet);
+          // a faded orange disabled button read as broken.
+          variant={isCompleted && !job?.report_url ? 'primary' : 'secondary'}
           // Report actions only exist once the job is completed — completing
           // it (via Report Summary's Generate Report, or Complete Job here)
           // is what unlocks this. No mid-inspection "draft preview" shortcut:
@@ -1081,7 +1097,7 @@ export default function JobDetailScreen() {
                 <MaterialCommunityIcons name="check-bold" size={44} color={C.success} />
               </Animated.View>
             </View>
-            <Text style={[cm.title, { color: C.text }]}>Job Complete!</Text>
+            <Text style={[cm.title, { color: C.text }]}>Job complete</Text>
             <Text style={[cm.property, { color: C.textSecondary }]}>{job?.property_name ?? 'Property'}</Text>
 
             <View style={[cm.statsRow, { backgroundColor: C.backgroundTertiary, borderColor: C.border, borderWidth: 1 }]}>
@@ -1105,17 +1121,29 @@ export default function JobDetailScreen() {
             </View>
 
             <Text style={[cm.autoCloseTxt, { color: C.textSecondary }]}>
-              Returning to dashboard in {completionCountdown}s…
+              Closing in {completionCountdown}s…
             </Text>
 
+            {/* The next step after completing is the report — offered right
+                here, with Close kept as before. */}
             <TouchableOpacity
               style={[cm.btn, { backgroundColor: C.primary }]}
               onPress={() => {
                 if (countdownRef.current) clearInterval(countdownRef.current);
                 setShowCompletionModal(false);
+                if (job) router.push(`/jobs/${job.id}/preview` as never);
               }}
             >
-              <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Close now</Text>
+              <Text style={[cm.btnTxt, { color: C.textOnPrimary }]}>Generate report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[cm.btn, { backgroundColor: 'transparent', marginTop: 8 }]}
+              onPress={() => {
+                if (countdownRef.current) clearInterval(countdownRef.current);
+                setShowCompletionModal(false);
+              }}
+            >
+              <Text style={[cm.btnTxt, { color: C.textSecondary }]}>Close now</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -21,6 +21,7 @@ import type { DefectCode } from '@/constants/DefectCodes';
 import type { Asset } from '@/types';
 import { T } from '@/constants/Colors';
 import { showConfirm } from '@/components/ui';
+import { useSheetBackHandler } from '@/hooks/useSheetBackHandler';
 import { stripPrices } from '@/utils/prices';
 
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -187,7 +188,13 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
   // exact gap is to catch the close via onChange (index -1) and, if the
   // form is dirty, re-expand it and ask before actually discarding.
   const closedViaSaveRef = useRef(false);
+  // Back closes the sheet (through the same dirty-check below) instead of
+  // leaving the screen behind it.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const closeSheet = React.useCallback(() => sheetRef.current?.close(), []);
+  useSheetBackHandler(sheetOpen, closeSheet);
   const handleSheetChange = (index: number) => {
+    setSheetOpen(index >= 0);
     if (index !== -1) return; // only care about the sheet actually closing
     if (closedViaSaveRef.current) { closedViaSaveRef.current = false; return; }
     const isDirty = severity !== DefectSeverity.NonConformance || assetId !== '' || description.trim() !== '' || photos.length > 0 || selectedCode !== null;
@@ -329,7 +336,7 @@ const AddDefectSheet = forwardRef<AddDefectSheetRef, Props>(({ jobId, propertyId
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.codeBtnTitle, { color: selectedCode ? C.primary : C.text }]}>
-            {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Browse Code Library'}
+            {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Browse code library'}
           </Text>
           <Text style={[s.codeBtnSub, { color: C.textSecondary }]} numberOfLines={1}>
             {selectedCode ? stripPrices(selectedCode.description) : '100+ defect codes'}

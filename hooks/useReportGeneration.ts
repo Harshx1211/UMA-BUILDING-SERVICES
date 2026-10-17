@@ -289,7 +289,7 @@ export function useReportGeneration(
     // what the technician is told, not the underlying mechanics.
     Toast.show(isOnline ? {
       type: 'info',
-      text1: 'Generating Report',
+      text1: 'Generating report',
       text2: "We'll let you know as soon as it's ready — you can keep working.",
     } : {
       type: 'info',

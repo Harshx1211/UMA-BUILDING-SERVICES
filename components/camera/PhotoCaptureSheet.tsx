@@ -1,4 +1,5 @@
-import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
+import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect, useCallback } from 'react';
+import { useSheetBackHandler } from '@/hooks/useSheetBackHandler';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
@@ -33,6 +34,10 @@ export interface PhotoCaptureSheetRef {
 const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, propertyId }, ref) => {
   const C = useColors();
   const bottomSheetRef = useRef<BottomSheet>(null);
+  // Back closes the sheet instead of leaving the screen behind it.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const closeSheet = useCallback(() => bottomSheetRef.current?.close(), []);
+  useSheetBackHandler(sheetOpen, closeSheet);
   const cameraRef = useRef<CameraView>(null);
   const snapPoints = ['92%'];
 
@@ -204,6 +209,7 @@ const PhotoCaptureSheet = forwardRef<PhotoCaptureSheetRef, Props>(({ jobId, prop
       index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
+      onChange={(index) => setSheetOpen(index >= 0)}
       backdropComponent={(props) => (
         <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
       )}

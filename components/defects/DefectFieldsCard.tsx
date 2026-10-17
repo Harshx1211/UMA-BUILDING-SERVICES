@@ -308,7 +308,7 @@ export function DefectFieldsCard({
               disabled={saving}
             >
               <MaterialCommunityIcons name={sev.icon} size={15} color={active ? color : C.textSecondary} />
-              <Text style={[s.sevSegTxt, { color: active ? color : C.textSecondary }]}>{sev.label}</Text>
+              <Text style={[s.sevSegTxt, { color: active ? color : C.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{sev.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -337,7 +337,7 @@ export function DefectFieldsCard({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.codeTitle, { color: selectedCode ? C.primary : C.text }]}>
-            {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from Code Library'}
+            {selectedCode ? `Code: ${selectedCode.code.toUpperCase()}` : 'Select from code library'}
           </Text>
           <Text style={[s.codeSub, { color: C.textSecondary }]} numberOfLines={1}>
             {selectedCode ? stripPrices(selectedCode.description) : 'Browse 100+ defect codes'}
@@ -422,8 +422,12 @@ export function DefectFieldsCard({
           // one row, crowding the two flex-1 primary actions on either side
           // of it. Matches the Delete icon button's compact treatment
           // instead, so Cancel/Save Changes keep comfortable room.
+          // An icon alone didn't say what this does (it saves the defect as
+          // Critical "replace now"), so it carries a word whenever the row
+          // has room — i.e. on the fresh-Fail form, with no Cancel/Delete.
           <TouchableOpacity
-            style={[s.iconBtn, { backgroundColor: T.iconBg(C.warning), borderColor: C.warning }]}
+            style={[s.iconBtn, { backgroundColor: T.iconBg(C.warning), borderColor: C.warning },
+              !onCancel && !onDelete && { width: undefined, paddingHorizontal: 12, flexDirection: 'row', gap: 6 }]}
             onPress={() => { if (validate()) onReplace(currentValue()); }}
             activeOpacity={0.8}
             disabled={saving}
@@ -431,6 +435,7 @@ export function DefectFieldsCard({
             hitSlop={8}
           >
             <MaterialCommunityIcons name="tools" size={18} color={C.warning} />
+            {!onCancel && !onDelete ? <Text style={[s.cancelTxt, { color: C.warning }]}>Replace</Text> : null}
           </TouchableOpacity>
         )}
         <TouchableOpacity

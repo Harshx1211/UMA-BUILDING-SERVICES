@@ -74,7 +74,8 @@ export function isOverdue(dateStr: string | null | undefined): boolean {
   return dateStr.slice(0, 10) < localDateString();
 }
 
-const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "Sept" (not "Sep") — what the phone's own en-AU date format prints everywhere else
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
 /**
  * Formats a date for display the Australian way: "16 Oct 2026".

@@ -54,8 +54,8 @@ export default function CompletionBottomSheet({
             <View style={[s.handle, { backgroundColor: C.border }]} />
           </View>
           
-          <Text style={[s.title, { color: C.text }]}>Complete Job?</Text>
-          <Text style={[s.subtitle, { color: C.textSecondary }]}>Review checklist before closing out</Text>
+          <Text style={[s.title, { color: C.text }]}>Complete job?</Text>
+          <Text style={[s.subtitle, { color: C.textSecondary }]}>Check these before you close the job</Text>
 
           <ScrollView style={s.list}>
             {/* Asset checklist */}
@@ -65,9 +65,9 @@ export default function CompletionBottomSheet({
               </View>
               <View style={s.checkTextWrap}>
                 <Text style={[s.itemTitle, { color: C.text }]}>Asset inspection</Text>
-                <Text style={[s.itemSub, { color: C.textSecondary }]}>{assetsInspected} / {assetsTotal} inspected</Text>
+                <Text style={[s.itemSub, { color: C.textSecondary }]}>{assetsInspected} / {assetsTotal} recorded</Text>
               </View>
-              <MaterialCommunityIcons name={allAssetsDone ? "check-circle" : "check-circle-outline"} size={24} color={allAssetsDone ? C.success : C.textTertiary} />
+              <MaterialCommunityIcons name={allAssetsDone ? "check-circle" : "alert-circle-outline"} size={24} color={allAssetsDone ? C.success : C.warning} />
             </View>
 
             {/* Signature checklist */}
@@ -77,9 +77,9 @@ export default function CompletionBottomSheet({
               </View>
               <View style={s.checkTextWrap}>
                 <Text style={[s.itemTitle, { color: C.text }]}>Client signature</Text>
-                <Text style={[s.itemSub, { color: C.textSecondary }]}>{hasSignature ? 'Signature secured' : 'Missing signature (Required)'}</Text>
+                <Text style={[s.itemSub, { color: C.textSecondary }]}>{hasSignature ? 'Signature captured' : 'Missing — required before completing'}</Text>
               </View>
-              <MaterialCommunityIcons name={hasSignature ? "check-circle" : "check-circle-outline"} size={24} color={hasSignature ? C.success : C.error} />
+              <MaterialCommunityIcons name={hasSignature ? "check-circle" : "alert-circle"} size={24} color={hasSignature ? C.success : C.error} />
             </View>
 
             {/* Defects warning */}
@@ -90,16 +90,16 @@ export default function CompletionBottomSheet({
                 </View>
                 <View style={s.checkTextWrap}>
                   <Text style={[s.itemTitle, { color: C.warningDark }]}>Defects logged</Text>
-                  <Text style={[s.itemSub, { color: C.warning }]}>Make sure client is aware</Text>
+                  <Text style={[s.itemSub, { color: C.warning }]}>Make sure the client is aware</Text>
                 </View>
               </View>
             )}
           </ScrollView>
 
           <View style={s.actionRow}>
-            <Button variant="secondary" title="Review" onPress={onClose} style={{ flex: 1 }} />
+            <Button variant="secondary" title="Back" onPress={onClose} style={{ flex: 1 }} />
             <Button
-              title={hasSignature ? "Finalize Job" : "Need Signature"}
+              title={hasSignature ? "Complete job" : "Get signature"}
               onPress={hasSignature ? handleConfirmPress : () => onNeedSignature?.()}
               isLoading={hasSignature && isConfirming}
               disabled={hasSignature && isConfirming}

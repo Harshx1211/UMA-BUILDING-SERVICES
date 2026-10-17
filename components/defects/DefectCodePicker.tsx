@@ -237,7 +237,7 @@ export default function DefectCodePicker({ visible, onSelect, onClose }: DefectC
             <TextInput
               ref={searchRef}
               style={[s.searchInput, { color: C.text }]}
-              placeholder="Filter Remark Types…"
+              placeholder="Filter remark types…"
               placeholderTextColor={C.textTertiary}
               value={query}
               onChangeText={setQuery}

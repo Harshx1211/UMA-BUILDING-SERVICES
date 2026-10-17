@@ -374,7 +374,7 @@ export default function HelpScreen() {
 
         {/* ── Feedback button ── */}
         <Reanimated.View entering={noMotion ? undefined : FadeInDown.delay(180).duration(350)}>
-          <Button variant="secondary" title="Send Feedback to Support" onPress={handleFeedback} />
+          <Button variant="secondary" title="Send feedback to support" onPress={handleFeedback} />
         </Reanimated.View>
 
         {/* ── App info row ── */}

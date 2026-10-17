@@ -129,7 +129,11 @@ export default function DocumentsScreen() {
         <EmptyState
           icon="file-document-outline"
           title="No documents yet"
-          subtitle="Scan a compliance certificate, data plate, or sign-off sheet to attach it to this site."
+          // A completed job has no Scan button (see the FAB below), so don't
+          // tell the technician to scan something they can't.
+          subtitle={jobStatus === 'completed'
+            ? 'This job is completed. Re-open it on the job screen to add documents.'
+            : 'Scan a compliance certificate, data plate, or sign-off sheet to attach it to this site.'}
         />
       ) : (
         <FlatList

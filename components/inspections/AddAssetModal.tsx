@@ -238,7 +238,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
   };
 
   // ── Step titles ───────────────────────────────────────────────
-  const stepTitle = step === 'type' ? 'Select Asset Type' : 'Asset Details';
+  const stepTitle = step === 'type' ? 'Select asset type' : 'Asset details';
 
   const stepSub = step === 'type' ? 'What kind of asset is this?'
     : [formatAssetName(selectedType, selectedVariant), formatAssetSubtitle(selectedType, selectedVariant, typeDef?.unitInspectionRoutine ? area : 'common')].filter(Boolean).join(' — ');
@@ -541,7 +541,7 @@ export default function AddAssetModal({ visible, propertyId, onClose, onAssetAdd
             </View>
             <View style={{ flex: 2 }}>
               <Button 
-                title={isSaving ? 'Saving…' : quantity === 1 ? 'Add Asset' : `Add ${quantity} Assets`} 
+                title={isSaving ? 'Saving…' : quantity === 1 ? 'Add asset' : `Add ${quantity} assets`} 
                 icon="check-circle" 
                 onPress={handleSave} 
                 disabled={isSaving} 

@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 import { getRecord } from '@/lib/database';
 import { onSyncComplete, offSyncComplete } from '@/lib/sync';
 import { MAX_LENGTHS, sanitizeText } from '@/utils/sanitize';
+import { useSheetBackHandler } from '@/hooks/useSheetBackHandler';
 
 interface Props {
   propertyId: string;
@@ -49,6 +50,8 @@ export const PropertyNotebookSheet = forwardRef<PropertyNotebookSheetRef, Props>
     const { items, isLoading, loadItems, addItem, deleteItem } = useNotebookStore();
     const [text, setText] = useState('');
     const [isOpen, setIsOpen] = useState(false);
+    const closeSheet = useCallback(() => bottomSheetRef.current?.close(), []);
+    useSheetBackHandler(isOpen, closeSheet);
 
     // Now that property_notebook_items rides the live "my data" channel
     // (see lib/sync.ts's subscribeToMyDataLive), a teammate's newly-added

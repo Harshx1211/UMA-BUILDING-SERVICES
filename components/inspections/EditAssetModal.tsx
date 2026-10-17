@@ -436,7 +436,7 @@ export default function EditAssetModal({ visible, asset, onClose, onAssetEdited 
           </View>
           <View style={{ flex: 2 }}>
             <Button 
-              title={isSaving ? 'Saving…' : 'Save Changes'} 
+              title={isSaving ? 'Saving…' : 'Save changes'} 
               icon="content-save" 
               onPress={handleSave} 
               disabled={isSaving} 

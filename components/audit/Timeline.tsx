@@ -40,13 +40,23 @@ function formatValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   if (field === 'is_compliant') return value === 1 || value === true || value === '1' ? 'Yes' : 'No';
   if (field === 'checklist_data') return 'updated';
-  if (field === 'result') return String(value).replace(/_/g, ' ');
-  if (field === 'severity') return String(value).replace(/_/g, ' ');
+  // Stored values are snake_case ("pass", "not_tested", "non_critical") —
+  // show them the way the rest of the app does ("Pass", "N/T", "Non-critical").
+  if (field === 'result') {
+    const v = String(value);
+    return v === 'not_tested' ? 'N/T' : v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, ' ');
+  }
+  if (field === 'severity' || field === 'status') {
+    const v = String(value).replace(/_/g, '-');
+    return v.charAt(0).toUpperCase() + v.slice(1);
+  }
   // Prices out first, before the text is shortened.
   if (typeof value === 'string') value = stripPrices(value);
   if (typeof value === 'string' && value.length > 60) return value.slice(0, 57) + '…';
   return String(value);
 }
+
+const isBlank = (v: unknown) => v === null || v === undefined || v === '';
 
 function fmtDateTime(iso: string): string {
   try {
@@ -92,7 +102,10 @@ export function Timeline({ tableName, recordId }: Props) {
   return (
     <View>
       {entries
-        .map((entry) => ({ ...entry, changes: entry.changes.filter((c) => !HIDDEN_FIELDS.has(c.field)) }))
+        // Also drop "changed" lines where nothing really changed (empty to
+        // empty — e.g. the first save writing blank remarks), which read as
+        // "Remarks changed to —".
+        .map((entry) => ({ ...entry, changes: entry.changes.filter((c) => !HIDDEN_FIELDS.has(c.field) && !(isBlank(c.old) && isBlank(c.new))) }))
         .filter((entry) => entry.changes.length > 0)
         .map((entry, i) => (
         <View key={entry.id} style={[s.row, i > 0 && { borderTopColor: C.border, borderTopWidth: 1 }]}>

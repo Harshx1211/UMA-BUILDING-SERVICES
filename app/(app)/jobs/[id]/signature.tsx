@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { TextInput } from '@/components/ui/AppTextInput';
 import { Text } from '@/components/ui/AppText';
+import Toast from 'react-native-toast-message';
+import { formatDisplayDate } from '@/utils/dateHelpers';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import type { NavigationAction } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -320,12 +322,9 @@ export default function SignatureScreen() {
       setResumedDraft(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
-      showConfirm({
-        title: 'Signature saved',
-        message: 'All signatures have been recorded.',
-        icon: 'check-circle-outline',
-        buttons: [{ text: 'OK', onPress: finishAfterSignature }],
-      });
+      // A short toast instead of a blocking "OK" dialog — success needs no tap.
+      Toast.show({ type: 'success', text1: 'Signatures saved' });
+      finishAfterSignature();
     } catch {
       setSaving(false);
       setSigError('Failed to save signature. Please try again.');
@@ -382,12 +381,8 @@ export default function SignatureScreen() {
       setResumedDraft(false);
       const refreshed = getSignatureForJob(id!) as Signature | null;
       if (refreshed) setExistingSig(refreshed);
-      showConfirm({
-        title: 'Recorded',
-        message: 'Technician signature captured. Client was unavailable.',
-        icon: 'check-circle-outline',
-        buttons: [{ text: 'OK', onPress: finishAfterSignature }],
-      });
+      Toast.show({ type: 'success', text1: 'Recorded', text2: 'Technician signature saved. Client was unavailable.' });
+      finishAfterSignature();
     } catch {
       setSaving(false);
       setSigError('Failed to record. Please try again.');
@@ -414,7 +409,7 @@ export default function SignatureScreen() {
       {/* ── Header ── */}
       <ScreenHeader
         eyebrow="JOB SIGN-OFF"
-        title="Sign-Off"
+        title="Sign-off"
         showBack={true}
         fallbackHref="/jobs"
         rightComponent={
@@ -465,7 +460,7 @@ export default function SignatureScreen() {
           <Card variant="success" style={s.bannerCard} padding={14}>
             <MaterialCommunityIcons name="check-circle" size={16} color={C.success} />
             <Text style={[s.bannerTxt, { color: C.successDark }]}>
-              Signed by {existingSig.signed_by_name} · {new Date(existingSig.signed_at).toLocaleDateString('en-AU')}
+              Signed by {existingSig.signed_by_name} · {formatDisplayDate(existingSig.signed_at)}
             </Text>
             {!jobLocked && (
               <TouchableOpacity
@@ -498,7 +493,7 @@ export default function SignatureScreen() {
               </Text>
             </View>
             <Text style={[s.stepLabel, { color: C.textSecondary }]}>
-              {step === 'tech' ? 'Technician Sign-off' : 'Client Sign-off'}
+              {step === 'tech' ? 'Technician sign-off' : 'Client sign-off'}
             </Text>
           </View>
         )}
@@ -511,7 +506,10 @@ export default function SignatureScreen() {
         {/* ─────────────── TECHNICIAN SIGNATURE ─────────────── */}
         <Text style={[s.fieldLabel, { color: C.textTertiary, marginTop: 16 }]}>TECHNICIAN SIGNATURE *</Text>
 
-        <View style={[s.canvasCard, { borderColor: C.border, backgroundColor: '#FFFFFF' }]}>
+        {/* On the client step the technician's (already captured) signature
+            shrinks to a small preview, so the client's own box sits on
+            screen instead of below the fold. */}
+        <View style={[s.canvasCard, { borderColor: C.border, backgroundColor: '#FFFFFF' }, showCanvas && step === 'client' && { height: 96 }]}>
 
           {/* View-only: existing sig captured */}
           {showTechView && (
@@ -638,7 +636,7 @@ export default function SignatureScreen() {
         <View style={[s.legalRow, { backgroundColor: C.backgroundTertiary, borderColor: C.border }]}>
           <MaterialCommunityIcons name="lock-outline" size={11} color={C.textTertiary} />
           <Text style={[s.legalTxt, { color: C.textTertiary }]}>
-            Electronic Transactions Act 1999 (Cth) · {Platform.OS === 'ios' ? 'iOS' : 'Android'} · {new Date().toLocaleDateString('en-AU')}
+            Electronic Transactions Act 1999 (Cth) · {Platform.OS === 'ios' ? 'iOS' : 'Android'} · {formatDisplayDate(new Date().toISOString())}
           </Text>
         </View>
 
@@ -646,7 +644,7 @@ export default function SignatureScreen() {
           <View style={{ gap: 10 }}>
             <Button
               variant="primary"
-              title={saving ? 'Processing…' : (step === 'tech' ? 'Next: Client Signature →' : 'Save All Signatures')}
+              title={saving ? 'Processing…' : (step === 'tech' ? 'Next: client signature' : 'Save signatures')}
               onPress={handleNextOrSave}
               disabled={saving}
               icon={step === 'tech' ? 'arrow-right-circle' : 'check-circle'}
@@ -654,7 +652,7 @@ export default function SignatureScreen() {
             {isClientStep && (
               <Button
                 variant="secondary"
-                title="Client Unavailable to Sign"
+                title="Client unavailable to sign"
                 onPress={handleClientUnavailable}
                 disabled={saving}
               />
@@ -662,7 +660,7 @@ export default function SignatureScreen() {
             {isEditing && (
               <Button
                 variant="secondary"
-                title="Cancel Re-sign"
+                title="Cancel re-sign"
                 onPress={() => { setIsEditing(false); setStep('tech'); setHasSig(false); setTechSigBase64(null); setSigError(''); }}
                 disabled={saving}
               />
